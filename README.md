@@ -1,158 +1,96 @@
-# Coolify One-Repo Deploy: CS2 + MatchZy + Get5
+# CS2 + MatchZy fuer Docker Compose und Coolify
 
-Dieses Repository liefert einen einzigen Compose-Stack fuer:
+Dieses Repository liefert einen bewusst kleinen Stack:
 
-- CS2 Dedicated (`cm2network/cs2`)
-- automatischen Mod-Install beim Serverstart (`Metamod` + `MatchZy with CSSharp`)
-- `g5api` + `g5v` + `mariadb` + `redis`
-- BasicAuth vor dem Panel (`g5v`)
-- Local Login im G5-Panel (`LOCALLOGINS=true`)
+- CS2 Dedicated Server auf Basis von `cm2network/cs2`
+- automatischen Mod-Install beim Serverstart
+- `Metamod Source 2.0-dev`
+- `MatchZy` inklusive `CounterStrikeSharp`, sofern das passende MatchZy-Release verfuegbar ist
+
+Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stabilen `MatchZy`-Server fuer Pracc, Pugs, Scrims und spaeter erweiterbare Automatisierung.
 
 ## Enthaltene Dateien
 
 - `docker-compose.yml`
-- `cs2/pre.sh` (idempotenter Auto-Installer)
+- `cs2/Dockerfile`
+- `cs2/pre.sh`
 - `.env.example`
 - `README.md`
 
 ## 1) Vorbereitung
 
-1. `.env.example` nach `.env` kopieren und Werte setzen.
-2. Pflichtwerte:
-- `SRCDS_TOKEN`
-- `CS2_RCONPW`
-- `MARIADB_ROOT_PASSWORD`
-- `MARIADB_PASSWORD`
-- `REDIS_PASSWORD`
-- `DBKEY` (muss 16, 24 oder 32 Zeichen lang sein)
-- `SHAREDSECRET`
-- `HOSTNAME`
-- `CLIENTHOME`
-- `APIURL`
-- `STEAMAPIKEY`
-- mindestens eine Steam64 in `SUPERADMINS`
+1. `.env.example` nach `.env` kopieren.
+2. Mindestens diese Werte setzen:
+   - `SRCDS_TOKEN`
+   - `CS2_RCONPW`
+3. Optional anpassen:
+   - `CS2_SERVERNAME`
+   - `CS2_PW`
+   - `CS2_STARTMAP`
+   - `CS2_MAXPLAYERS`
+   - `METAMOD_VERSION`
+   - `MATCHZY_VERSION`
 
-## 2) Coolify Deploy (Reihenfolge)
+## 2) Deploy mit Docker Compose oder Coolify
 
-1. Repository als Compose Resource in Coolify verbinden.
-2. `docker-compose.yml` laden.
-3. Environment-Variablen aus `.env` in Coolify setzen.
-4. Domains mappen:
-- Service `g5v` -> `https://panel.<deine-domain>`
-- Service `g5api` -> `https://api.<deine-domain>`
-- Service `g5api` -> `https://panel.<deine-domain>/api`
-5. Beim `g5api`-Domain-Mapping den Service-Port `3301` verwenden.
-6. Optional, aber fuer Coolify oft robuster: `G5V_API_URL=https://api.<deine-domain>` setzen.
-   Dann spricht das Frontend direkt die API-Subdomain an und ist nicht auf funktionierendes `/api`-Path-Routing angewiesen.
-7. Deploy starten.
+1. Repository als Compose-Ressource in Coolify verbinden oder lokal mit `docker compose` nutzen.
+2. `docker-compose.yml` deployen.
+3. Die Environment-Variablen aus `.env` in Coolify setzen.
+4. Nur die Spielports freigeben:
+   - `27015/tcp`
+   - `27015/udp`
+   - `27020/udp`
 
-Hinweis: Es werden keine custom networks in Compose definiert (Coolify-kompatibel).
+Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. Das ist fuer Coolify robuster.
 
 ## 3) Was der Stack macht
 
-### Portbelegung (aufsteigend ab 27015)
+### Ports
 
 - `27015` -> CS2 Game (`tcp/udp`)
-- `27016` -> MariaDB (`localhost only`)
-- `27017` -> Redis (`localhost only`)
-- `27018` -> G5API
-- `27019` -> G5V Panel
 - `27020` -> CS TV (`udp`, reserviert)
 
-### CS2
+### Startverhalten
 
-- Exponiert:
-- `27015/tcp`
-- `27015/udp`
-- `27020/udp`
-- Persistenz: `cs2_data`
-- `cs2/Dockerfile` kopiert `cs2/pre.sh` nach `/etc/pre.sh`.
-  Das Base-Image (`cm2network/cs2` = `joedwards32/cs2`) kopiert `/etc/pre.sh` beim Start nach `/home/steam/cs2-dedicated/pre.sh` und sourct diese Datei in `entry.sh` **nach** dem SteamCMD-Update und **vor** dem Start des `cs2`-Prozesses.
-  Daraus folgen zwei Dinge:
-  - Die gesamte Logik in `pre.sh` laeuft in einer Subshell, damit `set -e`, Traps und Fehler-Exits die `entry.sh` nicht abbrechen.
-  - Wird Metamod/MatchZy bereits erkannt, macht das Skript nur einen Re-Patch der `gameinfo.gi` und ist in Sekunden fertig.
-  - Es gibt keinen File-Bind-Mount mehr. Das ist fuer Coolify wichtig, weil der Compose-Run ueber einen Helper-Container laeuft und Repo-Dateien sonst auf dem Docker-Host nicht als regulaere Datei verfuegbar sind.
+`cs2/pre.sh` wird vor dem Start des CS2-Prozesses ausgefuehrt und erledigt Folgendes:
 
-### `cs2/pre.sh` Verhalten
+1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev` Builds auf.
+2. Loest das gewuenschte MatchZy-Release auf.
+3. Installiert die Archive nur neu, wenn sich Versionen geaendert haben, Dateien fehlen oder `MOD_REINSTALL=1` gesetzt ist.
+4. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
+5. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
-Beim Start:
+## 4) Erste Nutzung mit MatchZy
 
-1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev`-Snapshots von `metamodsource.net` auf.
-   - `METAMOD_VERSION=latest` zieht den neuesten `2.0-dev` Build.
-   - Optional kann ein Build direkt gepinnt werden, z. B. `METAMOD_VERSION=1383`.
-2. Loest MatchZy-Release (`latest` oder gepinnt via `MATCHZY_VERSION`) auf.
-3. Installiert nur neu, wenn:
-- Version geaendert
-- Dateien fehlen
-- `MOD_REINSTALL=1`
-4. Patcht `gameinfo.gi` immer erneut, damit `Game    csgo/addons/metamod` in `SearchPaths` enthalten ist.
-5. Speichert installierte Tags in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
+Nach erfolgreichem Start kannst du MatchZy direkt im Server verwenden.
 
-## 4) Erste Inbetriebnahme G5
+Typische Admin-Kommandos:
 
-1. `https://panel.<deine-domain>` oeffnen.
-2. Im Panel lokal registrieren (Local Login/Register).
-3. Bei Registrierung/Profil die korrekte Steam64 nutzen.
-4. Durch `SUPERADMINS`/`ADMINS` werden API-Rechte anhand Steam64 vergeben.
-5. CS2 Server im G5-Panel anlegen (IP/Port/RCON), danach Match erstellen und laden.
+- `.prac` startet den Practice Mode
+- `.exitprac` beendet den Practice Mode und geht zurueck in den Match-Modus
+- `.playout` aktiviert oder deaktiviert Scrim-Style Playout
+- `.readyrequired <zahl>` setzt, wie viele Spieler ready sein muessen
+- `.roundknife` schaltet Knife Round an oder aus
+- `.map <mapname>` wechselt die Map
+- `.restart` setzt den Match-Zustand zurueck
 
-## 5) Checks / Abnahme
+Fuer einfache Praccs und Scrims brauchst du kein JSON-Matchsetup. Ein Match-JSON ist erst noetig, wenn du feste Teams, SteamIDs und BO1/BO3-Serien sauber locken willst.
 
-Compose:
+## 5) Checks
 
 ```bash
 docker compose config
-```
-
-Container:
-
-```bash
 docker compose ps
 ```
 
-CS2 Console:
+In der CS2-Konsole:
 
-- `meta list` zeigt Metamod.
-- `css_plugins list` zeigt MatchZy.
+- `meta list` sollte Metamod anzeigen
+- `css_plugins list` sollte MatchZy anzeigen
 
-HTTP:
+Wenn das passt, sollte der Server fuer Practice und Scrims benutzbar sein.
 
-- `https://panel.<deine-domain>`.
-- `https://api.<deine-domain>/` antwortet.
-- `https://panel.<deine-domain>/api/` routed auf `g5api`.
-- Wenn `G5V_API_URL` gesetzt ist, nutzt das Frontend stattdessen direkt diese API-URL.
-
-Lokale Port-Checks:
-
-- `http://<server-ip>:27019` -> G5V
-- `http://<server-ip>:27018` -> G5API
-
-## 6) Fallback ohne `/api` Path-Routing in Coolify
-
-Falls `panel.<domain>/api` in deiner Coolify-Instanz nicht sauber routing-faehig ist, setze einfach:
-
-```bash
-G5V_API_URL=https://api.<deine-domain>
-```
-
-Das in diesem Repo enthaltene `g5v`-Wrapper-Image patched dann beim Containerstart den Frontend-Fallback von `"/api"` auf diese absolute URL.
-
-Nur falls du bewusst ein eigenes Frontend-Build brauchst, ist weiterhin ein komplett eigenes `g5v`-Image noetig:
-
-1. Eigenes `g5v` Image bauen:
-
-```bash
-docker build -t your-registry/g5v:custom -f DockerfileFull \
-  --build-arg VUE_APP_G5V_API_URL=https://api.<deine-domain> \
-  https://github.com/PhlexPlexico/G5V.git
-```
-
-2. In `docker-compose.yml` fuer `g5v` auf `your-registry/g5v:custom` wechseln.
-3. Dann nur noch zwei reine Subdomains nutzen:
-- `panel.<domain>` -> `g5v`
-- `api.<domain>` -> `g5api`
-
-## 7) Troubleshooting CS2 Connect
+## 6) Troubleshooting CS2 Connect
 
 Wenn im Log folgendes erscheint:
 
@@ -174,7 +112,7 @@ Zusatzcheck bei "kein Connect moeglich":
 2. Host-Firewall und Provider-Firewall muessen `27015/udp` (und optional `27015/tcp`, `27020/udp`) erlauben.
 3. Teste direkt mit `connect <server-ip>:27015` in der CS2-Konsole.
 
-## 8) Troubleshooting "Plugins nicht geladen"
+## 7) Troubleshooting "Plugins nicht geladen"
 
 Falls `meta list` oder `css_plugins list` leer ist:
 
