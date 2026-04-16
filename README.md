@@ -5,13 +5,13 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 - CS2 Dedicated Server auf Basis von `cm2network/cs2`
 - automatischen Mod-Install beim Serverstart
 - `Metamod Source 2.0-dev`
-- `MatchZy` inklusive `CounterStrikeSharp`, sofern das passende MatchZy-Release verfuegbar ist
+- `MatchZy`
+- `CounterStrikeSharp` aus dem offiziellen Release
 - `cs2-fake-rcon`
 - `WeaponPaints`
 - `CS2-SimpleAdmin` inklusive `PlayerSettingsCS2`, `AnyBaseLibCS2` und `MenuManagerCS2`
 - `FortniteEmotesNDances` inklusive `MultiAddonManager` und `Ray-Trace`
 - `cs2-executes`
-- `RollTheDice`
 
 Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stabilen `MatchZy`-Server fuer Pracc, Pugs, Scrims und spaeter erweiterbare Automatisierung.
 
@@ -36,11 +36,11 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `CS2_MAXPLAYERS`
    - `METAMOD_VERSION`
    - `MATCHZY_VERSION`
+   - `COUNTERSTRIKESHARP_VERSION`
    - `FAKE_RCON_ENABLED`
    - `WEAPONPAINTS_ENABLED`
    - `FORTNITE_EMOTES_ENABLED`
    - `EXECUTES_ENABLED`
-   - `ROLLTHEDICE_ENABLED`
    - `SIMPLEADMIN_ENABLED`
    - `ADMINS`
 
@@ -69,7 +69,8 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
 
 1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev` Builds auf.
 2. Loest das gewuenschte MatchZy-Release auf.
-3. Installiert optional weitere Plugins ueber deren offizielle Release-Archive:
+3. Installiert `CounterStrikeSharp` separat aus dem offiziellen Release, damit Plugin-Anforderungen nicht am im MatchZy-Archiv gebuendelten Stand haengen bleiben.
+4. Installiert optional weitere Plugins ueber deren offizielle Release-Archive:
    - `cs2-fake-rcon`
    - `WeaponPaints`
    - `CS2-SimpleAdmin`
@@ -80,10 +81,9 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
    - `Ray-Trace`
    - `FortniteEmotesNDances`
    - `cs2-executes`
-   - `RollTheDice`
-4. Schreibt `cfg/MatchZy/admins.json` aus `ADMINS` neu.
-5. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
-6. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
+5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus `ADMINS` neu.
+6. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
+7. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
 ## 4) Zusatzplugins
 
@@ -123,12 +123,6 @@ addons/counterstrikesharp/configs/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.json
 - Das Plugin ist eher ein eigener Trainings-/Executes-Modus als ein klassisches Scrim-Plugin.
 - Wenn du nur MatchZy fuer Pracc/Scrims willst, kannst du es ueber `EXECUTES_ENABLED=0` deaktivieren.
 
-### RollTheDice
-
-- Wird standardmaessig installiert.
-- Das Plugin ist ein Fun-/Chaos-Modus und normalerweise nichts fuer ernsthafte Scrims.
-- Wenn du es nicht willst, setze `ROLLTHEDICE_ENABLED=0`.
-
 ## 5) Erste Nutzung mit MatchZy
 
 Nach erfolgreichem Start kannst du MatchZy direkt im Server verwenden.
@@ -139,7 +133,12 @@ Wenn du MatchZy-Admins per Environment setzen willst, nutze `ADMINS` als komma-s
 ADMINS=76561198000000001, 76561198000000002
 ```
 
-Beim Containerstart schreibt `cs2/pre.sh` daraus die Datei `game/csgo/cfg/MatchZy/admins.json` neu. Ein leeres `ADMINS` erzeugt entsprechend eine leere Adminliste.
+Beim Containerstart schreibt `cs2/pre.sh` daraus automatisch:
+
+- `game/csgo/cfg/MatchZy/admins.json`
+- `game/csgo/addons/counterstrikesharp/configs/admins.json`
+
+Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`. Damit funktionieren MatchZy und andere CSS-Plugins konsistent ueber dieselbe `ADMINS`-Variable. Ein leeres `ADMINS` erzeugt entsprechend leere Adminlisten.
 
 Typische Admin-Kommandos:
 
@@ -165,7 +164,7 @@ In der CS2-Konsole:
 - `meta list` sollte Metamod anzeigen
 - `meta list` sollte auch `fake_rcon`, `multiaddonmanager` und `RayTrace` zeigen, falls aktiviert
 - `css_plugins list` sollte MatchZy anzeigen
-- `css_plugins list` sollte je nach aktivierten Plugins auch `WeaponPaints`, `CS2-SimpleAdmin`, `PlayerSettings`, `MenuManagerCore`, `FortniteEmotesNDances`, `ExecutesPlugin` und `RollTheDice` zeigen
+- `css_plugins list` sollte je nach aktivierten Plugins auch `WeaponPaints`, `CS2-SimpleAdmin`, `PlayerSettings`, `MenuManagerCore`, `FortniteEmotesNDances` und `ExecutesPlugin` zeigen
 
 ## 7) Troubleshooting CS2 Connect
 

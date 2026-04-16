@@ -87,6 +87,24 @@ _matchzy_bootstrap_main() (
     printf '%s' "$value"
   }
 
+  sanitize_admin_id() {
+    local value="$1"
+    value="$(trim_whitespace "$value")"
+
+    if [[ "$value" == '"'*'"' ]]; then
+      value="${value#\"}"
+      value="${value%\"}"
+    fi
+
+    if [[ "$value" == "'"*"'" ]]; then
+      value="${value#\'}"
+      value="${value%\'}"
+    fi
+
+    value="$(trim_whitespace "$value")"
+    printf '%s' "$value"
+  }
+
   extract_archive() {
     local archive="$1"
     local destination="$2"
@@ -110,6 +128,12 @@ _matchzy_bootstrap_main() (
         fail "Unsupported archive format: $archive"
         ;;
     esac
+  }
+
+  read_css_api_version() {
+    local dll_path="$1"
+    [[ -f "$dll_path" ]] || return 0
+    grep -aom1 -E '1\.0\.[0-9]{3}' "$dll_path" 2>/dev/null || true
   }
 
   normalize_csgo_layout() {
@@ -244,10 +268,10 @@ _matchzy_bootstrap_main() (
     rm -rf "$stage_dir"
     mkdir -p "$stage_dir"
 
-    log "Downloading $name asset"
+    printf '[pre.sh] %s\n' "Downloading $name asset" >&2
     http_get "$url" "$archive"
 
-    log "Extracting $name into staging directory $stage_dir"
+    printf '[pre.sh] %s\n' "Extracting $name into staging directory $stage_dir" >&2
     extract_archive "$archive" "$stage_dir"
 
     printf '%s\n' "$stage_dir"
@@ -344,8 +368,11 @@ _matchzy_bootstrap_main() (
 
   remove_obsolete_plugins() {
     rm -rf \
+      "$ADDONS_DIR/addons/counterstrikesharp" \
       "$ADDONS_DIR/Skin" \
       "$ADDONS_DIR/metamod/Skin.vdf" \
+      "$CSS_DIR/plugins/RollTheDice" \
+      "$CSS_DIR/configs/plugins/RollTheDice" \
       "$CSS_DIR/plugins/ColoredSmokeTeam" \
       "$CSS_DIR/configs/plugins/ColoredSmokeTeam" \
       "$CSS_DIR/gamedata/coloredsmoketeam.json"
@@ -404,30 +431,43 @@ _matchzy_bootstrap_main() (
     log "Patched gameinfo.gi with Metamod search path"
   }
 
+  collect_admin_ids() {
+    local admins_raw="$1"
+    local output_file="$2"
+    local entry=""
+    local admin_id=""
+    local -a admin_entries=()
+    local -A seen_ids=()
+
+    : > "$output_file"
+
+    IFS=',' read -r -a admin_entries <<< "${admins_raw//$'\n'/,}"
+    for entry in "${admin_entries[@]}"; do
+      admin_id="$(sanitize_admin_id "$entry")"
+      [[ -n "$admin_id" ]] || continue
+      [[ "$admin_id" =~ ^[0-9]+$ ]] || fail "ADMINS contains invalid SteamID64 '$admin_id'"
+      [[ -n "${seen_ids[$admin_id]:-}" ]] && continue
+      seen_ids["$admin_id"]=1
+      printf '%s\n' "$admin_id" >> "$output_file"
+    done
+  }
+
   write_matchzy_admins_file() {
     local admins_raw="$1"
     local admins_file="$2"
     local admins_dir=""
     local tmp_file=""
-    local entry=""
-    local admin_id=""
+    local ids_file=""
     local index=0
-    local -a admin_entries=()
     local -a admin_ids=()
-    local -A seen_ids=()
 
     admins_dir="$(dirname "$admins_file")"
     mkdir -p "$admins_dir"
 
-    IFS=',' read -r -a admin_entries <<< "${admins_raw//$'\n'/,}"
-    for entry in "${admin_entries[@]}"; do
-      admin_id="$(trim_whitespace "$entry")"
-      [[ -n "$admin_id" ]] || continue
-      [[ "$admin_id" =~ ^[0-9]+$ ]] || fail "ADMINS contains invalid SteamID64 '$admin_id'"
-      [[ -n "${seen_ids[$admin_id]:-}" ]] && continue
-      seen_ids["$admin_id"]=1
-      admin_ids+=("$admin_id")
-    done
+    ids_file="$(mktemp)"
+    collect_admin_ids "$admins_raw" "$ids_file"
+    mapfile -t admin_ids < "$ids_file"
+    rm -f "$ids_file"
 
     tmp_file="$(mktemp)"
     {
@@ -449,6 +489,48 @@ _matchzy_bootstrap_main() (
     log "Wrote MatchZy admins file with ${#admin_ids[@]} admin(s) from ADMINS"
   }
 
+  write_css_admins_file() {
+    local admins_raw="$1"
+    local admins_file="$2"
+    local admins_dir=""
+    local tmp_file=""
+    local ids_file=""
+    local index=0
+    local -a admin_ids=()
+
+    admins_dir="$(dirname "$admins_file")"
+    mkdir -p "$admins_dir"
+
+    ids_file="$(mktemp)"
+    collect_admin_ids "$admins_raw" "$ids_file"
+    mapfile -t admin_ids < "$ids_file"
+    rm -f "$ids_file"
+
+    tmp_file="$(mktemp)"
+    {
+      printf '{'
+      if ((${#admin_ids[@]} > 0)); then
+        printf '\n'
+        for index in "${!admin_ids[@]}"; do
+          printf '  "%s": {\n' "${admin_ids[$index]}"
+          printf '    "identity": "%s",\n' "${admin_ids[$index]}"
+          printf '    "flags": [\n'
+          printf '      "@css/root"\n'
+          printf '    ]\n'
+          printf '  }'
+          if (( index < ${#admin_ids[@]} - 1 )); then
+            printf ','
+          fi
+          printf '\n'
+        done
+      fi
+      printf '}\n'
+    } > "$tmp_file"
+
+    mv "$tmp_file" "$admins_file"
+    log "Wrote CounterStrikeSharp admins file with ${#admin_ids[@]} admin(s) from ADMINS"
+  }
+
   need_cmd awk
   need_cmd grep
   need_cmd sed
@@ -464,6 +546,7 @@ _matchzy_bootstrap_main() (
 
   local METAMOD_VERSION="${METAMOD_VERSION:-latest}"
   local MATCHZY_VERSION="${MATCHZY_VERSION:-latest}"
+  local COUNTERSTRIKESHARP_VERSION="${COUNTERSTRIKESHARP_VERSION:-latest}"
   local MOD_REINSTALL="${MOD_REINSTALL:-0}"
   local FAKE_RCON_ENABLED="${FAKE_RCON_ENABLED:-1}"
   local FAKE_RCON_VERSION="${FAKE_RCON_VERSION:-latest}"
@@ -476,8 +559,6 @@ _matchzy_bootstrap_main() (
   local RAYTRACE_VERSION="${RAYTRACE_VERSION:-latest}"
   local EXECUTES_ENABLED="${EXECUTES_ENABLED:-1}"
   local EXECUTES_VERSION="${EXECUTES_VERSION:-latest}"
-  local ROLLTHEDICE_ENABLED="${ROLLTHEDICE_ENABLED:-1}"
-  local ROLLTHEDICE_VERSION="${ROLLTHEDICE_VERSION:-latest}"
   local SIMPLEADMIN_ENABLED="${SIMPLEADMIN_ENABLED:-1}"
   local SIMPLEADMIN_VERSION="${SIMPLEADMIN_VERSION:-latest}"
   local PLAYERSETTINGS_VERSION="${PLAYERSETTINGS_VERSION:-latest}"
@@ -519,6 +600,21 @@ _matchzy_bootstrap_main() (
   [[ -n "${MATCHZY_TAG:-}" && -n "${MATCHZY_URL:-}" ]] \
     || fail "Could not resolve MatchZy linux asset"
   log "MatchZy resolved to tag '$MATCHZY_TAG'"
+
+  local COUNTERSTRIKESHARP_TAG=""
+  local COUNTERSTRIKESHARP_URL=""
+  log "Resolving CounterStrikeSharp release: $COUNTERSTRIKESHARP_VERSION"
+  mapfile -t _counterstrikesharp_release < <(
+    resolve_github_release_asset \
+      "roflmuffin/CounterStrikeSharp" \
+      "$COUNTERSTRIKESHARP_VERSION" \
+      'counterstrikesharp-with-runtime-linux-.*\.zip$' \
+      'CounterStrikeSharp'
+  )
+  COUNTERSTRIKESHARP_TAG="${_counterstrikesharp_release[0]:-}"
+  COUNTERSTRIKESHARP_URL="${_counterstrikesharp_release[1]:-}"
+  unset _counterstrikesharp_release
+  log "CounterStrikeSharp resolved to tag '$COUNTERSTRIKESHARP_TAG'"
 
   local FAKE_RCON_TAG=""
   local FAKE_RCON_URL=""
@@ -691,27 +787,9 @@ _matchzy_bootstrap_main() (
     log "cs2-executes installation disabled"
   fi
 
-  local ROLLTHEDICE_TAG=""
-  local ROLLTHEDICE_URL=""
-  if is_enabled "$ROLLTHEDICE_ENABLED"; then
-    log "Resolving RollTheDice release: $ROLLTHEDICE_VERSION"
-    mapfile -t _rollthedice_release < <(
-      resolve_github_release_asset \
-        "Kandru/cs2-roll-the-dice" \
-        "$ROLLTHEDICE_VERSION" \
-        'cs2-roll-the-dice-release-.*\.zip$' \
-        'RollTheDice'
-    )
-    ROLLTHEDICE_TAG="${_rollthedice_release[0]:-}"
-    ROLLTHEDICE_URL="${_rollthedice_release[1]:-}"
-    unset _rollthedice_release
-    log "RollTheDice resolved to tag '$ROLLTHEDICE_TAG'"
-  else
-    log "RollTheDice installation disabled"
-  fi
-
   local INSTALLED_METAMOD_TAG
   local INSTALLED_MATCHZY_TAG
+  local INSTALLED_COUNTERSTRIKESHARP_TAG
   local INSTALLED_FAKE_RCON_TAG
   local INSTALLED_WEAPONPAINTS_TAG
   local INSTALLED_PLAYERSETTINGS_TAG
@@ -722,10 +800,10 @@ _matchzy_bootstrap_main() (
   local INSTALLED_RAYTRACE_TAG
   local INSTALLED_FORTNITE_EMOTES_TAG
   local INSTALLED_EXECUTES_TAG
-  local INSTALLED_ROLLTHEDICE_TAG
 
   INSTALLED_METAMOD_TAG="$(read_state_value METAMOD_TAG)"
   INSTALLED_MATCHZY_TAG="$(read_state_value MATCHZY_TAG)"
+  INSTALLED_COUNTERSTRIKESHARP_TAG="$(read_state_value COUNTERSTRIKESHARP_TAG)"
   INSTALLED_FAKE_RCON_TAG="$(read_state_value FAKE_RCON_TAG)"
   INSTALLED_WEAPONPAINTS_TAG="$(read_state_value WEAPONPAINTS_TAG)"
   INSTALLED_PLAYERSETTINGS_TAG="$(read_state_value PLAYERSETTINGS_TAG)"
@@ -736,10 +814,12 @@ _matchzy_bootstrap_main() (
   INSTALLED_RAYTRACE_TAG="$(read_state_value RAYTRACE_TAG)"
   INSTALLED_FORTNITE_EMOTES_TAG="$(read_state_value FORTNITE_EMOTES_TAG)"
   INSTALLED_EXECUTES_TAG="$(read_state_value EXECUTES_TAG)"
-  INSTALLED_ROLLTHEDICE_TAG="$(read_state_value ROLLTHEDICE_TAG)"
 
   local metamod_marker="$GAME_DIR/addons/metamod"
   local matchzy_marker="$CSS_DIR/plugins/MatchZy"
+  local css_marker="$CSS_DIR/api/CounterStrikeSharp.API.dll"
+  local installed_css_api_version=""
+  local expected_css_api_version="${COUNTERSTRIKESHARP_TAG#v}"
   local fake_rcon_marker="$ADDONS_DIR/fake_rcon/bin/linuxsteamrt64/fake_rcon.so"
   local weaponpaints_marker="$CSS_DIR/plugins/WeaponPaints/WeaponPaints.dll"
   local weaponpaints_gamedata_src="$CSS_DIR/plugins/WeaponPaints/gamedata/weaponpaints.json"
@@ -753,9 +833,9 @@ _matchzy_bootstrap_main() (
   local raytrace_marker="$ADDONS_DIR/RayTrace/bin/linuxsteamrt64/RayTrace.so"
   local fortnite_emotes_marker="$CSS_DIR/plugins/FortniteEmotesNDances/FortniteEmotesNDances.dll"
   local executes_marker="$CSS_DIR/plugins/ExecutesPlugin/ExecutesPlugin.dll"
-  local rollthedice_marker="$CSS_DIR/plugins/RollTheDice/RollTheDice.dll"
   local css_core_config="$CSS_DIR/configs/core.json"
   local matchzy_admins_file="$GAME_DIR/cfg/MatchZy/admins.json"
+  local css_admins_file="$CSS_DIR/configs/admins.json"
 
   if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_METAMOD_TAG" != "$METAMOD_TAG" || ! -d "$metamod_marker" ]]; then
     log "Installing or updating Metamod"
@@ -770,6 +850,23 @@ _matchzy_bootstrap_main() (
   else
     log "MatchZy already current; skipping"
   fi
+
+  installed_css_api_version="$(read_css_api_version "$css_marker")"
+  if [[ "$MOD_REINSTALL" == "1" \
+    || "$INSTALLED_COUNTERSTRIKESHARP_TAG" != "$COUNTERSTRIKESHARP_TAG" \
+    || ! -f "$css_marker" \
+    || -d "$ADDONS_DIR/addons/counterstrikesharp" \
+    || "$installed_css_api_version" != "$expected_css_api_version" ]]; then
+    log "Installing or updating CounterStrikeSharp"
+    install_archive_component "counterstrikesharp" "$COUNTERSTRIKESHARP_URL" "$GAME_DIR" "$css_marker"
+  else
+    log "CounterStrikeSharp already current; skipping"
+  fi
+
+  patch_gameinfo_for_metamod "$GAMEINFO_FILE"
+
+  write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
+  write_css_admins_file "$ADMINS" "$css_admins_file"
 
   if is_enabled "$FAKE_RCON_ENABLED"; then
     if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_FAKE_RCON_TAG" != "$FAKE_RCON_TAG" || ! -f "$fake_rcon_marker" ]]; then
@@ -864,20 +961,10 @@ _matchzy_bootstrap_main() (
     fi
   fi
 
-  if is_enabled "$ROLLTHEDICE_ENABLED"; then
-    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_ROLLTHEDICE_TAG" != "$ROLLTHEDICE_TAG" || ! -f "$rollthedice_marker" ]]; then
-      log "Installing or updating RollTheDice"
-      install_archive_component "rollthedice" "$ROLLTHEDICE_URL" "$CSS_DIR/plugins" "$rollthedice_marker"
-    else
-      log "RollTheDice already current; skipping"
-    fi
-  fi
-
-  write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
-
   cat > "$STATE_FILE" <<EOF
 METAMOD_TAG=$METAMOD_TAG
 MATCHZY_TAG=$MATCHZY_TAG
+COUNTERSTRIKESHARP_TAG=$COUNTERSTRIKESHARP_TAG
 FAKE_RCON_TAG=$FAKE_RCON_TAG
 WEAPONPAINTS_TAG=$WEAPONPAINTS_TAG
 PLAYERSETTINGS_TAG=$PLAYERSETTINGS_TAG
@@ -888,11 +975,8 @@ MULTIADDONMANAGER_TAG=$MULTIADDONMANAGER_TAG
 RAYTRACE_TAG=$RAYTRACE_TAG
 FORTNITE_EMOTES_TAG=$FORTNITE_EMOTES_TAG
 EXECUTES_TAG=$EXECUTES_TAG
-ROLLTHEDICE_TAG=$ROLLTHEDICE_TAG
 EOF
   log "Stored install state in $STATE_FILE"
-
-  patch_gameinfo_for_metamod "$GAMEINFO_FILE"
   log "Mod bootstrap complete"
 )
 
