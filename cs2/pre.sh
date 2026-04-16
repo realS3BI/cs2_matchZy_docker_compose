@@ -378,6 +378,60 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/gamedata/coloredsmoketeam.json"
   }
 
+  remove_fake_rcon_component() {
+    rm -rf \
+      "$ADDONS_DIR/fake_rcon" \
+      "$ADDONS_DIR/configs/fake_rcon"
+  }
+
+  remove_weaponpaints_component() {
+    rm -rf \
+      "$CSS_DIR/plugins/WeaponPaints" \
+      "$CSS_DIR/configs/plugins/WeaponPaints" \
+      "$CSS_DIR/gamedata/weaponpaints.json"
+  }
+
+  remove_menu_stack_components() {
+    rm -rf \
+      "$CSS_DIR/plugins/MenuManagerCore" \
+      "$CSS_DIR/plugins/PlayerSettings" \
+      "$CSS_DIR/shared/AnyBaseLib" \
+      "$CSS_DIR/shared/MenuManagerApi" \
+      "$CSS_DIR/shared/PlayerSettingsApi" \
+      "$CSS_DIR/configs/plugins/MenuManagerCore" \
+      "$CSS_DIR/configs/plugins/PlayerSettings"
+  }
+
+  remove_simpleadmin_component() {
+    rm -rf \
+      "$CSS_DIR/plugins/CS2-SimpleAdmin" \
+      "$CSS_DIR/plugins/CS2-SimpleAdmin_FunCommands" \
+      "$CSS_DIR/plugins/CS2-SimpleAdmin_StealthModule" \
+      "$CSS_DIR/shared/CS2-SimpleAdminApi" \
+      "$CSS_DIR/configs/plugins/CS2-SimpleAdmin" \
+      "$ADDONS_DIR/StatusBlocker" \
+      "$ADDONS_DIR/StatusBlocker.vdf"
+  }
+
+  remove_fortnite_emotes_component() {
+    rm -rf \
+      "$CSS_DIR/plugins/FortniteEmotesNDances" \
+      "$CSS_DIR/shared/FortniteEmotesNDancesAPI" \
+      "$CSS_DIR/shared/KitsuneMenu" \
+      "$CSS_DIR/shared/RayTraceApi" \
+      "$CSS_DIR/configs/plugins/FortniteEmotesNDances" \
+      "$CSS_DIR/gamedata/fortnite_emotes.json" \
+      "$ADDONS_DIR/multiaddonmanager" \
+      "$ADDONS_DIR/RayTrace" \
+      "$GAME_DIR/cfg/multiaddonmanager"
+  }
+
+  remove_executes_component() {
+    rm -rf \
+      "$CSS_DIR/plugins/ExecutesPlugin" \
+      "$CSS_DIR/configs/plugins/ExecutesPlugin"
+  }
+
   patch_gameinfo_for_metamod() {
     local gameinfo="$1"
     local tmp_file=""
@@ -565,6 +619,10 @@ _matchzy_bootstrap_main() (
   local ANYBASELIB_VERSION="${ANYBASELIB_VERSION:-latest}"
   local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
   local ADMINS="${ADMINS:-}"
+  local NEED_MENU_STACK=0
+  if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
+    NEED_MENU_STACK=1
+  fi
 
   local STATE_DIR="$STEAMAPPDIR/.mod-installer"
   local STATE_FILE="$STATE_DIR/state.env"
@@ -577,6 +635,36 @@ _matchzy_bootstrap_main() (
   trap 'rm -rf "$TMP_DIR"' EXIT
 
   remove_obsolete_plugins
+
+  if ! is_enabled "$FAKE_RCON_ENABLED"; then
+    log "cs2-fake-rcon disabled; removing installed files"
+    remove_fake_rcon_component
+  fi
+
+  if ! is_enabled "$WEAPONPAINTS_ENABLED"; then
+    log "WeaponPaints disabled; removing installed files"
+    remove_weaponpaints_component
+  fi
+
+  if (( NEED_MENU_STACK != 1 )); then
+    log "Shared CounterStrikeSharp menu dependencies not required; removing installed files"
+    remove_menu_stack_components
+  fi
+
+  if ! is_enabled "$SIMPLEADMIN_ENABLED"; then
+    log "CS2-SimpleAdmin disabled; removing installed files"
+    remove_simpleadmin_component
+  fi
+
+  if ! is_enabled "$FORTNITE_EMOTES_ENABLED"; then
+    log "FortniteEmotesNDances disabled; removing installed files"
+    remove_fortnite_emotes_component
+  fi
+
+  if ! is_enabled "$EXECUTES_ENABLED"; then
+    log "cs2-executes disabled; removing installed files"
+    remove_executes_component
+  fi
 
   log "Resolving Metamod release: $METAMOD_VERSION"
   local METAMOD_TAG METAMOD_URL
@@ -614,6 +702,8 @@ _matchzy_bootstrap_main() (
   COUNTERSTRIKESHARP_TAG="${_counterstrikesharp_release[0]:-}"
   COUNTERSTRIKESHARP_URL="${_counterstrikesharp_release[1]:-}"
   unset _counterstrikesharp_release
+  [[ -n "${COUNTERSTRIKESHARP_TAG:-}" && -n "${COUNTERSTRIKESHARP_URL:-}" ]] \
+    || fail "Could not resolve CounterStrikeSharp linux asset"
   log "CounterStrikeSharp resolved to tag '$COUNTERSTRIKESHARP_TAG'"
 
   local FAKE_RCON_TAG=""
@@ -630,6 +720,8 @@ _matchzy_bootstrap_main() (
     FAKE_RCON_TAG="${_fake_rcon_release[0]:-}"
     FAKE_RCON_URL="${_fake_rcon_release[1]:-}"
     unset _fake_rcon_release
+    [[ -n "${FAKE_RCON_TAG:-}" && -n "${FAKE_RCON_URL:-}" ]] \
+      || fail "Could not resolve cs2-fake-rcon linux asset"
     log "cs2-fake-rcon resolved to tag '$FAKE_RCON_TAG'"
   else
     log "cs2-fake-rcon installation disabled"
@@ -649,14 +741,11 @@ _matchzy_bootstrap_main() (
     WEAPONPAINTS_TAG="${_weaponpaints_release[0]:-}"
     WEAPONPAINTS_URL="${_weaponpaints_release[1]:-}"
     unset _weaponpaints_release
+    [[ -n "${WEAPONPAINTS_TAG:-}" && -n "${WEAPONPAINTS_URL:-}" ]] \
+      || fail "Could not resolve WeaponPaints asset"
     log "WeaponPaints resolved to tag '$WEAPONPAINTS_TAG'"
   else
     log "WeaponPaints installation disabled"
-  fi
-
-  local NEED_MENU_STACK=0
-  if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
-    NEED_MENU_STACK=1
   fi
 
   local PLAYERSETTINGS_TAG=""
@@ -679,6 +768,8 @@ _matchzy_bootstrap_main() (
     PLAYERSETTINGS_TAG="${_playersettings_release[0]:-}"
     PLAYERSETTINGS_URL="${_playersettings_release[1]:-}"
     unset _playersettings_release
+    [[ -n "${PLAYERSETTINGS_TAG:-}" && -n "${PLAYERSETTINGS_URL:-}" ]] \
+      || fail "Could not resolve PlayerSettingsCS2 asset"
 
     mapfile -t _anybaselib_release < <(
       resolve_github_release_asset \
@@ -690,6 +781,8 @@ _matchzy_bootstrap_main() (
     ANYBASELIB_TAG="${_anybaselib_release[0]:-}"
     ANYBASELIB_URL="${_anybaselib_release[1]:-}"
     unset _anybaselib_release
+    [[ -n "${ANYBASELIB_TAG:-}" && -n "${ANYBASELIB_URL:-}" ]] \
+      || fail "Could not resolve AnyBaseLibCS2 asset"
 
     mapfile -t _menumanager_release < <(
       resolve_github_release_asset \
@@ -701,6 +794,8 @@ _matchzy_bootstrap_main() (
     MENUMANAGER_TAG="${_menumanager_release[0]:-}"
     MENUMANAGER_URL="${_menumanager_release[1]:-}"
     unset _menumanager_release
+    [[ -n "${MENUMANAGER_TAG:-}" && -n "${MENUMANAGER_URL:-}" ]] \
+      || fail "Could not resolve MenuManagerCS2 asset"
   else
     log "Shared CounterStrikeSharp menu dependencies not needed"
   fi
@@ -717,6 +812,8 @@ _matchzy_bootstrap_main() (
     SIMPLEADMIN_TAG="${_simpleadmin_release[0]:-}"
     SIMPLEADMIN_URL="${_simpleadmin_release[1]:-}"
     unset _simpleadmin_release
+    [[ -n "${SIMPLEADMIN_TAG:-}" && -n "${SIMPLEADMIN_URL:-}" ]] \
+      || fail "Could not resolve CS2-SimpleAdmin asset"
     log "CS2-SimpleAdmin resolved to tag '$SIMPLEADMIN_TAG'"
   else
     log "CS2-SimpleAdmin installation disabled"
@@ -740,6 +837,8 @@ _matchzy_bootstrap_main() (
     MULTIADDONMANAGER_TAG="${_multiaddonmanager_release[0]:-}"
     MULTIADDONMANAGER_URL="${_multiaddonmanager_release[1]:-}"
     unset _multiaddonmanager_release
+    [[ -n "${MULTIADDONMANAGER_TAG:-}" && -n "${MULTIADDONMANAGER_URL:-}" ]] \
+      || fail "Could not resolve MultiAddonManager linux asset"
 
     mapfile -t _raytrace_release < <(
       resolve_github_release_asset \
@@ -751,6 +850,8 @@ _matchzy_bootstrap_main() (
     RAYTRACE_TAG="${_raytrace_release[0]:-}"
     RAYTRACE_URL="${_raytrace_release[1]:-}"
     unset _raytrace_release
+    [[ -n "${RAYTRACE_TAG:-}" && -n "${RAYTRACE_URL:-}" ]] \
+      || fail "Could not resolve Ray-Trace Metamod linux asset"
 
     log "Resolving FortniteEmotesNDances release: $FORTNITE_EMOTES_VERSION"
     mapfile -t _fortnite_release < <(
@@ -763,6 +864,8 @@ _matchzy_bootstrap_main() (
     FORTNITE_EMOTES_TAG="${_fortnite_release[0]:-}"
     FORTNITE_EMOTES_URL="${_fortnite_release[1]:-}"
     unset _fortnite_release
+    [[ -n "${FORTNITE_EMOTES_TAG:-}" && -n "${FORTNITE_EMOTES_URL:-}" ]] \
+      || fail "Could not resolve FortniteEmotesNDances asset"
     log "FortniteEmotesNDances resolved to tag '$FORTNITE_EMOTES_TAG'"
   else
     log "FortniteEmotesNDances installation disabled"
@@ -782,6 +885,8 @@ _matchzy_bootstrap_main() (
     EXECUTES_TAG="${_executes_release[0]:-}"
     EXECUTES_URL="${_executes_release[1]:-}"
     unset _executes_release
+    [[ -n "${EXECUTES_TAG:-}" && -n "${EXECUTES_URL:-}" ]] \
+      || fail "Could not resolve cs2-executes asset"
     log "cs2-executes resolved to tag '$EXECUTES_TAG'"
   else
     log "cs2-executes installation disabled"
