@@ -99,11 +99,15 @@ services:
       SERVERPROVIDER: ${SERVERPROVIDER:-local}
 
   g5v:
-    image: ghcr.io/phlexplexico/g5v:latest
+    build:
+      context: .
+      dockerfile: g5v/Dockerfile
     restart: unless-stopped
     depends_on:
       g5api:
         condition: service_started
+    environment:
+      G5V_API_URL: ${G5V_API_URL:-}
     ports:
       - "27019:80"
 

@@ -42,7 +42,9 @@ Dieses Repository liefert einen einzigen Compose-Stack fuer:
 - Service `g5api` -> `https://api.<deine-domain>`
 - Service `g5api` -> `https://panel.<deine-domain>/api`
 5. Beim `g5api`-Domain-Mapping den Service-Port `3301` verwenden.
-6. Deploy starten.
+6. Optional, aber fuer Coolify oft robuster: `G5V_API_URL=https://api.<deine-domain>` setzen.
+   Dann spricht das Frontend direkt die API-Subdomain an und ist nicht auf funktionierendes `/api`-Path-Routing angewiesen.
+7. Deploy starten.
 
 Hinweis: Es werden keine custom networks in Compose definiert (Coolify-kompatibel).
 
@@ -116,6 +118,7 @@ HTTP:
 - `https://panel.<deine-domain>`.
 - `https://api.<deine-domain>/` antwortet.
 - `https://panel.<deine-domain>/api/` routed auf `g5api`.
+- Wenn `G5V_API_URL` gesetzt ist, nutzt das Frontend stattdessen direkt diese API-URL.
 
 Lokale Port-Checks:
 
@@ -124,7 +127,15 @@ Lokale Port-Checks:
 
 ## 6) Fallback ohne `/api` Path-Routing in Coolify
 
-Falls `panel.<domain>/api` in deiner Coolify-Instanz nicht sauber routing-faehig ist:
+Falls `panel.<domain>/api` in deiner Coolify-Instanz nicht sauber routing-faehig ist, setze einfach:
+
+```bash
+G5V_API_URL=https://api.<deine-domain>
+```
+
+Das in diesem Repo enthaltene `g5v`-Wrapper-Image patched dann beim Containerstart den Frontend-Fallback von `"/api"` auf diese absolute URL.
+
+Nur falls du bewusst ein eigenes Frontend-Build brauchst, ist weiterhin ein komplett eigenes `g5v`-Image noetig:
 
 1. Eigenes `g5v` Image bauen:
 
