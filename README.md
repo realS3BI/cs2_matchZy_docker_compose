@@ -24,7 +24,7 @@ Dieses Repository liefert einen einzigen Compose-Stack fuer:
 - `MARIADB_ROOT_PASSWORD`
 - `MARIADB_PASSWORD`
 - `REDIS_PASSWORD`
-- `DBKEY`
+- `DBKEY` (muss 16, 24 oder 32 Zeichen lang sein)
 - `SHAREDSECRET`
 - `HOSTNAME`
 - `CLIENTHOME`
@@ -77,7 +77,9 @@ Hinweis: Es werden keine custom networks in Compose definiert (Coolify-kompatibe
 
 Beim Start:
 
-1. Loest Metamod-Release (`latest` oder gepinnt via `METAMOD_VERSION`) ueber GitHub API auf.
+1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev`-Snapshots von `metamodsource.net` auf.
+   - `METAMOD_VERSION=latest` zieht den neuesten `2.0-dev` Build.
+   - Optional kann ein Build direkt gepinnt werden, z. B. `METAMOD_VERSION=1383`.
 2. Loest MatchZy-Release (`latest` oder gepinnt via `MATCHZY_VERSION`) auf.
 3. Installiert nur neu, wenn:
 - Version geaendert
@@ -164,6 +166,8 @@ docker compose run --rm cs2 sh -lc 'rm -rf /home/steam/cs2-dedicated/pre.sh'
 docker compose up -d cs2
 ```
 
+Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten siehst, kann auch eine alte persistierte Datei `/home/steam/cs2-dedicated/pre.sh` im Volume liegen. Dann ebenfalls einmalig entfernen und den Container neu starten, damit die aktuelle `/etc/pre.sh` aus dem Image erneut ins Volume kopiert wird.
+
 Zusatzcheck bei "kein Connect moeglich":
 
 1. Server muss `SV: Connection to Steam servers successful.` und `Network socket ... opened on port 27015` zeigen.
@@ -182,7 +186,7 @@ Falls `meta list` oder `css_plugins list` leer ist:
 
    Wenn keine `[pre.sh] ...` Zeilen auftauchen, wurde das Skript nicht gesourct. Haeufige Ursachen:
    - Es laeuft noch ein alter Deploy-Stand mit File-Bind-Mount statt gebautem Image.
-   - Im Persistenz-Volume liegt ein Ordner `pre.sh` statt einer Datei. Siehe Abschnitt 7.
+   - Im Persistenz-Volume liegt ein alter `pre.sh`-Pfad, entweder als Ordner oder als veraltete Datei. Siehe Abschnitt 7.
    - Das Image wurde nicht neu gebaut und enthaelt daher noch nicht das aktuelle `/etc/pre.sh`.
 
 2. Reinstall fuer den naechsten Start erzwingen (z. B. nach Versionwechsel):
@@ -206,3 +210,8 @@ Falls `meta list` oder `css_plugins list` leer ist:
    ```
 
    Keine Ausgabe -> der Patch wurde nicht (mehr) angewendet. Container neu starten; `pre.sh` patcht bei jedem Start erneut.
+
+5. Wenn `meta list` weiterhin `Unknown command 'meta'!` zeigt, obwohl `[pre.sh] Mod bootstrap complete` im Log steht:
+   - Dann wurde sehr wahrscheinlich der falsche Metamod-Zweig installiert.
+   - Fuer CS2 muss ein `2.0-dev`-Build mit `bin/linuxsteamrt64/libserver.so` installiert sein.
+   - Ein altes `1.12.x`-Release mit nur `bin/linux64/server.so` reicht fuer CS2 nicht.

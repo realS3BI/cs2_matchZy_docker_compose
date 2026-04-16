@@ -122,6 +122,44 @@ _matchzy_bootstrap_main() (
     return 1
   }
 
+  resolve_metamod_release() {
+    local wanted="$1"
+    local build=""
+    local page=""
+    local tag=""
+    local url=""
+
+    case "$wanted" in
+      latest|2.0-dev|dev)
+        page="$(http_get_text 'https://www.metamodsource.net/downloads.php/?branch=2.0-dev')" \
+          || fail "Unable to resolve Metamod 2.0-dev downloads page"
+        url="$(printf '%s' "$page" \
+          | tr -d '\r\n' \
+          | grep -Eo 'https://github\.com/alliedmodders/metamod-source/releases/download/2\.0\.0\.[0-9]+/mmsource-2\.0\.0-git[0-9]+-linux\.tar\.gz' \
+          | head -n1)"
+        tag="$(printf '%s' "$url" \
+          | sed -E 's#.*/mmsource-(2\.0\.0-git[0-9]+)-linux\.tar\.gz#\1#')"
+        ;;
+      *)
+        if [[ "$wanted" =~ ^[0-9]+$ ]]; then
+          build="$wanted"
+        elif [[ "$wanted" =~ git([0-9]+)$ ]]; then
+          build="${BASH_REMATCH[1]}"
+        elif [[ "$wanted" =~ dev\+([0-9]+)$ ]]; then
+          build="${BASH_REMATCH[1]}"
+        fi
+        ;;
+    esac
+
+    if [[ -z "$tag" || -z "$url" ]]; then
+      [[ -n "$build" ]] || fail "Could not resolve Metamod build for '$wanted'. Use 'latest' or a 2.0 build number like '1395'."
+      tag="2.0.0-git${build}"
+      url="https://github.com/alliedmodders/metamod-source/releases/download/2.0.0.${build}/mmsource-${tag}-linux.tar.gz"
+    fi
+
+    printf '%s\n%s\n' "$tag" "$url"
+  }
+
   patch_gameinfo_for_metamod() {
     local gameinfo="$1"
     local tmp_file=""
@@ -196,14 +234,12 @@ _matchzy_bootstrap_main() (
   [[ -d "$GAME_DIR" ]] || fail "Game directory not found: $GAME_DIR"
 
   log "Resolving Metamod release: $METAMOD_VERSION"
-  local metamod_json
-  metamod_json="$(get_release_json alliedmodders/metamod-source "$METAMOD_VERSION")" \
-    || fail "Unable to resolve Metamod release for '$METAMOD_VERSION'"
   local METAMOD_TAG METAMOD_URL
-  METAMOD_TAG="$(extract_tag_name "$metamod_json")"
-  METAMOD_URL="$(extract_asset_url "$metamod_json" 'linux\.tar\.gz$')"
-  [[ -n "${METAMOD_TAG:-}" && -n "${METAMOD_URL:-}" ]] \
-    || fail "Could not resolve Metamod linux asset"
+  mapfile -t _metamod_release < <(resolve_metamod_release "$METAMOD_VERSION")
+  METAMOD_TAG="${_metamod_release[0]:-}"
+  METAMOD_URL="${_metamod_release[1]:-}"
+  unset _metamod_release
+  [[ -n "${METAMOD_TAG:-}" && -n "${METAMOD_URL:-}" ]] || fail "Could not resolve Metamod linux asset"
   log "Metamod resolved to tag '$METAMOD_TAG'"
 
   log "Resolving MatchZy release: $MATCHZY_VERSION"
