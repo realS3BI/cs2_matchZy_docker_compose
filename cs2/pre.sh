@@ -20,6 +20,17 @@ _matchzy_bootstrap_main() (
     command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
   }
 
+  is_enabled() {
+    case "${1,,}" in
+      1|true|yes|on)
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  }
+
   http_get() {
     local url="$1"
     local out="$2"
@@ -61,6 +72,19 @@ _matchzy_bootstrap_main() (
       | sed -E 's/.*"([^"]+)"/\1/' \
       | grep -Ei "$pattern" \
       | head -n1
+  }
+
+  read_state_value() {
+    local key="$1"
+    [[ -f "$STATE_FILE" ]] || return 0
+    grep -E "^${key}=" "$STATE_FILE" | head -n1 | cut -d= -f2- || true
+  }
+
+  trim_whitespace() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
   }
 
   extract_archive() {
@@ -122,6 +146,26 @@ _matchzy_bootstrap_main() (
     return 1
   }
 
+  resolve_github_release_asset() {
+    local repo="$1"
+    local wanted="$2"
+    local pattern="$3"
+    local component="$4"
+    local json=""
+    local tag=""
+    local url=""
+
+    json="$(get_release_json "$repo" "$wanted")" \
+      || fail "Unable to resolve ${component} release for '$wanted' from $repo"
+    tag="$(extract_tag_name "$json")"
+    url="$(extract_asset_url "$json" "$pattern")"
+
+    [[ -n "$tag" && -n "$url" ]] \
+      || fail "Could not resolve ${component} asset from $repo matching pattern '$pattern'"
+
+    printf '%s\n%s\n' "$tag" "$url"
+  }
+
   resolve_metamod_release() {
     local wanted="$1"
     local build=""
@@ -158,6 +202,153 @@ _matchzy_bootstrap_main() (
     fi
 
     printf '%s\n%s\n' "$tag" "$url"
+  }
+
+  install_archive_component() {
+    local name="$1"
+    local url="$2"
+    local destination="$3"
+    local marker="${4:-}"
+    local normalize_mode="${5:-none}"
+    local archive=""
+
+    mkdir -p "$destination"
+
+    archive="$TMP_DIR/${name}-$(basename "${url%%\?*}")"
+    log "Downloading $name asset"
+    http_get "$url" "$archive"
+
+    log "Extracting $name into $destination"
+    extract_archive "$archive" "$destination"
+
+    case "$normalize_mode" in
+      csgo)
+        normalize_csgo_layout "$destination"
+        ;;
+    esac
+
+    if [[ -n "$marker" ]]; then
+      [[ -e "$marker" ]] || fail "$name installation marker not found at $marker"
+    fi
+  }
+
+  stage_archive_component() {
+    local name="$1"
+    local url="$2"
+    local stage_dir=""
+    local archive=""
+
+    stage_dir="$TMP_DIR/stage-$name"
+    archive="$TMP_DIR/${name}-$(basename "${url%%\?*}")"
+
+    rm -rf "$stage_dir"
+    mkdir -p "$stage_dir"
+
+    log "Downloading $name asset"
+    http_get "$url" "$archive"
+
+    log "Extracting $name into staging directory $stage_dir"
+    extract_archive "$archive" "$stage_dir"
+
+    printf '%s\n' "$stage_dir"
+  }
+
+  ensure_multiaddonmanager_addon() {
+    local cfg_file="$1"
+    local addon_id="$2"
+
+    mkdir -p "$(dirname "$cfg_file")"
+
+    if [[ ! -f "$cfg_file" ]]; then
+      printf 'mm_extra_addons "%s"\n' "$addon_id" > "$cfg_file"
+      log "Created MultiAddonManager config with addon $addon_id"
+      return 0
+    fi
+
+    if grep -Eq '^[[:space:]]*mm_extra_addons[[:space:]]+"[^"]*'"$addon_id"'[^"]*"' "$cfg_file"; then
+      log "MultiAddonManager already configured with addon $addon_id"
+      return 0
+    fi
+
+    if grep -Eq '^[[:space:]]*mm_extra_addons[[:space:]]+"' "$cfg_file"; then
+      sed -Ei 's#^([[:space:]]*mm_extra_addons[[:space:]]+")([^"]*)(".*)$#\1\2,'"${addon_id}"'\3#' "$cfg_file"
+      sed -Ei 's#mm_extra_addons[[:space:]]+",#mm_extra_addons "#' "$cfg_file"
+    else
+      printf '\nmm_extra_addons "%s"\n' "$addon_id" >> "$cfg_file"
+    fi
+
+    log "Ensured MultiAddonManager addon $addon_id is configured"
+  }
+
+  patch_css_core_follow_guidelines() {
+    local core_file="$1"
+
+    [[ -f "$core_file" ]] || {
+      log "CounterStrikeSharp core config not found at $core_file; skipping WeaponPaints core patch"
+      return 0
+    }
+
+    if grep -Eq '"FollowCS2ServerGuidelines"[[:space:]]*:[[:space:]]*false' "$core_file"; then
+      log "CounterStrikeSharp core config already allows WeaponPaints"
+      return 0
+    fi
+
+    if grep -Eq '"FollowCS2ServerGuidelines"[[:space:]]*:[[:space:]]*true' "$core_file"; then
+      sed -Ei '0,/"FollowCS2ServerGuidelines"[[:space:]]*:[[:space:]]*true/s//"FollowCS2ServerGuidelines": false/' "$core_file"
+      log "Patched CounterStrikeSharp core config: FollowCS2ServerGuidelines=false"
+      return 0
+    fi
+
+    log "CounterStrikeSharp core config does not contain FollowCS2ServerGuidelines; leaving file unchanged"
+  }
+
+  install_fortnite_emotes_component() {
+    local url="$1"
+    local marker="$2"
+    local stage_dir=""
+    local root_dir=""
+    local config_src=""
+    local config_dst=""
+
+    stage_dir="$(stage_archive_component "fortnite-emotes" "$url")"
+    root_dir="$stage_dir/FortniteEmotesNDances"
+    [[ -d "$root_dir" ]] || fail "FortniteEmotesNDances archive layout unexpected"
+
+    mkdir -p \
+      "$CSS_DIR/plugins" \
+      "$CSS_DIR/shared" \
+      "$CSS_DIR/configs/plugins" \
+      "$CSS_DIR/gamedata"
+
+    rm -rf \
+      "$CSS_DIR/plugins/FortniteEmotesNDances" \
+      "$CSS_DIR/shared/FortniteEmotesNDancesAPI" \
+      "$CSS_DIR/shared/KitsuneMenu" \
+      "$CSS_DIR/shared/RayTraceApi"
+
+    cp -a "$root_dir/plugins/FortniteEmotesNDances" "$CSS_DIR/plugins/"
+    cp -a "$root_dir/shared/." "$CSS_DIR/shared/"
+    cp -f "$root_dir/gamedata/fortnite_emotes.json" "$CSS_DIR/gamedata/fortnite_emotes.json"
+
+    config_src="$root_dir/configs/plugins/FortniteEmotesNDances"
+    config_dst="$CSS_DIR/configs/plugins/FortniteEmotesNDances"
+    if [[ ! -d "$config_dst" ]]; then
+      cp -a "$config_src" "$config_dst"
+      log "Installed default FortniteEmotesNDances config"
+    else
+      log "Keeping existing FortniteEmotesNDances config at $config_dst"
+    fi
+
+    [[ -f "$marker" ]] || fail "FortniteEmotesNDances installation marker not found at $marker"
+  }
+
+  remove_obsolete_plugins() {
+    rm -rf \
+      "$ADDONS_DIR/Skin" \
+      "$ADDONS_DIR/metamod/Skin.vdf" \
+      "$CSS_DIR/plugins/ColoredSmokeTeam" \
+      "$CSS_DIR/configs/plugins/ColoredSmokeTeam" \
+      "$CSS_DIR/gamedata/coloredsmoketeam.json"
   }
 
   patch_gameinfo_for_metamod() {
@@ -213,25 +404,98 @@ _matchzy_bootstrap_main() (
     log "Patched gameinfo.gi with Metamod search path"
   }
 
+  write_matchzy_admins_file() {
+    local admins_raw="$1"
+    local admins_file="$2"
+    local admins_dir=""
+    local tmp_file=""
+    local entry=""
+    local admin_id=""
+    local index=0
+    local -a admin_entries=()
+    local -a admin_ids=()
+    local -A seen_ids=()
+
+    admins_dir="$(dirname "$admins_file")"
+    mkdir -p "$admins_dir"
+
+    IFS=',' read -r -a admin_entries <<< "${admins_raw//$'\n'/,}"
+    for entry in "${admin_entries[@]}"; do
+      admin_id="$(trim_whitespace "$entry")"
+      [[ -n "$admin_id" ]] || continue
+      [[ "$admin_id" =~ ^[0-9]+$ ]] || fail "ADMINS contains invalid SteamID64 '$admin_id'"
+      [[ -n "${seen_ids[$admin_id]:-}" ]] && continue
+      seen_ids["$admin_id"]=1
+      admin_ids+=("$admin_id")
+    done
+
+    tmp_file="$(mktemp)"
+    {
+      printf '{'
+      if ((${#admin_ids[@]} > 0)); then
+        printf '\n'
+        for index in "${!admin_ids[@]}"; do
+          printf '  "%s": ""' "${admin_ids[$index]}"
+          if (( index < ${#admin_ids[@]} - 1 )); then
+            printf ','
+          fi
+          printf '\n'
+        done
+      fi
+      printf '}\n'
+    } > "$tmp_file"
+
+    mv "$tmp_file" "$admins_file"
+    log "Wrote MatchZy admins file with ${#admin_ids[@]} admin(s) from ADMINS"
+  }
+
   need_cmd awk
   need_cmd grep
   need_cmd sed
   need_cmd tar
   need_cmd mktemp
+  need_cmd cut
 
   local STEAMAPPDIR="${STEAMAPPDIR:-/home/steam/cs2-dedicated}"
   local GAME_DIR="$STEAMAPPDIR/game/csgo"
+  local ADDONS_DIR="$GAME_DIR/addons"
+  local CSS_DIR="$ADDONS_DIR/counterstrikesharp"
   local GAMEINFO_FILE="$GAME_DIR/gameinfo.gi"
 
   local METAMOD_VERSION="${METAMOD_VERSION:-latest}"
   local MATCHZY_VERSION="${MATCHZY_VERSION:-latest}"
   local MOD_REINSTALL="${MOD_REINSTALL:-0}"
+  local FAKE_RCON_ENABLED="${FAKE_RCON_ENABLED:-1}"
+  local FAKE_RCON_VERSION="${FAKE_RCON_VERSION:-latest}"
+  local WEAPONPAINTS_ENABLED="${WEAPONPAINTS_ENABLED:-1}"
+  local WEAPONPAINTS_VERSION="${WEAPONPAINTS_VERSION:-latest}"
+  local FORTNITE_EMOTES_ENABLED="${FORTNITE_EMOTES_ENABLED:-1}"
+  local FORTNITE_EMOTES_VERSION="${FORTNITE_EMOTES_VERSION:-latest}"
+  local FORTNITE_EMOTES_WORKSHOP_ADDON_ID="${FORTNITE_EMOTES_WORKSHOP_ADDON_ID:-3328582199}"
+  local MULTIADDONMANAGER_VERSION="${MULTIADDONMANAGER_VERSION:-latest}"
+  local RAYTRACE_VERSION="${RAYTRACE_VERSION:-latest}"
+  local EXECUTES_ENABLED="${EXECUTES_ENABLED:-1}"
+  local EXECUTES_VERSION="${EXECUTES_VERSION:-latest}"
+  local ROLLTHEDICE_ENABLED="${ROLLTHEDICE_ENABLED:-1}"
+  local ROLLTHEDICE_VERSION="${ROLLTHEDICE_VERSION:-latest}"
+  local SIMPLEADMIN_ENABLED="${SIMPLEADMIN_ENABLED:-1}"
+  local SIMPLEADMIN_VERSION="${SIMPLEADMIN_VERSION:-latest}"
+  local PLAYERSETTINGS_VERSION="${PLAYERSETTINGS_VERSION:-latest}"
+  local ANYBASELIB_VERSION="${ANYBASELIB_VERSION:-latest}"
+  local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
+  local ADMINS="${ADMINS:-}"
 
   local STATE_DIR="$STEAMAPPDIR/.mod-installer"
   local STATE_FILE="$STATE_DIR/state.env"
+  local TMP_DIR=""
   mkdir -p "$STATE_DIR"
 
   [[ -d "$GAME_DIR" ]] || fail "Game directory not found: $GAME_DIR"
+
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf "$TMP_DIR"' EXIT
+
+  remove_obsolete_plugins
 
   log "Resolving Metamod release: $METAMOD_VERSION"
   local METAMOD_TAG METAMOD_URL
@@ -256,58 +520,377 @@ _matchzy_bootstrap_main() (
     || fail "Could not resolve MatchZy linux asset"
   log "MatchZy resolved to tag '$MATCHZY_TAG'"
 
-  local INSTALLED_METAMOD_TAG=""
-  local INSTALLED_MATCHZY_TAG=""
-  if [[ -f "$STATE_FILE" ]]; then
-    INSTALLED_METAMOD_TAG="$(grep -E '^METAMOD_TAG=' "$STATE_FILE" | head -n1 | cut -d= -f2- || true)"
-    INSTALLED_MATCHZY_TAG="$(grep -E '^MATCHZY_TAG=' "$STATE_FILE" | head -n1 | cut -d= -f2- || true)"
+  local FAKE_RCON_TAG=""
+  local FAKE_RCON_URL=""
+  if is_enabled "$FAKE_RCON_ENABLED"; then
+    log "Resolving cs2-fake-rcon release: $FAKE_RCON_VERSION"
+    mapfile -t _fake_rcon_release < <(
+      resolve_github_release_asset \
+        "Salvatore-Als/cs2-fake-rcon" \
+        "$FAKE_RCON_VERSION" \
+        'linux\.tar\.gz$' \
+        'cs2-fake-rcon'
+    )
+    FAKE_RCON_TAG="${_fake_rcon_release[0]:-}"
+    FAKE_RCON_URL="${_fake_rcon_release[1]:-}"
+    unset _fake_rcon_release
+    log "cs2-fake-rcon resolved to tag '$FAKE_RCON_TAG'"
+  else
+    log "cs2-fake-rcon installation disabled"
   fi
+
+  local WEAPONPAINTS_TAG=""
+  local WEAPONPAINTS_URL=""
+  if is_enabled "$WEAPONPAINTS_ENABLED"; then
+    log "Resolving WeaponPaints release: $WEAPONPAINTS_VERSION"
+    mapfile -t _weaponpaints_release < <(
+      resolve_github_release_asset \
+        "Nereziel/cs2-WeaponPaints" \
+        "$WEAPONPAINTS_VERSION" \
+        'WeaponPaints\.zip$' \
+        'WeaponPaints'
+    )
+    WEAPONPAINTS_TAG="${_weaponpaints_release[0]:-}"
+    WEAPONPAINTS_URL="${_weaponpaints_release[1]:-}"
+    unset _weaponpaints_release
+    log "WeaponPaints resolved to tag '$WEAPONPAINTS_TAG'"
+  else
+    log "WeaponPaints installation disabled"
+  fi
+
+  local NEED_MENU_STACK=0
+  if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
+    NEED_MENU_STACK=1
+  fi
+
+  local PLAYERSETTINGS_TAG=""
+  local PLAYERSETTINGS_URL=""
+  local ANYBASELIB_TAG=""
+  local ANYBASELIB_URL=""
+  local MENUMANAGER_TAG=""
+  local MENUMANAGER_URL=""
+  local SIMPLEADMIN_TAG=""
+  local SIMPLEADMIN_URL=""
+  if (( NEED_MENU_STACK == 1 )); then
+    log "Resolving shared CounterStrikeSharp menu dependencies"
+    mapfile -t _playersettings_release < <(
+      resolve_github_release_asset \
+        "NickFox007/PlayerSettingsCS2" \
+        "$PLAYERSETTINGS_VERSION" \
+        'PlayerSettings\.zip$' \
+        'PlayerSettingsCS2'
+    )
+    PLAYERSETTINGS_TAG="${_playersettings_release[0]:-}"
+    PLAYERSETTINGS_URL="${_playersettings_release[1]:-}"
+    unset _playersettings_release
+
+    mapfile -t _anybaselib_release < <(
+      resolve_github_release_asset \
+        "NickFox007/AnyBaseLibCS2" \
+        "$ANYBASELIB_VERSION" \
+        'AnyBaseLib\.zip$' \
+        'AnyBaseLibCS2'
+    )
+    ANYBASELIB_TAG="${_anybaselib_release[0]:-}"
+    ANYBASELIB_URL="${_anybaselib_release[1]:-}"
+    unset _anybaselib_release
+
+    mapfile -t _menumanager_release < <(
+      resolve_github_release_asset \
+        "NickFox007/MenuManagerCS2" \
+        "$MENUMANAGER_VERSION" \
+        'MenuManager\.zip$' \
+        'MenuManagerCS2'
+    )
+    MENUMANAGER_TAG="${_menumanager_release[0]:-}"
+    MENUMANAGER_URL="${_menumanager_release[1]:-}"
+    unset _menumanager_release
+  else
+    log "Shared CounterStrikeSharp menu dependencies not needed"
+  fi
+
+  if is_enabled "$SIMPLEADMIN_ENABLED"; then
+    log "Resolving CS2-SimpleAdmin release: $SIMPLEADMIN_VERSION"
+    mapfile -t _simpleadmin_release < <(
+      resolve_github_release_asset \
+        "daffyyyy/CS2-SimpleAdmin" \
+        "$SIMPLEADMIN_VERSION" \
+        'CS2-SimpleAdmin-.*\.zip$' \
+        'CS2-SimpleAdmin'
+    )
+    SIMPLEADMIN_TAG="${_simpleadmin_release[0]:-}"
+    SIMPLEADMIN_URL="${_simpleadmin_release[1]:-}"
+    unset _simpleadmin_release
+    log "CS2-SimpleAdmin resolved to tag '$SIMPLEADMIN_TAG'"
+  else
+    log "CS2-SimpleAdmin installation disabled"
+  fi
+
+  local MULTIADDONMANAGER_TAG=""
+  local MULTIADDONMANAGER_URL=""
+  local RAYTRACE_TAG=""
+  local RAYTRACE_URL=""
+  local FORTNITE_EMOTES_TAG=""
+  local FORTNITE_EMOTES_URL=""
+  if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
+    log "Resolving FortniteEmotesNDances dependencies"
+    mapfile -t _multiaddonmanager_release < <(
+      resolve_github_release_asset \
+        "Source2ZE/MultiAddonManager" \
+        "$MULTIADDONMANAGER_VERSION" \
+        'linux\.tar\.gz$' \
+        'MultiAddonManager'
+    )
+    MULTIADDONMANAGER_TAG="${_multiaddonmanager_release[0]:-}"
+    MULTIADDONMANAGER_URL="${_multiaddonmanager_release[1]:-}"
+    unset _multiaddonmanager_release
+
+    mapfile -t _raytrace_release < <(
+      resolve_github_release_asset \
+        "FUNPLAY-pro-CS2/Ray-Trace" \
+        "$RAYTRACE_VERSION" \
+        'RayTrace-MM-.*linux\.tar\.gz$' \
+        'Ray-Trace Metamod'
+    )
+    RAYTRACE_TAG="${_raytrace_release[0]:-}"
+    RAYTRACE_URL="${_raytrace_release[1]:-}"
+    unset _raytrace_release
+
+    log "Resolving FortniteEmotesNDances release: $FORTNITE_EMOTES_VERSION"
+    mapfile -t _fortnite_release < <(
+      resolve_github_release_asset \
+        "Cruze03/FortniteEmotesNDances" \
+        "$FORTNITE_EMOTES_VERSION" \
+        'FortniteEmotesNDances_.*\.zip$' \
+        'FortniteEmotesNDances'
+    )
+    FORTNITE_EMOTES_TAG="${_fortnite_release[0]:-}"
+    FORTNITE_EMOTES_URL="${_fortnite_release[1]:-}"
+    unset _fortnite_release
+    log "FortniteEmotesNDances resolved to tag '$FORTNITE_EMOTES_TAG'"
+  else
+    log "FortniteEmotesNDances installation disabled"
+  fi
+
+  local EXECUTES_TAG=""
+  local EXECUTES_URL=""
+  if is_enabled "$EXECUTES_ENABLED"; then
+    log "Resolving cs2-executes release: $EXECUTES_VERSION"
+    mapfile -t _executes_release < <(
+      resolve_github_release_asset \
+        "zwolof/cs2-executes" \
+        "$EXECUTES_VERSION" \
+        'cs2-executes-.*\.zip$' \
+        'cs2-executes'
+    )
+    EXECUTES_TAG="${_executes_release[0]:-}"
+    EXECUTES_URL="${_executes_release[1]:-}"
+    unset _executes_release
+    log "cs2-executes resolved to tag '$EXECUTES_TAG'"
+  else
+    log "cs2-executes installation disabled"
+  fi
+
+  local ROLLTHEDICE_TAG=""
+  local ROLLTHEDICE_URL=""
+  if is_enabled "$ROLLTHEDICE_ENABLED"; then
+    log "Resolving RollTheDice release: $ROLLTHEDICE_VERSION"
+    mapfile -t _rollthedice_release < <(
+      resolve_github_release_asset \
+        "Kandru/cs2-roll-the-dice" \
+        "$ROLLTHEDICE_VERSION" \
+        'cs2-roll-the-dice-release-.*\.zip$' \
+        'RollTheDice'
+    )
+    ROLLTHEDICE_TAG="${_rollthedice_release[0]:-}"
+    ROLLTHEDICE_URL="${_rollthedice_release[1]:-}"
+    unset _rollthedice_release
+    log "RollTheDice resolved to tag '$ROLLTHEDICE_TAG'"
+  else
+    log "RollTheDice installation disabled"
+  fi
+
+  local INSTALLED_METAMOD_TAG
+  local INSTALLED_MATCHZY_TAG
+  local INSTALLED_FAKE_RCON_TAG
+  local INSTALLED_WEAPONPAINTS_TAG
+  local INSTALLED_PLAYERSETTINGS_TAG
+  local INSTALLED_ANYBASELIB_TAG
+  local INSTALLED_MENUMANAGER_TAG
+  local INSTALLED_SIMPLEADMIN_TAG
+  local INSTALLED_MULTIADDONMANAGER_TAG
+  local INSTALLED_RAYTRACE_TAG
+  local INSTALLED_FORTNITE_EMOTES_TAG
+  local INSTALLED_EXECUTES_TAG
+  local INSTALLED_ROLLTHEDICE_TAG
+
+  INSTALLED_METAMOD_TAG="$(read_state_value METAMOD_TAG)"
+  INSTALLED_MATCHZY_TAG="$(read_state_value MATCHZY_TAG)"
+  INSTALLED_FAKE_RCON_TAG="$(read_state_value FAKE_RCON_TAG)"
+  INSTALLED_WEAPONPAINTS_TAG="$(read_state_value WEAPONPAINTS_TAG)"
+  INSTALLED_PLAYERSETTINGS_TAG="$(read_state_value PLAYERSETTINGS_TAG)"
+  INSTALLED_ANYBASELIB_TAG="$(read_state_value ANYBASELIB_TAG)"
+  INSTALLED_MENUMANAGER_TAG="$(read_state_value MENUMANAGER_TAG)"
+  INSTALLED_SIMPLEADMIN_TAG="$(read_state_value SIMPLEADMIN_TAG)"
+  INSTALLED_MULTIADDONMANAGER_TAG="$(read_state_value MULTIADDONMANAGER_TAG)"
+  INSTALLED_RAYTRACE_TAG="$(read_state_value RAYTRACE_TAG)"
+  INSTALLED_FORTNITE_EMOTES_TAG="$(read_state_value FORTNITE_EMOTES_TAG)"
+  INSTALLED_EXECUTES_TAG="$(read_state_value EXECUTES_TAG)"
+  INSTALLED_ROLLTHEDICE_TAG="$(read_state_value ROLLTHEDICE_TAG)"
 
   local metamod_marker="$GAME_DIR/addons/metamod"
-  local matchzy_marker="$GAME_DIR/addons/counterstrikesharp/plugins/MatchZy"
+  local matchzy_marker="$CSS_DIR/plugins/MatchZy"
+  local fake_rcon_marker="$ADDONS_DIR/fake_rcon/bin/linuxsteamrt64/fake_rcon.so"
+  local weaponpaints_marker="$CSS_DIR/plugins/WeaponPaints/WeaponPaints.dll"
+  local weaponpaints_gamedata_src="$CSS_DIR/plugins/WeaponPaints/gamedata/weaponpaints.json"
+  local weaponpaints_gamedata_dst="$CSS_DIR/gamedata/weaponpaints.json"
+  local playersettings_marker="$CSS_DIR/plugins/PlayerSettings/PlayerSettings.dll"
+  local anybaselib_marker="$CSS_DIR/shared/AnyBaseLib/AnyBaseLib.dll"
+  local menumanager_marker="$CSS_DIR/plugins/MenuManagerCore/MenuManagerCore.dll"
+  local simpleadmin_marker="$CSS_DIR/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.dll"
+  local multiaddonmanager_marker="$ADDONS_DIR/multiaddonmanager/bin/multiaddonmanager.so"
+  local multiaddonmanager_cfg="$GAME_DIR/cfg/multiaddonmanager/multiaddonmanager.cfg"
+  local raytrace_marker="$ADDONS_DIR/RayTrace/bin/linuxsteamrt64/RayTrace.so"
+  local fortnite_emotes_marker="$CSS_DIR/plugins/FortniteEmotesNDances/FortniteEmotesNDances.dll"
+  local executes_marker="$CSS_DIR/plugins/ExecutesPlugin/ExecutesPlugin.dll"
+  local rollthedice_marker="$CSS_DIR/plugins/RollTheDice/RollTheDice.dll"
+  local css_core_config="$CSS_DIR/configs/core.json"
+  local matchzy_admins_file="$GAME_DIR/cfg/MatchZy/admins.json"
 
-  local reinstall_reason=""
-  if [[ "$MOD_REINSTALL" == "1" ]]; then
-    reinstall_reason="MOD_REINSTALL=1"
-  elif [[ "$INSTALLED_METAMOD_TAG" != "$METAMOD_TAG" ]]; then
-    reinstall_reason="Metamod version changed ($INSTALLED_METAMOD_TAG -> $METAMOD_TAG)"
-  elif [[ "$INSTALLED_MATCHZY_TAG" != "$MATCHZY_TAG" ]]; then
-    reinstall_reason="MatchZy version changed ($INSTALLED_MATCHZY_TAG -> $MATCHZY_TAG)"
-  elif [[ ! -d "$metamod_marker" || ! -d "$matchzy_marker" ]]; then
-    reinstall_reason="Mod files missing on disk"
+  if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_METAMOD_TAG" != "$METAMOD_TAG" || ! -d "$metamod_marker" ]]; then
+    log "Installing or updating Metamod"
+    install_archive_component "metamod" "$METAMOD_URL" "$GAME_DIR" "$metamod_marker"
+  else
+    log "Metamod already current; skipping"
   fi
 
-  if [[ -n "$reinstall_reason" ]]; then
-    log "Installing or updating mods: $reinstall_reason"
+  if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MATCHZY_TAG" != "$MATCHZY_TAG" || ! -d "$matchzy_marker" ]]; then
+    log "Installing or updating MatchZy"
+    install_archive_component "matchzy" "$MATCHZY_URL" "$GAME_DIR" "$matchzy_marker" "csgo"
+  else
+    log "MatchZy already current; skipping"
+  fi
 
-    local tmp_dir
-    tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "$tmp_dir"' EXIT
+  if is_enabled "$FAKE_RCON_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_FAKE_RCON_TAG" != "$FAKE_RCON_TAG" || ! -f "$fake_rcon_marker" ]]; then
+      log "Installing or updating cs2-fake-rcon"
+      install_archive_component "fake-rcon" "$FAKE_RCON_URL" "$GAME_DIR" "$fake_rcon_marker"
+    else
+      log "cs2-fake-rcon already current; skipping"
+    fi
+  fi
 
-    local metamod_archive matchzy_archive
-    metamod_archive="$tmp_dir/$(basename "${METAMOD_URL%%\?*}")"
-    matchzy_archive="$tmp_dir/$(basename "${MATCHZY_URL%%\?*}")"
+  if (( NEED_MENU_STACK == 1 )); then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_ANYBASELIB_TAG" != "$ANYBASELIB_TAG" || ! -f "$anybaselib_marker" ]]; then
+      log "Installing or updating AnyBaseLibCS2"
+      install_archive_component "anybaselib" "$ANYBASELIB_URL" "$GAME_DIR" "$anybaselib_marker"
+    else
+      log "AnyBaseLibCS2 already current; skipping"
+    fi
 
-    log "Downloading Metamod asset"
-    http_get "$METAMOD_URL" "$metamod_archive"
-    log "Extracting Metamod into $GAME_DIR"
-    extract_archive "$metamod_archive" "$GAME_DIR"
-    normalize_csgo_layout "$GAME_DIR"
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_PLAYERSETTINGS_TAG" != "$PLAYERSETTINGS_TAG" || ! -f "$playersettings_marker" ]]; then
+      log "Installing or updating PlayerSettingsCS2"
+      install_archive_component "playersettings" "$PLAYERSETTINGS_URL" "$GAME_DIR" "$playersettings_marker"
+    else
+      log "PlayerSettingsCS2 already current; skipping"
+    fi
 
-    log "Downloading MatchZy asset"
-    http_get "$MATCHZY_URL" "$matchzy_archive"
-    log "Extracting MatchZy into $GAME_DIR"
-    extract_archive "$matchzy_archive" "$GAME_DIR"
-    normalize_csgo_layout "$GAME_DIR"
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MENUMANAGER_TAG" != "$MENUMANAGER_TAG" || ! -f "$menumanager_marker" ]]; then
+      log "Installing or updating MenuManagerCS2"
+      install_archive_component "menumanager" "$MENUMANAGER_URL" "$GAME_DIR" "$menumanager_marker"
+    else
+      log "MenuManagerCS2 already current; skipping"
+    fi
+  fi
 
-    cat > "$STATE_FILE" <<EOF
+  if is_enabled "$WEAPONPAINTS_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_WEAPONPAINTS_TAG" != "$WEAPONPAINTS_TAG" || ! -f "$weaponpaints_marker" ]]; then
+      log "Installing or updating WeaponPaints"
+      install_archive_component "weaponpaints" "$WEAPONPAINTS_URL" "$CSS_DIR/plugins" "$weaponpaints_marker"
+    else
+      log "WeaponPaints already current; skipping"
+    fi
+
+    mkdir -p "$CSS_DIR/gamedata"
+    if [[ -f "$weaponpaints_gamedata_src" ]]; then
+      cp -f "$weaponpaints_gamedata_src" "$weaponpaints_gamedata_dst"
+      log "Installed WeaponPaints gamedata"
+    else
+      fail "WeaponPaints gamedata file not found at $weaponpaints_gamedata_src"
+    fi
+    patch_css_core_follow_guidelines "$css_core_config"
+  fi
+
+  if is_enabled "$SIMPLEADMIN_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_SIMPLEADMIN_TAG" != "$SIMPLEADMIN_TAG" || ! -f "$simpleadmin_marker" ]]; then
+      log "Installing or updating CS2-SimpleAdmin"
+      install_archive_component "simpleadmin" "$SIMPLEADMIN_URL" "$ADDONS_DIR" "$simpleadmin_marker"
+    else
+      log "CS2-SimpleAdmin already current; skipping"
+    fi
+  fi
+
+  if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MULTIADDONMANAGER_TAG" != "$MULTIADDONMANAGER_TAG" || ! -f "$multiaddonmanager_marker" ]]; then
+      log "Installing or updating MultiAddonManager"
+      install_archive_component "multiaddonmanager" "$MULTIADDONMANAGER_URL" "$GAME_DIR" "$multiaddonmanager_marker"
+    else
+      log "MultiAddonManager already current; skipping"
+    fi
+
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_RAYTRACE_TAG" != "$RAYTRACE_TAG" || ! -f "$raytrace_marker" ]]; then
+      log "Installing or updating Ray-Trace"
+      install_archive_component "raytrace" "$RAYTRACE_URL" "$ADDONS_DIR" "$raytrace_marker"
+    else
+      log "Ray-Trace already current; skipping"
+    fi
+
+    ensure_multiaddonmanager_addon "$multiaddonmanager_cfg" "$FORTNITE_EMOTES_WORKSHOP_ADDON_ID"
+
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_FORTNITE_EMOTES_TAG" != "$FORTNITE_EMOTES_TAG" || ! -f "$fortnite_emotes_marker" ]]; then
+      log "Installing or updating FortniteEmotesNDances"
+      install_fortnite_emotes_component "$FORTNITE_EMOTES_URL" "$fortnite_emotes_marker"
+    else
+      log "FortniteEmotesNDances already current; skipping"
+    fi
+  fi
+
+  if is_enabled "$EXECUTES_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_EXECUTES_TAG" != "$EXECUTES_TAG" || ! -f "$executes_marker" ]]; then
+      log "Installing or updating cs2-executes"
+      install_archive_component "executes" "$EXECUTES_URL" "$CSS_DIR/plugins" "$executes_marker"
+    else
+      log "cs2-executes already current; skipping"
+    fi
+  fi
+
+  if is_enabled "$ROLLTHEDICE_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_ROLLTHEDICE_TAG" != "$ROLLTHEDICE_TAG" || ! -f "$rollthedice_marker" ]]; then
+      log "Installing or updating RollTheDice"
+      install_archive_component "rollthedice" "$ROLLTHEDICE_URL" "$CSS_DIR/plugins" "$rollthedice_marker"
+    else
+      log "RollTheDice already current; skipping"
+    fi
+  fi
+
+  write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
+
+  cat > "$STATE_FILE" <<EOF
 METAMOD_TAG=$METAMOD_TAG
 MATCHZY_TAG=$MATCHZY_TAG
+FAKE_RCON_TAG=$FAKE_RCON_TAG
+WEAPONPAINTS_TAG=$WEAPONPAINTS_TAG
+PLAYERSETTINGS_TAG=$PLAYERSETTINGS_TAG
+ANYBASELIB_TAG=$ANYBASELIB_TAG
+MENUMANAGER_TAG=$MENUMANAGER_TAG
+SIMPLEADMIN_TAG=$SIMPLEADMIN_TAG
+MULTIADDONMANAGER_TAG=$MULTIADDONMANAGER_TAG
+RAYTRACE_TAG=$RAYTRACE_TAG
+FORTNITE_EMOTES_TAG=$FORTNITE_EMOTES_TAG
+EXECUTES_TAG=$EXECUTES_TAG
+ROLLTHEDICE_TAG=$ROLLTHEDICE_TAG
 EOF
-    log "Stored install state in $STATE_FILE"
-  else
-    log "Installed versions already current; skipping archive extraction"
-  fi
+  log "Stored install state in $STATE_FILE"
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
   log "Mod bootstrap complete"

@@ -6,6 +6,12 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 - automatischen Mod-Install beim Serverstart
 - `Metamod Source 2.0-dev`
 - `MatchZy` inklusive `CounterStrikeSharp`, sofern das passende MatchZy-Release verfuegbar ist
+- `cs2-fake-rcon`
+- `WeaponPaints`
+- `CS2-SimpleAdmin` inklusive `PlayerSettingsCS2`, `AnyBaseLibCS2` und `MenuManagerCS2`
+- `FortniteEmotesNDances` inklusive `MultiAddonManager` und `Ray-Trace`
+- `cs2-executes`
+- `RollTheDice`
 
 Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stabilen `MatchZy`-Server fuer Pracc, Pugs, Scrims und spaeter erweiterbare Automatisierung.
 
@@ -30,6 +36,13 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `CS2_MAXPLAYERS`
    - `METAMOD_VERSION`
    - `MATCHZY_VERSION`
+   - `FAKE_RCON_ENABLED`
+   - `WEAPONPAINTS_ENABLED`
+   - `FORTNITE_EMOTES_ENABLED`
+   - `EXECUTES_ENABLED`
+   - `ROLLTHEDICE_ENABLED`
+   - `SIMPLEADMIN_ENABLED`
+   - `ADMINS`
 
 ## 2) Deploy mit Docker Compose oder Coolify
 
@@ -56,13 +69,77 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
 
 1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev` Builds auf.
 2. Loest das gewuenschte MatchZy-Release auf.
-3. Installiert die Archive nur neu, wenn sich Versionen geaendert haben, Dateien fehlen oder `MOD_REINSTALL=1` gesetzt ist.
-4. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
-5. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
+3. Installiert optional weitere Plugins ueber deren offizielle Release-Archive:
+   - `cs2-fake-rcon`
+   - `WeaponPaints`
+   - `CS2-SimpleAdmin`
+   - `PlayerSettingsCS2`
+   - `AnyBaseLibCS2`
+   - `MenuManagerCS2`
+   - `MultiAddonManager`
+   - `Ray-Trace`
+   - `FortniteEmotesNDances`
+   - `cs2-executes`
+   - `RollTheDice`
+4. Schreibt `cfg/MatchZy/admins.json` aus `ADMINS` neu.
+5. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
+6. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
-## 4) Erste Nutzung mit MatchZy
+## 4) Zusatzplugins
+
+### cs2-fake-rcon
+
+- Wird standardmaessig installiert.
+- Stellt `fake_rcon_password` und `fake_rcon` bereit.
+
+### WeaponPaints
+
+- Wird standardmaessig installiert.
+- Benoetigt MySQL laut Projekt-Doku.
+- `cs2/pre.sh` kopiert automatisch `weaponpaints.json` nach `addons/counterstrikesharp/gamedata/`.
+- `cs2/pre.sh` setzt in `addons/counterstrikesharp/configs/core.json` nach Moeglichkeit `FollowCS2ServerGuidelines` auf `false`, wie vom Projekt verlangt.
+- Danach musst du `addons/counterstrikesharp/configs/plugins/WeaponPaints/WeaponPaints.json` mit deinen DB-Daten pflegen.
+
+### CS2-SimpleAdmin
+
+- Wird standardmaessig installiert.
+- Abhaengigkeiten `PlayerSettingsCS2`, `AnyBaseLibCS2` und `MenuManagerCS2` werden automatisch mit installiert.
+- Beim ersten Start erzeugt das Plugin seine Konfiguration unter:
+
+```text
+addons/counterstrikesharp/configs/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.json
+```
+
+### FortniteEmotesNDances
+
+- Wird standardmaessig installiert.
+- Benoetigt laut Projekt `MultiAddonManager` und `Ray-Trace`; beides wird automatisch mit installiert.
+- `cs2/pre.sh` traegt automatisch die Workshop-Addon-ID `3328582199` in `cfg/multiaddonmanager/multiaddonmanager.cfg` ein.
+- Wenn du das Plugin nicht willst, setze `FORTNITE_EMOTES_ENABLED=0`.
+
+### cs2-executes
+
+- Wird standardmaessig installiert.
+- Das Plugin ist eher ein eigener Trainings-/Executes-Modus als ein klassisches Scrim-Plugin.
+- Wenn du nur MatchZy fuer Pracc/Scrims willst, kannst du es ueber `EXECUTES_ENABLED=0` deaktivieren.
+
+### RollTheDice
+
+- Wird standardmaessig installiert.
+- Das Plugin ist ein Fun-/Chaos-Modus und normalerweise nichts fuer ernsthafte Scrims.
+- Wenn du es nicht willst, setze `ROLLTHEDICE_ENABLED=0`.
+
+## 5) Erste Nutzung mit MatchZy
 
 Nach erfolgreichem Start kannst du MatchZy direkt im Server verwenden.
+
+Wenn du MatchZy-Admins per Environment setzen willst, nutze `ADMINS` als komma-separierte Liste von Steam64IDs. Leerzeichen um die Kommata sind erlaubt.
+
+```bash
+ADMINS=76561198000000001, 76561198000000002
+```
+
+Beim Containerstart schreibt `cs2/pre.sh` daraus die Datei `game/csgo/cfg/MatchZy/admins.json` neu. Ein leeres `ADMINS` erzeugt entsprechend eine leere Adminliste.
 
 Typische Admin-Kommandos:
 
@@ -76,7 +153,7 @@ Typische Admin-Kommandos:
 
 Fuer einfache Praccs und Scrims brauchst du kein JSON-Matchsetup. Ein Match-JSON ist erst noetig, wenn du feste Teams, SteamIDs und BO1/BO3-Serien sauber locken willst.
 
-## 5) Checks
+## 6) Checks
 
 ```bash
 docker compose config
@@ -86,11 +163,11 @@ docker compose ps
 In der CS2-Konsole:
 
 - `meta list` sollte Metamod anzeigen
+- `meta list` sollte auch `fake_rcon`, `multiaddonmanager` und `RayTrace` zeigen, falls aktiviert
 - `css_plugins list` sollte MatchZy anzeigen
+- `css_plugins list` sollte je nach aktivierten Plugins auch `WeaponPaints`, `CS2-SimpleAdmin`, `PlayerSettings`, `MenuManagerCore`, `FortniteEmotesNDances`, `ExecutesPlugin` und `RollTheDice` zeigen
 
-Wenn das passt, sollte der Server fuer Practice und Scrims benutzbar sein.
-
-## 6) Troubleshooting CS2 Connect
+## 7) Troubleshooting CS2 Connect
 
 Wenn im Log folgendes erscheint:
 
@@ -106,50 +183,36 @@ docker compose up -d cs2
 
 Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten siehst, kann auch eine alte persistierte Datei `/home/steam/cs2-dedicated/pre.sh` im Volume liegen. Dann ebenfalls einmalig entfernen und den Container neu starten, damit die aktuelle `/etc/pre.sh` aus dem Image erneut ins Volume kopiert wird.
 
-Zusatzcheck bei "kein Connect moeglich":
+## 8) Troubleshooting "Plugins nicht geladen"
 
-1. Server muss `SV: Connection to Steam servers successful.` und `Network socket ... opened on port 27015` zeigen.
-2. Host-Firewall und Provider-Firewall muessen `27015/udp` (und optional `27015/tcp`, `27020/udp`) erlauben.
-3. Teste direkt mit `connect <server-ip>:27015` in der CS2-Konsole.
+1. Im CS2-Log muss eine Zeile wie `[pre.sh] Mod bootstrap complete` erscheinen.
+2. Reinstall fuer den naechsten Start erzwingen:
 
-## 7) Troubleshooting "Plugins nicht geladen"
+```bash
+MOD_REINSTALL=1 docker compose up -d cs2
+```
 
-Falls `meta list` oder `css_plugins list` leer ist:
+3. Plugin-Pfade pruefen:
 
-1. Pruefen, ob der Hook ueberhaupt ausgefuehrt wurde. Im CS2-Log muss eine Zeile wie diese stehen:
+```bash
+docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons'
+docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons/counterstrikesharp/plugins'
+docker compose exec cs2 sh -lc 'ls -la /etc/pre.sh /home/steam/cs2-dedicated/pre.sh'
+```
 
-   ```text
-   [pre.sh] Mod bootstrap complete
-   ```
+4. Metamod-SearchPath pruefen:
 
-   Wenn keine `[pre.sh] ...` Zeilen auftauchen, wurde das Skript nicht gesourct. Haeufige Ursachen:
-   - Es laeuft noch ein alter Deploy-Stand mit File-Bind-Mount statt gebautem Image.
-   - Im Persistenz-Volume liegt ein alter `pre.sh`-Pfad, entweder als Ordner oder als veraltete Datei. Siehe Abschnitt 7.
-   - Das Image wurde nicht neu gebaut und enthaelt daher noch nicht das aktuelle `/etc/pre.sh`.
+```bash
+docker compose exec cs2 sh -lc 'grep -n "csgo/addons/metamod" /home/steam/cs2-dedicated/game/csgo/gameinfo.gi'
+```
 
-2. Reinstall fuer den naechsten Start erzwingen (z. B. nach Versionwechsel):
+5. Wenn `WeaponPaints` geladen ist, aber nicht funktioniert:
+   - Pruefe `addons/counterstrikesharp/configs/plugins/WeaponPaints/WeaponPaints.json`.
+   - Pruefe DB-Zugangsdaten und `addons/counterstrikesharp/gamedata/weaponpaints.json`.
 
-   ```bash
-   MOD_REINSTALL=1 docker compose up -d cs2
-   ```
+6. Wenn `CS2-SimpleAdmin` geladen ist, aber nicht richtig funktioniert:
+   - Pruefe `addons/counterstrikesharp/configs/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.json`.
 
-3. Nach dem Start im Container die Plugin-Pfade pruefen:
-
-   ```bash
-   docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons'
-   docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons/counterstrikesharp/plugins'
-   docker compose exec cs2 sh -lc 'ls -la /etc/pre.sh /home/steam/cs2-dedicated/pre.sh'
-   ```
-
-4. Kontrollieren, dass der Metamod-SearchPath in `gameinfo.gi` noch drin ist:
-
-   ```bash
-   docker compose exec cs2 sh -lc 'grep -n "csgo/addons/metamod" /home/steam/cs2-dedicated/game/csgo/gameinfo.gi'
-   ```
-
-   Keine Ausgabe -> der Patch wurde nicht (mehr) angewendet. Container neu starten; `pre.sh` patcht bei jedem Start erneut.
-
-5. Wenn `meta list` weiterhin `Unknown command 'meta'!` zeigt, obwohl `[pre.sh] Mod bootstrap complete` im Log steht:
-   - Dann wurde sehr wahrscheinlich der falsche Metamod-Zweig installiert.
-   - Fuer CS2 muss ein `2.0-dev`-Build mit `bin/linuxsteamrt64/libserver.so` installiert sein.
-   - Ein altes `1.12.x`-Release mit nur `bin/linux64/server.so` reicht fuer CS2 nicht.
+7. Wenn `FortniteEmotesNDances` nicht richtig funktioniert:
+   - Pruefe `meta list` auf `multiaddonmanager` und `RayTrace`.
+   - Pruefe `cfg/multiaddonmanager/multiaddonmanager.cfg` auf die Workshop-Addon-ID.
