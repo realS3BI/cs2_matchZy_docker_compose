@@ -1,0 +1,113 @@
+services:
+  cs2:
+    image: cm2network/cs2:latest
+    restart: unless-stopped
+    ports:
+      - "27015:27015/tcp"
+      - "27015:27015/udp"
+      - "27020:27020/udp"
+    environment:
+      SRCDS_TOKEN: ${SRCDS_TOKEN:?SRCDS_TOKEN is required}
+      CS2_SERVERNAME: ${CS2_SERVERNAME:-CS2 MatchZy Server}
+      CS2_RCONPW: ${CS2_RCONPW:?CS2_RCONPW is required}
+      CS2_PW: ${CS2_PW:-}
+      CS2_MAXPLAYERS: ${CS2_MAXPLAYERS:-10}
+      CS2_STARTMAP: ${CS2_STARTMAP:-de_mirage}
+      CS2_PORT: ${CS2_PORT:-27015}
+      TV_PORT: ${TV_PORT:-27020}
+      CS2_ADDITIONAL_ARGS: ${CS2_ADDITIONAL_ARGS:-}
+      STEAMAPPDIR: /home/steam/cs2-dedicated
+      METAMOD_VERSION: ${METAMOD_VERSION:-latest}
+      MATCHZY_VERSION: ${MATCHZY_VERSION:-latest}
+      MOD_REINSTALL: ${MOD_REINSTALL:-0}
+    volumes:
+      - cs2_data:/home/steam/cs2-dedicated
+      - ./cs2/pre.sh:/home/steam/cs2-dedicated/pre.sh:ro
+
+  get5db:
+    image: mariadb:11
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27016:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-get5}
+      MARIADB_USER: ${MARIADB_USER:-get5}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?MARIADB_PASSWORD is required}
+    volumes:
+      - get5db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  g5api:
+    image: ghcr.io/phlexplexico/g5api:latest
+    restart: unless-stopped
+    depends_on:
+      get5db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "27018:3301"
+    volumes:
+      - g5api_public:/Get5API/public
+    environment:
+      NODE_ENV: production
+      PORT: 3301
+      HOSTNAME: ${HOSTNAME:?HOSTNAME is required}
+      DBKEY: ${DBKEY:?DBKEY is required}
+      STEAMAPIKEY: ${STEAMAPIKEY:?STEAMAPIKEY is required}
+      SHAREDSECRET: ${SHAREDSECRET:?SHAREDSECRET is required}
+      CLIENTHOME: ${CLIENTHOME:?CLIENTHOME is required}
+      APIURL: ${APIURL:?APIURL is required}
+      SQLUSER: ${MARIADB_USER:-get5}
+      SQLPASSWORD: ${MARIADB_PASSWORD:?MARIADB_PASSWORD is required}
+      DATABASE: ${MARIADB_DATABASE:-get5}
+      SQLHOST: get5db
+      SQLPORT: 3306
+      ADMINS: ${ADMINS:-}
+      SUPERADMINS: ${SUPERADMINS:?SUPERADMINS is required}
+      REDISURL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+      REDISTTL: ${REDISTTL:-86400}
+      USEREDIS: ${USEREDIS:-true}
+      UPLOADDEMOS: ${UPLOADDEMOS:-true}
+      LOCALLOGINS: ${LOCALLOGINS:-true}
+      QUEUETTL: ${QUEUETTL:-3600}
+      SERVERPINGTO: ${SERVERPINGTO:-5000}
+      SERVERPROVIDER: ${SERVERPROVIDER:-local}
+
+  g5v:
+    image: ghcr.io/phlexplexico/g5v:latest
+    restart: unless-stopped
+    depends_on:
+      g5api:
+        condition: service_started
+    ports:
+      - "27019:80"
+
+volumes:
+  cs2_data:
+  get5db_data:
+  redis_data:
+  g5api_public:
