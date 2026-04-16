@@ -1,6 +1,8 @@
 services:
   cs2:
-    image: cm2network/cs2:latest
+    build:
+      context: .
+      dockerfile: cs2/Dockerfile
     restart: unless-stopped
     ports:
       - "27015:27015/tcp"
@@ -22,7 +24,6 @@ services:
       MOD_REINSTALL: ${MOD_REINSTALL:-0}
     volumes:
       - cs2_data:/home/steam/cs2-dedicated
-      - ./cs2/pre.sh:/home/steam/cs2-dedicated/pre.sh:ro
 
   get5db:
     image: mariadb:11

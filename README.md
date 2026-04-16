@@ -64,11 +64,12 @@ Hinweis: Es werden keine custom networks in Compose definiert (Coolify-kompatibe
 - `27015/udp`
 - `27020/udp`
 - Persistenz: `cs2_data`
-- `cs2/pre.sh` wird direkt nach `/home/steam/cs2-dedicated/pre.sh` gemountet.
-  Das Base-Image (`cm2network/cs2` = `joedwards32/cs2`) sourct diese Datei in `entry.sh` **nach** dem SteamCMD-Update und **vor** dem Start des `cs2`-Prozesses.
+- `cs2/Dockerfile` kopiert `cs2/pre.sh` nach `/etc/pre.sh`.
+  Das Base-Image (`cm2network/cs2` = `joedwards32/cs2`) kopiert `/etc/pre.sh` beim Start nach `/home/steam/cs2-dedicated/pre.sh` und sourct diese Datei in `entry.sh` **nach** dem SteamCMD-Update und **vor** dem Start des `cs2`-Prozesses.
   Daraus folgen zwei Dinge:
   - Die gesamte Logik in `pre.sh` laeuft in einer Subshell, damit `set -e`, Traps und Fehler-Exits die `entry.sh` nicht abbrechen.
   - Wird Metamod/MatchZy bereits erkannt, macht das Skript nur einen Re-Patch der `gameinfo.gi` und ist in Sekunden fertig.
+  - Es gibt keinen File-Bind-Mount mehr. Das ist fuer Coolify wichtig, weil der Compose-Run ueber einen Helper-Container laeuft und Repo-Dateien sonst auf dem Docker-Host nicht als regulaere Datei verfuegbar sind.
 
 ### `cs2/pre.sh` Verhalten
 
@@ -169,9 +170,9 @@ Falls `meta list` oder `css_plugins list` leer ist:
    ```
 
    Wenn keine `[pre.sh] ...` Zeilen auftauchen, wurde das Skript nicht gesourct. Haeufige Ursachen:
-   - Mount-Pfad falsch. Korrekt ist `./cs2/pre.sh:/home/steam/cs2-dedicated/pre.sh:ro` (dieses Repo macht das seit dem Fix).
-   - Coolify bzw. Deployment-Ziel hat `./cs2/pre.sh` nicht mitgeshippt. Mit `docker compose exec cs2 sh -lc 'head -n1 /home/steam/cs2-dedicated/pre.sh'` pruefen.
+   - Es laeuft noch ein alter Deploy-Stand mit File-Bind-Mount statt gebautem Image.
    - Im Persistenz-Volume liegt ein Ordner `pre.sh` statt einer Datei. Siehe Abschnitt 7.
+   - Das Image wurde nicht neu gebaut und enthaelt daher noch nicht das aktuelle `/etc/pre.sh`.
 
 2. Reinstall fuer den naechsten Start erzwingen (z. B. nach Versionwechsel):
 
@@ -184,6 +185,7 @@ Falls `meta list` oder `css_plugins list` leer ist:
    ```bash
    docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons'
    docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons/counterstrikesharp/plugins'
+   docker compose exec cs2 sh -lc 'ls -la /etc/pre.sh /home/steam/cs2-dedicated/pre.sh'
    ```
 
 4. Kontrollieren, dass der Metamod-SearchPath in `gameinfo.gi` noch drin ist:
