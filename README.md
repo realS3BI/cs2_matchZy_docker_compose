@@ -64,7 +64,11 @@ Hinweis: Es werden keine custom networks in Compose definiert (Coolify-kompatibe
 - `27015/udp`
 - `27020/udp`
 - Persistenz: `cs2_data`
-- `cs2/pre.sh` wird als Hook-Datei nach `/home/steam/cs2-dedicated/pre.sh` gemountet.
+- `cs2/pre.sh` wird direkt nach `/home/steam/cs2-dedicated/pre.sh` gemountet.
+  Das Base-Image (`cm2network/cs2` = `joedwards32/cs2`) sourct diese Datei in `entry.sh` **nach** dem SteamCMD-Update und **vor** dem Start des `cs2`-Prozesses.
+  Daraus folgen zwei Dinge:
+  - Die gesamte Logik in `pre.sh` laeuft in einer Subshell, damit `set -e`, Traps und Fehler-Exits die `entry.sh` nicht abbrechen.
+  - Wird Metamod/MatchZy bereits erkannt, macht das Skript nur einen Re-Patch der `gameinfo.gi` und ist in Sekunden fertig.
 
 ### `cs2/pre.sh` Verhalten
 
@@ -79,16 +83,15 @@ Beim Start:
 4. Patcht `gameinfo.gi` immer erneut, damit `Game    csgo/addons/metamod` in `SearchPaths` enthalten ist.
 5. Speichert installierte Tags in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
-## 5) Erste Inbetriebnahme G5
+## 4) Erste Inbetriebnahme G5
 
 1. `https://panel.<deine-domain>` oeffnen.
-2. BasicAuth eingeben.
-3. Im Panel lokal registrieren (Local Login/Register).
-4. Bei Registrierung/Profil die korrekte Steam64 nutzen.
-5. Durch `SUPERADMINS`/`ADMINS` werden API-Rechte anhand Steam64 vergeben.
-6. CS2 Server im G5-Panel anlegen (IP/Port/RCON), danach Match erstellen und laden.
+2. Im Panel lokal registrieren (Local Login/Register).
+3. Bei Registrierung/Profil die korrekte Steam64 nutzen.
+4. Durch `SUPERADMINS`/`ADMINS` werden API-Rechte anhand Steam64 vergeben.
+5. CS2 Server im G5-Panel anlegen (IP/Port/RCON), danach Match erstellen und laden.
 
-## 6) Checks / Abnahme
+## 5) Checks / Abnahme
 
 Compose:
 
@@ -109,7 +112,7 @@ CS2 Console:
 
 HTTP:
 
-- `https://panel.<deine-domain>` fordert BasicAuth.
+- `https://panel.<deine-domain>`.
 - `https://api.<deine-domain>/` antwortet.
 - `https://panel.<deine-domain>/api/` routed auf `g5api`.
 
@@ -118,7 +121,7 @@ Lokale Port-Checks:
 - `http://<server-ip>:27019` -> G5V
 - `http://<server-ip>:27018` -> G5API
 
-## 7) Fallback ohne `/api` Path-Routing in Coolify
+## 6) Fallback ohne `/api` Path-Routing in Coolify
 
 Falls `panel.<domain>/api` in deiner Coolify-Instanz nicht sauber routing-faehig ist:
 
@@ -134,3 +137,59 @@ docker build -t your-registry/g5v:custom -f DockerfileFull \
 3. Dann nur noch zwei reine Subdomains nutzen:
 - `panel.<domain>` -> `g5v`
 - `api.<domain>` -> `g5api`
+
+## 7) Troubleshooting CS2 Connect
+
+Wenn im Log folgendes erscheint:
+
+- `cp: cannot create regular file '/home/steam/cs2-dedicated/pre.sh/pre.sh': Read-only file system`
+- `entry.sh: line 138: source: /home/steam/cs2-dedicated/pre.sh: is a directory`
+
+dann liegt im Persistenz-Volume ein falscher Ordner `pre.sh` statt einer Datei. Einmalig reparieren:
+
+```bash
+docker compose run --rm cs2 sh -lc 'rm -rf /home/steam/cs2-dedicated/pre.sh'
+docker compose up -d cs2
+```
+
+Zusatzcheck bei "kein Connect moeglich":
+
+1. Server muss `SV: Connection to Steam servers successful.` und `Network socket ... opened on port 27015` zeigen.
+2. Host-Firewall und Provider-Firewall muessen `27015/udp` (und optional `27015/tcp`, `27020/udp`) erlauben.
+3. Teste direkt mit `connect <server-ip>:27015` in der CS2-Konsole.
+
+## 8) Troubleshooting "Plugins nicht geladen"
+
+Falls `meta list` oder `css_plugins list` leer ist:
+
+1. Pruefen, ob der Hook ueberhaupt ausgefuehrt wurde. Im CS2-Log muss eine Zeile wie diese stehen:
+
+   ```text
+   [pre.sh] Mod bootstrap complete
+   ```
+
+   Wenn keine `[pre.sh] ...` Zeilen auftauchen, wurde das Skript nicht gesourct. Haeufige Ursachen:
+   - Mount-Pfad falsch. Korrekt ist `./cs2/pre.sh:/home/steam/cs2-dedicated/pre.sh:ro` (dieses Repo macht das seit dem Fix).
+   - Coolify bzw. Deployment-Ziel hat `./cs2/pre.sh` nicht mitgeshippt. Mit `docker compose exec cs2 sh -lc 'head -n1 /home/steam/cs2-dedicated/pre.sh'` pruefen.
+   - Im Persistenz-Volume liegt ein Ordner `pre.sh` statt einer Datei. Siehe Abschnitt 7.
+
+2. Reinstall fuer den naechsten Start erzwingen (z. B. nach Versionwechsel):
+
+   ```bash
+   MOD_REINSTALL=1 docker compose up -d cs2
+   ```
+
+3. Nach dem Start im Container die Plugin-Pfade pruefen:
+
+   ```bash
+   docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons'
+   docker compose exec cs2 sh -lc 'ls -la /home/steam/cs2-dedicated/game/csgo/addons/counterstrikesharp/plugins'
+   ```
+
+4. Kontrollieren, dass der Metamod-SearchPath in `gameinfo.gi` noch drin ist:
+
+   ```bash
+   docker compose exec cs2 sh -lc 'grep -n "csgo/addons/metamod" /home/steam/cs2-dedicated/game/csgo/gameinfo.gi'
+   ```
+
+   Keine Ausgabe -> der Patch wurde nicht (mehr) angewendet. Container neu starten; `pre.sh` patcht bei jedem Start erneut.
