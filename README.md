@@ -42,6 +42,7 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `FORTNITE_EMOTES_ENABLED`
    - `EXECUTES_ENABLED`
    - `SIMPLEADMIN_ENABLED`
+   - `MATCHZY_SMOKE_COLOR`
    - `ADMINS`
 
 ## 2) Deploy mit Docker Compose oder Coolify
@@ -82,8 +83,9 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
    - `FortniteEmotesNDances`
    - `cs2-executes`
 5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus `ADMINS` neu.
-6. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
-7. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
+6. Schreibt `cfg/MatchZy/config.cfg` mit `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR` und festem Chat-Prefix neu.
+7. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
+8. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
 ## 4) Zusatzplugins
 
@@ -138,7 +140,16 @@ Beim Containerstart schreibt `cs2/pre.sh` daraus automatisch:
 - `game/csgo/cfg/MatchZy/admins.json`
 - `game/csgo/addons/counterstrikesharp/configs/admins.json`
 
+Zusätzlich schreibt der Bootstrap immer auch:
+
+- `game/csgo/cfg/MatchZy/config.cfg`
+
 Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`. Damit funktionieren MatchZy und andere CSS-Plugins konsistent ueber dieselbe `ADMINS`-Variable. Ein leeres `ADMINS` erzeugt entsprechend leere Adminlisten.
+
+Die MatchZy-Config enthaelt aktuell diese automatisch gesetzten Werte:
+
+- `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR`
+- `matchzy_chat_prefix "{Green}Sebi CS2{Default}"`
 
 Typische Admin-Kommandos:
 

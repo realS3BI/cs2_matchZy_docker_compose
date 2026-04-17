@@ -543,6 +543,30 @@ _matchzy_bootstrap_main() (
     log "Wrote MatchZy admins file with ${#admin_ids[@]} admin(s) from ADMINS"
   }
 
+  write_matchzy_config_file() {
+    local smoke_color_raw="$1"
+    local config_file="$2"
+    local config_dir=""
+    local smoke_color_value="false"
+    local tmp_file=""
+
+    config_dir="$(dirname "$config_file")"
+    mkdir -p "$config_dir"
+
+    if is_enabled "$smoke_color_raw"; then
+      smoke_color_value="true"
+    fi
+
+    tmp_file="$(mktemp)"
+    {
+      printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
+      printf 'matchzy_chat_prefix "{Green}Sebi CS2{Default}"\n'
+    } > "$tmp_file"
+
+    mv "$tmp_file" "$config_file"
+    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value'"
+  }
+
   write_css_admins_file() {
     local admins_raw="$1"
     local admins_file="$2"
@@ -618,6 +642,7 @@ _matchzy_bootstrap_main() (
   local PLAYERSETTINGS_VERSION="${PLAYERSETTINGS_VERSION:-latest}"
   local ANYBASELIB_VERSION="${ANYBASELIB_VERSION:-latest}"
   local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
+  local MATCHZY_SMOKE_COLOR="${MATCHZY_SMOKE_COLOR:-0}"
   local ADMINS="${ADMINS:-}"
   local NEED_MENU_STACK=0
   if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
@@ -940,6 +965,7 @@ _matchzy_bootstrap_main() (
   local executes_marker="$CSS_DIR/plugins/ExecutesPlugin/ExecutesPlugin.dll"
   local css_core_config="$CSS_DIR/configs/core.json"
   local matchzy_admins_file="$GAME_DIR/cfg/MatchZy/admins.json"
+  local matchzy_config_file="$GAME_DIR/cfg/MatchZy/config.cfg"
   local css_admins_file="$CSS_DIR/configs/admins.json"
 
   if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_METAMOD_TAG" != "$METAMOD_TAG" || ! -d "$metamod_marker" ]]; then
@@ -971,6 +997,7 @@ _matchzy_bootstrap_main() (
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
 
   write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
+  write_matchzy_config_file "$MATCHZY_SMOKE_COLOR" "$matchzy_config_file"
   write_css_admins_file "$ADMINS" "$css_admins_file"
 
   if is_enabled "$FAKE_RCON_ENABLED"; then
