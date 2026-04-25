@@ -87,6 +87,13 @@ _matchzy_bootstrap_main() (
     printf '%s' "$value"
   }
 
+  escape_cfg_value() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '%s' "$value"
+  }
+
   sanitize_admin_id() {
     local value="$1"
     value="$(trim_whitespace "$value")"
@@ -545,9 +552,11 @@ _matchzy_bootstrap_main() (
 
   write_matchzy_config_file() {
     local smoke_color_raw="$1"
-    local config_file="$2"
+    local server_name_raw="$2"
+    local config_file="$3"
     local config_dir=""
     local smoke_color_value="false"
+    local chat_prefix=""
     local tmp_file=""
 
     config_dir="$(dirname "$config_file")"
@@ -557,14 +566,16 @@ _matchzy_bootstrap_main() (
       smoke_color_value="true"
     fi
 
+    chat_prefix="{Green}$(escape_cfg_value "$server_name_raw"){Default}"
+
     tmp_file="$(mktemp)"
     {
       printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
-      printf 'matchzy_chat_prefix "{Green}Sebi CS2{Default}"\n'
+      printf 'matchzy_chat_prefix "%s"\n' "$chat_prefix"
     } > "$tmp_file"
 
     mv "$tmp_file" "$config_file"
-    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value'"
+    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value' and chat prefix from CS2_SERVERNAME"
   }
 
   write_css_admins_file() {
@@ -643,6 +654,7 @@ _matchzy_bootstrap_main() (
   local ANYBASELIB_VERSION="${ANYBASELIB_VERSION:-latest}"
   local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
   local MATCHZY_SMOKE_COLOR="${MATCHZY_SMOKE_COLOR:-0}"
+  local CS2_SERVERNAME="${CS2_SERVERNAME:-CS2 MatchZy Server}"
   local ADMINS="${ADMINS:-}"
   local NEED_MENU_STACK=0
   if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
@@ -997,7 +1009,7 @@ _matchzy_bootstrap_main() (
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
 
   write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
-  write_matchzy_config_file "$MATCHZY_SMOKE_COLOR" "$matchzy_config_file"
+  write_matchzy_config_file "$MATCHZY_SMOKE_COLOR" "$CS2_SERVERNAME" "$matchzy_config_file"
   write_css_admins_file "$ADMINS" "$css_admins_file"
 
   if is_enabled "$FAKE_RCON_ENABLED"; then
