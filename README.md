@@ -11,6 +11,7 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 - `WeaponPaints`
 - `CS2-SimpleAdmin` inklusive `PlayerSettingsCS2`, `AnyBaseLibCS2` und `MenuManagerCS2`
 - `FortniteEmotesNDances` inklusive `MultiAddonManager` und `Ray-Trace`
+- Workshop-Maps per `CS2_WORKSHOP_MAPS`
 - `cs2-executes`
 
 Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stabilen `MatchZy`-Server fuer Pracc, Pugs, Scrims und spaeter erweiterbare Automatisierung.
@@ -40,9 +41,11 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `FAKE_RCON_ENABLED`
    - `WEAPONPAINTS_ENABLED`
    - `FORTNITE_EMOTES_ENABLED`
+   - `CS2_WORKSHOP_MAPS`
    - `EXECUTES_ENABLED`
    - `SIMPLEADMIN_ENABLED`
    - `MATCHZY_SMOKE_COLOR`
+   - `MATCHZY_CHAT_PREFIX`
    - `ADMINS`
 
 ## 2) Deploy mit Docker Compose oder Coolify
@@ -83,9 +86,10 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
    - `FortniteEmotesNDances`
    - `cs2-executes`
 5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus `ADMINS` neu.
-6. Schreibt `cfg/MatchZy/config.cfg` mit `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR` und festem Chat-Prefix neu.
-7. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
-8. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
+6. Schreibt `cfg/MatchZy/config.cfg` mit `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR` und Chat-Prefix aus ENV neu.
+7. Schreibt bei Bedarf `cfg/multiaddonmanager/multiaddonmanager.cfg` aus Fortnite Emotes und `CS2_WORKSHOP_MAPS` neu.
+8. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
+9. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
 ## 4) Zusatzplugins
 
@@ -119,6 +123,25 @@ addons/counterstrikesharp/configs/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.json
 - `cs2/pre.sh` traegt automatisch die Workshop-Addon-ID `3328582199` in `cfg/multiaddonmanager/multiaddonmanager.cfg` ein.
 - Wenn du das Plugin nicht willst, setze `FORTNITE_EMOTES_ENABLED=0`.
 
+### Workshop-Maps
+
+Workshop-Maps kannst du ueber `CS2_WORKSHOP_MAPS` als komma-separierte Liste setzen. Akzeptiert werden reine Workshop-IDs und Steam-Workshop-Links:
+
+```bash
+CS2_WORKSHOP_MAPS=https://steamcommunity.com/sharedfiles/filedetails/?id=3070244462,https://steamcommunity.com/sharedfiles/filedetails/?id=3077265396
+CS2_WORKSHOP_MAPS=3070244462,3077265396
+```
+
+Beim Containerstart extrahiert `cs2/pre.sh` daraus die IDs, entfernt Duplikate und schreibt sie in:
+
+```text
+game/csgo/cfg/multiaddonmanager/multiaddonmanager.cfg
+```
+
+Wenn `FORTNITE_EMOTES_ENABLED=1` ist, wird die Fortnite-Emotes-Workshop-ID zusaetzlich in dieselbe `mm_extra_addons`-Liste geschrieben. Wenn Fortnite Emotes deaktiviert sind, aber `CS2_WORKSHOP_MAPS` gesetzt ist, bleibt `MultiAddonManager` trotzdem installiert.
+
+Optional kannst du mit `CS2_WORKSHOP_FORCE_DOWNLOAD=1` setzen, dass MultiAddonManager die gemounteten Workshop-Addons bei jedem Laden erneut prueft/downloadet. Standard ist `0`.
+
 ### cs2-executes
 
 - Wird standardmaessig installiert.
@@ -149,7 +172,20 @@ Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`. Dami
 Die MatchZy-Config enthaelt aktuell diese automatisch gesetzten Werte:
 
 - `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR`
-- `matchzy_chat_prefix "{Green}Sebi CS2{Default}"`
+- `matchzy_chat_prefix` aus Prefix-ENV mit Prioritaet `MATCHZY_CHAT_PREFIX` > `matchzy_chat_prefix` > `CS2_SERVERNAME`
+
+Beispiele fuer den Prefix:
+
+```bash
+# Plain Text -> wird automatisch zu {Green}Sebi CS2{Default}
+MATCHZY_CHAT_PREFIX=Sebi CS2
+
+# Bereits mit MatchZy-Farbcodes -> bleibt unveraendert
+MATCHZY_CHAT_PREFIX={Gold}Scrim{Default}
+
+# Leerer Wert -> faellt auf CS2_SERVERNAME zurueck
+MATCHZY_CHAT_PREFIX=
+```
 
 Typische Admin-Kommandos:
 
@@ -163,6 +199,41 @@ Typische Admin-Kommandos:
 
 Fuer einfache Praccs und Scrims brauchst du kein JSON-Matchsetup. Ein Match-JSON ist erst noetig, wenn du feste Teams, SteamIDs und BO1/BO3-Serien sauber locken willst.
 
+### Workshop-Maps laden
+
+Nach Aenderungen an `CS2_WORKSHOP_MAPS` den Container neu bauen/starten:
+
+```bash
+docker compose up -d --build
+```
+
+Wenn die Workshop-Map gemountet ist, kannst du sie mit MatchZy ueber den internen Mapnamen laden:
+
+```text
+.map aim_botz
+```
+
+Alternativ per MatchZy-RCON:
+
+```text
+.rcon map aim_botz
+```
+
+Wenn du den internen Mapnamen nicht kennst, frage die Workshop-Maps ueber RCON ab:
+
+```text
+.rcon ds_workshop_listmaps
+.rcon ds_workshop_changelevel <mapname>
+```
+
+Als Fallback kannst du eine Workshop-Map direkt per Workshop-ID laden:
+
+```text
+map_workshop <workshop_id>
+```
+
+Wichtig: `CS2_WORKSHOP_MAPS` enthaelt Links oder IDs zum Downloaden und Mounten. Fuer `.map` brauchst du den internen Mapnamen der Workshop-Map, nicht zwingend den Titel auf Steam. `ds_workshop_listmaps` ist der einfachste Weg, diesen Namen zu finden.
+
 ## 6) Checks
 
 ```bash
@@ -173,7 +244,7 @@ docker compose ps
 In der CS2-Konsole:
 
 - `meta list` sollte Metamod anzeigen
-- `meta list` sollte auch `fake_rcon`, `multiaddonmanager` und `RayTrace` zeigen, falls aktiviert
+- `meta list` sollte auch `fake_rcon`, `multiaddonmanager` und `RayTrace` zeigen, falls aktiviert oder fuer Workshop-Maps benoetigt
 - `css_plugins list` sollte MatchZy anzeigen
 - `css_plugins list` sollte je nach aktivierten Plugins auch `WeaponPaints`, `CS2-SimpleAdmin`, `PlayerSettings`, `MenuManagerCore`, `FortniteEmotesNDances` und `ExecutesPlugin` zeigen
 
@@ -226,3 +297,8 @@ docker compose exec cs2 sh -lc 'grep -n "csgo/addons/metamod" /home/steam/cs2-de
 7. Wenn `FortniteEmotesNDances` nicht richtig funktioniert:
    - Pruefe `meta list` auf `multiaddonmanager` und `RayTrace`.
    - Pruefe `cfg/multiaddonmanager/multiaddonmanager.cfg` auf die Workshop-Addon-ID.
+
+8. Wenn Workshop-Maps nicht geladen werden:
+   - Pruefe `cfg/multiaddonmanager/multiaddonmanager.cfg` auf deine Workshop-IDs.
+   - Pruefe `meta list` auf `multiaddonmanager`.
+   - Nutze `.rcon ds_workshop_listmaps`, um den internen Mapnamen zu finden.

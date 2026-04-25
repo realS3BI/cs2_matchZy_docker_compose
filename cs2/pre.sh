@@ -94,6 +94,40 @@ _matchzy_bootstrap_main() (
     printf '%s' "$value"
   }
 
+  contains_matchzy_color_token() {
+    local value="$1"
+    [[ "$value" =~ \{(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\} ]]
+  }
+
+  resolve_matchzy_chat_prefix() {
+    local server_name_raw="$1"
+    local chat_prefix_raw="$2"
+    local chat_prefix_legacy_raw="$3"
+    local prefix_value=""
+    local prefix_source="CS2_SERVERNAME"
+
+    prefix_value="$(trim_whitespace "$chat_prefix_raw")"
+    if [[ -n "$prefix_value" ]]; then
+      prefix_source="MATCHZY_CHAT_PREFIX"
+    else
+      prefix_value="$(trim_whitespace "$chat_prefix_legacy_raw")"
+      if [[ -n "$prefix_value" ]]; then
+        prefix_source="matchzy_chat_prefix"
+      else
+        prefix_value="$(trim_whitespace "$server_name_raw")"
+        [[ -n "$prefix_value" ]] || prefix_value="CS2 MatchZy Server"
+        prefix_source="CS2_SERVERNAME"
+      fi
+    fi
+
+    if contains_matchzy_color_token "$prefix_value"; then
+      printf '%s\n%s\n' "$(escape_cfg_value "$prefix_value")" "$prefix_source"
+      return 0
+    fi
+
+    printf '%s\n%s\n' "{Green}$(escape_cfg_value "$prefix_value"){Default}" "$prefix_source"
+  }
+
   sanitize_admin_id() {
     local value="$1"
     value="$(trim_whitespace "$value")"
@@ -284,31 +318,103 @@ _matchzy_bootstrap_main() (
     printf '%s\n' "$stage_dir"
   }
 
-  ensure_multiaddonmanager_addon() {
+  extract_workshop_id() {
+    local value="$1"
+
+    value="$(trim_whitespace "$value")"
+
+    if [[ "$value" == '"'*'"' ]]; then
+      value="${value#\"}"
+      value="${value%\"}"
+    fi
+
+    if [[ "$value" == "'"*"'" ]]; then
+      value="${value#\'}"
+      value="${value%\'}"
+    fi
+
+    value="$(trim_whitespace "$value")"
+    [[ -n "$value" ]] || return 0
+
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+
+    if [[ "$value" =~ (^|[?&])id=([0-9]+)($|[^0-9]) ]]; then
+      printf '%s\n' "${BASH_REMATCH[2]}"
+      return 0
+    fi
+
+    fail "CS2_WORKSHOP_MAPS contains invalid workshop entry '$value'"
+  }
+
+  collect_workshop_addon_ids() {
+    local maps_raw="$1"
+    local output_file="$2"
+    local entry=""
+    local addon_id=""
+    local -a map_entries=()
+    local -A seen_ids=()
+
+    : > "$output_file"
+
+    IFS=',' read -r -a map_entries <<< "${maps_raw//$'\n'/,}"
+    for entry in "${map_entries[@]}"; do
+      addon_id="$(extract_workshop_id "$entry")"
+      [[ -n "$addon_id" ]] || continue
+      [[ -n "${seen_ids[$addon_id]:-}" ]] && continue
+      seen_ids["$addon_id"]=1
+      printf '%s\n' "$addon_id" >> "$output_file"
+    done
+  }
+
+  write_multiaddonmanager_config() {
     local cfg_file="$1"
-    local addon_id="$2"
+    local force_download_raw="$2"
+    shift 2
+
+    local force_download_value="0"
+    local addon_id=""
+    local addons_value=""
+    local addon_count=0
+    local tmp_file=""
+    local -A seen_ids=()
+
+    if is_enabled "$force_download_raw"; then
+      force_download_value="1"
+    fi
 
     mkdir -p "$(dirname "$cfg_file")"
 
-    if [[ ! -f "$cfg_file" ]]; then
-      printf 'mm_extra_addons "%s"\n' "$addon_id" > "$cfg_file"
-      log "Created MultiAddonManager config with addon $addon_id"
-      return 0
-    fi
+    for addon_id in "$@"; do
+      [[ -n "$addon_id" ]] || continue
+      [[ "$addon_id" =~ ^[0-9]+$ ]] || fail "MultiAddonManager addon ID is invalid: $addon_id"
+      [[ -n "${seen_ids[$addon_id]:-}" ]] && continue
+      seen_ids["$addon_id"]=1
+      if [[ -n "$addons_value" ]]; then
+        addons_value="$addons_value,$addon_id"
+      else
+        addons_value="$addon_id"
+      fi
+      addon_count=$((addon_count + 1))
+    done
 
-    if grep -Eq '^[[:space:]]*mm_extra_addons[[:space:]]+"[^"]*'"$addon_id"'[^"]*"' "$cfg_file"; then
-      log "MultiAddonManager already configured with addon $addon_id"
-      return 0
-    fi
+    [[ -n "$addons_value" ]] || fail "Cannot write MultiAddonManager config without addon IDs"
 
-    if grep -Eq '^[[:space:]]*mm_extra_addons[[:space:]]+"' "$cfg_file"; then
-      sed -Ei 's#^([[:space:]]*mm_extra_addons[[:space:]]+")([^"]*)(".*)$#\1\2,'"${addon_id}"'\3#' "$cfg_file"
-      sed -Ei 's#mm_extra_addons[[:space:]]+",#mm_extra_addons "#' "$cfg_file"
+    tmp_file="$(mktemp)"
+    {
+      printf 'mm_extra_addons "%s"\n' "$addons_value"
+      printf 'mm_addon_mount_download "%s"\n' "$force_download_value"
+    } > "$tmp_file"
+
+    mv "$tmp_file" "$cfg_file"
+
+    if (( addon_count == 1 )); then
+      log "Wrote MultiAddonManager config with 1 workshop addon"
     else
-      printf '\nmm_extra_addons "%s"\n' "$addon_id" >> "$cfg_file"
+      log "Wrote MultiAddonManager config with $addon_count workshop addons"
     fi
-
-    log "Ensured MultiAddonManager addon $addon_id is configured"
   }
 
   patch_css_core_follow_guidelines() {
@@ -428,8 +534,12 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/shared/RayTraceApi" \
       "$CSS_DIR/configs/plugins/FortniteEmotesNDances" \
       "$CSS_DIR/gamedata/fortnite_emotes.json" \
+      "$ADDONS_DIR/RayTrace"
+  }
+
+  remove_multiaddonmanager_component() {
+    rm -rf \
       "$ADDONS_DIR/multiaddonmanager" \
-      "$ADDONS_DIR/RayTrace" \
       "$GAME_DIR/cfg/multiaddonmanager"
   }
 
@@ -553,10 +663,13 @@ _matchzy_bootstrap_main() (
   write_matchzy_config_file() {
     local smoke_color_raw="$1"
     local server_name_raw="$2"
-    local config_file="$3"
+    local chat_prefix_raw="$3"
+    local chat_prefix_legacy_raw="$4"
+    local config_file="$5"
     local config_dir=""
     local smoke_color_value="false"
     local chat_prefix=""
+    local chat_prefix_source=""
     local tmp_file=""
 
     config_dir="$(dirname "$config_file")"
@@ -566,7 +679,9 @@ _matchzy_bootstrap_main() (
       smoke_color_value="true"
     fi
 
-    chat_prefix="{Green}$(escape_cfg_value "$server_name_raw"){Default}"
+    IFS=$'\n' read -r chat_prefix chat_prefix_source < <(
+      resolve_matchzy_chat_prefix "$server_name_raw" "$chat_prefix_raw" "$chat_prefix_legacy_raw"
+    )
 
     tmp_file="$(mktemp)"
     {
@@ -575,7 +690,7 @@ _matchzy_bootstrap_main() (
     } > "$tmp_file"
 
     mv "$tmp_file" "$config_file"
-    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value' and chat prefix from CS2_SERVERNAME"
+    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value' and chat prefix from $chat_prefix_source"
   }
 
   write_css_admins_file() {
@@ -646,6 +761,8 @@ _matchzy_bootstrap_main() (
   local FORTNITE_EMOTES_WORKSHOP_ADDON_ID="${FORTNITE_EMOTES_WORKSHOP_ADDON_ID:-3328582199}"
   local MULTIADDONMANAGER_VERSION="${MULTIADDONMANAGER_VERSION:-latest}"
   local RAYTRACE_VERSION="${RAYTRACE_VERSION:-latest}"
+  local CS2_WORKSHOP_MAPS="${CS2_WORKSHOP_MAPS:-}"
+  local CS2_WORKSHOP_FORCE_DOWNLOAD="${CS2_WORKSHOP_FORCE_DOWNLOAD:-0}"
   local EXECUTES_ENABLED="${EXECUTES_ENABLED:-1}"
   local EXECUTES_VERSION="${EXECUTES_VERSION:-latest}"
   local SIMPLEADMIN_ENABLED="${SIMPLEADMIN_ENABLED:-1}"
@@ -655,11 +772,17 @@ _matchzy_bootstrap_main() (
   local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
   local MATCHZY_SMOKE_COLOR="${MATCHZY_SMOKE_COLOR:-0}"
   local CS2_SERVERNAME="${CS2_SERVERNAME:-CS2 MatchZy Server}"
+  local MATCHZY_CHAT_PREFIX="${MATCHZY_CHAT_PREFIX:-}"
+  local MATCHZY_CHAT_PREFIX_LEGACY="${matchzy_chat_prefix:-}"
   local ADMINS="${ADMINS:-}"
   local NEED_MENU_STACK=0
   if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
     NEED_MENU_STACK=1
   fi
+  local NEED_MULTIADDONMANAGER=0
+  local workshop_ids_file=""
+  local -a WORKSHOP_ADDON_IDS=()
+  local -a MULTIADDONMANAGER_ADDON_IDS=()
 
   local STATE_DIR="$STEAMAPPDIR/.mod-installer"
   local STATE_FILE="$STATE_DIR/state.env"
@@ -670,6 +793,22 @@ _matchzy_bootstrap_main() (
 
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TMP_DIR"' EXIT
+
+  workshop_ids_file="$(mktemp)"
+  collect_workshop_addon_ids "$CS2_WORKSHOP_MAPS" "$workshop_ids_file"
+  mapfile -t WORKSHOP_ADDON_IDS < "$workshop_ids_file"
+  rm -f "$workshop_ids_file"
+
+  if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
+    NEED_MULTIADDONMANAGER=1
+    MULTIADDONMANAGER_ADDON_IDS+=("$FORTNITE_EMOTES_WORKSHOP_ADDON_ID")
+  fi
+
+  if ((${#WORKSHOP_ADDON_IDS[@]} > 0)); then
+    NEED_MULTIADDONMANAGER=1
+    MULTIADDONMANAGER_ADDON_IDS+=("${WORKSHOP_ADDON_IDS[@]}")
+    log "Configured ${#WORKSHOP_ADDON_IDS[@]} workshop map addon(s) from CS2_WORKSHOP_MAPS"
+  fi
 
   remove_obsolete_plugins
 
@@ -696,6 +835,11 @@ _matchzy_bootstrap_main() (
   if ! is_enabled "$FORTNITE_EMOTES_ENABLED"; then
     log "FortniteEmotesNDances disabled; removing installed files"
     remove_fortnite_emotes_component
+  fi
+
+  if (( NEED_MULTIADDONMANAGER != 1 )); then
+    log "MultiAddonManager not required; removing installed files"
+    remove_multiaddonmanager_component
   fi
 
   if ! is_enabled "$EXECUTES_ENABLED"; then
@@ -862,8 +1006,8 @@ _matchzy_bootstrap_main() (
   local RAYTRACE_URL=""
   local FORTNITE_EMOTES_TAG=""
   local FORTNITE_EMOTES_URL=""
-  if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
-    log "Resolving FortniteEmotesNDances dependencies"
+  if (( NEED_MULTIADDONMANAGER == 1 )); then
+    log "Resolving MultiAddonManager release: $MULTIADDONMANAGER_VERSION"
     mapfile -t _multiaddonmanager_release < <(
       resolve_github_release_asset \
         "Source2ZE/MultiAddonManager" \
@@ -876,7 +1020,13 @@ _matchzy_bootstrap_main() (
     unset _multiaddonmanager_release
     [[ -n "${MULTIADDONMANAGER_TAG:-}" && -n "${MULTIADDONMANAGER_URL:-}" ]] \
       || fail "Could not resolve MultiAddonManager linux asset"
+    log "MultiAddonManager resolved to tag '$MULTIADDONMANAGER_TAG'"
+  else
+    log "MultiAddonManager installation disabled"
+  fi
 
+  if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
+    log "Resolving FortniteEmotesNDances dependencies"
     mapfile -t _raytrace_release < <(
       resolve_github_release_asset \
         "FUNPLAY-pro-CS2/Ray-Trace" \
@@ -1009,7 +1159,12 @@ _matchzy_bootstrap_main() (
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
 
   write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
-  write_matchzy_config_file "$MATCHZY_SMOKE_COLOR" "$CS2_SERVERNAME" "$matchzy_config_file"
+  write_matchzy_config_file \
+    "$MATCHZY_SMOKE_COLOR" \
+    "$CS2_SERVERNAME" \
+    "$MATCHZY_CHAT_PREFIX" \
+    "$MATCHZY_CHAT_PREFIX_LEGACY" \
+    "$matchzy_config_file"
   write_css_admins_file "$ADMINS" "$css_admins_file"
 
   if is_enabled "$FAKE_RCON_ENABLED"; then
@@ -1072,11 +1227,15 @@ _matchzy_bootstrap_main() (
   fi
 
   if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
-    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MULTIADDONMANAGER_TAG" != "$MULTIADDONMANAGER_TAG" || ! -f "$multiaddonmanager_marker" ]]; then
-      log "Installing or updating MultiAddonManager"
-      install_archive_component "multiaddonmanager" "$MULTIADDONMANAGER_URL" "$GAME_DIR" "$multiaddonmanager_marker"
-    else
-      log "MultiAddonManager already current; skipping"
+    if (( NEED_MULTIADDONMANAGER == 1 )); then
+      if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MULTIADDONMANAGER_TAG" != "$MULTIADDONMANAGER_TAG" || ! -f "$multiaddonmanager_marker" ]]; then
+        log "Installing or updating MultiAddonManager"
+        install_archive_component "multiaddonmanager" "$MULTIADDONMANAGER_URL" "$GAME_DIR" "$multiaddonmanager_marker"
+      else
+        log "MultiAddonManager already current; skipping"
+      fi
+
+      write_multiaddonmanager_config "$multiaddonmanager_cfg" "$CS2_WORKSHOP_FORCE_DOWNLOAD" "${MULTIADDONMANAGER_ADDON_IDS[@]}"
     fi
 
     if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_RAYTRACE_TAG" != "$RAYTRACE_TAG" || ! -f "$raytrace_marker" ]]; then
@@ -1086,14 +1245,21 @@ _matchzy_bootstrap_main() (
       log "Ray-Trace already current; skipping"
     fi
 
-    ensure_multiaddonmanager_addon "$multiaddonmanager_cfg" "$FORTNITE_EMOTES_WORKSHOP_ADDON_ID"
-
     if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_FORTNITE_EMOTES_TAG" != "$FORTNITE_EMOTES_TAG" || ! -f "$fortnite_emotes_marker" ]]; then
       log "Installing or updating FortniteEmotesNDances"
       install_fortnite_emotes_component "$FORTNITE_EMOTES_URL" "$fortnite_emotes_marker"
     else
       log "FortniteEmotesNDances already current; skipping"
     fi
+  elif (( NEED_MULTIADDONMANAGER == 1 )); then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MULTIADDONMANAGER_TAG" != "$MULTIADDONMANAGER_TAG" || ! -f "$multiaddonmanager_marker" ]]; then
+      log "Installing or updating MultiAddonManager"
+      install_archive_component "multiaddonmanager" "$MULTIADDONMANAGER_URL" "$GAME_DIR" "$multiaddonmanager_marker"
+    else
+      log "MultiAddonManager already current; skipping"
+    fi
+
+    write_multiaddonmanager_config "$multiaddonmanager_cfg" "$CS2_WORKSHOP_FORCE_DOWNLOAD" "${MULTIADDONMANAGER_ADDON_IDS[@]}"
   fi
 
   if is_enabled "$EXECUTES_ENABLED"; then
