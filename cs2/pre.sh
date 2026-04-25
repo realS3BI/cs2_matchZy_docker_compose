@@ -11,40 +11,9 @@ _matchzy_bootstrap_main() (
     printf '[pre.sh] %s\n' "$*"
   }
 
-  debug_log() {
-    local level="$1"
-    shift || true
-    printf '[pre.sh][%s] %s\n' "$level" "$*"
-  }
-
   fail() {
     printf '[pre.sh] ERROR: %s\n' "$*" >&2
     exit 1
-  }
-
-  file_debug_state() {
-    local path="$1"
-    if [[ -e "$path" || -L "$path" ]]; then
-      local kind="regular"
-      local size="?"
-      if [[ -L "$path" ]]; then
-        kind="symlink"
-      elif [[ -d "$path" ]]; then
-        kind="directory"
-      fi
-
-      if [[ -f "$path" ]]; then
-        size="$(wc -c < "$path" 2>/dev/null || printf '?')"
-      fi
-
-      debug_log "L2" "Path exists: $path (type=$kind, size_bytes=$size)"
-      debug_log "L2" "Path perms: $(ls -ld "$path" 2>/dev/null || printf 'unavailable')"
-      if command -v stat >/dev/null 2>&1; then
-        debug_log "L2" "Path stat: $(stat -c 'mode=%a uid=%u gid=%g inode=%i dev=%d' "$path" 2>/dev/null || printf 'unavailable')"
-      fi
-    else
-      debug_log "L2" "Path does not exist yet: $path"
-    fi
   }
 
   need_cmd() {
@@ -130,6 +99,44 @@ _matchzy_bootstrap_main() (
     [[ "$value" =~ \{(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\} ]]
   }
 
+  ensure_bracketed_prefix() {
+    local value="$1"
+    value="$(trim_whitespace "$value")"
+    [[ -n "$value" ]] || {
+      printf '%s' "$value"
+      return 0
+    }
+
+    if [[ "$value" == \[*\] ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+
+    value="${value#[}"
+    value="${value%]}"
+    printf '[%s]' "$value"
+  }
+
+  sync_runtime_pre_hook() {
+    local image_pre_hook="/etc/pre.sh"
+    local runtime_pre_hook="/home/steam/cs2-dedicated/pre.sh"
+    local hooks_differ=1
+
+    [[ -f "$image_pre_hook" ]] || return 0
+
+    if [[ -f "$runtime_pre_hook" ]]; then
+      if command -v cmp >/dev/null 2>&1 && cmp -s "$image_pre_hook" "$runtime_pre_hook"; then
+        hooks_differ=0
+      fi
+    fi
+
+    if (( hooks_differ == 1 )); then
+      cp -f "$image_pre_hook" "$runtime_pre_hook"
+      chmod 0755 "$runtime_pre_hook" 2>/dev/null || true
+      log "Synchronized runtime pre.sh from image"
+    fi
+  }
+
   resolve_matchzy_chat_prefix() {
     local server_name_raw="$1"
     local chat_prefix_raw="$2"
@@ -140,10 +147,12 @@ _matchzy_bootstrap_main() (
     prefix_value="$(trim_whitespace "$chat_prefix_raw")"
     if [[ -n "$prefix_value" ]]; then
       prefix_source="MATCHZY_CHAT_PREFIX"
+      prefix_value="$(ensure_bracketed_prefix "$prefix_value")"
     else
       prefix_value="$(trim_whitespace "$chat_prefix_legacy_raw")"
       if [[ -n "$prefix_value" ]]; then
         prefix_source="matchzy_chat_prefix"
+        prefix_value="$(ensure_bracketed_prefix "$prefix_value")"
       else
         prefix_value="$(trim_whitespace "$server_name_raw")"
         [[ -n "$prefix_value" ]] || prefix_value="CS2 MatchZy Server"
@@ -704,12 +713,7 @@ _matchzy_bootstrap_main() (
     local tmp_file=""
 
     config_dir="$(dirname "$config_file")"
-    debug_log "L1" "Preparing MatchZy config write to $config_file"
-    debug_log "L2" "Input env snapshot: MATCHZY_SMOKE_COLOR='$smoke_color_raw' CS2_SERVERNAME='$server_name_raw' MATCHZY_CHAT_PREFIX='$chat_prefix_raw' matchzy_chat_prefix='$chat_prefix_legacy_raw'"
-    file_debug_state "$config_dir"
-    file_debug_state "$config_file"
     mkdir -p "$config_dir"
-    file_debug_state "$config_dir"
 
     if is_enabled "$smoke_color_raw"; then
       smoke_color_value="true"
@@ -720,29 +724,12 @@ _matchzy_bootstrap_main() (
     )
 
     tmp_file="$(mktemp)"
-    debug_log "L3" "Using temporary file for config generation: $tmp_file"
     {
       printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
       printf 'matchzy_chat_prefix "%s"\n' "$chat_prefix"
     } > "$tmp_file"
-    file_debug_state "$tmp_file"
-    debug_log "L3" "Temp config content:"
-    while IFS= read -r line; do
-      debug_log "L3" "  $line"
-    done < "$tmp_file"
 
-    if mv "$tmp_file" "$config_file"; then
-      debug_log "L1" "Atomically moved temp config into place at $config_file"
-    else
-      local mv_rc=$?
-      debug_log "L1" "Failed moving temp config into place (exit=$mv_rc)"
-      fail "Unable to move generated MatchZy config into place at $config_file"
-    fi
-    file_debug_state "$config_file"
-    debug_log "L3" "Final config content after write:"
-    while IFS= read -r line; do
-      debug_log "L3" "  $line"
-    done < "$config_file"
+    mv "$tmp_file" "$config_file"
     log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value' and chat prefix from $chat_prefix_source"
   }
 
@@ -840,6 +827,7 @@ _matchzy_bootstrap_main() (
   local STATE_DIR="$STEAMAPPDIR/.mod-installer"
   local STATE_FILE="$STATE_DIR/state.env"
   local TMP_DIR=""
+  sync_runtime_pre_hook
   mkdir -p "$STATE_DIR"
 
   [[ -d "$GAME_DIR" ]] || fail "Game directory not found: $GAME_DIR"
@@ -1212,16 +1200,12 @@ _matchzy_bootstrap_main() (
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
 
   write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
-  debug_log "L1" "Entering MatchZy config generation step"
-  file_debug_state "$matchzy_config_file"
   write_matchzy_config_file \
     "$MATCHZY_SMOKE_COLOR" \
     "$CS2_SERVERNAME" \
     "$MATCHZY_CHAT_PREFIX" \
     "$MATCHZY_CHAT_PREFIX_LEGACY" \
     "$matchzy_config_file"
-  debug_log "L1" "Finished MatchZy config generation step"
-  file_debug_state "$matchzy_config_file"
   write_css_admins_file "$ADMINS" "$css_admins_file"
 
   if is_enabled "$FAKE_RCON_ENABLED"; then

@@ -173,11 +173,12 @@ Die MatchZy-Config enthaelt aktuell diese automatisch gesetzten Werte:
 
 - `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR`
 - `matchzy_chat_prefix` aus Prefix-ENV mit Prioritaet `MATCHZY_CHAT_PREFIX` > `matchzy_chat_prefix` > `CS2_SERVERNAME`
+- Werte aus `MATCHZY_CHAT_PREFIX` und `matchzy_chat_prefix` werden immer als `[<wert>]` normalisiert
 
 Beispiele fuer den Prefix:
 
 ```bash
-# Plain Text -> wird automatisch zu {Green}Sebi CS2{Default}
+# Plain Text -> wird automatisch zu {Green}[Sebi CS2]{Default}
 MATCHZY_CHAT_PREFIX=Sebi CS2
 
 # Bereits mit MatchZy-Farbcodes -> bleibt unveraendert
@@ -262,7 +263,7 @@ docker compose run --rm cs2 sh -lc 'rm -rf /home/steam/cs2-dedicated/pre.sh'
 docker compose up -d cs2
 ```
 
-Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten siehst, kann auch eine alte persistierte Datei `/home/steam/cs2-dedicated/pre.sh` im Volume liegen. Dann ebenfalls einmalig entfernen und den Container neu starten, damit die aktuelle `/etc/pre.sh` aus dem Image erneut ins Volume kopiert wird.
+Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten siehst, kann auch eine alte persistierte Datei `/home/steam/cs2-dedicated/pre.sh` im Volume liegen. Das wird inzwischen beim Start automatisch behoben: `pre.sh` synchronisiert die Runtime-Datei aus `/etc/pre.sh`, sobald sie fehlt oder veraltet ist.
 
 ## 8) Troubleshooting "Plugins nicht geladen"
 
