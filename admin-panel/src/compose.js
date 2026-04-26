@@ -31,22 +31,56 @@ export class Compose {
     }
   }
 
+  firstId(output) {
+    return output.trim().split(/\r?\n/).filter(Boolean)[0] || "";
+  }
+
+  async containerExists(ref) {
+    if (!ref) return false;
+    const result = await this.run(["inspect", "--type", "container", ref], { timeout: 30 * 1000 });
+    return result.ok;
+  }
+
+  async findContainerByFilters(filters) {
+    const args = ["ps", "-q"];
+    for (const filter of filters) {
+      args.push("--filter", filter);
+    }
+    const result = await this.run(args, { timeout: 30 * 1000 });
+    return this.firstId(result.stdout);
+  }
+
   async findServiceContainer() {
-    if (this.config.containerName) {
+    if (await this.containerExists(this.config.containerName)) {
       return this.config.containerName;
     }
 
-    const filters = ["ps", "-q", "--filter", `label=com.docker.compose.service=${this.config.serviceName}`];
+    const candidates = [];
+
     if (this.config.composeProjectName) {
-      filters.push("--filter", `label=com.docker.compose.project=${this.config.composeProjectName}`);
+      candidates.push([
+        `label=com.docker.compose.project=${this.config.composeProjectName}`,
+        `label=com.docker.compose.service=${this.config.serviceName}`
+      ]);
+      candidates.push([`name=${this.config.composeProjectName}-${this.config.serviceName}`]);
+      candidates.push([`name=${this.config.composeProjectName}_${this.config.serviceName}`]);
     }
 
-    const result = await this.run(filters, { timeout: 30 * 1000 });
-    const containerId = result.stdout.trim().split(/\r?\n/).filter(Boolean)[0];
-    if (containerId) return containerId;
+    if (this.config.containerName) {
+      candidates.push([`name=${this.config.containerName}-${this.config.serviceName}`]);
+      candidates.push([`name=${this.config.containerName}_${this.config.serviceName}`]);
+      candidates.push([`name=${this.config.containerName}`]);
+    }
 
-    const fallback = await this.run(["ps", "-q", "--filter", `label=com.docker.compose.service=${this.config.serviceName}`], { timeout: 30 * 1000 });
-    return fallback.stdout.trim().split(/\r?\n/).filter(Boolean)[0] || "";
+    candidates.push([`label=com.docker.compose.service=${this.config.serviceName}`]);
+    candidates.push([`name=${this.config.serviceName}`]);
+
+    for (const filters of candidates) {
+      const containerId = await this.findContainerByFilters(filters);
+      if (containerId) return containerId;
+    }
+
+    return "";
   }
 
   async recreateService() {

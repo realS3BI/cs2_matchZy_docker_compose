@@ -79,7 +79,7 @@ Das Compose-Projekt enthaelt zusaetzlich:
 
 Das Panel-Frontend ist eine Vite/React-App mit Tailwind CSS v4 und lokalen shadcn-style UI-Komponenten. Der Produktionsbuild wird beim Docker-Build erzeugt und vom Express-Backend ausgeliefert.
 
-`ADMIN_PANEL_CONTROL_MODE=docker` ist der Standard fuer Coolify. Das Panel findet den `cs2` Container ueber Docker-Compose-Labels. Falls das in einer speziellen Coolify-Installation nicht eindeutig ist, setze `ADMIN_PANEL_CS2_CONTAINER` auf den Container-Namen oder die Container-ID.
+`ADMIN_PANEL_CONTROL_MODE=docker` ist der Standard fuer Coolify. Das Panel findet den `cs2` Container ueber Docker-Compose-Labels und typische Compose-Namensmuster. `ADMIN_PANEL_CS2_CONTAINER` sollte normalerweise leer bleiben. Setze es nur, wenn du den exakten Container-Namen oder die Container-ID kennst; der Compose-Projektname wie `cs2-matchzy` ist dafuer nicht ausreichend.
 
 Start:
 
