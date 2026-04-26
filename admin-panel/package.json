@@ -1,0 +1,31 @@
+{
+  "name": "cs2-matchzy-admin-panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build --config client/vite.config.js",
+    "dev": "vite --config client/vite.config.js",
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "@vitejs/plugin-react": "^5.1.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cookie-parser": "1.4.7",
+    "express": "^4.22.1",
+    "express-rate-limit": "7.5.0",
+    "lucide-react": "^0.562.0",
+    "mongodb": "6.13.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.3.0"
+  }
+}
