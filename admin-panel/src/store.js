@@ -1,7 +1,7 @@
 import { MongoClient } from "mongodb";
 import { loadEnvFile } from "./env-file.js";
 import { SERVER_ENV_KEYS } from "./defaults.js";
-import { sanitizeAdmins, sanitizeEnv } from "./validators.js";
+import { sanitizeAdmins, sanitizeEnv, sanitizeNades } from "./validators.js";
 
 function currentProcessEnv() {
   const env = {};
@@ -24,6 +24,7 @@ export class Store {
     this.db = this.client.db(this.config.mongoDbName);
     this.settings = this.db.collection("settings");
     this.admins = this.db.collection("admins");
+    this.nades = this.db.collection("nades");
     this.actions = this.db.collection("actions");
     await this.actions.createIndex({ createdAt: -1 });
   }
@@ -66,6 +67,22 @@ export class Store {
       { upsert: true }
     );
     await this.logAction("save", "success", "Admins saved");
+    return cleanEntries;
+  }
+
+  async getNades() {
+    const doc = await this.nades.findOne({ _id: "current" });
+    return doc?.entries || [];
+  }
+
+  async saveNades(entries) {
+    const cleanEntries = sanitizeNades(entries);
+    await this.nades.updateOne(
+      { _id: "current" },
+      { $set: { entries: cleanEntries, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    await this.logAction("save", "success", "Nades saved");
     return cleanEntries;
   }
 

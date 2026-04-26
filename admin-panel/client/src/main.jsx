@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Copy,
+  Crosshair,
+  Download,
+  FileInput,
   LogOut,
   Pause,
   Play,
@@ -27,6 +31,7 @@ const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Server },
   { id: "settings", label: "Settings", icon: Save },
   { id: "admins", label: "Admins", icon: Shield },
+  { id: "nades", label: "Nades", icon: Crosshair },
   { id: "logs", label: "Docker Logs", icon: Terminal }
 ];
 
@@ -120,9 +125,10 @@ function Shell({ children, tab, setTab, message, error, onLogout }) {
   );
 }
 
-function Dashboard({ env, admins, status, onRefresh, onApply, onRestart, busy }) {
+function Dashboard({ env, admins, nades, status, onRefresh, onApply, onRestart, busy }) {
   const service = status?.service;
   const last = status?.lastAction;
+  const globalNadesEnabled = ["1", "true", "yes", "on"].includes(String(env.MATCHZY_SAVE_NADES_AS_GLOBAL ?? "1").toLowerCase());
 
   return (
     <>
@@ -168,6 +174,8 @@ function Dashboard({ env, admins, status, onRefresh, onApply, onRestart, busy })
             <span>Name: <code className="text-primary">{env.CS2_SERVERNAME || ""}</code></span>
             <span>Map: <code className="text-primary">{env.CS2_STARTMAP || ""}</code></span>
             <span>Admins: <Badge>{admins.length}</Badge></span>
+            <span>Nades: <Badge>{nades.length}</Badge></span>
+            <span>Global nades: <Badge>{globalNadesEnabled ? "on" : "off"}</Badge></span>
           </CardContent>
         </Card>
       </section>
@@ -319,6 +327,209 @@ function Admins({ admins, setAdmins, flagPresets, onSave }) {
   );
 }
 
+const nadeTypes = ["", "Smoke", "Flash", "HE", "Molly", "Decoy"];
+
+function createNade(env) {
+  return {
+    id: window.crypto?.randomUUID?.() || String(Date.now()),
+    name: "",
+    map: env.CS2_STARTMAP || "",
+    type: "Smoke",
+    desc: "",
+    lineupPos: "0 0 0",
+    lineupAng: "0 0 0",
+    owner: "default"
+  };
+}
+
+function Nades({ env, nades, setNades, onSave }) {
+  const [mapFilter, setMapFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importJson, setImportJson] = useState("");
+  const [exportJson, setExportJson] = useState("");
+  const [localError, setLocalError] = useState("");
+
+  const maps = useMemo(() => [...new Set(nades.map((nade) => nade.map).filter(Boolean))].sort(), [nades]);
+  const filteredNades = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return nades.filter((nade) => {
+      if (mapFilter && nade.map !== mapFilter) return false;
+      if (typeFilter && nade.type !== typeFilter) return false;
+      if (!normalizedQuery) return true;
+      return `${nade.name} ${nade.desc}`.toLowerCase().includes(normalizedQuery);
+    });
+  }, [nades, mapFilter, typeFilter, query]);
+  const groupedNades = useMemo(() => {
+    const groups = new Map();
+    for (const nade of filteredNades) {
+      const map = nade.map || "(no map)";
+      if (!groups.has(map)) groups.set(map, []);
+      groups.get(map).push(nade);
+    }
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredNades]);
+
+  function updateNade(id, patch) {
+    setNades((current) => current.map((nade) => (nade.id === id ? { ...nade, ...patch } : nade)));
+  }
+
+  async function importNades() {
+    setLocalError("");
+    try {
+      const matchzyConfig = JSON.parse(importJson);
+      const result = await api("/api/nades/import", {
+        method: "POST",
+        body: JSON.stringify({ matchzyConfig, mode: "replace" })
+      });
+      setNades(result.entries || []);
+      setImportOpen(false);
+      setImportJson("");
+    } catch (error) {
+      setLocalError(error.message);
+    }
+  }
+
+  async function exportNades() {
+    setLocalError("");
+    try {
+      const result = await api("/api/nades/export");
+      setExportJson(JSON.stringify(result, null, 2));
+    } catch (error) {
+      setLocalError(error.message);
+    }
+  }
+
+  async function copyExport() {
+    if (!exportJson) return;
+    await navigator.clipboard?.writeText(exportJson);
+  }
+
+  function downloadExport() {
+    if (!exportJson) return;
+    const blob = new Blob([`${exportJson}\n`], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "matchzy-savednades.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save nades
+        </Button>
+        <Button variant="secondary" onClick={() => setNades((current) => [...current, createNade(env)])}>
+          <Plus className="h-4 w-4" />
+          Add nade
+        </Button>
+        <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
+          <FileInput className="h-4 w-4" />
+          Import JSON
+        </Button>
+        <Button variant="secondary" onClick={exportNades}>
+          <Download className="h-4 w-4" />
+          Export JSON
+        </Button>
+      </div>
+      {localError ? <Message error={localError} /> : null}
+      {importOpen ? (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Import MatchZy savednades.json</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}}' />
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={importNades}>
+                <FileInput className="h-4 w-4" />
+                Replace nades
+              </Button>
+              <Button variant="secondary" onClick={() => setImportOpen(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+      {exportJson ? (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Export</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <Textarea readOnly value={exportJson} />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={copyExport}>
+                <Copy className="h-4 w-4" />
+                Copy
+              </Button>
+              <Button variant="secondary" onClick={downloadExport}>
+                <Download className="h-4 w-4" />
+                Download
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Nades</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-2 md:grid-cols-[1fr_180px_180px]">
+            <Input value={query} placeholder="Search name or description" onChange={(event) => setQuery(event.target.value)} />
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={mapFilter}
+              onChange={(event) => setMapFilter(event.target.value)}
+            >
+              <option value="">All maps</option>
+              {maps.map((map) => <option key={map} value={map}>{map}</option>)}
+            </select>
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+            >
+              <option value="">All types</option>
+              {nadeTypes.filter(Boolean).map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </div>
+          {nades.length === 0 ? <p className="text-sm text-muted-foreground">No nades configured.</p> : null}
+          {groupedNades.map(([map, mapNades]) => (
+            <section key={map} className="grid gap-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">{map} <Badge>{mapNades.length}</Badge></h3>
+              {mapNades.map((nade) => (
+                <div key={nade.id} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_44px]">
+                  <Input value={nade.name || ""} placeholder="Name" onChange={(event) => updateNade(nade.id, { name: event.target.value })} />
+                  <Input value={nade.map || ""} placeholder="Map" onChange={(event) => updateNade(nade.id, { map: event.target.value })} />
+                  <select
+                    className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={nade.type || ""}
+                    onChange={(event) => updateNade(nade.id, { type: event.target.value })}
+                  >
+                    {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
+                  </select>
+                  <Input value={nade.desc || ""} placeholder="Description" onChange={(event) => updateNade(nade.id, { desc: event.target.value })} />
+                  <Input value={nade.lineupPos || ""} placeholder="LineupPos" onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} />
+                  <Input value={nade.lineupAng || ""} placeholder="LineupAng" onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} />
+                  <Button variant="secondary" size="icon" title="Remove" onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </section>
+          ))}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
 function DockerLogs({ active }) {
   const [logs, setLogs] = useState("");
   const [tail, setTail] = useState(300);
@@ -404,6 +615,7 @@ function App() {
   const [env, setEnv] = useState({});
   const [curatedFields, setCuratedFields] = useState([]);
   const [admins, setAdmins] = useState([]);
+  const [nades, setNades] = useState([]);
   const [flagPresets, setFlagPresets] = useState([]);
   const [status, setStatus] = useState(null);
   const [message, setMessage] = useState("");
@@ -411,15 +623,17 @@ function App() {
   const [busy, setBusy] = useState(false);
 
   async function loadAll() {
-    const [settings, adminData, statusData] = await Promise.all([
+    const [settings, adminData, nadesData, statusData] = await Promise.all([
       api("/api/settings"),
       api("/api/admins"),
+      api("/api/nades"),
       api("/api/server/status")
     ]);
     setAuthenticated(true);
     setEnv(settings.env || {});
     setCuratedFields(settings.curatedFields || []);
     setAdmins(adminData.entries || []);
+    setNades(nadesData.entries || []);
     setFlagPresets(adminData.flagPresets || []);
     setStatus(statusData);
   }
@@ -478,6 +692,7 @@ function App() {
         <Dashboard
           env={env}
           admins={admins}
+          nades={nades}
           status={status}
           busy={busy}
           onRefresh={() => runAction(async () => {
@@ -509,6 +724,18 @@ function App() {
             const result = await api("/api/admins", { method: "PUT", body: JSON.stringify({ entries: admins }) });
             setAdmins(result.entries);
             return { message: "Admins saved." };
+          })}
+        />
+      ) : null}
+      {tab === "nades" ? (
+        <Nades
+          env={env}
+          nades={nades}
+          setNades={setNades}
+          onSave={() => runAction(async () => {
+            const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
+            setNades(result.entries);
+            return { message: "Nades saved." };
           })}
         />
       ) : null}

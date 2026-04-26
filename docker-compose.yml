@@ -29,6 +29,7 @@ services:
       ADMIN_PANEL_RUNTIME_ENV_FILE: /runtime/settings.env
       ADMIN_PANEL_RUNTIME_ADMINS_FILE: /runtime/csharp-admins.json
       ADMIN_PANEL_RUNTIME_MATCHZY_ADMINS_FILE: /runtime/matchzy-admins.json
+      ADMIN_PANEL_RUNTIME_MATCHZY_NADES_FILE: /runtime/matchzy-savednades.json
       ADMIN_PANEL_CS2_SERVICE: cs2
       ADMIN_PANEL_CS2_CONTAINER: ${ADMIN_PANEL_CS2_CONTAINER:-}
     volumes:
@@ -77,12 +78,14 @@ services:
       ANYBASELIB_VERSION: ${ANYBASELIB_VERSION:-latest}
       MENUMANAGER_VERSION: ${MENUMANAGER_VERSION:-latest}
       MATCHZY_SMOKE_COLOR: ${MATCHZY_SMOKE_COLOR:-0}
+      MATCHZY_SAVE_NADES_AS_GLOBAL: ${MATCHZY_SAVE_NADES_AS_GLOBAL:-1}
       MATCHZY_CHAT_PREFIX: ${MATCHZY_CHAT_PREFIX:-}
       matchzy_chat_prefix: ${matchzy_chat_prefix:-}
       ADMINS: ${ADMINS:-}
       CS2_RUNTIME_ENV_FILE: /config-runtime/settings.env
       CSHARP_ADMINS_FILE: /config-runtime/csharp-admins.json
       MATCHZY_ADMINS_FILE: /config-runtime/matchzy-admins.json
+      MATCHZY_SAVEDNADES_FILE: /config-runtime/matchzy-savednades.json
       MOD_REINSTALL: ${MOD_REINSTALL:-0}
     volumes:
       - cs2_data:/home/steam/cs2-dedicated

@@ -729,9 +729,11 @@ _matchzy_bootstrap_main() (
     local server_name_raw="$2"
     local chat_prefix_raw="$3"
     local chat_prefix_legacy_raw="$4"
-    local config_file="$5"
+    local save_nades_as_global_raw="$5"
+    local config_file="$6"
     local config_dir=""
     local smoke_color_value="false"
+    local save_nades_as_global_value="false"
     local chat_prefix=""
     local chat_prefix_source=""
     local tmp_file=""
@@ -742,6 +744,9 @@ _matchzy_bootstrap_main() (
     if is_enabled "$smoke_color_raw"; then
       smoke_color_value="true"
     fi
+    if is_enabled "$save_nades_as_global_raw"; then
+      save_nades_as_global_value="true"
+    fi
 
     IFS=$'\n' read -r chat_prefix chat_prefix_source < <(
       resolve_matchzy_chat_prefix "$server_name_raw" "$chat_prefix_raw" "$chat_prefix_legacy_raw"
@@ -750,11 +755,12 @@ _matchzy_bootstrap_main() (
     tmp_file="$(mktemp)"
     {
       printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
+      printf 'matchzy_save_nades_as_global_enabled "%s"\n' "$save_nades_as_global_value"
       printf 'matchzy_chat_prefix "%s"\n' "$chat_prefix"
     } > "$tmp_file"
 
     mv "$tmp_file" "$config_file"
-    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value' and chat prefix from $chat_prefix_source"
+    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value', global saved nades set to '$save_nades_as_global_value', and chat prefix from $chat_prefix_source"
   }
 
   write_css_admins_file() {
@@ -826,6 +832,15 @@ _matchzy_bootstrap_main() (
     log "Wrote CounterStrikeSharp and MatchZy admin files from runtime files"
   }
 
+  write_matchzy_savednades_file_from_runtime() {
+    local source_file="$1"
+    local savednades_file="$2"
+
+    [[ -n "$source_file" && -f "$source_file" ]] || return 0
+    copy_file_atomic "$source_file" "$savednades_file"
+    log "Wrote MatchZy saved nades from runtime file"
+  }
+
   need_cmd awk
   need_cmd grep
   need_cmd sed
@@ -862,12 +877,14 @@ _matchzy_bootstrap_main() (
   local ANYBASELIB_VERSION="${ANYBASELIB_VERSION:-latest}"
   local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
   local MATCHZY_SMOKE_COLOR="${MATCHZY_SMOKE_COLOR:-0}"
+  local MATCHZY_SAVE_NADES_AS_GLOBAL="${MATCHZY_SAVE_NADES_AS_GLOBAL:-1}"
   local CS2_SERVERNAME="${CS2_SERVERNAME:-CS2 MatchZy Server}"
   local MATCHZY_CHAT_PREFIX="${MATCHZY_CHAT_PREFIX:-}"
   local MATCHZY_CHAT_PREFIX_LEGACY="${matchzy_chat_prefix:-}"
   local ADMINS="${ADMINS:-}"
   local CSHARP_ADMINS_FILE="${CSHARP_ADMINS_FILE:-}"
   local MATCHZY_ADMINS_FILE="${MATCHZY_ADMINS_FILE:-}"
+  local MATCHZY_SAVEDNADES_FILE="${MATCHZY_SAVEDNADES_FILE:-}"
   local NEED_MENU_STACK=0
   if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
     NEED_MENU_STACK=1
@@ -1222,6 +1239,7 @@ _matchzy_bootstrap_main() (
   local css_core_config="$CSS_DIR/configs/core.json"
   local matchzy_admins_file="$GAME_DIR/cfg/MatchZy/admins.json"
   local matchzy_config_file="$GAME_DIR/cfg/MatchZy/config.cfg"
+  local matchzy_savednades_file="$GAME_DIR/cfg/MatchZy/savednades.json"
   local css_admins_file="$CSS_DIR/configs/admins.json"
 
   if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_METAMOD_TAG" != "$METAMOD_TAG" || ! -d "$metamod_marker" ]]; then
@@ -1262,7 +1280,9 @@ _matchzy_bootstrap_main() (
     "$CS2_SERVERNAME" \
     "$MATCHZY_CHAT_PREFIX" \
     "$MATCHZY_CHAT_PREFIX_LEGACY" \
+    "$MATCHZY_SAVE_NADES_AS_GLOBAL" \
     "$matchzy_config_file"
+  write_matchzy_savednades_file_from_runtime "$MATCHZY_SAVEDNADES_FILE" "$matchzy_savednades_file"
   if [[ -z "$CSHARP_ADMINS_FILE" || ! -f "$CSHARP_ADMINS_FILE" || -z "$MATCHZY_ADMINS_FILE" || ! -f "$MATCHZY_ADMINS_FILE" ]]; then
     write_css_admins_file "$ADMINS" "$css_admins_file"
   fi

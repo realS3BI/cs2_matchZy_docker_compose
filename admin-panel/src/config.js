@@ -19,6 +19,7 @@ export function getConfig() {
     runtimeEnvFile: process.env.ADMIN_PANEL_RUNTIME_ENV_FILE || "/runtime/settings.env",
     runtimeAdminsFile: process.env.ADMIN_PANEL_RUNTIME_ADMINS_FILE || "/runtime/csharp-admins.json",
     runtimeMatchZyAdminsFile: process.env.ADMIN_PANEL_RUNTIME_MATCHZY_ADMINS_FILE || "/runtime/matchzy-admins.json",
+    runtimeMatchZyNadesFile: process.env.ADMIN_PANEL_RUNTIME_MATCHZY_NADES_FILE || "/runtime/matchzy-savednades.json",
     controlMode: process.env.ADMIN_PANEL_CONTROL_MODE || "docker",
     composeProjectName: process.env.COMPOSE_PROJECT_NAME || "",
     serviceName: process.env.ADMIN_PANEL_CS2_SERVICE || "cs2",

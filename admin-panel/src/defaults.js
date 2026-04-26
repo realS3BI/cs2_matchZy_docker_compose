@@ -30,6 +30,7 @@ export const SERVER_ENV_KEYS = [
   "ANYBASELIB_VERSION",
   "MENUMANAGER_VERSION",
   "MATCHZY_SMOKE_COLOR",
+  "MATCHZY_SAVE_NADES_AS_GLOBAL",
   "MATCHZY_CHAT_PREFIX",
   "ADMINS",
   "MOD_REINSTALL"
@@ -53,6 +54,7 @@ export const CURATED_FIELDS = [
   { key: "CS2_STARTMAP", label: "Start map", type: "text" },
   { key: "CS2_WORKSHOP_MAPS", label: "Workshop maps", type: "textarea" },
   { key: "MATCHZY_SMOKE_COLOR", label: "MatchZy smoke color", type: "boolean" },
+  { key: "MATCHZY_SAVE_NADES_AS_GLOBAL", label: "MatchZy global saved nades", type: "boolean" },
   { key: "MATCHZY_CHAT_PREFIX", label: "MatchZy chat prefix", type: "text" },
   { key: "FAKE_RCON_ENABLED", label: "Fake RCON", type: "boolean" },
   { key: "WEAPONPAINTS_ENABLED", label: "WeaponPaints", type: "boolean" },

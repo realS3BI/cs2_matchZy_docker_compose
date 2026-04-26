@@ -7,7 +7,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CURATED_FIELDS, FLAG_PRESETS, SERVER_ENV_KEYS } from "./defaults.js";
 import { writeEnvFile } from "./env-file.js";
-import { adminsToCssConfig, adminsToMatchZyConfig, sanitizeAdmins, sanitizeEnv } from "./validators.js";
+import {
+  adminsToCssConfig,
+  adminsToMatchZyConfig,
+  matchZySavedNadesConfigToNades,
+  nadesToMatchZySavedNadesConfig,
+  sanitizeAdmins,
+  sanitizeEnv,
+  sanitizeNades
+} from "./validators.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -126,17 +134,46 @@ export function createApp({ config, store, compose }) {
     res.json({ entries: await store.saveAdmins(entries) });
   });
 
+  app.get("/api/nades", async (req, res) => {
+    res.json({
+      entries: await store.getNades()
+    });
+  });
+
+  app.put("/api/nades", async (req, res) => {
+    const entries = sanitizeNades(req.body?.entries);
+    res.json({ entries: await store.saveNades(entries) });
+  });
+
+  app.post("/api/nades/import", async (req, res) => {
+    const importedEntries = matchZySavedNadesConfigToNades(req.body?.matchzyConfig);
+    const mode = req.body?.mode === "merge" ? "merge" : "replace";
+    if (mode === "merge") {
+      const merged = [...await store.getNades(), ...importedEntries];
+      res.json({ entries: await store.saveNades(merged) });
+      return;
+    }
+    res.json({ entries: await store.saveNades(importedEntries) });
+  });
+
+  app.get("/api/nades/export", async (req, res) => {
+    res.json(nadesToMatchZySavedNadesConfig(await store.getNades()));
+  });
+
   app.post("/api/server/apply", async (req, res) => {
     const env = await store.getSettings();
     const admins = await store.getAdmins();
+    const nades = await store.getNades();
     const nextEnv = sanitizeEnv({
       ...env,
+      MATCHZY_SAVE_NADES_AS_GLOBAL: env.MATCHZY_SAVE_NADES_AS_GLOBAL ?? "1",
       ADMINS: admins.map((entry) => entry.identitySteam64).join(",")
     });
 
     await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(nextEnv));
     await writeJsonFile(config.runtimeAdminsFile, adminsToCssConfig(admins));
     await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(admins));
+    await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
     if (config.envFile) {
       await writeEnvFile(config.envFile, nextEnv);
     }
