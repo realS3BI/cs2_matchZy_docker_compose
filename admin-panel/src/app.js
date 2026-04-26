@@ -71,7 +71,7 @@ async function writeJsonFile(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-export function createApp({ config, store, compose }) {
+export function createApp({ config, store, compose, nadesSync }) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
@@ -142,7 +142,9 @@ export function createApp({ config, store, compose }) {
 
   app.put("/api/nades", async (req, res) => {
     const entries = sanitizeNades(req.body?.entries);
-    res.json({ entries: await store.saveNades(entries) });
+    const savedEntries = await store.saveNades(entries);
+    await nadesSync?.writeFromMongo(savedEntries);
+    res.json({ entries: savedEntries });
   });
 
   app.post("/api/nades/import", async (req, res) => {
@@ -154,10 +156,14 @@ export function createApp({ config, store, compose }) {
         mergedByKey.set(`${entry.owner}\u0000${entry.map}\u0000${entry.name}`.toLowerCase(), entry);
       }
       const merged = [...mergedByKey.values()];
-      res.json({ entries: await store.saveNades(merged) });
+      const savedEntries = await store.saveNades(merged);
+      await nadesSync?.writeFromMongo(savedEntries);
+      res.json({ entries: savedEntries });
       return;
     }
-    res.json({ entries: await store.saveNades(importedEntries) });
+    const savedEntries = await store.saveNades(importedEntries);
+    await nadesSync?.writeFromMongo(savedEntries);
+    res.json({ entries: savedEntries });
   });
 
   app.get("/api/nades/export", async (req, res) => {
@@ -178,6 +184,7 @@ export function createApp({ config, store, compose }) {
     await writeJsonFile(config.runtimeAdminsFile, adminsToCssConfig(admins));
     await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(admins));
     await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
+    await nadesSync?.writeFromMongo(nades);
     if (config.envFile) {
       await writeEnvFile(config.envFile, nextEnv);
     }
@@ -197,7 +204,8 @@ export function createApp({ config, store, compose }) {
   app.get("/api/server/status", async (req, res) => {
     res.json({
       service: await compose.serviceStatus(),
-      lastAction: await store.getLastAction(["apply", "restart", "save", "login_fail"])
+      nadesSync: nadesSync?.status() || { enabled: false },
+      lastAction: await store.getLastAction(["apply", "restart", "save", "nades_sync", "login_fail"])
     });
   });
 

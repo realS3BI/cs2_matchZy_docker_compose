@@ -13,7 +13,7 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 - `FortniteEmotesNDances` inklusive `MultiAddonManager` und `Ray-Trace`
 - Workshop-Maps per `CS2_WORKSHOP_MAPS`
 - `cs2-executes`
-- Web-Admin-Panel mit React, Tailwind CSS v4, shadcn-style Komponenten und MongoDB-Persistenz fuer Settings, CounterStrikeSharp-Admins und Restart/Recreate
+- Web-Admin-Panel mit React, Tailwind CSS v4, shadcn-style Komponenten und MongoDB-Persistenz fuer Settings, CounterStrikeSharp-Admins, MatchZy-Nades und Restart/Recreate
 
 ## Enthaltene Dateien
 
@@ -69,7 +69,7 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 docker compose up -d --build --force-recreate cs2
 ```
 
-Hinweis: Der `cs2` Service nutzt weiterhin Docker-Volumes. Das Admin-Panel mountet das Runtime-Volume `admin_panel_runtime` und den Docker-Socket, damit es Settings schreiben und den `cs2` Container neu starten kann.
+Hinweis: Der `cs2` Service nutzt weiterhin Docker-Volumes. Das Admin-Panel mountet das Runtime-Volume `admin_panel_runtime`, das CS2-Datenvolume `cs2_data` und den Docker-Socket, damit es Settings schreiben, MatchZy-Nades live synchronisieren und den `cs2` Container neu starten kann.
 
 ## 3) Web-Admin-Panel
 
@@ -93,8 +93,17 @@ Das Panel liest bestehende Werte aus den Container-ENV oder aus MongoDB, speiche
 - `settings.env` fuer Server- und Plugin-Settings
 - `csharp-admins.json` fuer CounterStrikeSharp-Admins inklusive Flags
 - `matchzy-admins.json` fuer die daraus abgeleiteten MatchZy-Admins
+- `matchzy-savednades.json` als Start-/Apply-Fallback fuer MatchZy-Nades
 
 Der `cs2` Container liest diese lokalen Dateien beim Start ein. MongoDB bleibt damit im Admin-Panel; der Gameserver braucht keine DB-Verbindung und kann auch mit den letzten gueltigen Runtime-Dateien starten, wenn MongoDB nicht verfuegbar ist.
+
+MatchZy-Nades werden zusaetzlich live bidirektional synchronisiert. Das Panel schreibt beim Speichern sofort in die echte Datei `game/csgo/cfg/MatchZy/savednades.json` im `cs2_data` Volume. Wenn MatchZy oder ein Spieler ingame diese Datei aendert, importiert das Panel die Aenderung automatisch zurueck nach MongoDB. Der Sync prueft die Datei standardmaessig alle 2 Sekunden und verhindert Rueckkopplungen ueber Dateihashes.
+
+Relevante Nade-Sync-Variablen:
+
+- `ADMIN_PANEL_NADES_SYNC_ENABLED` steuert den Live-Sync (`1` Standard, `0` deaktiviert)
+- `ADMIN_PANEL_NADES_SYNC_INTERVAL_MS` setzt das Polling-Intervall in Millisekunden (`2000` Standard)
+- `ADMIN_PANEL_LIVE_MATCHZY_NADES_FILE` zeigt auf die Live-Datei im gemounteten CS2-Volume
 
 Fuer Coolify ist das der robuste Standardpfad, weil der Container nicht das Git-Repo oder Coolifys interne `.env` bearbeiten muss. Danach startet das Panel den `cs2` Container ueber den Docker-Socket neu.
 
@@ -137,6 +146,16 @@ Beim Anwenden erzeugt das Panel `csharp-admins.json` und `matchzy-admins.json`. 
 - `game/csgo/cfg/MatchZy/admins.json`
 
 Wenn diese Runtime-Dateien fehlen, bleibt der alte `ADMINS`-Flow als Fallback aktiv.
+
+### MatchZy Nades
+
+Das Panel pflegt MatchZy-Nades in MongoDB und synchronisiert sie live mit:
+
+```text
+game/csgo/cfg/MatchZy/savednades.json
+```
+
+Panel-Aenderungen werden ohne CS2-Restart in die Live-Datei geschrieben. Ingame gespeicherte Nades werden beim naechsten Sync-Poll importiert und erscheinen nach einem Panel-Refresh in der Nades-Ansicht. `Apply & Restart CS2` schreibt weiterhin die Runtime-Datei `matchzy-savednades.json`, damit der Server beim naechsten Start auch ohne MongoDB-Verbindung den letzten gueltigen Stand uebernehmen kann.
 
 ## 4) Was der Stack macht
 

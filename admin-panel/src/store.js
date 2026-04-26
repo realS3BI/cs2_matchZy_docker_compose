@@ -75,6 +75,10 @@ export class Store {
     return doc?.entries || [];
   }
 
+  async getNadesDocument() {
+    return await this.nades.findOne({ _id: "current" });
+  }
+
   async saveNades(entries) {
     const cleanEntries = sanitizeNades(entries);
     await this.nades.updateOne(
@@ -83,6 +87,17 @@ export class Store {
       { upsert: true }
     );
     await this.logAction("save", "success", "Nades saved");
+    return cleanEntries;
+  }
+
+  async replaceNadesFromSync(entries, details = {}) {
+    const cleanEntries = sanitizeNades(entries);
+    await this.nades.updateOne(
+      { _id: "current" },
+      { $set: { entries: cleanEntries, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    await this.logAction("nades_sync", "success", "Nades imported from MatchZy savednades.json", details);
     return cleanEntries;
   }
 

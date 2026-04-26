@@ -30,10 +30,14 @@ services:
       ADMIN_PANEL_RUNTIME_ADMINS_FILE: /runtime/csharp-admins.json
       ADMIN_PANEL_RUNTIME_MATCHZY_ADMINS_FILE: /runtime/matchzy-admins.json
       ADMIN_PANEL_RUNTIME_MATCHZY_NADES_FILE: /runtime/matchzy-savednades.json
+      ADMIN_PANEL_LIVE_MATCHZY_NADES_FILE: /cs2-data/game/csgo/cfg/MatchZy/savednades.json
+      ADMIN_PANEL_NADES_SYNC_ENABLED: ${ADMIN_PANEL_NADES_SYNC_ENABLED:-1}
+      ADMIN_PANEL_NADES_SYNC_INTERVAL_MS: ${ADMIN_PANEL_NADES_SYNC_INTERVAL_MS:-2000}
       ADMIN_PANEL_CS2_SERVICE: cs2
       ADMIN_PANEL_CS2_CONTAINER: ${ADMIN_PANEL_CS2_CONTAINER:-}
     volumes:
       - admin_panel_runtime:/runtime
+      - cs2_data:/cs2-data
       - /var/run/docker.sock:/var/run/docker.sock
 
   cs2:

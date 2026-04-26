@@ -1,6 +1,7 @@
 import { getConfig } from "./config.js";
 import { Compose } from "./compose.js";
 import { createApp } from "./app.js";
+import { NadesSyncService } from "./nades-sync.js";
 import { Store } from "./store.js";
 import { setTimeout as wait } from "node:timers/promises";
 
@@ -18,10 +19,16 @@ for (let attempt = 1; attempt <= 30; attempt += 1) {
   }
 }
 
+const nadesSync = new NadesSyncService({ config, store });
+if (config.nadesSyncEnabled) {
+  await nadesSync.start();
+}
+
 const app = createApp({
   config,
   store,
-  compose: new Compose(config)
+  compose: new Compose(config),
+  nadesSync
 });
 
 const server = app.listen(config.port, "0.0.0.0", () => {
@@ -30,6 +37,7 @@ const server = app.listen(config.port, "0.0.0.0", () => {
 
 async function shutdown() {
   server.close();
+  await nadesSync.stop();
   await store.close();
   process.exit(0);
 }
