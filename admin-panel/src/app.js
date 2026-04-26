@@ -149,7 +149,11 @@ export function createApp({ config, store, compose }) {
     const importedEntries = matchZySavedNadesConfigToNades(req.body?.matchzyConfig);
     const mode = req.body?.mode === "merge" ? "merge" : "replace";
     if (mode === "merge") {
-      const merged = [...await store.getNades(), ...importedEntries];
+      const mergedByKey = new Map();
+      for (const entry of [...(await store.getNades()), ...importedEntries]) {
+        mergedByKey.set(`${entry.owner}\u0000${entry.map}\u0000${entry.name}`.toLowerCase(), entry);
+      }
+      const merged = [...mergedByKey.values()];
       res.json({ entries: await store.saveNades(merged) });
       return;
     }
