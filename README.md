@@ -13,8 +13,7 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 - `FortniteEmotesNDances` inklusive `MultiAddonManager` und `Ray-Trace`
 - Workshop-Maps per `CS2_WORKSHOP_MAPS`
 - `cs2-executes`
-
-Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stabilen `MatchZy`-Server fuer Pracc, Pugs, Scrims und spaeter erweiterbare Automatisierung.
+- Web-Admin-Panel mit React, Tailwind CSS v4, shadcn-style Komponenten und MongoDB-Persistenz fuer Settings, CounterStrikeSharp-Admins und Restart/Recreate
 
 ## Enthaltene Dateien
 
@@ -22,6 +21,7 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
 - `cs2/Dockerfile`
 - `cs2/entrypoint.sh`
 - `cs2/pre.sh`
+- `admin-panel/`
 - `.env.example`
 - `README.md`
 
@@ -31,6 +31,8 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
 2. Mindestens diese Werte setzen:
    - `SRCDS_TOKEN`
    - `CS2_RCONPW`
+   - `ADMIN_PANEL_PASSWORD`
+   - `ADMIN_PANEL_SESSION_SECRET`
 3. Optional anpassen:
    - `CS2_SERVERNAME`
    - `CS2_PW`
@@ -47,26 +49,95 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `SIMPLEADMIN_ENABLED`
    - `MATCHZY_SMOKE_COLOR`
    - `MATCHZY_CHAT_PREFIX`
-   - `ADMINS`
+   - `ADMINS` (nur Fallback; das Panel schreibt Admins als Runtime-Datei)
 
 ## 2) Deploy mit Docker Compose oder Coolify
 
 1. Repository als Compose-Ressource in Coolify verbinden oder lokal mit `docker compose` nutzen.
 2. `docker-compose.yml` deployen.
 3. Die Environment-Variablen aus `.env` in Coolify setzen.
-4. Nur die Spielports freigeben:
+4. Fuer das Admin-Panel `ADMIN_PANEL_PASSWORD` sofort auf ein eigenes langes Passwort setzen. `ADMIN_PANEL_SESSION_SECRET` sollte ein langer zufaelliger Wert sein.
+5. Nur die Spielports und bei Bedarf den Panel-Port freigeben:
    - `27015/tcp`
    - `27015/udp`
    - `27020/udp`
-5. Bei Aenderungen an `.env` den Container neu erstellen (kein reines `restart`):
+   - Web-Admin-Panel ueber Coolify-Domain auf Container-Port `8080`
+6. Bei Aenderungen an `.env` den Container neu erstellen (kein reines `restart`):
 
 ```bash
 docker compose up -d --build --force-recreate cs2
 ```
 
-Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. Das ist fuer Coolify robuster.
+Hinweis: Der `cs2` Service nutzt weiterhin Docker-Volumes. Das Admin-Panel mountet das Runtime-Volume `admin_panel_runtime` und den Docker-Socket, damit es Settings schreiben und den `cs2` Container neu starten kann.
 
-## 3) Was der Stack macht
+## 3) Web-Admin-Panel
+
+Das Compose-Projekt enthaelt zusaetzlich:
+
+- `admin-panel` auf `${ADMIN_PANEL_PORT:-8080}`
+- `mongodb` mit Volume `admin_panel_mongodb`
+
+Das Panel-Frontend ist eine Vite/React-App mit Tailwind CSS v4 und lokalen shadcn-style UI-Komponenten. Der Produktionsbuild wird beim Docker-Build erzeugt und vom Express-Backend ausgeliefert.
+
+`ADMIN_PANEL_CONTROL_MODE=docker` ist der Standard fuer Coolify. Das Panel findet den `cs2` Container ueber Docker-Compose-Labels. Falls das in einer speziellen Coolify-Installation nicht eindeutig ist, setze `ADMIN_PANEL_CS2_CONTAINER` auf den Container-Namen oder die Container-ID.
+
+Start:
+
+```bash
+docker compose up -d --build admin-panel mongodb
+```
+
+Das Panel liest bestehende Werte aus den Container-ENV oder aus MongoDB, speichert Aenderungen in MongoDB und schreibt beim Button `Apply & Restart CS2` Runtime-Dateien in das gemeinsame Volume `admin_panel_runtime`:
+
+- `settings.env` fuer Server- und Plugin-Settings
+- `csharp-admins.json` fuer CounterStrikeSharp-Admins inklusive Flags
+- `matchzy-admins.json` fuer die daraus abgeleiteten MatchZy-Admins
+
+Der `cs2` Container liest diese lokalen Dateien beim Start ein. MongoDB bleibt damit im Admin-Panel; der Gameserver braucht keine DB-Verbindung und kann auch mit den letzten gueltigen Runtime-Dateien starten, wenn MongoDB nicht verfuegbar ist.
+
+Fuer Coolify ist das der robuste Standardpfad, weil der Container nicht das Git-Repo oder Coolifys interne `.env` bearbeiten muss. Danach startet das Panel den `cs2` Container ueber den Docker-Socket neu.
+
+Im Standardmodus `ADMIN_PANEL_CONTROL_MODE=docker` entspricht Apply technisch:
+
+```bash
+docker restart <cs2-container>
+```
+
+Der Button `Restart CS2` fuehrt nur aus:
+
+```bash
+docker restart <cs2-container>
+```
+
+Wenn du lokal explizit den alten Compose-Recreate-Pfad nutzen willst, kannst du `ADMIN_PANEL_CONTROL_MODE=compose` setzen und zusaetzlich `COMPOSE_PROJECT_DIR`, `COMPOSE_FILE` und `ADMIN_PANEL_ENV_FILE` mounten/setzen.
+
+### Coolify Domain / Vite Routing
+
+Das Panel lauscht intern auf Port `8080` und liefert den gebauten Vite/React-Client direkt ueber Express aus. Alle API-Calls nutzen relative Pfade wie `/api/settings`. Dadurch funktioniert das Routing hinter einer Coolify-Domain ohne separate Vite-Proxy-Konfiguration.
+
+In Coolify bei der Domain fuer den Service `admin-panel` den Container-Port `8080` hinterlegen, z. B. `https://panel.example.com:8080`. Der Port sagt Coolify nur, an welchen Container-Port weitergeleitet wird; extern bleibt die Domain normal ueber HTTPS erreichbar.
+
+Wichtig: Der `admin-panel` Container mountet den Docker-Socket, damit er den `cs2` Container neu starten kann. Das ist funktional, aber sicherheitsrelevant: Wer Zugriff auf das Panel bekommt, kann indirekt Docker auf dem Host steuern. Wenn das Panel oeffentlich erreichbar ist, sollte es hinter HTTPS/Reverse-Proxy laufen; fuer produktiven Betrieb sind zusaetzlich IP-Allowlisting oder VPN empfehlenswert.
+
+### CounterStrikeSharp Admins
+
+Das Panel pflegt CounterStrikeSharp-Admins als Steam64ID plus Flags, z. B.:
+
+- `@css/root`
+- `@css/config`
+- `@custom/prac`
+- `@css/map`
+- `@css/rcon`
+- `@css/chat`
+
+Beim Anwenden erzeugt das Panel `csharp-admins.json` und `matchzy-admins.json`. Wenn beide Dateien existieren, kopiert `cs2/pre.sh` sie an die Plugin-Zielpfade:
+
+- `game/csgo/addons/counterstrikesharp/configs/admins.json`
+- `game/csgo/cfg/MatchZy/admins.json`
+
+Wenn diese Runtime-Dateien fehlen, bleibt der alte `ADMINS`-Flow als Fallback aktiv.
+
+## 4) Was der Stack macht
 
 ### Ports
 
@@ -91,13 +162,13 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
    - `Ray-Trace`
    - `FortniteEmotesNDances`
    - `cs2-executes`
-5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus `ADMINS` neu.
+5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus den Runtime-Dateien `matchzy-admins.json` und `csharp-admins.json` oder fallback aus `ADMINS` neu.
 6. Schreibt `cfg/MatchZy/config.cfg` mit `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR` und Chat-Prefix aus ENV neu.
 7. Schreibt bei Bedarf `cfg/multiaddonmanager/multiaddonmanager.cfg` aus Fortnite Emotes und `CS2_WORKSHOP_MAPS` neu.
 8. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
 9. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
-## 4) Zusatzplugins
+## 5) Zusatzplugins
 
 ### cs2-fake-rcon
 
@@ -154,7 +225,7 @@ Optional kannst du mit `CS2_WORKSHOP_FORCE_DOWNLOAD=1` setzen, dass MultiAddonMa
 - Das Plugin ist eher ein eigener Trainings-/Executes-Modus als ein klassisches Scrim-Plugin.
 - Wenn du nur MatchZy fuer Pracc/Scrims willst, kannst du es ueber `EXECUTES_ENABLED=0` deaktivieren.
 
-## 5) Erste Nutzung mit MatchZy
+## 6) Erste Nutzung mit MatchZy
 
 Nach erfolgreichem Start kannst du MatchZy direkt im Server verwenden.
 
@@ -173,7 +244,7 @@ Zusätzlich schreibt der Bootstrap immer auch:
 
 - `game/csgo/cfg/MatchZy/config.cfg`
 
-Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`. Damit funktionieren MatchZy und andere CSS-Plugins konsistent ueber dieselbe `ADMINS`-Variable. Ein leeres `ADMINS` erzeugt entsprechend leere Adminlisten.
+Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`, wenn du den alten `ADMINS`-Flow nutzt. Wenn du Admins ueber das Web-Panel pflegst, ist `csharp-admins.json` fuehrend und erlaubt rollenbasierte Flags pro Admin. Ein leeres `ADMINS` erzeugt entsprechend leere Adminlisten, solange keine Runtime-Admin-Datei existiert.
 
 Die MatchZy-Config enthaelt aktuell diese automatisch gesetzten Werte:
 
@@ -241,7 +312,7 @@ map_workshop <workshop_id>
 
 Wichtig: `CS2_WORKSHOP_MAPS` enthaelt Links oder IDs zum Downloaden und Mounten. Fuer `.map` brauchst du den internen Mapnamen der Workshop-Map, nicht zwingend den Titel auf Steam. `ds_workshop_listmaps` ist der einfachste Weg, diesen Namen zu finden.
 
-## 6) Checks
+## 7) Checks
 
 ```bash
 docker compose config
@@ -254,8 +325,9 @@ In der CS2-Konsole:
 - `meta list` sollte auch `fake_rcon`, `multiaddonmanager` und `RayTrace` zeigen, falls aktiviert oder fuer Workshop-Maps benoetigt
 - `css_plugins list` sollte MatchZy anzeigen
 - `css_plugins list` sollte je nach aktivierten Plugins auch `WeaponPaints`, `CS2-SimpleAdmin`, `PlayerSettings`, `MenuManagerCore`, `FortniteEmotesNDances` und `ExecutesPlugin` zeigen
+- `docker compose ps admin-panel mongodb` sollte das Admin-Panel und MongoDB anzeigen
 
-## 7) Troubleshooting CS2 Connect
+## 8) Troubleshooting CS2 Connect
 
 Wenn im Log folgendes erscheint:
 
@@ -275,7 +347,7 @@ Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten 
 docker compose up -d --build --force-recreate cs2
 ```
 
-## 8) Troubleshooting "Plugins nicht geladen"
+## 9) Troubleshooting "Plugins nicht geladen"
 
 1. Im CS2-Log muss eine Zeile wie `[pre.sh] Mod bootstrap complete` erscheinen.
 2. Reinstall fuer den naechsten Start erzwingen:

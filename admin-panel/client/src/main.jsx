@@ -1,0 +1,436 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  LogOut,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Server,
+  Shield,
+  Trash2,
+  UploadCloud
+} from "lucide-react";
+import { api } from "./lib/api";
+import { cn } from "./lib/utils";
+import { Badge } from "./components/ui/badge";
+import { Button } from "./components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { Input } from "./components/ui/input";
+import { Textarea } from "./components/ui/textarea";
+import "./index.css";
+
+const tabs = [
+  { id: "dashboard", label: "Dashboard", icon: Server },
+  { id: "settings", label: "Settings", icon: Save },
+  { id: "admins", label: "Admins", icon: Shield }
+];
+
+function Message({ message, error }) {
+  if (!message && !error) return null;
+  return (
+    <div
+      className={cn(
+        "mb-4 rounded-md border px-4 py-3 text-sm whitespace-pre-wrap",
+        error ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-[#f7f3df] text-[#8a5d0e]"
+      )}
+    >
+      {error || message}
+    </div>
+  );
+}
+
+function Login({ error, onLogin }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await onLogin(password);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto mt-[12vh] w-[min(420px,calc(100vw-32px))]">
+      <Card className="shadow-[0_18px_60px_rgba(32,35,31,0.12)]">
+        <CardHeader>
+          <CardTitle className="text-2xl">CS2 Admin Panel</CardTitle>
+          <p className="text-sm text-muted-foreground">Enter the configured panel password.</p>
+        </CardHeader>
+        <CardContent>
+          <Message error={error} />
+          <form className="grid gap-4" onSubmit={submit}>
+            <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+              Password
+              <Input
+                autoFocus
+                autoComplete="current-password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <Button disabled={busy}>{busy ? "Logging in..." : "Login"}</Button>
+          </form>
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
+
+function Shell({ children, tab, setTab, message, error, onLogout }) {
+  return (
+    <main className="mx-auto mb-12 mt-6 w-[min(1220px,calc(100vw-24px))]">
+      <header className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold">CS2 MatchZy Admin</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Service settings, admins, and restart control.</p>
+        </div>
+        <Button variant="secondary" onClick={onLogout}>
+          <LogOut className="h-4 w-4" />
+          Logout
+        </Button>
+      </header>
+      <nav className="mb-5 flex gap-2 overflow-x-auto border-b border-border pb-2">
+        {tabs.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Button
+              key={item.id}
+              variant={tab === item.id ? "default" : "ghost"}
+              onClick={() => setTab(item.id)}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </Button>
+          );
+        })}
+      </nav>
+      <Message message={message} error={error} />
+      {children}
+    </main>
+  );
+}
+
+function Dashboard({ env, admins, status, onRefresh, onApply, onRestart, busy }) {
+  const service = status?.service;
+  const last = status?.lastAction;
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={onRefresh} disabled={busy}>
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
+        <Button onClick={onApply} disabled={busy}>
+          <UploadCloud className="h-4 w-4" />
+          Apply & Restart CS2
+        </Button>
+        <Button variant="destructive" onClick={onRestart} disabled={busy}>
+          <RotateCcw className="h-4 w-4" />
+          Restart CS2
+        </Button>
+      </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Server</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm text-muted-foreground">
+            <span>State: <Badge>{service?.state || "unknown"}</Badge></span>
+            <span>Service: <code className="text-primary">cs2</code></span>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Last action</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm text-muted-foreground">
+            <span>Type: <Badge>{last?.type || "none"}</Badge></span>
+            <span>Status: <Badge variant={last?.status === "failed" ? "destructive" : "default"}>{last?.status || "none"}</Badge></span>
+            <span className="line-clamp-3">{last?.message || ""}</span>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Active config</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm text-muted-foreground">
+            <span>Name: <code className="text-primary">{env.CS2_SERVERNAME || ""}</code></span>
+            <span>Map: <code className="text-primary">{env.CS2_STARTMAP || ""}</code></span>
+            <span>Admins: <Badge>{admins.length}</Badge></span>
+          </CardContent>
+        </Card>
+      </section>
+    </>
+  );
+}
+
+function Settings({ env, setEnv, curatedFields, onSave }) {
+  const rawRows = useMemo(() => Object.keys(env).sort(), [env]);
+
+  function setValue(key, value) {
+    setEnv((current) => ({ ...current, [key]: value }));
+  }
+
+  function renameKey(oldKey, newKey) {
+    setEnv((current) => {
+      const next = { ...current };
+      const value = next[oldKey];
+      delete next[oldKey];
+      if (newKey.trim()) next[newKey.trim()] = value;
+      return next;
+    });
+  }
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save settings
+        </Button>
+        <Button variant="secondary" onClick={() => setValue("NEW_KEY", "")}>
+          <Plus className="h-4 w-4" />
+          Add ENV
+        </Button>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {curatedFields.map((field) => (
+            <SettingField key={field.key} field={field} value={env[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />
+          ))}
+        </CardContent>
+      </Card>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Raw ENV</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          {rawRows.map((key) => (
+            <div key={key} className="grid gap-2 md:grid-cols-[220px_1fr_44px]">
+              <Input defaultValue={key} onBlur={(event) => renameKey(key, event.target.value)} />
+              <Input value={env[key] ?? ""} onChange={(event) => setValue(key, event.target.value)} />
+              <Button
+                variant="secondary"
+                size="icon"
+                title="Remove"
+                onClick={() => setEnv((current) => {
+                  const next = { ...current };
+                  delete next[key];
+                  return next;
+                })}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function SettingField({ field, value, onChange }) {
+  if (field.type === "boolean") {
+    const checked = ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+    return (
+      <label className="flex min-h-10 items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-muted-foreground">
+        {field.label}
+        <input className="h-5 w-5 accent-primary" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked ? "1" : "0")} />
+      </label>
+    );
+  }
+  const Control = field.type === "textarea" ? Textarea : Input;
+  return (
+    <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+      {field.label}
+      <Control type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function Admins({ admins, setAdmins, flagPresets, onSave }) {
+  function updateAdmin(index, patch) {
+    setAdmins((current) => current.map((admin, itemIndex) => (itemIndex === index ? { ...admin, ...patch } : admin)));
+  }
+
+  function toggleFlag(index, flag, checked) {
+    const currentFlags = admins[index].flags || [];
+    const flags = checked ? [...new Set([...currentFlags, flag])] : currentFlags.filter((item) => item !== flag);
+    updateAdmin(index, { flags });
+  }
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save admins
+        </Button>
+        <Button variant="secondary" onClick={() => setAdmins((current) => [...current, { name: "", identitySteam64: "", flags: ["@css/root"] }])}>
+          <Plus className="h-4 w-4" />
+          Add admin
+        </Button>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>CounterStrikeSharp Admins</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {admins.length === 0 ? <p className="text-sm text-muted-foreground">No admins configured.</p> : null}
+          {admins.map((admin, index) => (
+            <div key={index} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1.2fr_1.6fr_44px]">
+              <Input value={admin.name || ""} placeholder="Name" onChange={(event) => updateAdmin(index, { name: event.target.value })} />
+              <Input value={admin.identitySteam64 || ""} placeholder="Steam64 ID" onChange={(event) => updateAdmin(index, { identitySteam64: event.target.value })} />
+              <div className="flex flex-wrap gap-2 rounded-md border border-border bg-card p-2">
+                {flagPresets.map((flag) => (
+                  <label key={flag} className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <input
+                      className="h-4 w-4 accent-primary"
+                      type="checkbox"
+                      checked={(admin.flags || []).includes(flag)}
+                      onChange={(event) => toggleFlag(index, flag, event.target.checked)}
+                    />
+                    {flag}
+                  </label>
+                ))}
+              </div>
+              <Button variant="secondary" size="icon" title="Remove" onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [tab, setTab] = useState("dashboard");
+  const [env, setEnv] = useState({});
+  const [curatedFields, setCuratedFields] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [flagPresets, setFlagPresets] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function loadAll() {
+    const [settings, adminData, statusData] = await Promise.all([
+      api("/api/settings"),
+      api("/api/admins"),
+      api("/api/server/status")
+    ]);
+    setAuthenticated(true);
+    setEnv(settings.env || {});
+    setCuratedFields(settings.curatedFields || []);
+    setAdmins(adminData.entries || []);
+    setFlagPresets(adminData.flagPresets || []);
+    setStatus(statusData);
+  }
+
+  async function runAction(action) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await action();
+      await loadAll();
+      setMessage(result?.message || "Done.");
+    } catch (actionError) {
+      setError(actionError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAll().catch(() => setAuthenticated(false));
+  }, []);
+
+  if (!authenticated) {
+    return (
+      <Login
+        error={error}
+        onLogin={async (password) => {
+          try {
+            await api("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+            setError("");
+            await loadAll();
+          } catch (loginError) {
+            setError(loginError.message);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <Shell
+      tab={tab}
+      setTab={(nextTab) => {
+        setMessage("");
+        setError("");
+        setTab(nextTab);
+      }}
+      message={message}
+      error={error}
+      onLogout={async () => {
+        await api("/api/auth/logout", { method: "POST" });
+        setAuthenticated(false);
+      }}
+    >
+      {tab === "dashboard" ? (
+        <Dashboard
+          env={env}
+          admins={admins}
+          status={status}
+          busy={busy}
+          onRefresh={() => runAction(async () => {
+            await loadAll();
+            return { message: "Refreshed." };
+          })}
+          onApply={() => runAction(() => api("/api/server/apply", { method: "POST", body: "{}" }))}
+          onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))}
+        />
+      ) : null}
+      {tab === "settings" ? (
+        <Settings
+          env={env}
+          setEnv={setEnv}
+          curatedFields={curatedFields}
+          onSave={() => runAction(async () => {
+            const result = await api("/api/settings", { method: "PUT", body: JSON.stringify({ env }) });
+            setEnv(result.env);
+            return { message: "Settings saved." };
+          })}
+        />
+      ) : null}
+      {tab === "admins" ? (
+        <Admins
+          admins={admins}
+          setAdmins={setAdmins}
+          flagPresets={flagPresets}
+          onSave={() => runAction(async () => {
+            const result = await api("/api/admins", { method: "PUT", body: JSON.stringify({ entries: admins }) });
+            setAdmins(result.entries);
+            return { message: "Admins saved." };
+          })}
+        />
+      ) : null}
+    </Shell>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);

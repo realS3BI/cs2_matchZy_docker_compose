@@ -799,6 +799,33 @@ _matchzy_bootstrap_main() (
     log "Wrote CounterStrikeSharp admins file with ${#admin_ids[@]} admin(s) from ADMINS"
   }
 
+  copy_file_atomic() {
+    local source_file="$1"
+    local destination_file="$2"
+    local destination_dir=""
+    local tmp_file=""
+
+    destination_dir="$(dirname "$destination_file")"
+    mkdir -p "$destination_dir"
+    tmp_file="$(mktemp "$destination_dir/.tmp.XXXXXX")"
+    cp -f "$source_file" "$tmp_file"
+    mv "$tmp_file" "$destination_file"
+  }
+
+  write_admin_files_from_runtime() {
+    local css_source_file="$1"
+    local matchzy_source_file="$2"
+    local matchzy_admins_file="$3"
+    local css_admins_file="$4"
+
+    [[ -f "$css_source_file" ]] || fail "CounterStrikeSharp admins runtime file not found: $css_source_file"
+    [[ -f "$matchzy_source_file" ]] || fail "MatchZy admins runtime file not found: $matchzy_source_file"
+
+    copy_file_atomic "$css_source_file" "$css_admins_file"
+    copy_file_atomic "$matchzy_source_file" "$matchzy_admins_file"
+    log "Wrote CounterStrikeSharp and MatchZy admin files from runtime files"
+  }
+
   need_cmd awk
   need_cmd grep
   need_cmd sed
@@ -839,6 +866,8 @@ _matchzy_bootstrap_main() (
   local MATCHZY_CHAT_PREFIX="${MATCHZY_CHAT_PREFIX:-}"
   local MATCHZY_CHAT_PREFIX_LEGACY="${matchzy_chat_prefix:-}"
   local ADMINS="${ADMINS:-}"
+  local CSHARP_ADMINS_FILE="${CSHARP_ADMINS_FILE:-}"
+  local MATCHZY_ADMINS_FILE="${MATCHZY_ADMINS_FILE:-}"
   local NEED_MENU_STACK=0
   if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
     NEED_MENU_STACK=1
@@ -1223,14 +1252,20 @@ _matchzy_bootstrap_main() (
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
 
-  write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
+  if [[ -n "$CSHARP_ADMINS_FILE" && -f "$CSHARP_ADMINS_FILE" && -n "$MATCHZY_ADMINS_FILE" && -f "$MATCHZY_ADMINS_FILE" ]]; then
+    write_admin_files_from_runtime "$CSHARP_ADMINS_FILE" "$MATCHZY_ADMINS_FILE" "$matchzy_admins_file" "$css_admins_file"
+  else
+    write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
+  fi
   write_matchzy_config_file \
     "$MATCHZY_SMOKE_COLOR" \
     "$CS2_SERVERNAME" \
     "$MATCHZY_CHAT_PREFIX" \
     "$MATCHZY_CHAT_PREFIX_LEGACY" \
     "$matchzy_config_file"
-  write_css_admins_file "$ADMINS" "$css_admins_file"
+  if [[ -z "$CSHARP_ADMINS_FILE" || ! -f "$CSHARP_ADMINS_FILE" || -z "$MATCHZY_ADMINS_FILE" || ! -f "$MATCHZY_ADMINS_FILE" ]]; then
+    write_css_admins_file "$ADMINS" "$css_admins_file"
+  fi
 
   if is_enabled "$FAKE_RCON_ENABLED"; then
     if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_FAKE_RCON_TAG" != "$FAKE_RCON_TAG" || ! -f "$fake_rcon_marker" ]]; then

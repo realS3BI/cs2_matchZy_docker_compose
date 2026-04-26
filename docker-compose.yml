@@ -1,4 +1,40 @@
+name: ${COMPOSE_PROJECT_NAME:-cs2-matchzy}
+
 services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - admin_panel_mongodb:/data/db
+
+  admin-panel:
+    build:
+      context: .
+      dockerfile: admin-panel/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    expose:
+      - "8080"
+    ports:
+      - "127.0.0.1:${ADMIN_PANEL_PORT:-8080}:8080"
+    environment:
+      ADMIN_PANEL_PASSWORD: ${ADMIN_PANEL_PASSWORD:?ADMIN_PANEL_PASSWORD is required}
+      ADMIN_PANEL_SESSION_SECRET: ${ADMIN_PANEL_SESSION_SECRET:?ADMIN_PANEL_SESSION_SECRET is required}
+      ADMIN_PANEL_PORT: 8080
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/cs2_admin_panel}
+      MONGODB_DB: ${MONGODB_DB:-cs2_admin_panel}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-cs2-matchzy}
+      ADMIN_PANEL_CONTROL_MODE: ${ADMIN_PANEL_CONTROL_MODE:-docker}
+      ADMIN_PANEL_RUNTIME_ENV_FILE: /runtime/settings.env
+      ADMIN_PANEL_RUNTIME_ADMINS_FILE: /runtime/csharp-admins.json
+      ADMIN_PANEL_RUNTIME_MATCHZY_ADMINS_FILE: /runtime/matchzy-admins.json
+      ADMIN_PANEL_CS2_SERVICE: cs2
+      ADMIN_PANEL_CS2_CONTAINER: ${ADMIN_PANEL_CS2_CONTAINER:-}
+    volumes:
+      - admin_panel_runtime:/runtime
+      - /var/run/docker.sock:/var/run/docker.sock
+
   cs2:
     build:
       context: .
@@ -44,9 +80,15 @@ services:
       MATCHZY_CHAT_PREFIX: ${MATCHZY_CHAT_PREFIX:-}
       matchzy_chat_prefix: ${matchzy_chat_prefix:-}
       ADMINS: ${ADMINS:-}
+      CS2_RUNTIME_ENV_FILE: /config-runtime/settings.env
+      CSHARP_ADMINS_FILE: /config-runtime/csharp-admins.json
+      MATCHZY_ADMINS_FILE: /config-runtime/matchzy-admins.json
       MOD_REINSTALL: ${MOD_REINSTALL:-0}
     volumes:
       - cs2_data:/home/steam/cs2-dedicated
+      - admin_panel_runtime:/config-runtime
 
 volumes:
+  admin_panel_mongodb:
+  admin_panel_runtime:
   cs2_data:
