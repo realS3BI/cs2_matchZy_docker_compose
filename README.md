@@ -20,6 +20,7 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
 
 - `docker-compose.yml`
 - `cs2/Dockerfile`
+- `cs2/entrypoint.sh`
 - `cs2/pre.sh`
 - `.env.example`
 - `README.md`
@@ -57,6 +58,11 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `27015/tcp`
    - `27015/udp`
    - `27020/udp`
+5. Bei Aenderungen an `.env` den Container neu erstellen (kein reines `restart`):
+
+```bash
+docker compose up -d --build --force-recreate cs2
+```
 
 Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. Das ist fuer Coolify robuster.
 
@@ -69,7 +75,7 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
 
 ### Startverhalten
 
-`cs2/pre.sh` wird vor dem Start des CS2-Prozesses ausgefuehrt und erledigt Folgendes:
+`cs2/entrypoint.sh` synchronisiert vor jedem Start `/etc/pre.sh` und `/etc/post.sh` in das Persistenz-Volume. Danach wird `cs2/pre.sh` vor dem Start des CS2-Prozesses ausgefuehrt und erledigt Folgendes:
 
 1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev` Builds auf.
 2. Loest das gewuenschte MatchZy-Release auf.
@@ -263,7 +269,11 @@ docker compose run --rm cs2 sh -lc 'rm -rf /home/steam/cs2-dedicated/pre.sh'
 docker compose up -d cs2
 ```
 
-Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten siehst, kann auch eine alte persistierte Datei `/home/steam/cs2-dedicated/pre.sh` im Volume liegen. Das wird inzwischen beim Start automatisch behoben: `pre.sh` synchronisiert die Runtime-Datei aus `/etc/pre.sh`, sobald sie fehlt oder veraltet ist.
+Wenn du auf ein neues Image gewechselt hast und trotzdem weiter altes Verhalten siehst, wurde der Container vermutlich nur neu gestartet, aber nicht neu erstellt. Nutze in dem Fall:
+
+```bash
+docker compose up -d --build --force-recreate cs2
+```
 
 ## 8) Troubleshooting "Plugins nicht geladen"
 
