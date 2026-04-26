@@ -87,6 +87,24 @@ _matchzy_bootstrap_main() (
     printf '%s' "$value"
   }
 
+  strip_wrapping_quotes() {
+    local value="$1"
+    value="$(trim_whitespace "$value")"
+
+    if [[ "$value" == '"'*'"' ]]; then
+      value="${value#\"}"
+      value="${value%\"}"
+    fi
+
+    if [[ "$value" == "'"*"'" ]]; then
+      value="${value#\'}"
+      value="${value%\'}"
+    fi
+
+    value="$(trim_whitespace "$value")"
+    printf '%s' "$value"
+  }
+
   escape_cfg_value() {
     local value="$1"
     value="${value//\\/\\\\}"
@@ -96,16 +114,22 @@ _matchzy_bootstrap_main() (
 
   contains_matchzy_color_token() {
     local value="$1"
-    [[ "$value" =~ \{(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\} ]]
+    [[ "$value" =~ \{(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\} || \
+       "$value" =~ \[(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\] ]]
   }
 
   ensure_bracketed_prefix() {
     local value="$1"
-    value="$(trim_whitespace "$value")"
+    value="$(strip_wrapping_quotes "$value")"
     [[ -n "$value" ]] || {
       printf '%s' "$value"
       return 0
     }
+
+    if contains_matchzy_color_token "$value"; then
+      printf '%s' "$value"
+      return 0
+    fi
 
     if [[ "$value" == \[*\] ]]; then
       printf '%s' "$value"
@@ -144,17 +168,17 @@ _matchzy_bootstrap_main() (
     local prefix_value=""
     local prefix_source="CS2_SERVERNAME"
 
-    prefix_value="$(trim_whitespace "$chat_prefix_raw")"
+    prefix_value="$(strip_wrapping_quotes "$chat_prefix_raw")"
     if [[ -n "$prefix_value" ]]; then
       prefix_source="MATCHZY_CHAT_PREFIX"
       prefix_value="$(ensure_bracketed_prefix "$prefix_value")"
     else
-      prefix_value="$(trim_whitespace "$chat_prefix_legacy_raw")"
+      prefix_value="$(strip_wrapping_quotes "$chat_prefix_legacy_raw")"
       if [[ -n "$prefix_value" ]]; then
         prefix_source="matchzy_chat_prefix"
         prefix_value="$(ensure_bracketed_prefix "$prefix_value")"
       else
-        prefix_value="$(trim_whitespace "$server_name_raw")"
+        prefix_value="$(strip_wrapping_quotes "$server_name_raw")"
         [[ -n "$prefix_value" ]] || prefix_value="CS2 MatchZy Server"
         prefix_source="CS2_SERVERNAME"
       fi
