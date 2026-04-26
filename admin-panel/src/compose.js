@@ -141,4 +141,25 @@ export class Compose {
       return { ok: true, state: "unknown", raw: text };
     }
   }
+
+  async serviceLogs({ tail = 300 } = {}) {
+    const safeTail = Math.min(Math.max(Number(tail) || 300, 50), 2000);
+
+    if (this.config.controlMode === "compose" && this.config.projectDir) {
+      return this.run(this.args("logs", "--no-color", "--timestamps", "--tail", String(safeTail), this.config.serviceName), {
+        timeout: 30 * 1000,
+        maxBuffer: 4 * 1024 * 1024
+      });
+    }
+
+    const containerId = await this.findServiceContainer();
+    if (!containerId) {
+      return { ok: false, stdout: "", stderr: `Could not find container for service '${this.config.serviceName}'` };
+    }
+
+    return this.run(["logs", "--timestamps", "--tail", String(safeTail), containerId], {
+      timeout: 30 * 1000,
+      maxBuffer: 4 * 1024 * 1024
+    });
+  }
 }

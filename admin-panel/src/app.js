@@ -160,6 +160,16 @@ export function createApp({ config, store, compose }) {
     });
   });
 
+  app.get("/api/server/logs", async (req, res) => {
+    const result = await compose.serviceLogs({ tail: req.query.tail });
+    const output = `${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`.trimEnd();
+    res.status(result.ok ? 200 : 500).json({
+      ok: result.ok,
+      logs: output,
+      message: actionMessage(result)
+    });
+  });
+
   app.use(express.static(publicDir));
   app.get("*", (req, res) => res.sendFile(join(publicDir, "index.html")));
 

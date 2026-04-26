@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   LogOut,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   RotateCcw,
   Save,
   Server,
   Shield,
+  Terminal,
   Trash2,
   UploadCloud
 } from "lucide-react";
@@ -23,7 +26,8 @@ import "./index.css";
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Server },
   { id: "settings", label: "Settings", icon: Save },
-  { id: "admins", label: "Admins", icon: Shield }
+  { id: "admins", label: "Admins", icon: Shield },
+  { id: "logs", label: "Docker Logs", icon: Terminal }
 ];
 
 function Message({ message, error }) {
@@ -315,6 +319,85 @@ function Admins({ admins, setAdmins, flagPresets, onSave }) {
   );
 }
 
+function DockerLogs({ active }) {
+  const [logs, setLogs] = useState("");
+  const [tail, setTail] = useState(300);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [logError, setLogError] = useState("");
+  const [updatedAt, setUpdatedAt] = useState("");
+  const logRef = useRef(null);
+
+  const loadLogs = useCallback(async () => {
+    if (!active) return;
+    setLoading(true);
+    setLogError("");
+    try {
+      const result = await api(`/api/server/logs?tail=${tail}`);
+      setLogs(result.logs || "");
+      setUpdatedAt(new Date().toLocaleTimeString());
+      requestAnimationFrame(() => {
+        if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+      });
+    } catch (error) {
+      setLogError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [active, tail]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    loadLogs();
+    if (!autoRefresh) return undefined;
+    const timer = window.setInterval(loadLogs, 5000);
+    return () => window.clearInterval(timer);
+  }, [active, autoRefresh, loadLogs]);
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Button variant="secondary" onClick={loadLogs} disabled={loading}>
+          <RefreshCw className={cn("h-4 w-4", loading ? "animate-spin" : "")} />
+          Refresh
+        </Button>
+        <Button variant={autoRefresh ? "default" : "secondary"} onClick={() => setAutoRefresh((current) => !current)}>
+          {autoRefresh ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
+        </Button>
+        <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          Lines
+          <select
+            className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={tail}
+            onChange={(event) => setTail(Number(event.target.value))}
+          >
+            <option value={100}>100</option>
+            <option value={300}>300</option>
+            <option value={800}>800</option>
+            <option value={1500}>1500</option>
+          </select>
+        </label>
+        <span className="text-sm text-muted-foreground">{updatedAt ? `Updated ${updatedAt}` : ""}</span>
+      </div>
+      {logError ? <Message error={logError} /> : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>CS2 Docker Logs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <pre
+            ref={logRef}
+            className="h-[62vh] overflow-auto rounded-md border border-border bg-[#10130f] p-4 font-mono text-xs leading-relaxed text-[#dce8d4] whitespace-pre-wrap"
+          >
+            {logs || (loading ? "Loading logs..." : "No logs available.")}
+          </pre>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
 function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [tab, setTab] = useState("dashboard");
@@ -429,6 +512,7 @@ function App() {
           })}
         />
       ) : null}
+      {tab === "logs" ? <DockerLogs active={tab === "logs"} /> : null}
     </Shell>
   );
 }
