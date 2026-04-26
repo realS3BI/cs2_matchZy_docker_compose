@@ -825,6 +825,7 @@ _matchzy_bootstrap_main() (
   local FORTNITE_EMOTES_WORKSHOP_ADDON_ID="${FORTNITE_EMOTES_WORKSHOP_ADDON_ID:-3328582199}"
   local MULTIADDONMANAGER_VERSION="${MULTIADDONMANAGER_VERSION:-latest}"
   local RAYTRACE_VERSION="${RAYTRACE_VERSION:-latest}"
+  local CS2_WORKSHOP_MAPS_ENABLED="${CS2_WORKSHOP_MAPS_ENABLED:-1}"
   local CS2_WORKSHOP_MAPS="${CS2_WORKSHOP_MAPS:-}"
   local CS2_WORKSHOP_FORCE_DOWNLOAD="${CS2_WORKSHOP_FORCE_DOWNLOAD:-0}"
   local EXECUTES_ENABLED="${EXECUTES_ENABLED:-1}"
@@ -859,10 +860,14 @@ _matchzy_bootstrap_main() (
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TMP_DIR"' EXIT
 
-  workshop_ids_file="$(mktemp)"
-  collect_workshop_addon_ids "$CS2_WORKSHOP_MAPS" "$workshop_ids_file"
-  mapfile -t WORKSHOP_ADDON_IDS < "$workshop_ids_file"
-  rm -f "$workshop_ids_file"
+  if is_enabled "$CS2_WORKSHOP_MAPS_ENABLED"; then
+    workshop_ids_file="$(mktemp)"
+    collect_workshop_addon_ids "$CS2_WORKSHOP_MAPS" "$workshop_ids_file"
+    mapfile -t WORKSHOP_ADDON_IDS < "$workshop_ids_file"
+    rm -f "$workshop_ids_file"
+  elif [[ -n "$(trim_whitespace "$CS2_WORKSHOP_MAPS")" ]]; then
+    log "CS2_WORKSHOP_MAPS_ENABLED=0; keeping CS2_WORKSHOP_MAPS configured but not loading workshop maps"
+  fi
 
   if is_enabled "$FORTNITE_EMOTES_ENABLED"; then
     NEED_MULTIADDONMANAGER=1

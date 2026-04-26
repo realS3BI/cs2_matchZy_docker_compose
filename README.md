@@ -42,6 +42,7 @@ Aktuell ist absichtlich kein Web-Panel enthalten. Der Fokus liegt auf einem stab
    - `FAKE_RCON_ENABLED`
    - `WEAPONPAINTS_ENABLED`
    - `FORTNITE_EMOTES_ENABLED`
+   - `CS2_WORKSHOP_MAPS_ENABLED`
    - `CS2_WORKSHOP_MAPS`
    - `EXECUTES_ENABLED`
    - `SIMPLEADMIN_ENABLED`
@@ -93,7 +94,7 @@ Hinweis: Es werden keine custom networks und keine Host-Bind-Mounts benoetigt. D
    - `cs2-executes`
 5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus `ADMINS` neu.
 6. Schreibt `cfg/MatchZy/config.cfg` mit `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR` und Chat-Prefix aus ENV neu.
-7. Schreibt bei Bedarf `cfg/multiaddonmanager/multiaddonmanager.cfg` aus Fortnite Emotes und `CS2_WORKSHOP_MAPS` neu.
+7. Schreibt bei Bedarf `cfg/multiaddonmanager/multiaddonmanager.cfg` aus Fortnite Emotes und aktivierten `CS2_WORKSHOP_MAPS` neu.
 8. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
 9. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
 
@@ -138,13 +139,15 @@ CS2_WORKSHOP_MAPS=https://steamcommunity.com/sharedfiles/filedetails/?id=3070244
 CS2_WORKSHOP_MAPS=3070244462,3077265396
 ```
 
-Beim Containerstart extrahiert `cs2/pre.sh` daraus die IDs, entfernt Duplikate und schreibt sie in:
+Mit `CS2_WORKSHOP_MAPS_ENABLED=0` bleiben die IDs/Links in `CS2_WORKSHOP_MAPS` gespeichert, werden aber beim Containerstart nicht geladen, nicht validiert und nicht in `MultiAddonManager` geschrieben. Standard ist `1`.
+
+Wenn `CS2_WORKSHOP_MAPS_ENABLED=1` ist, extrahiert `cs2/pre.sh` beim Containerstart daraus die IDs, entfernt Duplikate und schreibt sie in:
 
 ```text
 game/csgo/cfg/multiaddonmanager/multiaddonmanager.cfg
 ```
 
-Wenn `FORTNITE_EMOTES_ENABLED=1` ist, wird die Fortnite-Emotes-Workshop-ID zusaetzlich in dieselbe `mm_extra_addons`-Liste geschrieben. Wenn Fortnite Emotes deaktiviert sind, aber `CS2_WORKSHOP_MAPS` gesetzt ist, bleibt `MultiAddonManager` trotzdem installiert.
+Wenn `FORTNITE_EMOTES_ENABLED=1` ist, wird die Fortnite-Emotes-Workshop-ID zusaetzlich in dieselbe `mm_extra_addons`-Liste geschrieben. Wenn Fortnite Emotes deaktiviert sind, aber `CS2_WORKSHOP_MAPS_ENABLED=1` und `CS2_WORKSHOP_MAPS` gesetzt sind, bleibt `MultiAddonManager` trotzdem installiert.
 
 Optional kannst du mit `CS2_WORKSHOP_FORCE_DOWNLOAD=1` setzen, dass MultiAddonManager die gemounteten Workshop-Addons bei jedem Laden erneut prueft/downloadet. Standard ist `0`.
 
@@ -208,7 +211,7 @@ Fuer einfache Praccs und Scrims brauchst du kein JSON-Matchsetup. Ein Match-JSON
 
 ### Workshop-Maps laden
 
-Nach Aenderungen an `CS2_WORKSHOP_MAPS` den Container neu bauen/starten:
+Nach Aenderungen an `CS2_WORKSHOP_MAPS` oder `CS2_WORKSHOP_MAPS_ENABLED` den Container neu bauen/starten:
 
 ```bash
 docker compose up -d --build
@@ -239,7 +242,7 @@ Als Fallback kannst du eine Workshop-Map direkt per Workshop-ID laden:
 map_workshop <workshop_id>
 ```
 
-Wichtig: `CS2_WORKSHOP_MAPS` enthaelt Links oder IDs zum Downloaden und Mounten. Fuer `.map` brauchst du den internen Mapnamen der Workshop-Map, nicht zwingend den Titel auf Steam. `ds_workshop_listmaps` ist der einfachste Weg, diesen Namen zu finden.
+Wichtig: `CS2_WORKSHOP_MAPS` enthaelt Links oder IDs zum Downloaden und Mounten, wird aber nur mit `CS2_WORKSHOP_MAPS_ENABLED=1` aktiv genutzt. Fuer `.map` brauchst du den internen Mapnamen der Workshop-Map, nicht zwingend den Titel auf Steam. `ds_workshop_listmaps` ist der einfachste Weg, diesen Namen zu finden.
 
 ## 6) Checks
 
