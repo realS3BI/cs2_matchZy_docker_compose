@@ -71,6 +71,11 @@ async function writeJsonFile(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+async function writeAdminRuntimeFiles(config, admins) {
+  await writeJsonFile(config.runtimeAdminsFile, adminsToCssConfig(admins));
+  await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(admins));
+}
+
 export function createApp({ config, store, compose, nadesSync }) {
   const app = express();
   app.disable("x-powered-by");
@@ -131,7 +136,9 @@ export function createApp({ config, store, compose, nadesSync }) {
 
   app.put("/api/admins", async (req, res) => {
     const entries = sanitizeAdmins(req.body?.entries);
-    res.json({ entries: await store.saveAdmins(entries) });
+    const savedEntries = await store.saveAdmins(entries);
+    await writeAdminRuntimeFiles(config, savedEntries);
+    res.json({ entries: savedEntries });
   });
 
   app.get("/api/nades", async (req, res) => {
@@ -181,8 +188,7 @@ export function createApp({ config, store, compose, nadesSync }) {
     });
 
     await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(nextEnv));
-    await writeJsonFile(config.runtimeAdminsFile, adminsToCssConfig(admins));
-    await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(admins));
+    await writeAdminRuntimeFiles(config, admins);
     await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
     await nadesSync?.writeFromMongo(nades);
     if (config.envFile) {
