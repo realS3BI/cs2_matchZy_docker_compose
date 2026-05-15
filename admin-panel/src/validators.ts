@@ -4,8 +4,8 @@ const STEAM64_RE = /^[0-9]{17}$/;
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NAMES_WITHOUT_SLASHES_RE = /^[^\\/]+$/;
 const VECTOR_RE = /^-?(?:\d+(?:\.\d+)?|\.\d+)\s+-?(?:\d+(?:\.\d+)?|\.\d+)\s+-?(?:\d+(?:\.\d+)?|\.\d+)$/;
-const SETPOS_SETANG_RE = /^setpos\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s*;\s*setang\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))$/i;
 const NADE_TYPES = new Set(["", "Smoke", "Flash", "HE", "Molly", "Decoy"]);
+const MAX_LINEUP_IMAGES = 10;
 
 export function sanitizeEnv(input) {
   const output = {};
@@ -78,19 +78,46 @@ function normalizeVector(value, fieldName) {
   return normalized;
 }
 
-function parseSetposSetang(value) {
-  const normalized = String(value ?? "").trim().replace(/\s+/g, " ");
-  const match = normalized.match(SETPOS_SETANG_RE);
-  if (!match) return null;
-  return {
-    lineupPos: `${match[1]} ${match[2]} ${match[3]}`,
-    lineupAng: `${match[4]} ${match[5]} ${match[6]}`
-  };
-}
-
 function nadeId(entry) {
   const source = `${entry.owner}:${entry.map}:${entry.name}`;
   return source.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "nade";
+}
+
+function sanitizeLineupImages(images) {
+  if (images === undefined || images === null) return [];
+  if (!Array.isArray(images)) {
+    throw new Error("Lineup images must be an array");
+  }
+  if (images.length > MAX_LINEUP_IMAGES) {
+    throw new Error(`Lineup images must contain at most ${MAX_LINEUP_IMAGES} images`);
+  }
+
+  return images.map((image) => {
+    if (!image || typeof image !== "object" || Array.isArray(image)) {
+      throw new Error("Lineup image must be an object");
+    }
+
+    const key = String(image.key ?? "").trim();
+    const url = String(image.url ?? "").trim();
+    const name = String(image.name ?? "").trim();
+    const size = Number(image.size ?? 0);
+    const uploadedAt = String(image.uploadedAt ?? "").trim() || new Date().toISOString();
+
+    if (!key) {
+      throw new Error("Lineup image key is required");
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error("Lineup image URL must be http or https");
+    }
+    if (!name) {
+      throw new Error("Lineup image name is required");
+    }
+    if (!Number.isFinite(size) || size < 0) {
+      throw new Error("Lineup image size must be a non-negative number");
+    }
+
+    return { key, url, name, size, uploadedAt };
+  });
 }
 
 export function sanitizeNades(entries) {
@@ -135,6 +162,7 @@ export function sanitizeNades(entries) {
       desc,
       lineupPos,
       lineupAng,
+      lineupImages: sanitizeLineupImages(entry.lineupImages),
       owner,
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
@@ -181,53 +209,4 @@ export function matchZySavedNadesConfigToNades(config) {
   }
 
   return sanitizeNades(entries);
-}
-
-export function setposSetangTextToNades(text, defaults = {}) {
-  const map = String(defaults.map ?? "").trim();
-  if (!map) {
-    throw new Error("Nade map is required");
-  }
-
-  const commands = String(text ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (commands.length === 0) {
-    throw new Error("Import is empty");
-  }
-
-  const entries = commands.map((line, index) => {
-    const parsed = parseSetposSetang(line);
-    if (!parsed) {
-      throw new Error("Import must be MatchZy JSON or setpos ...;setang ... lines");
-    }
-    const suffix = commands.length === 1 ? "" : `_${index + 1}`;
-    return {
-      name: `imported_nade${suffix}`,
-      map,
-      type: String(defaults.type ?? "Smoke").trim(),
-      desc: "",
-      owner: String(defaults.owner ?? "default").trim() || "default",
-      ...parsed
-    };
-  });
-
-  return sanitizeNades(entries);
-}
-
-export function parseNadesImport(input, defaults = {}) {
-  if (typeof input === "string") {
-    const trimmed = input.trim();
-    if (!trimmed) {
-      throw new Error("Import is empty");
-    }
-    if (trimmed.startsWith("{")) {
-      return matchZySavedNadesConfigToNades(JSON.parse(trimmed));
-    }
-    return setposSetangTextToNades(trimmed, defaults);
-  }
-
-  return matchZySavedNadesConfigToNades(input);
 }

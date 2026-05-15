@@ -3,14 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.12.1",
   "scripts": {
-    "build": "vite build --config client/vite.config.js",
-    "dev": "vite --config client/vite.config.js",
-    "start": "node src/server.js",
-    "test": "node --test"
+    "build": "pnpm run build:server && pnpm run build:client",
+    "build:client": "vite build --config client/vite.config.ts",
+    "build:server": "tsc -p tsconfig.server.json",
+    "dev": "vite --config client/vite.config.ts",
+    "start": "node build/src/server.js",
+    "test": "pnpm run build:server && node --test \"build/test/*.test.js\"",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
+    "@uploadthing/react": "^7.3.3",
     "@vitejs/plugin-react": "^5.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -21,11 +27,18 @@
     "mongodb": "6.13.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "uploadthing": "^7.7.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.8.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.1.18",
+    "typescript": "^6.0.3",
     "vite": "^7.3.0"
   }
 }

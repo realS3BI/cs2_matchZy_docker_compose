@@ -1,6 +1,7 @@
+import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/utils";
 
-export function Input({ className, ...props }) {
+export function Input({ className, ...props }: ComponentPropsWithoutRef<"input">) {
   return (
     <input
       className={cn(

@@ -7,15 +7,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CURATED_FIELDS, FLAG_PRESETS, SERVER_ENV_KEYS } from "./defaults.js";
 import { writeEnvFile } from "./env-file.js";
+import { uploadRouter } from "./uploadthing.js";
 import {
   adminsToCssConfig,
   adminsToMatchZyConfig,
+  matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
-  parseNadesImport,
   sanitizeAdmins,
   sanitizeEnv,
   sanitizeNades
 } from "./validators.js";
+import { createRouteHandler } from "uploadthing/express";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -79,6 +81,12 @@ async function writeAdminRuntimeFiles(config, admins) {
 export function createApp({ config, store, compose, nadesSync }) {
   const app = express();
   app.disable("x-powered-by");
+  app.use(
+    "/api/uploadthing",
+    createRouteHandler({
+      router: uploadRouter(config)
+    })
+  );
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
 
@@ -155,11 +163,7 @@ export function createApp({ config, store, compose, nadesSync }) {
   });
 
   app.post("/api/nades/import", async (req, res) => {
-    const importedEntries = parseNadesImport(req.body?.matchzyConfig, {
-      map: req.body?.map,
-      type: req.body?.type,
-      owner: req.body?.owner
-    });
+    const importedEntries = matchZySavedNadesConfigToNades(req.body?.matchzyConfig);
     const mode = req.body?.mode === "merge" ? "merge" : "replace";
     if (mode === "merge") {
       const mergedByKey = new Map();

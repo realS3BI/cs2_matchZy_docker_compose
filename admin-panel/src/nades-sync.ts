@@ -62,6 +62,22 @@ async function writeJsonFileAtomic(path, value) {
 }
 
 export class NadesSyncService {
+  config: any;
+  store: any;
+  liveFile: string;
+  runtimeFile: string;
+  intervalMs: number;
+  enabled: boolean;
+  running: boolean;
+  polling: boolean;
+  timer: NodeJS.Timeout | null;
+  lastSeenMtimeMs: number;
+  lastSeenHash: string;
+  lastSelfWrittenHash: string;
+  lastReadAt: string;
+  lastWriteAt: string;
+  lastError: string;
+
   constructor({ config, store }) {
     this.config = config;
     this.store = store;

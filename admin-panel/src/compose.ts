@@ -4,6 +4,8 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export class Compose {
+  config: any;
+
   constructor(config) {
     this.config = config;
   }

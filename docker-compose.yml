@@ -35,6 +35,7 @@ services:
       ADMIN_PANEL_NADES_SYNC_INTERVAL_MS: ${ADMIN_PANEL_NADES_SYNC_INTERVAL_MS:-2000}
       ADMIN_PANEL_CS2_SERVICE: cs2
       ADMIN_PANEL_CS2_CONTAINER: ${ADMIN_PANEL_CS2_CONTAINER:-}
+      UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:?UPLOADTHING_TOKEN is required}
     volumes:
       - admin_panel_runtime:/runtime
       - cs2_data:/cs2-data

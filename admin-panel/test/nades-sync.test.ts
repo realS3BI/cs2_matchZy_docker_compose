@@ -14,6 +14,7 @@ function sampleEntry(patch = {}) {
     desc: "from T roof",
     lineupPos: "1 2 3",
     lineupAng: "4 5 6",
+    lineupImages: [],
     owner: "default",
     ...patch
   };
@@ -39,6 +40,9 @@ function comparable(entries) {
 }
 
 class FakeStore {
+  entries: any[];
+  actions: any[];
+
   constructor(entries = []) {
     this.entries = entries;
     this.actions = [];

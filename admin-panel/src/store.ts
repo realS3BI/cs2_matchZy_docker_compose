@@ -1,4 +1,4 @@
-import { MongoClient } from "mongodb";
+import { Collection, Db, MongoClient } from "mongodb";
 import { loadEnvFile } from "./env-file.js";
 import { SERVER_ENV_KEYS } from "./defaults.js";
 import { sanitizeAdmins, sanitizeEnv, sanitizeNades } from "./validators.js";
@@ -14,6 +14,14 @@ function currentProcessEnv() {
 }
 
 export class Store {
+  config: any;
+  client: MongoClient;
+  db!: Db;
+  settings!: Collection<any>;
+  admins!: Collection<any>;
+  nades!: Collection<any>;
+  actions!: Collection<any>;
+
   constructor(config) {
     this.config = config;
     this.client = new MongoClient(config.mongodbUri);

@@ -5,7 +5,6 @@ import {
   adminsToMatchZyConfig,
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
-  parseNadesImport,
   sanitizeAdmins,
   sanitizeEnv,
   sanitizeNades
@@ -52,6 +51,39 @@ test("sanitizeNades validates and defaults owner", () => {
     desc: "from T roof",
     lineupPos: "1 2 3",
     lineupAng: "4 5 6",
+    lineupImages: [],
+    owner: "default"
+  }]);
+});
+
+test("sanitizeNades accepts lineup images", () => {
+  assert.deepEqual(sanitizeNades([{
+    name: "window_smoke",
+    map: "de_mirage",
+    lineupPos: "1 2 3",
+    lineupAng: "4 5 6",
+    lineupImages: [{
+      key: "abc123",
+      url: "https://example.com/image.jpg",
+      name: "image.jpg",
+      size: 1234,
+      uploadedAt: "2026-05-15T00:00:00.000Z"
+    }]
+  }]).map(({ updatedAt, ...entry }) => entry), [{
+    id: "default-de_mirage-window_smoke",
+    name: "window_smoke",
+    map: "de_mirage",
+    type: "",
+    desc: "",
+    lineupPos: "1 2 3",
+    lineupAng: "4 5 6",
+    lineupImages: [{
+      key: "abc123",
+      url: "https://example.com/image.jpg",
+      name: "image.jpg",
+      size: 1234,
+      uploadedAt: "2026-05-15T00:00:00.000Z"
+    }],
     owner: "default"
   }]);
 });
@@ -60,6 +92,7 @@ test("sanitizeNades rejects invalid entries", () => {
   assert.throws(() => sanitizeNades([{ name: "", map: "de_mirage", lineupPos: "1 2 3", lineupAng: "1 2 3" }]), /Nade name is required/);
   assert.throws(() => sanitizeNades([{ name: "bad/name", map: "de_mirage", lineupPos: "1 2 3", lineupAng: "1 2 3" }]), /Invalid nade name/);
   assert.throws(() => sanitizeNades([{ name: "a", map: "de_mirage", lineupPos: "1 2", lineupAng: "1 2 3" }]), /Lineup position/);
+  assert.throws(() => sanitizeNades([{ name: "a", map: "de_mirage", lineupPos: "1 2 3", lineupAng: "1 2 3", lineupImages: [{ key: "x", url: "ftp://example.com/a.jpg", name: "a.jpg", size: 1 }] }]), /Lineup image URL/);
   assert.throws(() => sanitizeNades([
     { name: "a", map: "de_mirage", lineupPos: "1 2 3", lineupAng: "1 2 3" },
     { name: "a", map: "de_mirage", lineupPos: "4 5 6", lineupAng: "4 5 6" }
@@ -108,40 +141,32 @@ test("matchZySavedNadesConfigToNades imports MatchZy savednades.json", () => {
     desc: "from T roof",
     lineupPos: "1 2 3",
     lineupAng: "4 5 6",
+    lineupImages: [],
     owner: "default"
   }]);
 });
 
-test("parseNadesImport imports setpos setang text", () => {
-  const entries = parseNadesImport(
-    "setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000",
-    { map: "de_mirage" }
-  );
-
-  assert.deepEqual(entries.map(({ updatedAt, ...entry }) => entry), [{
-    id: "default-de_mirage-imported_nade",
-    name: "imported_nade",
+test("nadesToMatchZySavedNadesConfig omits lineup images", () => {
+  const config: any = nadesToMatchZySavedNadesConfig([{
+    name: "window_smoke",
     map: "de_mirage",
-    type: "Smoke",
-    desc: "",
-    lineupPos: "1422.968750 34.830574 -103.968750",
-    lineupAng: "-24.193808 -166.485611 0.000000",
-    owner: "default"
+    desc: "from T roof",
+    lineupPos: "1 2 3",
+    lineupAng: "4 5 6",
+    lineupImages: [{
+      key: "abc123",
+      url: "https://example.com/image.jpg",
+      name: "image.jpg",
+      size: 1234
+    }]
   }]);
-});
 
-test("parseNadesImport imports MatchZy JSON text", () => {
-  const entries = parseNadesImport(JSON.stringify({
-    default: {
-      window_smoke: {
-        LineupPos: "1 2 3",
-        LineupAng: "4 5 6",
-        Map: "de_mirage"
-      }
-    }
-  }));
-
-  assert.equal(entries[0].name, "window_smoke");
-  assert.equal(entries[0].lineupPos, "1 2 3");
-  assert.equal(entries[0].lineupAng, "4 5 6");
+  assert.equal(config.default.window_smoke.LineupImages, undefined);
+  assert.deepEqual(config.default.window_smoke, {
+    LineupPos: "1 2 3",
+    LineupAng: "4 5 6",
+    Desc: "from T roof",
+    Map: "de_mirage",
+    Type: ""
+  });
 });

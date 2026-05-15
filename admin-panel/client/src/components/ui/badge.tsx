@@ -1,6 +1,11 @@
+import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/utils";
 
-export function Badge({ className, variant = "default", ...props }) {
+type BadgeProps = ComponentPropsWithoutRef<"span"> & {
+  variant?: "default" | "destructive";
+};
+
+export function Badge({ className, variant = "default", ...props }: BadgeProps) {
   return (
     <span
       className={cn(

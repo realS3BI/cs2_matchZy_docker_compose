@@ -23,9 +23,20 @@ import { cn } from "./lib/utils";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
+import { parseSetposSetang } from "./lib/nades";
+import { UploadButton } from "./lib/uploadthing";
 import "./index.css";
+import "@uploadthing/react/styles.css";
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Server },
@@ -35,7 +46,7 @@ const tabs = [
   { id: "logs", label: "Docker Logs", icon: Terminal }
 ];
 
-function Message({ message, error }) {
+function Message({ message = "", error = "" }: { message?: string; error?: string }) {
   if (!message && !error) return null;
   return (
     <div
@@ -338,20 +349,171 @@ function createNade(env) {
     desc: "",
     lineupPos: "0 0 0",
     lineupAng: "0 0 0",
+    lineupImages: [],
     owner: "default"
   };
+}
+
+function NadeDialog({ env, open, onOpenChange, onAdd }) {
+  const [draft, setDraft] = useState(() => createNade(env));
+  const [setposText, setSetposText] = useState("");
+  const [dialogError, setDialogError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft(createNade(env));
+    setSetposText("");
+    setDialogError("");
+  }, [open, env]);
+
+  function updateDraft(patch) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function applyPosition() {
+    setDialogError("");
+    const parsed = parseSetposSetang(setposText);
+    if (!parsed) {
+      setDialogError("setpos/setang format is invalid.");
+      return;
+    }
+    updateDraft(parsed);
+  }
+
+  function addImage(image) {
+    const serverData = image.serverData || {};
+    const nextImage = {
+      key: String(serverData.key || image.key || ""),
+      url: String(serverData.url || image.url || ""),
+      name: String(serverData.name || image.name || "lineup-image"),
+      size: Number(serverData.size ?? image.size ?? 0),
+      uploadedAt: String(serverData.uploadedAt || new Date().toISOString())
+    };
+    if (!nextImage.key || !nextImage.url) return;
+    setDraft((current) => ({
+      ...current,
+      lineupImages: [...(current.lineupImages || []), nextImage].slice(0, 10)
+    }));
+  }
+
+  function removeImage(key) {
+    setDraft((current) => ({
+      ...current,
+      lineupImages: (current.lineupImages || []).filter((image) => image.key !== key)
+    }));
+  }
+
+  function submit() {
+    setDialogError("");
+    onAdd({
+      ...draft,
+      id: window.crypto?.randomUUID?.() || String(Date.now()),
+      lineupImages: draft.lineupImages || []
+    });
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add nade</DialogTitle>
+          <DialogDescription className="sr-only">Add a new nade lineup.</DialogDescription>
+        </DialogHeader>
+        {dialogError ? <Message error={dialogError} /> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+            Name
+            <Input value={draft.name || ""} onChange={(event) => updateDraft({ name: event.target.value })} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+            Map
+            <Input value={draft.map || ""} onChange={(event) => updateDraft({ map: event.target.value })} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+            Type
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={draft.type || ""}
+              onChange={(event) => updateDraft({ type: event.target.value })}
+            >
+              {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+            Owner
+            <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground md:col-span-2">
+            Description
+            <Input value={draft.desc || ""} onChange={(event) => updateDraft({ desc: event.target.value })} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+            LineupPos
+            <Input value={draft.lineupPos || ""} onChange={(event) => updateDraft({ lineupPos: event.target.value })} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
+            LineupAng
+            <Input value={draft.lineupAng || ""} onChange={(event) => updateDraft({ lineupAng: event.target.value })} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-muted-foreground md:col-span-2">
+            setpos/setang
+            <Textarea
+              value={setposText}
+              onChange={(event) => setSetposText(event.target.value)}
+              placeholder="setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000"
+            />
+          </label>
+        </div>
+        <div className="grid gap-3">
+          <UploadButton
+            endpoint="lineupImageUploader"
+            onClientUploadComplete={(files) => {
+              for (const file of files || []) addImage(file);
+            }}
+            onUploadError={(error) => setDialogError(error.message)}
+            appearance={{
+              button: "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md h-10 px-4 text-sm font-semibold",
+              allowedContent: "text-xs text-muted-foreground"
+            }}
+          />
+          {(draft.lineupImages || []).length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(draft.lineupImages || []).map((image) => (
+                <div key={image.key} className="grid grid-cols-[72px_1fr_40px] items-center gap-3 rounded-md border border-border bg-background p-2">
+                  <img className="h-14 w-[72px] rounded-sm object-cover" src={image.url} alt={image.name} />
+                  <a className="truncate text-sm font-semibold text-primary hover:underline" href={image.url} target="_blank" rel="noreferrer">
+                    {image.name}
+                  </a>
+                  <Button variant="secondary" size="icon" title="Remove image" onClick={() => removeImage(image.key)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={applyPosition}>Apply position</Button>
+          <Button onClick={submit}>Add nade</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function Nades({ env, nades, setNades, onSave }) {
   const [mapFilter, setMapFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importJson, setImportJson] = useState("");
   const [exportJson, setExportJson] = useState("");
   const [localError, setLocalError] = useState("");
 
-  const maps = useMemo(() => [...new Set(nades.map((nade) => nade.map).filter(Boolean))].sort(), [nades]);
+  const maps = useMemo<string[]>(() => [...new Set<string>(nades.map((nade) => String(nade.map || "")).filter(Boolean))].sort(), [nades]);
   const filteredNades = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return nades.filter((nade) => {
@@ -378,14 +540,10 @@ function Nades({ env, nades, setNades, onSave }) {
   async function importNades() {
     setLocalError("");
     try {
+      const matchzyConfig = JSON.parse(importJson);
       const result = await api("/api/nades/import", {
         method: "POST",
-        body: JSON.stringify({
-          matchzyConfig: importJson,
-          map: env.CS2_STARTMAP || "",
-          type: "Smoke",
-          mode: "replace"
-        })
+        body: JSON.stringify({ matchzyConfig, mode: "replace" })
       });
       setNades(result.entries || []);
       setImportOpen(false);
@@ -428,27 +586,33 @@ function Nades({ env, nades, setNades, onSave }) {
           <Save className="h-4 w-4" />
           Save nades
         </Button>
-        <Button variant="secondary" onClick={() => setNades((current) => [...current, createNade(env)])}>
+        <Button variant="secondary" onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4" />
           Add nade
         </Button>
         <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
           <FileInput className="h-4 w-4" />
-          Import
+          Import JSON
         </Button>
         <Button variant="secondary" onClick={exportNades}>
           <Download className="h-4 w-4" />
           Export JSON
         </Button>
       </div>
+      <NadeDialog
+        env={env}
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdd={(entry) => setNades((current) => [...current, entry])}
+      />
       {localError ? <Message error={localError} /> : null}
       {importOpen ? (
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>Import MatchZy nades</CardTitle>
+            <CardTitle>Import MatchZy savednades.json</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}} or setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000' />
+            <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}}' />
             <div className="flex flex-wrap gap-2">
               <Button onClick={importNades}>
                 <FileInput className="h-4 w-4" />
@@ -508,7 +672,7 @@ function Nades({ env, nades, setNades, onSave }) {
             <section key={map} className="grid gap-2">
               <h3 className="text-sm font-semibold text-muted-foreground">{map} <Badge>{mapNades.length}</Badge></h3>
               {mapNades.map((nade) => (
-                <div key={nade.id} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_44px]">
+                <div key={nade.id} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_44px]">
                   <Input value={nade.name || ""} placeholder="Name" onChange={(event) => updateNade(nade.id, { name: event.target.value })} />
                   <Input value={nade.map || ""} placeholder="Map" onChange={(event) => updateNade(nade.id, { map: event.target.value })} />
                   <select
@@ -521,6 +685,13 @@ function Nades({ env, nades, setNades, onSave }) {
                   <Input value={nade.desc || ""} placeholder="Description" onChange={(event) => updateNade(nade.id, { desc: event.target.value })} />
                   <Input value={nade.lineupPos || ""} placeholder="LineupPos" onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} />
                   <Input value={nade.lineupAng || ""} placeholder="LineupAng" onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} />
+                  {(nade.lineupImages || []).length > 0 ? (
+                    <a className="block h-10 w-[86px] overflow-hidden rounded-md border border-border bg-card" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer" title={`${nade.lineupImages.length} image(s)`}>
+                      <img className="h-full w-full object-cover" src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || "Lineup"} />
+                    </a>
+                  ) : (
+                    <span className="flex h-10 items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">No image</span>
+                  )}
                   <Button variant="secondary" size="icon" title="Remove" onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
