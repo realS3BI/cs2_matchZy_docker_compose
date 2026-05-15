@@ -1,3 +1,26 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parseEnvFile } from "./env-file.js";
+
+function loadLocalEnvFile() {
+  const explicitPath = process.env.ADMIN_PANEL_DOTENV_FILE;
+  const candidates = explicitPath
+    ? [explicitPath]
+    : [join(process.cwd(), ".env"), join(process.cwd(), "..", ".env")];
+
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    const env = parseEnvFile(readFileSync(path, "utf8"));
+    for (const [key, value] of Object.entries(env)) {
+      process.env[key] ??= String(value);
+    }
+    process.env.ADMIN_PANEL_DOTENV_FILE = path;
+    return;
+  }
+}
+
+loadLocalEnvFile();
+
 export function requireEnv(name) {
   const value = process.env[name];
   if (!value) {
