@@ -4,6 +4,7 @@ const STEAM64_RE = /^[0-9]{17}$/;
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NAMES_WITHOUT_SLASHES_RE = /^[^\\/]+$/;
 const VECTOR_RE = /^-?(?:\d+(?:\.\d+)?|\.\d+)\s+-?(?:\d+(?:\.\d+)?|\.\d+)\s+-?(?:\d+(?:\.\d+)?|\.\d+)$/;
+const SETPOS_SETANG_RE = /^setpos\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s*;\s*setang\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))$/i;
 const NADE_TYPES = new Set(["", "Smoke", "Flash", "HE", "Molly", "Decoy"]);
 
 export function sanitizeEnv(input) {
@@ -75,6 +76,16 @@ function normalizeVector(value, fieldName) {
     throw new Error(`${fieldName} must contain exactly 3 numeric values`);
   }
   return normalized;
+}
+
+function parseSetposSetang(value) {
+  const normalized = String(value ?? "").trim().replace(/\s+/g, " ");
+  const match = normalized.match(SETPOS_SETANG_RE);
+  if (!match) return null;
+  return {
+    lineupPos: `${match[1]} ${match[2]} ${match[3]}`,
+    lineupAng: `${match[4]} ${match[5]} ${match[6]}`
+  };
 }
 
 function nadeId(entry) {
@@ -170,4 +181,53 @@ export function matchZySavedNadesConfigToNades(config) {
   }
 
   return sanitizeNades(entries);
+}
+
+export function setposSetangTextToNades(text, defaults = {}) {
+  const map = String(defaults.map ?? "").trim();
+  if (!map) {
+    throw new Error("Nade map is required");
+  }
+
+  const commands = String(text ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (commands.length === 0) {
+    throw new Error("Import is empty");
+  }
+
+  const entries = commands.map((line, index) => {
+    const parsed = parseSetposSetang(line);
+    if (!parsed) {
+      throw new Error("Import must be MatchZy JSON or setpos ...;setang ... lines");
+    }
+    const suffix = commands.length === 1 ? "" : `_${index + 1}`;
+    return {
+      name: `imported_nade${suffix}`,
+      map,
+      type: String(defaults.type ?? "Smoke").trim(),
+      desc: "",
+      owner: String(defaults.owner ?? "default").trim() || "default",
+      ...parsed
+    };
+  });
+
+  return sanitizeNades(entries);
+}
+
+export function parseNadesImport(input, defaults = {}) {
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      throw new Error("Import is empty");
+    }
+    if (trimmed.startsWith("{")) {
+      return matchZySavedNadesConfigToNades(JSON.parse(trimmed));
+    }
+    return setposSetangTextToNades(trimmed, defaults);
+  }
+
+  return matchZySavedNadesConfigToNades(input);
 }

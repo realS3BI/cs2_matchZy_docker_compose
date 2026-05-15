@@ -10,8 +10,8 @@ import { writeEnvFile } from "./env-file.js";
 import {
   adminsToCssConfig,
   adminsToMatchZyConfig,
-  matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
+  parseNadesImport,
   sanitizeAdmins,
   sanitizeEnv,
   sanitizeNades
@@ -155,7 +155,11 @@ export function createApp({ config, store, compose, nadesSync }) {
   });
 
   app.post("/api/nades/import", async (req, res) => {
-    const importedEntries = matchZySavedNadesConfigToNades(req.body?.matchzyConfig);
+    const importedEntries = parseNadesImport(req.body?.matchzyConfig, {
+      map: req.body?.map,
+      type: req.body?.type,
+      owner: req.body?.owner
+    });
     const mode = req.body?.mode === "merge" ? "merge" : "replace";
     if (mode === "merge") {
       const mergedByKey = new Map();

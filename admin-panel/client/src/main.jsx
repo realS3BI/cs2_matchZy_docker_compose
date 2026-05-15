@@ -378,10 +378,14 @@ function Nades({ env, nades, setNades, onSave }) {
   async function importNades() {
     setLocalError("");
     try {
-      const matchzyConfig = JSON.parse(importJson);
       const result = await api("/api/nades/import", {
         method: "POST",
-        body: JSON.stringify({ matchzyConfig, mode: "replace" })
+        body: JSON.stringify({
+          matchzyConfig: importJson,
+          map: env.CS2_STARTMAP || "",
+          type: "Smoke",
+          mode: "replace"
+        })
       });
       setNades(result.entries || []);
       setImportOpen(false);
@@ -430,7 +434,7 @@ function Nades({ env, nades, setNades, onSave }) {
         </Button>
         <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
           <FileInput className="h-4 w-4" />
-          Import JSON
+          Import
         </Button>
         <Button variant="secondary" onClick={exportNades}>
           <Download className="h-4 w-4" />
@@ -441,10 +445,10 @@ function Nades({ env, nades, setNades, onSave }) {
       {importOpen ? (
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>Import MatchZy savednades.json</CardTitle>
+            <CardTitle>Import MatchZy nades</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}}' />
+            <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}} or setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000' />
             <div className="flex flex-wrap gap-2">
               <Button onClick={importNades}>
                 <FileInput className="h-4 w-4" />

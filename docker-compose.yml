@@ -85,7 +85,6 @@ services:
       MATCHZY_SMOKE_COLOR: ${MATCHZY_SMOKE_COLOR:-0}
       MATCHZY_SAVE_NADES_AS_GLOBAL: ${MATCHZY_SAVE_NADES_AS_GLOBAL:-1}
       MATCHZY_CHAT_PREFIX: ${MATCHZY_CHAT_PREFIX:-}
-      matchzy_chat_prefix: ${matchzy_chat_prefix:-}
       ADMINS: ${ADMINS:-}
       CS2_RUNTIME_ENV_FILE: /config-runtime/settings.env
       CSHARP_ADMINS_FILE: /config-runtime/csharp-admins.json

@@ -271,19 +271,17 @@ Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`, wenn
 Die MatchZy-Config enthaelt aktuell diese automatisch gesetzten Werte:
 
 - `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR`
-- `matchzy_chat_prefix` aus Prefix-ENV mit Prioritaet `MATCHZY_CHAT_PREFIX` > `matchzy_chat_prefix` > `CS2_SERVERNAME`
-- Werte aus `MATCHZY_CHAT_PREFIX` und `matchzy_chat_prefix` werden immer als `[<wert>]` normalisiert
+- `matchzy_chat_prefix` ausschliesslich aus `MATCHZY_CHAT_PREFIX`
+- Leeres `MATCHZY_CHAT_PREFIX` faellt auf `[{Green}MatchZy{Default}]` zurueck
+- Der Prefix wird nicht mehr legacy-normalisiert; nutze die vollstaendige MatchZy-Syntax
 
 Beispiele fuer den Prefix:
 
 ```bash
-# Plain Text -> wird automatisch zu {Green}[Sebi CS2]{Default}
-MATCHZY_CHAT_PREFIX=Sebi CS2
+# Gueltige Syntax
+MATCHZY_CHAT_PREFIX=[{Green}MatchZy{Default}]
 
-# Bereits mit MatchZy-Farbcodes -> bleibt unveraendert
-MATCHZY_CHAT_PREFIX={Gold}Scrim{Default}
-
-# Leerer Wert -> faellt auf CS2_SERVERNAME zurueck
+# Leerer Wert -> faellt auf [{Green}MatchZy{Default}] zurueck
 MATCHZY_CHAT_PREFIX=
 ```
 

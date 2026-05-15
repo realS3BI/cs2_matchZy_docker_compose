@@ -5,6 +5,7 @@ import {
   adminsToMatchZyConfig,
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
+  parseNadesImport,
   sanitizeAdmins,
   sanitizeEnv,
   sanitizeNades
@@ -109,4 +110,38 @@ test("matchZySavedNadesConfigToNades imports MatchZy savednades.json", () => {
     lineupAng: "4 5 6",
     owner: "default"
   }]);
+});
+
+test("parseNadesImport imports setpos setang text", () => {
+  const entries = parseNadesImport(
+    "setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000",
+    { map: "de_mirage" }
+  );
+
+  assert.deepEqual(entries.map(({ updatedAt, ...entry }) => entry), [{
+    id: "default-de_mirage-imported_nade",
+    name: "imported_nade",
+    map: "de_mirage",
+    type: "Smoke",
+    desc: "",
+    lineupPos: "1422.968750 34.830574 -103.968750",
+    lineupAng: "-24.193808 -166.485611 0.000000",
+    owner: "default"
+  }]);
+});
+
+test("parseNadesImport imports MatchZy JSON text", () => {
+  const entries = parseNadesImport(JSON.stringify({
+    default: {
+      window_smoke: {
+        LineupPos: "1 2 3",
+        LineupAng: "4 5 6",
+        Map: "de_mirage"
+      }
+    }
+  }));
+
+  assert.equal(entries[0].name, "window_smoke");
+  assert.equal(entries[0].lineupPos, "1 2 3");
+  assert.equal(entries[0].lineupAng, "4 5 6");
 });

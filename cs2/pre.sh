@@ -112,33 +112,9 @@ _matchzy_bootstrap_main() (
     printf '%s' "$value"
   }
 
-  contains_matchzy_color_token() {
+  is_valid_matchzy_chat_prefix() {
     local value="$1"
-    [[ "$value" =~ \{(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\} || \
-       "$value" =~ \[(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\] ]]
-  }
-
-  ensure_bracketed_prefix() {
-    local value="$1"
-    value="$(strip_wrapping_quotes "$value")"
-    [[ -n "$value" ]] || {
-      printf '%s' "$value"
-      return 0
-    }
-
-    if contains_matchzy_color_token "$value"; then
-      printf '%s' "$value"
-      return 0
-    fi
-
-    if [[ "$value" == \[*\] ]]; then
-      printf '%s' "$value"
-      return 0
-    fi
-
-    value="${value#[}"
-    value="${value%]}"
-    printf '[%s]' "$value"
+    [[ "$value" =~ ^\[\{(Default|Darkred|Green|LightYellow|LightBlue|Olive|Lime|Red|Purple|Grey|Yellow|Gold|Silver|Blue|DarkBlue)\}.+\{Default\}\]$ ]]
   }
 
   sync_runtime_pre_hook() {
@@ -162,34 +138,19 @@ _matchzy_bootstrap_main() (
   }
 
   resolve_matchzy_chat_prefix() {
-    local server_name_raw="$1"
-    local chat_prefix_raw="$2"
-    local chat_prefix_legacy_raw="$3"
+    local chat_prefix_raw="$1"
     local prefix_value=""
-    local prefix_source="CS2_SERVERNAME"
+    local prefix_source="MATCHZY_CHAT_PREFIX"
 
     prefix_value="$(strip_wrapping_quotes "$chat_prefix_raw")"
-    if [[ -n "$prefix_value" ]]; then
-      prefix_source="MATCHZY_CHAT_PREFIX"
-      prefix_value="$(ensure_bracketed_prefix "$prefix_value")"
-    else
-      prefix_value="$(strip_wrapping_quotes "$chat_prefix_legacy_raw")"
-      if [[ -n "$prefix_value" ]]; then
-        prefix_source="matchzy_chat_prefix"
-        prefix_value="$(ensure_bracketed_prefix "$prefix_value")"
-      else
-        prefix_value="$(strip_wrapping_quotes "$server_name_raw")"
-        [[ -n "$prefix_value" ]] || prefix_value="CS2 MatchZy Server"
-        prefix_source="CS2_SERVERNAME"
-      fi
+    if [[ -z "$prefix_value" ]]; then
+      prefix_value="[{Green}MatchZy{Default}]"
+      prefix_source="default"
+    elif ! is_valid_matchzy_chat_prefix "$prefix_value"; then
+      return 1
     fi
 
-    if contains_matchzy_color_token "$prefix_value"; then
-      printf '%s\n%s\n' "$(escape_cfg_value "$prefix_value")" "$prefix_source"
-      return 0
-    fi
-
-    printf '%s\n%s\n' "{Green}$(escape_cfg_value "$prefix_value"){Default}" "$prefix_source"
+    printf '%s\t%s\n' "$(escape_cfg_value "$prefix_value")" "$prefix_source"
   }
 
   sanitize_admin_id() {
@@ -726,16 +687,15 @@ _matchzy_bootstrap_main() (
 
   write_matchzy_config_file() {
     local smoke_color_raw="$1"
-    local server_name_raw="$2"
-    local chat_prefix_raw="$3"
-    local chat_prefix_legacy_raw="$4"
-    local save_nades_as_global_raw="$5"
-    local config_file="$6"
+    local chat_prefix_raw="$2"
+    local save_nades_as_global_raw="$3"
+    local config_file="$4"
     local config_dir=""
     local smoke_color_value="false"
     local save_nades_as_global_value="false"
     local chat_prefix=""
     local chat_prefix_source=""
+    local chat_prefix_resolved=""
     local tmp_file=""
 
     config_dir="$(dirname "$config_file")"
@@ -748,9 +708,9 @@ _matchzy_bootstrap_main() (
       save_nades_as_global_value="true"
     fi
 
-    IFS=$'\n' read -r chat_prefix chat_prefix_source < <(
-      resolve_matchzy_chat_prefix "$server_name_raw" "$chat_prefix_raw" "$chat_prefix_legacy_raw"
-    )
+    chat_prefix_resolved="$(resolve_matchzy_chat_prefix "$chat_prefix_raw")" \
+      || fail "MATCHZY_CHAT_PREFIX must use syntax like '[{Green}MatchZy{Default}]'"
+    IFS=$'\t' read -r chat_prefix chat_prefix_source <<< "$chat_prefix_resolved"
 
     tmp_file="$(mktemp)"
     {
@@ -879,9 +839,7 @@ _matchzy_bootstrap_main() (
   local MENUMANAGER_VERSION="${MENUMANAGER_VERSION:-latest}"
   local MATCHZY_SMOKE_COLOR="${MATCHZY_SMOKE_COLOR:-0}"
   local MATCHZY_SAVE_NADES_AS_GLOBAL="${MATCHZY_SAVE_NADES_AS_GLOBAL:-1}"
-  local CS2_SERVERNAME="${CS2_SERVERNAME:-CS2 MatchZy Server}"
   local MATCHZY_CHAT_PREFIX="${MATCHZY_CHAT_PREFIX:-}"
-  local MATCHZY_CHAT_PREFIX_LEGACY="${matchzy_chat_prefix:-}"
   local ADMINS="${ADMINS:-}"
   local CSHARP_ADMINS_FILE="${CSHARP_ADMINS_FILE:-}"
   local MATCHZY_ADMINS_FILE="${MATCHZY_ADMINS_FILE:-}"
@@ -1282,9 +1240,7 @@ _matchzy_bootstrap_main() (
   fi
   write_matchzy_config_file \
     "$MATCHZY_SMOKE_COLOR" \
-    "$CS2_SERVERNAME" \
     "$MATCHZY_CHAT_PREFIX" \
-    "$MATCHZY_CHAT_PREFIX_LEGACY" \
     "$MATCHZY_SAVE_NADES_AS_GLOBAL" \
     "$matchzy_config_file"
   write_matchzy_savednades_file_from_runtime "$MATCHZY_SAVEDNADES_FILE" "$matchzy_savednades_file"
