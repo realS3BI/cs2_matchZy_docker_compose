@@ -104,6 +104,7 @@ Relevante Nade-Sync-Variablen:
 - `ADMIN_PANEL_NADES_SYNC_ENABLED` steuert den Live-Sync (`1` Standard, `0` deaktiviert)
 - `ADMIN_PANEL_NADES_SYNC_INTERVAL_MS` setzt das Polling-Intervall in Millisekunden (`2000` Standard)
 - `ADMIN_PANEL_LIVE_MATCHZY_NADES_FILE` zeigt auf die Live-Datei im gemounteten CS2-Volume
+- `UPLOADTHING_TOKEN` ist optional und wird nur fuer Lineup-Bilduploads im Nades-Dialog benoetigt
 
 Fuer Coolify ist das der robuste Standardpfad, weil der Container nicht das Git-Repo oder Coolifys interne `.env` bearbeiten muss. Danach startet das Panel den `cs2` Container ueber den Docker-Socket neu.
 
