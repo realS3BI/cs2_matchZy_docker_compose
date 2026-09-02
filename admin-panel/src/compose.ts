@@ -1,7 +1,45 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { setTimeout as wait } from "node:timers/promises";
 
 const execFileAsync = promisify(execFile);
+
+const DIAGNOSTIC_PROBE = String.raw`
+root=/home/steam/cs2-dedicated/game/csgo
+state=/home/steam/cs2-dedicated/.mod-installer/state.env
+
+probe_file() {
+  if [ -f "$2" ]; then
+    printf 'FILE\t%s\t1\n' "$1"
+  else
+    printf 'FILE\t%s\t0\n' "$1"
+  fi
+}
+
+probe_file preHook /home/steam/cs2-dedicated/pre.sh
+probe_file installerState "$state"
+probe_file metamod "$root/addons/metamod/bin/linuxsteamrt64/server.so"
+probe_file counterStrikeSharpNative "$root/addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"
+probe_file counterStrikeSharpApi "$root/addons/counterstrikesharp/api/CounterStrikeSharp.API.dll"
+probe_file matchZy "$root/addons/counterstrikesharp/plugins/MatchZy/MatchZy.dll"
+probe_file matchZyConfig "$root/cfg/MatchZy/config.cfg"
+probe_file matchZySavedNades "$root/cfg/MatchZy/savednades.json"
+
+if [ -f "$root/gameinfo.gi" ] && grep -Eq '^[[:space:]]*Game[[:space:]]+csgo/addons/metamod[[:space:]]*$' "$root/gameinfo.gi"; then
+  printf 'FILE\tgameinfoMetamod\t1\n'
+else
+  printf 'FILE\tgameinfoMetamod\t0\n'
+fi
+
+if [ -f "$state" ]; then
+  for key in METAMOD MATCHZY COUNTERSTRIKESHARP FAKE_RCON WEAPONPAINTS PLAYERSETTINGS ANYBASELIB MENUMANAGER SIMPLEADMIN MULTIADDONMANAGER RAYTRACE FORTNITE_EMOTES EXECUTES; do
+    value="$(grep "^$key"_TAG= "$state" 2>/dev/null | head -n 1 | cut -d= -f2-)"
+    if [ -n "$value" ]; then
+      printf 'VERSION\t%s\t%s\n' "$key" "$value"
+    fi
+  done
+fi
+`;
 
 export class Compose {
   config: any;
@@ -44,7 +82,7 @@ export class Compose {
   }
 
   async findContainerByFilters(filters) {
-    const args = ["ps", "-q"];
+    const args = ["ps", "-aq"];
     for (const filter of filters) {
       args.push("--filter", filter);
     }
@@ -163,5 +201,84 @@ export class Compose {
       timeout: 30 * 1000,
       maxBuffer: 4 * 1024 * 1024
     });
+  }
+
+  async serviceDiagnostics() {
+    const service = await this.serviceStatus();
+    const containerId = await this.findServiceContainer();
+    if (!containerId) {
+      return { service, container: null, probe: null, logs: "" };
+    }
+
+    const inspect = await this.run([
+      "inspect",
+      "--format",
+      "{{.Id}}\t{{.Name}}\t{{.State.Status}}\t{{.State.StartedAt}}\t{{.RestartCount}}",
+      containerId
+    ], { timeout: 30 * 1000 });
+
+    let container = null;
+    if (inspect.ok) {
+      const [id, rawName, state, startedAt, restartCount] = inspect.stdout.trim().split("\t");
+      container = {
+        id,
+        name: String(rawName || "").replace(/^\//, ""),
+        state,
+        startedAt,
+        restartCount: Number(restartCount || 0)
+      };
+    }
+
+    const [probe, logs] = await Promise.all([
+      service.state === "running"
+        ? this.run(["exec", containerId, "sh", "-lc", DIAGNOSTIC_PROBE], {
+            timeout: 30 * 1000,
+            maxBuffer: 1024 * 1024
+          })
+        : Promise.resolve(null),
+      this.run([
+        "logs",
+        "--timestamps",
+        "--since",
+        container?.startedAt || "24h",
+        "--tail",
+        "5000",
+        containerId
+      ], {
+        timeout: 30 * 1000,
+        maxBuffer: 8 * 1024 * 1024
+      })
+    ]);
+
+    return {
+      service,
+      container,
+      probe,
+      logs: `${logs.stdout || ""}${logs.stderr ? `\n${logs.stderr}` : ""}`
+    };
+  }
+
+  async waitForServiceLog(needles, since, timeoutMs = 10 * 60 * 1000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const containerId = await this.findServiceContainer();
+      if (containerId) {
+        const result = await this.run([
+          "logs",
+          "--since",
+          since,
+          "--tail",
+          "5000",
+          containerId
+        ], {
+          timeout: 30 * 1000,
+          maxBuffer: 8 * 1024 * 1024
+        });
+        const output = `${result.stdout || ""}\n${result.stderr || ""}`;
+        if (needles.some((needle) => output.includes(needle))) return true;
+      }
+      await wait(2000);
+    }
+    return false;
   }
 }

@@ -16,6 +16,10 @@
   --color-ring: #186a5a;
   --color-destructive: #b13d2e;
   --color-destructive-foreground: #ffffff;
+  --color-success: #176d59;
+  --color-success-foreground: #ffffff;
+  --color-warning: #bc8124;
+  --color-warning-foreground: #7a4d09;
 }
 
 html {
@@ -32,4 +36,98 @@ body {
     repeating-linear-gradient(90deg, rgba(32, 35, 31, 0.035) 0 1px, transparent 1px 88px),
     var(--color-background);
   font-family: "Segoe UI", "Aptos", "Trebuchet MS", sans-serif;
+}
+
+.diagnostic-hero {
+  overflow: hidden;
+  background:
+    linear-gradient(112deg, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 48%),
+    var(--color-card);
+}
+
+.diagnostic-kicker {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.diagnostic-title {
+  font-family: "Bahnschrift Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: clamp(1.75rem, 4vw, 2.65rem);
+  font-stretch: condensed;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+}
+
+.diagnostic-rail {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagnostic-step {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.diagnostic-node {
+  position: relative;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+}
+
+.diagnostic-node svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.diagnostic-node-pass {
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-success);
+}
+
+.diagnostic-node-warn {
+  border-color: color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  color: var(--color-warning-foreground);
+}
+
+.diagnostic-node-fail {
+  border-color: color-mix(in srgb, var(--color-destructive) 50%, var(--color-border));
+  color: var(--color-destructive);
+}
+
+@media (min-width: 768px) {
+  .diagnostic-rail {
+    position: relative;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+
+  .diagnostic-rail::before {
+    position: absolute;
+    top: 1.22rem;
+    right: 8%;
+    left: 8%;
+    height: 1px;
+    background: var(--color-border);
+    content: "";
+  }
+
+  .diagnostic-step {
+    position: relative;
+    grid-template-columns: 1fr;
+  }
 }

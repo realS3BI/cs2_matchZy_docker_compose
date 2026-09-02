@@ -13,6 +13,14 @@ export function CardTitle({ className, ...props }: ComponentPropsWithoutRef<"h2"
   return <h2 className={cn("text-base font-semibold leading-none", className)} {...props} />;
 }
 
+export function CardDescription({ className, ...props }: ComponentPropsWithoutRef<"p">) {
+  return <p className={cn("text-sm text-muted-foreground", className)} {...props} />;
+}
+
 export function CardContent({ className, ...props }: ComponentPropsWithoutRef<"div">) {
   return <div className={cn("p-5 pt-0", className)} {...props} />;
+}
+
+export function CardFooter({ className, ...props }: ComponentPropsWithoutRef<"div">) {
+  return <div className={cn("flex items-center gap-2 p-5 pt-0", className)} {...props} />;
 }

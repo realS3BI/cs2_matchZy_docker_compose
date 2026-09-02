@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Activity,
   Copy,
   Crosshair,
   Download,
@@ -37,9 +38,11 @@ import { parseSetposSetang } from "./lib/nades";
 import { UploadButton } from "./lib/uploadthing";
 import "./index.css";
 import "@uploadthing/react/styles.css";
+import { Diagnostics } from "./diagnostics";
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Server },
+  { id: "diagnostics", label: "Diagnostics", icon: Activity },
   { id: "settings", label: "Settings", icon: Save },
   { id: "admins", label: "Admins", icon: Shield },
   { id: "nades", label: "Nades", icon: Crosshair },
@@ -108,14 +111,14 @@ function Shell({ children, tab, setTab, message, error, onLogout }) {
       <header className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold">CS2 MatchZy Admin</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Service settings, admins, and restart control.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Coolify service control, MatchZy diagnostics, and server configuration.</p>
         </div>
         <Button variant="secondary" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           Logout
         </Button>
       </header>
-      <nav className="mb-5 flex gap-2 overflow-x-auto border-b border-border pb-2">
+      <nav className="mb-5 flex gap-2 overflow-x-auto border-b border-border pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((item) => {
           const Icon = item.icon;
           return (
@@ -877,6 +880,9 @@ function App() {
           onApply={() => runAction(() => api("/api/server/apply", { method: "POST", body: "{}" }))}
           onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))}
         />
+      ) : null}
+      {tab === "diagnostics" ? (
+        <Diagnostics active={tab === "diagnostics"} onOpenLogs={() => setTab("logs")} />
       ) : null}
       {tab === "settings" ? (
         <Settings

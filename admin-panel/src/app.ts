@@ -18,6 +18,7 @@ import {
   sanitizeNades
 } from "./validators.js";
 import { createRouteHandler } from "uploadthing/express";
+import { buildDiagnostics } from "./diagnostics.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -78,6 +79,31 @@ async function writeAdminRuntimeFiles(config, admins) {
   await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(admins));
 }
 
+async function writeServerRuntimeFiles(config, nadesSync, env, admins, nades) {
+  await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(env));
+  await writeAdminRuntimeFiles(config, admins);
+  await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
+  await nadesSync?.writeFromMongo(nades);
+}
+
+async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) {
+  const observed = await compose.waitForServiceLog(
+    ["[pre.sh] Hook finished successfully", "[pre.sh] Hook failed"],
+    since
+  );
+
+  const resetEnv = sanitizeEnv({ ...(await store.getSettings()), MOD_REINSTALL: "0" });
+  await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(resetEnv));
+  await store.saveSettings(resetEnv);
+  await store.logAction(
+    "repair_reset",
+    observed ? "success" : "failed",
+    observed
+      ? "Reset MOD_REINSTALL after the one-shot repair"
+      : "Reset MOD_REINSTALL after timing out while waiting for the mod bootstrap"
+  );
+}
+
 export function createApp({ config, store, compose, nadesSync }) {
   const app = express();
   app.disable("x-powered-by");
@@ -119,6 +145,10 @@ export function createApp({ config, store, compose, nadesSync }) {
   app.post("/api/auth/logout", (req, res) => {
     res.clearCookie(COOKIE_NAME);
     res.json({ ok: true });
+  });
+
+  app.get("/healthz", (req, res) => {
+    res.json({ ok: true, service: "cs2-matchzy-admin" });
   });
 
   app.use("/api", requireAuth(config));
@@ -195,10 +225,7 @@ export function createApp({ config, store, compose, nadesSync }) {
       ADMINS: admins.map((entry) => entry.identitySteam64).join(",")
     });
 
-    await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(nextEnv));
-    await writeAdminRuntimeFiles(config, admins);
-    await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
-    await nadesSync?.writeFromMongo(nades);
+    await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
     if (config.envFile) {
       await writeEnvFile(config.envFile, nextEnv);
     }
@@ -215,12 +242,55 @@ export function createApp({ config, store, compose, nadesSync }) {
     res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result) });
   });
 
+  app.post("/api/server/repair", async (req, res) => {
+    const admins = await store.getAdmins();
+    const nades = await store.getNades();
+    const repairEnv = sanitizeEnv({
+      ...(await store.getSettings()),
+      MOD_REINSTALL: "1",
+      ADMINS: admins.map((entry) => entry.identitySteam64).join(",")
+    });
+
+    const repairStartedAt = new Date().toISOString();
+    await writeServerRuntimeFiles(config, nadesSync, repairEnv, admins, nades);
+    await store.saveSettings(repairEnv);
+    const result = await compose.restartService();
+
+    if (result.ok) {
+      void resetRepairFlagAfterBootstrap({ config, store, compose, since: repairStartedAt }).catch(async (error) => {
+        await store.logAction("repair_reset", "failed", error.message || "Could not reset MOD_REINSTALL");
+      });
+    } else {
+      const resetEnv = sanitizeEnv({ ...repairEnv, MOD_REINSTALL: "0" });
+      await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(resetEnv));
+      await store.saveSettings(resetEnv);
+    }
+
+    await store.logAction("repair", result.ok ? "success" : "failed", actionMessage(result), { code: result.code });
+    res.status(result.ok ? 200 : 500).json({
+      ok: result.ok,
+      message: result.ok ? "One-shot mod repair started. Diagnostics will update as the server boots." : actionMessage(result)
+    });
+  });
+
   app.get("/api/server/status", async (req, res) => {
     res.json({
       service: await compose.serviceStatus(),
       nadesSync: nadesSync?.status() || { enabled: false },
-      lastAction: await store.getLastAction(["apply", "restart", "save", "nades_sync", "login_fail"])
+      lastAction: await store.getLastAction(["apply", "restart", "repair", "save", "nades_sync", "login_fail"])
     });
+  });
+
+  app.get("/api/server/diagnostics", async (req, res) => {
+    const [raw, desired] = await Promise.all([
+      compose.serviceDiagnostics(),
+      store.getSettings()
+    ]);
+    res.json(buildDiagnostics({
+      ...raw,
+      desired,
+      controlMode: config.controlMode
+    }));
   });
 
   app.get("/api/server/logs", async (req, res) => {

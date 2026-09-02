@@ -969,7 +969,7 @@ _matchzy_bootstrap_main() (
       resolve_github_release_asset \
         "Salvatore-Als/cs2-fake-rcon" \
         "$FAKE_RCON_VERSION" \
-        'linux\.tar\.gz$' \
+        'linux\.(zip|tar\.gz)$' \
         'cs2-fake-rcon'
     )
     FAKE_RCON_TAG="${_fake_rcon_release[0]:-}"
@@ -1086,7 +1086,7 @@ _matchzy_bootstrap_main() (
       resolve_github_release_asset \
         "Source2ZE/MultiAddonManager" \
         "$MULTIADDONMANAGER_VERSION" \
-        'linux\.tar\.gz$' \
+        '(steamrt3|linux)\.tar\.gz$' \
         'MultiAddonManager'
     )
     MULTIADDONMANAGER_TAG="${_multiaddonmanager_release[0]:-}"

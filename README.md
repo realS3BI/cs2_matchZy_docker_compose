@@ -120,6 +120,22 @@ Der Button `Restart CS2` fuehrt nur aus:
 docker restart <cs2-container>
 ```
 
+### MatchZy-Diagnose und One-shot-Reparatur
+
+Der Tab `Diagnostics` verfolgt die komplette Startkette:
+
+```text
+CS2 container -> Mod bootstrap -> Metamod -> CounterStrikeSharp -> MatchZy
+```
+
+Das Panel liest dafuer den Zustand des `cs2` Containers, die Startup-Logs seit dem letzten Containerstart, feste Plugin-Dateipfade und die Versions-Tags aus `.mod-installer/state.env`. Der Diagnose-Report enthaelt keine Environment-Werte oder Zugangsdaten und kann ueber `Copy report` sicher fuer die Fehlersuche kopiert werden.
+
+Wenn die Kette blockiert ist, setzt `Repair mods once` fuer genau einen Start `MOD_REINSTALL=1` und startet den `cs2` Container neu. Das Panel setzt den Wert nach Abschluss des Bootstrap-Hooks automatisch auf `0` zurueck. Der Button ist bei einer vollstaendig gesunden Startkette deaktiviert.
+
+`GET /healthz` ist ohne Panel-Login erreichbar und wird vom Docker-Healthcheck des `admin-panel` Containers verwendet. In Coolify kann derselbe Pfad fuer einen zusaetzlichen HTTP-Healthcheck genutzt werden.
+
+Nach Aenderungen an `cs2/` oder `admin-panel/` muss in Coolify die gesamte Compose-Ressource neu gebaut und deployed werden. Ein einfacher Neustart verwendet weiterhin die alten Images.
+
 Wenn du lokal explizit den alten Compose-Recreate-Pfad nutzen willst, kannst du `ADMIN_PANEL_CONTROL_MODE=compose` setzen und zusaetzlich `COMPOSE_PROJECT_DIR`, `COMPOSE_FILE` und `ADMIN_PANEL_ENV_FILE` mounten/setzen.
 
 ### Coolify Domain / Vite Routing
