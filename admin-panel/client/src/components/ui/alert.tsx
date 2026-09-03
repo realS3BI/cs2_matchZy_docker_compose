@@ -10,8 +10,8 @@ export function Alert({ className, variant = "default", ...props }: AlertProps) 
     <section
       role="alert"
       className={cn(
-        "grid gap-1 rounded-md border p-4 text-sm",
-        variant === "default" && "border-border bg-muted/50 text-foreground",
+        "grid gap-1 rounded-lg border p-4 text-sm",
+        variant === "default" && "border-border bg-card text-foreground",
         variant === "destructive" && "border-destructive/30 bg-destructive/10 text-destructive",
         variant === "warning" && "border-warning/35 bg-warning/10 text-warning-foreground",
         variant === "success" && "border-success/30 bg-success/10 text-success",
@@ -23,9 +23,9 @@ export function Alert({ className, variant = "default", ...props }: AlertProps) 
 }
 
 export function AlertTitle({ className, ...props }: ComponentPropsWithoutRef<"h3">) {
-  return <h3 className={cn("font-semibold", className)} {...props} />;
+  return <h3 className={cn("font-medium", className)} {...props} />;
 }
 
 export function AlertDescription({ className, ...props }: ComponentPropsWithoutRef<"div">) {
-  return <div className={cn("text-sm opacity-90", className)} {...props} />;
+  return <div className={cn("text-sm leading-relaxed opacity-90", className)} {...props} />;
 }

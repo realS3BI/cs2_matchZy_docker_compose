@@ -233,27 +233,29 @@ export function Diagnostics({ active, onOpenLogs }) {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={loadDiagnostics} disabled={loading}>
-          <RefreshCw data-icon="inline-start" className={cn(loading && "animate-spin")} />
-          Run diagnostics
-        </Button>
-        <Button variant="secondary" onClick={copyReport} disabled={!diagnostics}>
-          <Clipboard data-icon="inline-start" />
-          Copy report
-        </Button>
-        <Button variant="secondary" onClick={onOpenLogs}>
-          <Terminal data-icon="inline-start" />
-          Open Docker logs
-        </Button>
-        <Button onClick={() => setRepairOpen(true)} disabled={!diagnostics?.repairAvailable || loading}>
-          <Wrench data-icon="inline-start" />
-          Repair mods once
-        </Button>
-        {diagnostics?.generatedAt ? (
-          <span className="text-xs text-muted-foreground">Checked {formatDate(diagnostics.generatedAt)}</span>
-        ) : null}
-      </div>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-center gap-2 p-3 sm:p-3">
+          <Button variant="secondary" onClick={loadDiagnostics} disabled={loading}>
+            <RefreshCw data-icon="inline-start" className={cn(loading && "animate-spin")} />
+            Run diagnostics
+          </Button>
+          <Button variant="secondary" onClick={copyReport} disabled={!diagnostics}>
+            <Clipboard data-icon="inline-start" />
+            Copy report
+          </Button>
+          <Button variant="secondary" onClick={onOpenLogs}>
+            <Terminal data-icon="inline-start" />
+            Open Docker logs
+          </Button>
+          <Button onClick={() => setRepairOpen(true)} disabled={!diagnostics?.repairAvailable || loading}>
+            <Wrench data-icon="inline-start" />
+            Repair mods once
+          </Button>
+          {diagnostics?.generatedAt ? (
+            <span className="ml-auto text-xs text-muted-foreground">Checked {formatDate(diagnostics.generatedAt)}</span>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {error ? (
         <Alert variant="destructive" className="mb-4">

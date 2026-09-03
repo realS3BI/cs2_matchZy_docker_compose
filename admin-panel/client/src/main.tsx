@@ -11,7 +11,10 @@ import {
   Crosshair,
   Download,
   FileInput,
+  LayoutDashboard,
+  LockKeyhole,
   LogOut,
+  MapPinned,
   Pause,
   Play,
   Plus,
@@ -19,17 +22,18 @@ import {
   RotateCcw,
   Save,
   Server,
-  Settings2,
   Shield,
   Terminal,
   Trash2,
-  UploadCloud
+  UploadCloud,
+  UsersRound
 } from "lucide-react";
 import { api } from "./lib/api";
 import { cn } from "./lib/utils";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import {
   Dialog,
@@ -41,24 +45,28 @@ import {
 } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
-import { Field, FieldDescription, FieldLabel } from "./components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "./components/ui/field";
 import { NativeSelect } from "./components/ui/native-select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "./components/ui/switch";
 import { parseSetposSetang } from "./lib/nades";
 import { UploadButton } from "./lib/uploadthing";
+import "@fontsource-variable/ibm-plex-sans";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
-import "@uploadthing/react/styles.css";
 import { Diagnostics } from "./diagnostics";
 
 const tabs = [
-  { id: "overview", label: "Overview", icon: Server },
-  { id: "server", label: "Server", icon: Settings2 },
-  { id: "plugins", label: "Plugins", icon: Boxes },
-  { id: "access", label: "Access", icon: Shield },
-  { id: "maintenance", label: "Maintenance", icon: CalendarClock },
-  { id: "nades", label: "Nades", icon: Crosshair },
-  { id: "diagnostics", label: "Diagnostics", icon: Activity },
-  { id: "logs", label: "Logs", icon: Terminal }
+  { id: "overview", label: "Overview", icon: LayoutDashboard, group: "Workspace" },
+  { id: "server", label: "Server", icon: Server, group: "Workspace" },
+  { id: "plugins", label: "Plugins", icon: Boxes, group: "Workspace" },
+  { id: "access", label: "Access", icon: Shield, group: "Workspace" },
+  { id: "maintenance", label: "Maintenance", icon: CalendarClock, group: "Operations" },
+  { id: "nades", label: "Nades", icon: Crosshair, group: "Operations" },
+  { id: "diagnostics", label: "Diagnostics", icon: Activity, group: "Operations" },
+  { id: "logs", label: "Logs", icon: Terminal, group: "Operations" }
 ];
 
 function Message({ message = "", error = "" }: { message?: string; error?: string }) {
@@ -86,79 +94,135 @@ function Login({ error, onLogin }) {
   }
 
   return (
-    <main className="mx-auto mt-[12vh] w-[min(420px,calc(100vw-32px))]">
-      <Card className="shadow-[0_18px_60px_rgba(32,35,31,0.12)]">
-        <CardHeader>
-          <p className="control-kicker">Private operations</p>
-          <CardTitle className="control-title text-3xl">CS2 control room</CardTitle>
-          <p className="text-sm text-muted-foreground">Sign in to manage the Coolify deployment.</p>
-        </CardHeader>
-        <CardContent>
-          <Message error={error} />
-          <form className="grid gap-4" onSubmit={submit}>
-            <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-              Password
-              <Input
-                autoFocus
-                autoComplete="current-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            <Button disabled={busy}>{busy ? "Logging in..." : "Login"}</Button>
-          </form>
-        </CardContent>
-      </Card>
+    <main className="login-shell login-grid grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
+      <section className="hidden flex-col justify-between border-r border-sidebar-border p-12 text-sidebar-accent-foreground lg:flex xl:p-16">
+        <div className="flex items-center gap-3">
+          <span className="control-brand-mark"><Crosshair aria-hidden="true" /></span>
+          <div>
+            <p className="font-semibold">MatchZy Control</p>
+            <p className="font-mono text-[11px] text-sidebar-foreground/45">CS2 / COOLIFY</p>
+          </div>
+        </div>
+        <div className="max-w-xl">
+          <p className="mb-5 font-mono text-xs uppercase tracking-[0.14em] text-sidebar-foreground/45">Private operations</p>
+          <h1 className="control-title text-5xl leading-[1.02] xl:text-6xl">One place to run your match server.</h1>
+          <p className="mt-6 max-w-lg text-base leading-7 text-sidebar-foreground/60">Configure game modes, manage access and follow the container from a focused desktop workspace.</p>
+        </div>
+        <p className="font-mono text-xs text-sidebar-foreground/35">MATCHZY ADMIN PANEL</p>
+      </section>
+      <section className="grid min-h-screen place-items-center p-4 sm:p-8">
+        <Card className="w-full max-w-[430px] shadow-2xl">
+          <CardHeader className="gap-4">
+            <span className="metric-icon"><LockKeyhole aria-hidden="true" /></span>
+            <div className="grid gap-1.5">
+              <CardTitle className="control-title text-2xl">Sign in</CardTitle>
+              <CardDescription>Use the admin password for this Coolify deployment.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Message error={error} />
+            <form onSubmit={submit}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel>Password</FieldLabel>
+                  <Input
+                    autoFocus
+                    autoComplete="current-password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </Field>
+                <Button className="w-full" disabled={busy}>{busy ? "Logging in..." : "Open control room"}</Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+      </section>
     </main>
   );
 }
 
-function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, onSave, onApply }) {
+function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, onSave, onApply, serviceState }) {
+  const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
+  const tabGroups = ["Workspace", "Operations"];
+
   return (
-    <main className="control-shell mx-auto min-h-screen w-full max-w-[1500px] lg:grid lg:grid-cols-[248px_1fr]">
-      <aside className="control-sidebar border-b border-white/10 px-4 py-5 text-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
-        <div className="mb-5 flex items-start justify-between gap-3 lg:mb-9">
-          <div>
-            <p className="control-kicker text-[#8fd4be]">CS2 / OPS</p>
-            <h1 className="control-title mt-2 text-2xl text-white">Control room</h1>
-            <p className="mt-2 hidden text-xs leading-relaxed text-white/55 lg:block">One source of truth for your Coolify game server.</p>
+    <div className="control-shell">
+      <aside className="control-sidebar flex min-w-0 flex-col border-b border-sidebar-border lg:border-b-0 lg:border-r">
+        <header className="flex items-center justify-between gap-3 border-b border-sidebar-border p-4 lg:px-5 lg:py-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="control-brand-mark"><Crosshair aria-hidden="true" /></span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-sidebar-accent-foreground">MatchZy Control</p>
+              <p className="font-mono text-[10px] tracking-[0.12em] text-sidebar-foreground/40">CS2 / COOLIFY</p>
+            </div>
           </div>
-          <Button className="text-white hover:bg-white/10" variant="ghost" size="icon" title="Log out" onClick={onLogout}>
-            <LogOut />
+          <Button className="lg:hidden" variant="sidebar" size="icon" title="Log out" onClick={onLogout}>
+            <LogOut aria-hidden="true" />
           </Button>
-        </div>
-        <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:grid" aria-label="Control room sections">
-          {tabs.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.id} type="button" className={cn("control-nav-item", tab === item.id && "control-nav-item-active")} onClick={() => setTab(item.id)}>
-                <Icon aria-hidden="true" />
-                <span>{item.label}</span>
-                <ChevronRight className="ml-auto hidden lg:block" aria-hidden="true" />
-              </button>
-            );
-          })}
+        </header>
+        <nav className="flex min-w-0 gap-1 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-1 lg:flex-col lg:gap-6 lg:overflow-y-auto lg:p-4" aria-label="Control room sections">
+          {tabGroups.map((group) => (
+            <div key={group} className="contents lg:flex lg:flex-col lg:gap-1">
+              <p className="control-nav-label mb-1 hidden lg:block">{group}</p>
+              {tabs.filter((item) => item.group === group).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} type="button" className={cn("control-nav-item", tab === item.id && "control-nav-item-active")} onClick={() => setTab(item.id)}>
+                    <Icon aria-hidden="true" />
+                    <span>{item.label}</span>
+                    <ChevronRight className="ml-auto hidden lg:block" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
-      </aside>
-      <div className="min-w-0 px-3 pb-28 pt-5 sm:px-6 lg:px-9 lg:pt-8">
-        <Message message={message} error={error} />
-        {children}
-      </div>
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 py-3 shadow-[0_-8px_30px_rgba(20,27,24,0.08)] backdrop-blur lg:left-[248px]">
-        <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-3">
-          <span className="hidden text-sm text-muted-foreground sm:block">{dirty ? "Draft changes are not active yet." : "Configuration matches the saved draft."}</span>
-          <div className="ml-auto flex gap-2">
-            <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}>
-              <Save data-icon="inline-start" /> Save draft
-            </Button>
-            <Button onClick={onApply} disabled={busy}>
-              <UploadCloud data-icon="inline-start" /> Apply & restart
-            </Button>
+        <footer className="hidden border-t border-sidebar-border p-4 lg:block">
+          <div className="mb-3 flex items-center gap-2 px-2 text-xs text-sidebar-foreground/50">
+            <span className="server-status-dot text-success" />
+            Private admin session
           </div>
-        </div>
+          <Button className="w-full justify-start" variant="sidebar" onClick={onLogout}>
+            <LogOut data-icon="inline-start" />
+            Log out
+          </Button>
+        </footer>
+      </aside>
+      <div className="min-w-0">
+        <header className="control-topbar sticky top-0 z-30">
+          <div className="control-content flex min-h-16 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
+            <div className="hidden items-center gap-2 text-sm sm:flex">
+              <span className="text-muted-foreground">Control room</span>
+              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+              <span className="font-medium">{activeTab.label}</span>
+            </div>
+            <div className="flex items-center gap-2 sm:ml-auto">
+              <Badge variant={serviceState === "running" ? "success" : "outline"}>
+                <span className="server-status-dot" />
+                {serviceState || "unknown"}
+              </Badge>
+              <Badge className="hidden md:inline-flex" variant={dirty ? "warning" : "outline"}>{dirty ? "Unsaved changes" : "Draft saved"}</Badge>
+            </div>
+            <div className="ml-auto flex gap-2 sm:ml-0">
+              <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}>
+                <Save data-icon="inline-start" />
+                Save draft
+              </Button>
+              <Button onClick={onApply} disabled={busy}>
+                <UploadCloud data-icon="inline-start" />
+                Apply & restart
+              </Button>
+            </div>
+          </div>
+        </header>
+        <main className="control-content min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 xl:px-10">
+          <Message message={message} error={error} />
+          {children}
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -170,11 +234,11 @@ function formatDate(value) {
 
 function PageHeader({ eyebrow, title, description, actions = null }) {
   return (
-    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-8">
       <div className="max-w-3xl">
         <p className="control-kicker">{eyebrow}</p>
-        <h2 className="control-title mt-2 text-4xl">{title}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
+        <h2 className="control-title mt-2 text-2xl sm:text-3xl">{title}</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
       {actions}
     </header>
@@ -188,6 +252,12 @@ function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, bu
   const [restartOpen, setRestartOpen] = useState(false);
   const activeMode = (policy?.modes || []).find((mode) => mode.id === env.SERVER_MODE) || policy?.mode;
   const enabledPlugins = (policy?.plugins || []).filter((plugin) => plugin.locked || (plugin.envKey ? env[plugin.envKey] === "1" : plugin.enabled)).length;
+  const metrics = [
+    { label: "Player slots", value: env.CS2_MAXPLAYERS || "Not set", detail: "Configured capacity", icon: UsersRound },
+    { label: "Plugins", value: enabledPlugins, detail: "Enabled components", icon: Boxes },
+    { label: "Server access", value: admins.length, detail: admins.length === 1 ? "Authorized person" : "Authorized people", icon: Shield },
+    { label: "Nade library", value: nades.length, detail: nades.length === 1 ? "Saved lineup" : "Saved lineups", icon: Crosshair }
+  ];
 
   return (
     <>
@@ -197,43 +267,72 @@ function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, bu
         description="The server's current lifecycle, selected game mode and next maintenance window."
         actions={<div className="flex gap-2"><Button variant="secondary" onClick={onRefresh} disabled={busy}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} /> Refresh</Button><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
       />
-      <section className="control-hero mb-5 overflow-hidden rounded-lg border border-white/10 p-5 text-white sm:p-7">
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={service?.state === "running" ? "success" : "destructive"}>{service?.state || "unknown"}</Badge>
-              <Badge className="border-white/20 text-white" variant="outline">{activeMode?.name || env.SERVER_MODE}</Badge>
-            </div>
-            <p className="control-title mt-5 max-w-2xl text-4xl text-white">{activeMode?.description}</p>
-          </div>
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md bg-white/10">
-            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Start map</dt><dd className="mt-2 font-mono text-sm">{env.CS2_STARTMAP}</dd></div>
-            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Players</dt><dd className="mt-2 font-mono text-sm">0–{env.CS2_MAXPLAYERS}</dd></div>
-            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Plugins</dt><dd className="mt-2 font-mono text-sm">{enabledPlugins} active</dd></div>
-            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Access</dt><dd className="mt-2 font-mono text-sm">{admins.length} people</dd></div>
-          </dl>
-        </div>
+      <section className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <Card key={metric.label} className="metric-card">
+              <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
+                <div className="grid gap-1">
+                  <CardDescription>{metric.label}</CardDescription>
+                  <CardTitle className="text-2xl">{metric.value}</CardTitle>
+                </div>
+                <span className="metric-icon"><Icon aria-hidden="true" /></span>
+              </CardHeader>
+              <CardContent><p className="text-xs text-muted-foreground">{metric.detail}</p></CardContent>
+            </Card>
+          );
+        })}
       </section>
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+      <section className="grid gap-4 xl:grid-cols-[1.55fr_0.75fr]">
         <Card>
-          <CardHeader><CardTitle>Server lifecycle</CardTitle><CardDescription>The same path is checked by Diagnostics after every boot.</CardDescription></CardHeader>
-          <CardContent>
-            <ol className="lifecycle-rail">
-              {["Coolify image", "Bootstrap", "Game process", "Daily recycle"].map((label, index) => (
-                <li key={label}><span className={cn("lifecycle-node", index < 3 && service?.state === "running" && "lifecycle-node-active")}>{index < 3 && service?.state === "running" ? <Check /> : <CircleDot />}</span><span>{label}</span></li>
-              ))}
-            </ol>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div className="grid gap-1.5">
+              <CardTitle>Server overview</CardTitle>
+              <CardDescription>{activeMode?.description || "Current runtime configuration."}</CardDescription>
+            </div>
+            <Badge variant={service?.state === "running" ? "success" : "destructive"}>
+              <span className="server-status-dot" />
+              {service?.state || "unknown"}
+            </Badge>
+          </CardHeader>
+          <CardContent className="grid gap-6">
+            <dl className="grid gap-4 rounded-lg border border-border bg-muted/35 p-4 sm:grid-cols-3">
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Game mode</dt><dd className="text-sm font-medium">{activeMode?.name || env.SERVER_MODE || "Not set"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Start map</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{env.CS2_STARTMAP || "Not set"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Container</dt><dd className="font-mono text-xs">{service?.containerName || "Not detected"}</dd></div>
+            </dl>
+            <div>
+              <p className="mb-4 text-sm font-medium">Lifecycle</p>
+              <ol className="lifecycle-rail">
+                {["Coolify image", "Bootstrap", "Game process", "Daily recycle"].map((label, index) => (
+                  <li key={label}><span className={cn("lifecycle-node", index < 3 && service?.state === "running" && "lifecycle-node-active")}>{index < 3 && service?.state === "running" ? <Check /> : <CircleDot />}</span><span>{label}</span></li>
+                ))}
+              </ol>
+            </div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Next maintenance</CardTitle><CardDescription>A short daily restart limits long-running degradation.</CardDescription></CardHeader>
-          <CardContent className="grid gap-4">
-            <div><p className="text-2xl font-semibold">{maintenance?.enabled ? maintenance.time : "Disabled"}</p><p className="text-sm text-muted-foreground">{maintenance?.timezone || env.AUTO_RESTART_TIMEZONE}</p></div>
-            <div className="border-t border-border pt-4 text-sm"><span className="text-muted-foreground">Next run</span><p className="mt-1 font-medium">{formatDate(maintenance?.nextRunAt)}</p></div>
+          <CardHeader><CardTitle>Operations</CardTitle><CardDescription>Maintenance and the latest panel action.</CardDescription></CardHeader>
+          <CardContent className="grid gap-5">
+            <div className="grid gap-1">
+              <p className="text-xs text-muted-foreground">Next maintenance</p>
+              <p className="text-2xl font-semibold tracking-tight">{maintenance?.enabled ? maintenance.time : "Disabled"}</p>
+              <p className="text-xs text-muted-foreground">{maintenance?.timezone || env.AUTO_RESTART_TIMEZONE}</p>
+            </div>
+            <Separator />
+            <div className="grid gap-1">
+              <p className="text-xs text-muted-foreground">Next run</p>
+              <p className="text-sm font-medium">{formatDate(maintenance?.nextRunAt)}</p>
+            </div>
+            <Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}>
+              <RotateCcw data-icon="inline-start" />
+              Restart server
+            </Button>
           </CardContent>
         </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Latest control action</CardTitle></CardHeader>
+        <Card className="xl:col-span-2">
+          <CardHeader><CardTitle>Latest control action</CardTitle><CardDescription>The newest saved operation from this control panel.</CardDescription></CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-[160px_130px_1fr] sm:items-start">
             <span className="text-sm">{last?.type || "No action"}</span>
             <Badge className="w-fit" variant={last?.status === "failed" ? "destructive" : "success"}>{last?.status || "idle"}</Badge>
@@ -258,7 +357,7 @@ function Settings({ env, setEnv, policy }) {
 
   return (
     <>
-      <PageHeader eyebrow="Configuration" title="Server" description="Only supported settings are exposed here. The panel writes one validated runtime configuration for Coolify." />
+      <PageHeader eyebrow="Configuration" title="Server settings" description="Edit the supported runtime settings used by the Coolify deployment." />
       <div className="grid gap-4">
         {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || env.SERVER_MODE === "matchzy").map((group) => (
           <Card key={group.id}>
@@ -277,7 +376,7 @@ function SettingField({ field, value, onChange }) {
   if (field.type === "boolean") {
     const checked = ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
     return (
-      <Field className="flex min-h-16 grid-cols-[1fr_auto] items-center rounded-md border border-border bg-background px-4 py-3">
+      <Field className="flex min-h-16 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 px-4 py-3">
         <span><FieldLabel>{field.label}</FieldLabel>{field.description ? <FieldDescription className="mt-1 block">{field.description}</FieldDescription> : null}</span>
         <Switch checked={checked} onCheckedChange={(next) => onChange(next ? "1" : "0")} />
       </Field>
@@ -288,6 +387,7 @@ function SettingField({ field, value, onChange }) {
     <Field className={field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : ""}>
       <FieldLabel>{field.label}</FieldLabel>
       <Control placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(event.target.value)} />
+      {field.description ? <FieldDescription>{field.description}</FieldDescription> : null}
     </Field>
   );
 }
@@ -296,16 +396,22 @@ function Plugins({ env, setEnv, policy }) {
   const mode = env.SERVER_MODE || "matchzy";
   return (
     <>
-      <PageHeader eyebrow="Compatibility policy" title="Modes & plugins" description="Choose one game mode. Optional plugins show the dependency stack the installer will manage." />
+      <PageHeader eyebrow="Compatibility policy" title="Game modes & plugins" description="Choose one game mode and control the optional components installed with it." />
       <Card className="mb-4">
         <CardHeader><CardTitle>Server mode</CardTitle><CardDescription>MatchZy and Executes solve different game flows and cannot run together.</CardDescription></CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-3">
-          {(policy?.modes || []).map((item) => (
-            <button key={item.id} type="button" className={cn("mode-choice", mode === item.id && "mode-choice-active")} onClick={() => setEnv((current) => ({ ...current, SERVER_MODE: item.id, MATCHZY_ENABLED: item.id === "matchzy" ? "1" : "0", EXECUTES_ENABLED: item.id === "executes" ? "1" : "0" }))}>
-              <span className="flex items-center justify-between"><strong>{item.name}</strong>{mode === item.id ? <Check /> : <CircleDot />}</span>
-              <span className="text-sm leading-relaxed text-muted-foreground">{item.description}</span>
-            </button>
-          ))}
+        <CardContent>
+          <RadioGroup
+            className="lg:grid-cols-3"
+            value={mode}
+            onValueChange={(nextMode) => setEnv((current) => ({ ...current, SERVER_MODE: nextMode, MATCHZY_ENABLED: nextMode === "matchzy" ? "1" : "0", EXECUTES_ENABLED: nextMode === "executes" ? "1" : "0" }))}
+          >
+            {(policy?.modes || []).map((item) => (
+              <label key={item.id} className={cn("mode-choice", mode === item.id && "mode-choice-active")}>
+                <span className="flex items-center justify-between"><strong>{item.name}</strong><RadioGroupItem value={item.id} aria-label={item.name} /></span>
+                <span className="text-sm leading-relaxed text-muted-foreground">{item.description}</span>
+              </label>
+            ))}
+          </RadioGroup>
         </CardContent>
       </Card>
       <Card>
@@ -344,26 +450,24 @@ function Admins({ admins, setAdmins, flagPresets, roles }) {
       <Card>
         <CardHeader><CardTitle>People with server access</CardTitle><CardDescription>Use Custom only when the predefined roles are not precise enough.</CardDescription></CardHeader>
         <CardContent className="grid gap-3">
-          {admins.length === 0 ? <p className="text-sm text-muted-foreground">No one has panel-managed in-game permissions.</p> : null}
+          {admins.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No one has panel-managed in-game permissions. Add a person to assign a role.</div> : null}
           {admins.map((admin, index) => (
-            <div key={index} className="grid gap-3 rounded-md border border-border bg-background p-4 xl:grid-cols-[1fr_1.2fr_220px_44px]">
+            <div key={index} className="grid gap-3 rounded-lg border border-border bg-muted/25 p-4 xl:grid-cols-[1fr_1.2fr_220px_44px]">
               <Field><FieldLabel>Name</FieldLabel><Input value={admin.name || ""} placeholder="Display name" onChange={(event) => updateAdmin(index, { name: event.target.value })} /></Field>
               <Field><FieldLabel>Steam64 ID</FieldLabel><Input value={admin.identitySteam64 || ""} placeholder="7656119…" onChange={(event) => updateAdmin(index, { identitySteam64: event.target.value })} /></Field>
               <Field><FieldLabel>Role</FieldLabel><NativeSelect value={admin.role || "owner"} onChange={(event) => updateAdmin(index, { role: event.target.value })}>{(roles || []).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</NativeSelect></Field>
               <Button className="self-end" variant="secondary" size="icon" title="Remove" onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
-              {admin.role === "custom" ? <div className="flex flex-wrap gap-2 rounded-md border border-border bg-card p-3 xl:col-span-4">
+              {admin.role === "custom" ? <FieldGroup className="flex-row flex-wrap gap-3 rounded-md border border-border bg-card p-3 xl:col-span-4">
                 {flagPresets.map((flag) => (
-                  <label key={flag} className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                    <input
-                      className="h-4 w-4 accent-primary"
-                      type="checkbox"
+                  <Field key={flag} className="flex grid-cols-[auto_1fr] items-center gap-2">
+                    <Checkbox
                       checked={(admin.flags || []).includes(flag)}
-                      onChange={(event) => toggleFlag(index, flag, event.target.checked)}
+                      onCheckedChange={(checked) => toggleFlag(index, flag, checked === true)}
                     />
-                    {flag}
-                  </label>
+                    <FieldLabel className="font-mono text-xs text-muted-foreground">{flag}</FieldLabel>
+                  </Field>
                 ))}
-              </div> : <p className="text-xs text-muted-foreground xl:col-span-4">{(roles || []).find((role) => role.id === (admin.role || "owner"))?.description}</p>}
+              </FieldGroup> : <p className="text-xs text-muted-foreground xl:col-span-4">{(roles || []).find((role) => role.id === (admin.role || "owner"))?.description}</p>}
             </div>
           ))}
         </CardContent>
@@ -377,12 +481,12 @@ function Maintenance({ env, setEnv, status, onRestart, busy }) {
   const [restartOpen, setRestartOpen] = useState(false);
   return (
     <>
-      <PageHeader eyebrow="Uptime policy" title="Maintenance" description="A coordinated daily restart refreshes the long-running CS2 process without redeploying the Coolify resource." />
+      <PageHeader eyebrow="Uptime policy" title="Maintenance" description="Schedule a daily process restart without redeploying the Coolify resource." />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>
           <CardHeader><CardTitle>Daily server recycle</CardTitle><CardDescription>The panel claims one restart slot in MongoDB, so duplicate panel instances cannot restart the server twice.</CardDescription></CardHeader>
           <CardContent className="grid gap-5">
-            <Field className="flex grid-cols-[1fr_auto] items-center rounded-md border border-border bg-background p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch checked={enabled} onCheckedChange={(next) => setEnv((current) => ({ ...current, AUTO_RESTART_ENABLED: next ? "1" : "0" }))} /></Field>
+            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch checked={enabled} onCheckedChange={(next) => setEnv((current) => ({ ...current, AUTO_RESTART_ENABLED: next ? "1" : "0" }))} /></Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field><FieldLabel>Local time</FieldLabel><Input type="time" value={env.AUTO_RESTART_TIME || "05:00"} disabled={!enabled} onChange={(event) => setEnv((current) => ({ ...current, AUTO_RESTART_TIME: event.target.value }))} /></Field>
               <Field><FieldLabel>IANA timezone</FieldLabel><Input value={env.AUTO_RESTART_TIMEZONE || "Europe/Vienna"} disabled={!enabled} onChange={(event) => setEnv((current) => ({ ...current, AUTO_RESTART_TIMEZONE: event.target.value }))} /><FieldDescription>Example: Europe/Vienna; daylight-saving changes are handled automatically.</FieldDescription></Field>
@@ -393,8 +497,8 @@ function Maintenance({ env, setEnv, status, onRestart, busy }) {
         <Card>
           <CardHeader><CardTitle>Schedule state</CardTitle><CardDescription>Reported by the running scheduler.</CardDescription></CardHeader>
           <CardContent className="grid gap-4 text-sm">
-            <div><span className="text-muted-foreground">Next run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.nextRunAt)}</p></div>
-            <div className="border-t border-border pt-4"><span className="text-muted-foreground">Last run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.lastRun?.lastRunAt)}</p></div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4"><span className="text-muted-foreground">Next run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.nextRunAt)}</p></div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4"><span className="text-muted-foreground">Last run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.lastRun?.lastRunAt)}</p></div>
             <Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button>
           </CardContent>
         </Card>
@@ -484,52 +588,52 @@ function NadeDialog({ env, open, onOpenChange, onAdd }) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add nade</DialogTitle>
-          <DialogDescription className="sr-only">Add a new nade lineup.</DialogDescription>
+          <DialogDescription>Add a lineup and attach up to ten reference images.</DialogDescription>
         </DialogHeader>
         {dialogError ? <Message error={dialogError} /> : null}
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-            Name
+        <FieldGroup className="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel>Name</FieldLabel>
             <Input value={draft.name || ""} onChange={(event) => updateDraft({ name: event.target.value })} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-            Map
+          </Field>
+          <Field>
+            <FieldLabel>Map</FieldLabel>
             <Input value={draft.map || ""} onChange={(event) => updateDraft({ map: event.target.value })} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-            Type
+          </Field>
+          <Field>
+            <FieldLabel>Type</FieldLabel>
             <NativeSelect
               value={draft.type || ""}
               onChange={(event) => updateDraft({ type: event.target.value })}
             >
               {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
             </NativeSelect>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-            Owner
+          </Field>
+          <Field>
+            <FieldLabel>Owner</FieldLabel>
             <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground md:col-span-2">
-            Description
+          </Field>
+          <Field className="md:col-span-2">
+            <FieldLabel>Description</FieldLabel>
             <Input value={draft.desc || ""} onChange={(event) => updateDraft({ desc: event.target.value })} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-            LineupPos
+          </Field>
+          <Field>
+            <FieldLabel>Lineup position</FieldLabel>
             <Input value={draft.lineupPos || ""} onChange={(event) => updateDraft({ lineupPos: event.target.value })} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-            LineupAng
+          </Field>
+          <Field>
+            <FieldLabel>Lineup angle</FieldLabel>
             <Input value={draft.lineupAng || ""} onChange={(event) => updateDraft({ lineupAng: event.target.value })} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-muted-foreground md:col-span-2">
-            setpos/setang
+          </Field>
+          <Field className="md:col-span-2">
+            <FieldLabel>setpos/setang</FieldLabel>
             <Textarea
               value={setposText}
               onChange={(event) => setSetposText(event.target.value)}
               placeholder="setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000"
             />
-          </label>
-        </div>
+          </Field>
+        </FieldGroup>
         <div className="grid gap-3">
           <UploadButton
             endpoint="lineupImageUploader"
@@ -646,25 +750,31 @@ function Nades({ env, nades, setNades, onSave }) {
 
   return (
     <>
-      <PageHeader eyebrow="Match library" title="Nade lineups" description="MongoDB and MatchZy's savednades.json stay synchronized while MatchZy mode is active." />
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Button onClick={onSave}>
-          <Save data-icon="inline-start" />
-          Save nades
-        </Button>
-        <Button variant="secondary" onClick={() => setAddOpen(true)}>
-          <Plus data-icon="inline-start" />
-          Add nade
-        </Button>
-        <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
-          <FileInput data-icon="inline-start" />
-          Import JSON
-        </Button>
-        <Button variant="secondary" onClick={exportNades}>
-          <Download data-icon="inline-start" />
-          Export JSON
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Match library"
+        title="Nade lineups"
+        description="MongoDB and MatchZy's savednades.json stay synchronized while MatchZy mode is active."
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
+              <FileInput data-icon="inline-start" />
+              Import
+            </Button>
+            <Button variant="secondary" onClick={exportNades}>
+              <Download data-icon="inline-start" />
+              Export
+            </Button>
+            <Button variant="secondary" onClick={() => setAddOpen(true)}>
+              <Plus data-icon="inline-start" />
+              Add nade
+            </Button>
+            <Button onClick={onSave}>
+              <Save data-icon="inline-start" />
+              Save nades
+            </Button>
+          </div>
+        )}
+      />
       <NadeDialog
         env={env}
         open={addOpen}
@@ -711,32 +821,42 @@ function Nades({ env, nades, setNades, onSave }) {
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle>Nades</CardTitle>
+          <div className="flex items-start justify-between gap-4">
+            <div className="grid gap-1.5">
+              <CardTitle>Saved lineups</CardTitle>
+              <CardDescription>Filter and edit the lineups that MatchZy can load.</CardDescription>
+            </div>
+            <Badge variant="secondary">{filteredNades.length} shown</Badge>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-2 md:grid-cols-[1fr_180px_180px]">
-            <Input value={query} placeholder="Search name or description" onChange={(event) => setQuery(event.target.value)} />
-            <NativeSelect
-              value={mapFilter}
-              onChange={(event) => setMapFilter(event.target.value)}
-            >
-              <option value="">All maps</option>
-              {maps.map((map) => <option key={map} value={map}>{map}</option>)}
-            </NativeSelect>
-            <NativeSelect
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-            >
-              <option value="">All types</option>
-              {nadeTypes.filter(Boolean).map((type) => <option key={type} value={type}>{type}</option>)}
-            </NativeSelect>
-          </div>
-          {nades.length === 0 ? <p className="text-sm text-muted-foreground">No nades configured.</p> : null}
+          <FieldGroup className="grid gap-2 rounded-lg border border-border bg-muted/25 p-3 md:grid-cols-[1fr_180px_180px]">
+            <Field>
+              <FieldLabel className="sr-only">Search lineups</FieldLabel>
+              <Input value={query} placeholder="Search name or description" onChange={(event) => setQuery(event.target.value)} />
+            </Field>
+            <Field>
+              <FieldLabel className="sr-only">Map</FieldLabel>
+              <NativeSelect value={mapFilter} onChange={(event) => setMapFilter(event.target.value)}>
+                <option value="">All maps</option>
+                {maps.map((map) => <option key={map} value={map}>{map}</option>)}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel className="sr-only">Nade type</FieldLabel>
+              <NativeSelect value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                <option value="">All types</option>
+                {nadeTypes.filter(Boolean).map((type) => <option key={type} value={type}>{type}</option>)}
+              </NativeSelect>
+            </Field>
+          </FieldGroup>
+          {nades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No nades configured. Add the first lineup to this library.</div> : null}
+          {nades.length > 0 && filteredNades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No lineups match the current filters.</div> : null}
           {groupedNades.map(([map, mapNades]) => (
             <section key={map} className="grid gap-2">
               <h3 className="text-sm font-semibold text-muted-foreground">{map} <Badge>{mapNades.length}</Badge></h3>
               {mapNades.map((nade) => (
-                <div key={nade.id} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_44px]">
+                <div key={nade.id} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_44px]">
                   <Input value={nade.name || ""} placeholder="Name" onChange={(event) => updateNade(nade.id, { name: event.target.value })} />
                   <Input value={nade.map || ""} placeholder="Map" onChange={(event) => updateNade(nade.id, { map: event.target.value })} />
                   <NativeSelect
@@ -749,11 +869,11 @@ function Nades({ env, nades, setNades, onSave }) {
                   <Input value={nade.lineupPos || ""} placeholder="LineupPos" onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} />
                   <Input value={nade.lineupAng || ""} placeholder="LineupAng" onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} />
                   {(nade.lineupImages || []).length > 0 ? (
-                    <a className="block h-10 w-[86px] overflow-hidden rounded-md border border-border bg-card" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer" title={`${nade.lineupImages.length} image(s)`}>
+                    <a className="block h-9 w-[86px] overflow-hidden rounded-md border border-border bg-card" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer" title={`${nade.lineupImages.length} image(s)`}>
                       <img className="h-full w-full object-cover" src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || "Lineup"} />
                     </a>
                   ) : (
-                    <span className="flex h-10 items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">No image</span>
+                    <span className="flex h-9 items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">No image</span>
                   )}
                   <Button variant="secondary" size="icon" title="Remove" onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}>
                     <Trash2 />
@@ -806,29 +926,28 @@ function DockerLogs({ active }) {
   return (
     <>
       <PageHeader eyebrow="Runtime output" title="Docker logs" description="Live output from the CS2 container, newest lines at the bottom." />
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={loadLogs} disabled={loading}>
-          <RefreshCw data-icon="inline-start" className={cn(loading && "animate-spin")} />
-          Refresh
-        </Button>
-        <Button variant={autoRefresh ? "default" : "secondary"} onClick={() => setAutoRefresh((current) => !current)}>
-          {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
-          {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
-        </Button>
-        <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          Lines
-          <NativeSelect className="w-auto"
-            value={tail}
-            onChange={(event) => setTail(Number(event.target.value))}
-          >
-            <option value={100}>100</option>
-            <option value={300}>300</option>
-            <option value={800}>800</option>
-            <option value={1500}>1500</option>
-          </NativeSelect>
-        </label>
-        <span className="text-sm text-muted-foreground">{updatedAt ? `Updated ${updatedAt}` : ""}</span>
-      </div>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-center gap-2 p-3 sm:p-3">
+          <Button variant="secondary" onClick={loadLogs} disabled={loading}>
+            <RefreshCw data-icon="inline-start" className={cn(loading && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button variant={autoRefresh ? "default" : "secondary"} onClick={() => setAutoRefresh((current) => !current)}>
+            {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
+            {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
+          </Button>
+          <Field className="ml-auto flex grid-cols-[auto_100px] items-center gap-2">
+            <FieldLabel className="text-muted-foreground">Lines</FieldLabel>
+            <NativeSelect value={tail} onChange={(event) => setTail(Number(event.target.value))}>
+              <option value={100}>100</option>
+              <option value={300}>300</option>
+              <option value={800}>800</option>
+              <option value={1500}>1500</option>
+            </NativeSelect>
+          </Field>
+          <span className="text-xs text-muted-foreground">{updatedAt ? `Updated ${updatedAt}` : ""}</span>
+        </CardContent>
+      </Card>
       {logError ? <Message error={logError} /> : null}
       <Card>
         <CardHeader>
@@ -837,7 +956,7 @@ function DockerLogs({ active }) {
         <CardContent>
           <pre
             ref={logRef}
-            className="h-[62vh] overflow-auto rounded-md border border-border bg-[#10130f] p-4 font-mono text-xs leading-relaxed text-[#dce8d4] whitespace-pre-wrap"
+            className="log-console h-[62vh] overflow-auto whitespace-pre-wrap rounded-lg border border-sidebar-border p-4 font-mono text-xs leading-relaxed"
           >
             {logs || (loading ? "Loading logs..." : "No logs available.")}
           </pre>
@@ -932,6 +1051,7 @@ function App() {
       error={error}
       dirty={dirty}
       busy={busy}
+      serviceState={status?.service?.state}
       onSave={() => runAction(async () => {
         await api("/api/control", { method: "PUT", body: JSON.stringify({ env, admins }) });
         return { message: "Draft saved. Apply it when you are ready to restart CS2." };

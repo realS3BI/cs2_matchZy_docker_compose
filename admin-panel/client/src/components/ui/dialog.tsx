@@ -16,7 +16,7 @@ const DialogOverlay = forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-50 bg-black/45", className)}
+    className={cn("fixed inset-0 z-50 bg-foreground/55 backdrop-blur-[2px]", className)}
     {...props}
   />
 ));
@@ -32,13 +32,13 @@ const DialogContent = forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "relative grid max-h-[90vh] w-[min(760px,calc(100vw-24px))] gap-4 overflow-y-auto rounded-md border border-border bg-card p-5 text-card-foreground shadow-xl pointer-events-auto focus-visible:outline-none",
+          "relative grid max-h-[90vh] w-[min(760px,calc(100vw-24px))] gap-5 overflow-y-auto rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xl pointer-events-auto focus-visible:outline-none sm:p-6",
           className
         )}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4">
+        <DialogPrimitive.Close className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4">
           <X />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -49,7 +49,7 @@ const DialogContent = forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 function DialogHeader({ className, ...props }: ComponentPropsWithoutRef<"div">) {
-  return <div className={cn("grid gap-1.5 pr-9", className)} {...props} />;
+  return <div className={cn("grid gap-1.5 pr-9 text-left", className)} {...props} />;
 }
 
 function DialogFooter({ className, ...props }: ComponentPropsWithoutRef<"div">) {
