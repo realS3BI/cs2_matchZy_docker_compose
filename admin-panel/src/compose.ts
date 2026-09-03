@@ -4,9 +4,25 @@ import { setTimeout as wait } from "node:timers/promises";
 
 const execFileAsync = promisify(execFile);
 
-const DIAGNOSTIC_PROBE = String.raw`
-root=/home/steam/cs2-dedicated/game/csgo
-state=/home/steam/cs2-dedicated/.mod-installer/state.json
+type DiagnosticProbePaths = {
+  root?: string;
+  state?: string;
+  preHook?: string;
+};
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+export function buildDiagnosticProbe({
+  root = "/home/steam/cs2-dedicated/game/csgo",
+  state = "/home/steam/cs2-dedicated/.mod-installer/state.json",
+  preHook = "/home/steam/cs2-dedicated/pre.sh"
+}: DiagnosticProbePaths = {}) {
+  return String.raw`
+root=${shellQuote(root)}
+state=${shellQuote(state)}
+pre_hook=${shellQuote(preHook)}
 
 probe_file() {
   if [ -f "$2" ]; then
@@ -16,9 +32,9 @@ probe_file() {
   fi
 }
 
-probe_file preHook /home/steam/cs2-dedicated/pre.sh
+probe_file preHook "$pre_hook"
 probe_file installerState "$state"
-probe_file metamod "$root/addons/metamod/bin/linuxsteamrt64/server.so"
+probe_file metamod "$root/addons/metamod/bin/linuxsteamrt64/libserver.so"
 probe_file counterStrikeSharpNative "$root/addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"
 probe_file counterStrikeSharpApi "$root/addons/counterstrikesharp/api/CounterStrikeSharp.API.dll"
 probe_file matchZy "$root/addons/counterstrikesharp/plugins/MatchZy/MatchZy.dll"
@@ -64,6 +80,9 @@ EXECUTES	executesTag
 VERSION_KEYS
 fi
 `;
+}
+
+const DIAGNOSTIC_PROBE = buildDiagnosticProbe();
 
 export class Compose {
   config: any;

@@ -47,8 +47,10 @@ import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "./components/ui/field";
 import { NativeSelect } from "./components/ui/native-select";
+import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "./components/ui/switch";
 import { parseSetposSetang } from "./lib/nades";
 import "@fontsource-variable/ibm-plex-sans";
@@ -75,6 +77,84 @@ function Message({ message = "", error = "" }: { message?: string; error?: strin
       <AlertTitle>{error ? "Action failed" : "Control room updated"}</AlertTitle>
       <AlertDescription className="whitespace-pre-wrap">{error || message}</AlertDescription>
     </Alert>
+  );
+}
+
+const operationCopy = {
+  apply: {
+    title: "Applying changes",
+    working: "Saving the platform settings and restarting the CS2 container.",
+    refreshing: "The restart finished. Loading the new server status.",
+    workingStep: "Apply settings and restart CS2"
+  },
+  restart: {
+    title: "Restarting CS2",
+    working: "Waiting for Docker to stop and start the CS2 container.",
+    refreshing: "The restart finished. Loading the new server status.",
+    workingStep: "Restart the CS2 container"
+  }
+};
+
+function formatElapsed(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+function OperationDialog({ operation }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!operation) return undefined;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [operation?.startedAt]);
+
+  if (!operation) return null;
+
+  const copy = operationCopy[operation.kind];
+  const refreshing = operation.phase === "refreshing";
+  const elapsed = Math.max(0, Math.floor((now - operation.startedAt) / 1000));
+
+  return (
+    <Dialog open onOpenChange={() => undefined}>
+      <DialogContent
+        className="max-w-lg"
+        showCloseButton={false}
+        onEscapeKeyDown={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+      >
+        <DialogHeader className="pr-0">
+          <div className="mb-2 flex items-center gap-3">
+            <span className="metric-icon"><Spinner aria-hidden="true" /></span>
+            <Badge variant="warning">Server action running</Badge>
+          </div>
+          <DialogTitle className="control-title text-xl">{copy.title}</DialogTitle>
+          <DialogDescription>{refreshing ? copy.refreshing : copy.working}</DialogDescription>
+          <span className="sr-only" aria-live="polite">{refreshing ? "Refreshing server status" : copy.workingStep}</span>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <Progress
+            value={refreshing ? 92 : 58}
+            aria-label={refreshing ? "Refreshing server status" : copy.workingStep}
+          />
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">Current step</dt>
+              <dd className="text-sm font-medium">{refreshing ? "Refresh dashboard status" : copy.workingStep}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">Elapsed time</dt>
+              <dd className="font-mono text-sm font-medium">{formatElapsed(elapsed)}</dd>
+            </div>
+          </dl>
+          <Alert>
+            <AlertTitle>Keep this tab open</AlertTitle>
+            <AlertDescription>The panel is still working. This window closes as soon as the updated status is available.</AlertDescription>
+          </Alert>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -142,7 +222,7 @@ function Login({ error, onLogin }) {
   );
 }
 
-function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, onSave, onApply, serviceState }) {
+function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
   const tabGroups = ["Workspace", "Operations"];
 
@@ -210,8 +290,8 @@ function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, o
                 Save draft
               </Button>
               <Button onClick={onApply} disabled={busy}>
-                <UploadCloud data-icon="inline-start" />
-                Apply & restart
+                {operation?.kind === "apply" ? <Spinner data-icon="inline-start" /> : <UploadCloud data-icon="inline-start" />}
+                {operation?.kind === "apply" ? "Applying..." : "Apply & restart"}
               </Button>
             </div>
           </div>
@@ -1022,6 +1102,7 @@ function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [operation, setOperation] = useState(null);
 
   async function loadAll() {
     const control = await api("/api/control");
@@ -1035,16 +1116,24 @@ function App() {
     setSavedSignature(JSON.stringify({ settings: control.settings || {}, admins: control.admins || [] }));
   }
 
-  async function runAction(action) {
+  async function runAction(action, operationKind = null) {
     setBusy(true);
+    setMessage("");
     setError("");
+    if (operationKind) {
+      setOperation({ kind: operationKind, phase: "working", startedAt: Date.now() });
+    }
     try {
       const result = await action();
+      if (operationKind) {
+        setOperation((current) => current ? { ...current, phase: "refreshing" } : current);
+      }
       await loadAll();
       setMessage(result?.message || "Done.");
     } catch (actionError) {
       setError(actionError.message);
     } finally {
+      setOperation(null);
       setBusy(false);
     }
   }
@@ -1094,12 +1183,13 @@ function App() {
       error={error}
       dirty={dirty}
       busy={busy}
+      operation={operation}
       serviceState={status?.service?.state}
       onSave={() => runAction(async () => {
         await api("/api/control", { method: "PUT", body: JSON.stringify({ settings, admins }) });
         return { message: "Draft saved. Apply it when you are ready to restart CS2." };
       })}
-      onApply={() => runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings, admins }) }))}
+      onApply={() => runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings, admins }) }), "apply")}
       onLogout={async () => {
         await api("/api/auth/logout", { method: "POST" });
         setAuthenticated(false);
@@ -1117,7 +1207,7 @@ function App() {
             await loadAll();
             return { message: "Refreshed." };
           })}
-          onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))}
+          onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
         />
       ) : null}
       {tab === "diagnostics" ? (
@@ -1139,7 +1229,7 @@ function App() {
           roles={policy?.adminRoles || []}
         />
       ) : null}
-      {tab === "maintenance" ? <Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))} /> : null}
+      {tab === "maintenance" ? <Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")} /> : null}
       {tab === "nades" ? (
         <Nades
           settings={settings}
@@ -1153,6 +1243,7 @@ function App() {
         />
       ) : null}
       {tab === "logs" ? <DockerLogs active={tab === "logs"} /> : null}
+      <OperationDialog operation={operation} />
     </Shell>
   );
 }
