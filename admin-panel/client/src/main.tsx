@@ -445,7 +445,7 @@ function Settings({ settings, setSettings, policy }) {
     <>
       <PageHeader eyebrow="Configuration" title="Server settings" description="Edit the supported runtime settings used by the Coolify deployment." />
       <div className="grid gap-4">
-        {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || settings.serverMode === "matchzy").map((group) => (
+        {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || ["matchzy", "nades"].includes(settings.serverMode)).map((group) => (
           <Card key={group.id}>
             <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -502,7 +502,7 @@ function Plugins({ settings, setSettings, policy }) {
       <Card>
         <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
-          {(policy?.plugins || []).filter((plugin) => !["matchzy", "executes"].includes(plugin.id)).map((plugin) => {
+          {(policy?.plugins || []).filter((plugin) => !["matchzy", "nades", "executes"].includes(plugin.id)).map((plugin) => {
             const enabled = plugin.locked || settings[plugin.settingKey] === true;
             return (
               <div key={plugin.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">

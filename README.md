@@ -95,7 +95,9 @@ Das Dashboard findet den CS2-Container ueber Docker-Compose-Labels. Dafuer ist `
 
 Es ist immer genau ein Modus aktiv:
 
-- `MatchZy`: Competitive Matches, Practice und gespeicherte Nades
+- `MatchZy`: Competitive Matches
+- `Nades`: startet MatchZy mit `matchzy_autostart_mode 2` direkt im Practice-Modus und stellt gespeicherte Lineups bereit
+- `Warmup / Aim Botz`: startet die Workshop-Map `Aim Botz - Aim Training (CS2)` (`3070244462`) fuer Solo-Aim-Training mit Bots
 - `Executes`: Executes-Szenarien ohne MatchZy
 - `Vanilla + framework`: Metamod und CounterStrikeSharp ohne Match-Plugin
 

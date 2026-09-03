@@ -620,6 +620,7 @@ _matchzy_bootstrap_main() (
     local chat_prefix_raw="$2"
     local save_nades_as_global_raw="$3"
     local config_file="$4"
+    local autostart_mode="${5:-1}"
     local config_dir=""
     local smoke_color_value="false"
     local save_nades_as_global_value="false"
@@ -647,10 +648,11 @@ _matchzy_bootstrap_main() (
       printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
       printf 'matchzy_save_nades_as_global_enabled "%s"\n' "$save_nades_as_global_value"
       printf 'matchzy_chat_prefix "%s"\n' "$chat_prefix"
+      printf 'matchzy_autostart_mode %s\n' "$autostart_mode"
     } > "$tmp_file"
 
     mv "$tmp_file" "$config_file"
-    log "Wrote MatchZy config.cfg with smoke color set to '$smoke_color_value', global saved nades set to '$save_nades_as_global_value', and chat prefix from $chat_prefix_source"
+    log "Wrote MatchZy config.cfg with autostart mode '$autostart_mode', smoke color set to '$smoke_color_value', global saved nades set to '$save_nades_as_global_value', and chat prefix from $chat_prefix_source"
   }
 
   copy_file_atomic() {
@@ -709,6 +711,7 @@ _matchzy_bootstrap_main() (
   local metamod_version="$(jq -er '.metamodVersion' "$SETTINGS_FILE")"
   local server_mode="$(jq -er '.serverMode' "$SETTINGS_FILE")"
   local matchzy_enabled=0
+  local matchzy_autostart_mode=1
   local matchzy_version="$(jq -er '.matchZyVersion' "$SETTINGS_FILE")"
   local counter_strike_sharp_version="$(jq -er '.counterStrikeSharpVersion' "$SETTINGS_FILE")"
   local repair_mods="$(jq -r 'if .repairMods then "1" else "0" end' "$SETTINGS_FILE")"
@@ -741,6 +744,16 @@ _matchzy_bootstrap_main() (
   case "$server_mode" in
     matchzy)
       matchzy_enabled=1
+      matchzy_autostart_mode=1
+      executes_enabled=0
+      ;;
+    nades)
+      matchzy_enabled=1
+      matchzy_autostart_mode=2
+      executes_enabled=0
+      ;;
+    warmup)
+      matchzy_enabled=0
       executes_enabled=0
       ;;
     executes)
@@ -752,7 +765,7 @@ _matchzy_bootstrap_main() (
       executes_enabled=0
       ;;
     *)
-      fail "Server mode must be one of: matchzy, executes, vanilla"
+      fail "Server mode must be one of: matchzy, nades, warmup, executes, vanilla"
       ;;
   esac
   log "Server mode '$server_mode' selected (MatchZy=$matchzy_enabled, Executes=$executes_enabled)"
@@ -1168,7 +1181,8 @@ _matchzy_bootstrap_main() (
       "$matchzy_smoke_color" \
       "$matchzy_chat_prefix" \
       "$matchzy_save_nades_as_global" \
-      "$matchzy_config_file"
+      "$matchzy_config_file" \
+      "$matchzy_autostart_mode"
     write_matchzy_savednades_file_from_runtime "$runtime_matchzy_savednades_file" "$matchzy_savednades_file"
   fi
 

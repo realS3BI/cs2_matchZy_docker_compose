@@ -39,6 +39,17 @@ configure_upstream_process() {
   export CS2_MAXPLAYERS="$(read_setting '.maxPlayers')"
   export CS2_STARTMAP="$(read_setting '.startMap')"
   export CS2_ADDITIONAL_ARGS="$(read_setting '.additionalArgs')"
+  if [[ "$(read_setting '.serverMode')" == "warmup" ]]; then
+    export CS2_GAMEALIAS="custom"
+    export CS2_GAMETYPE=3
+    export CS2_GAMEMODE=0
+    export CS2_HOST_WORKSHOP_MAP="3070244462"
+  else
+    export CS2_GAMEALIAS="competitive"
+    export CS2_GAMETYPE=0
+    export CS2_GAMEMODE=1
+    export CS2_HOST_WORKSHOP_MAP=""
+  fi
   export CS2_PORT=27015
   export TV_PORT=27020
 }

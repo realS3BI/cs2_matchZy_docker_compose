@@ -55,7 +55,7 @@ function check(id, label, status, detail) {
 }
 
 function isVersionRelevant(key, settings) {
-  if (key === "MATCHZY") return settings.serverMode === "matchzy";
+  if (key === "MATCHZY") return ["matchzy", "nades"].includes(settings.serverMode);
   if (key === "EXECUTES") return settings.serverMode === "executes";
   if (key === "FAKE_RCON") return settings.fakeRconEnabled;
   if (key === "WEAPONPAINTS") return settings.weaponPaintsEnabled;
@@ -107,10 +107,10 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         ? "warn"
         : "fail";
 
-  const modeCheck = settings.serverMode === "matchzy"
+  const modeCheck = ["matchzy", "nades"].includes(settings.serverMode)
     ? check(
-      "matchzy",
-      "MatchZy",
+      settings.serverMode,
+      settings.serverMode === "nades" ? "Nades" : "MatchZy",
       matchZyRuntimeStatus,
       matchZyRuntimeStatus === "pass"
         ? "MatchZy reported a successful load."
@@ -118,7 +118,9 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
           ? matchZyInstalled ? "MatchZy reported a load failure." : "MatchZy.dll is missing."
           : "MatchZy.dll exists, but no load confirmation is present in retained logs."
     )
-    : settings.serverMode === "executes"
+    : settings.serverMode === "warmup"
+      ? check("warmup", "Warmup / Aim Botz", "pass", "CS2 starts Workshop map 3070244462 in Custom mode.")
+      : settings.serverMode === "executes"
       ? check(
         "executes",
         "Executes",
@@ -195,7 +197,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       detail: "Open Docker Logs and inspect the first [pre.sh] ERROR from the latest container start."
     });
   }
-  if (settings.serverMode === "matchzy" && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
+  if (["matchzy", "nades"].includes(settings.serverMode) && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
     findings.push({
       severity: "error",
       title: "MatchZy did not enter the loaded state",
@@ -242,7 +244,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     })),
     repairAvailable: serviceRunning && overall !== "healthy",
     nades: {
-      relevant: settings.serverMode === "matchzy",
+      relevant: ["matchzy", "nades"].includes(settings.serverMode),
       configPresent: Boolean(files.matchZyConfig),
       savedNadesPresent: Boolean(files.matchZySavedNades)
     }

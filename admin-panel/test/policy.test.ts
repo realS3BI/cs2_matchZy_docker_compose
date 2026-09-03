@@ -7,6 +7,19 @@ test("normalizeSettings keeps one explicit server mode", () => {
   assert.equal(settings.serverMode, "executes");
 });
 
+test("warmup uses the dedicated Workshop map without a mode plugin", () => {
+  const model: any = buildControlModel({ serverMode: "warmup" });
+  assert.equal(model.mode.id, "warmup");
+  assert.equal(model.plugins.some((plugin) => plugin.id === "warmup"), false);
+});
+
+test("nades is a MatchZy-backed server mode", () => {
+  const model: any = buildControlModel({ serverMode: "nades" });
+  assert.equal(model.mode.id, "nades");
+  assert.equal(model.plugins[0].id, "nades");
+  assert.ok(model.plugins[0].dependencies.includes("CounterStrikeSharp"));
+});
+
 test("normalizeSettings drops fields outside the application schema", () => {
   const settings: any = normalizeSettings({ serverMode: "matchzy", unknownSetting: "value" });
   assert.equal(settings.unknownSetting, undefined);

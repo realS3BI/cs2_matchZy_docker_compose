@@ -56,7 +56,9 @@ type SettingsGroup = {
 };
 
 export const GAME_MODES = [
-  { id: "matchzy", name: "MatchZy", description: "Competitive matches, practice commands and saved nade lineups." },
+  { id: "matchzy", name: "MatchZy", description: "Competitive matches with MatchZy." },
+  { id: "nades", name: "Nades", description: "Starts MatchZy directly in practice mode with nade commands and saved lineups." },
+  { id: "warmup", name: "Warmup / Aim Botz", description: "Solo aim training with bots on the Aim Botz Workshop map." },
   { id: "executes", name: "Executes", description: "Executes scenarios. MatchZy is removed while this mode is active." },
   { id: "vanilla", name: "Vanilla + framework", description: "No match mode plugin; Metamod and CounterStrikeSharp remain available." }
 ];
@@ -80,13 +82,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     fields: [
       { key: "serverName", label: "Server name", type: "text" },
       { key: "maxPlayers", label: "Max players", type: "number" },
-      { key: "startMap", label: "Start map", type: "text" },
+      { key: "startMap", label: "Start map", type: "text", description: "Used by MatchZy, Executes and Vanilla. Warmup always starts Aim Botz." },
       { key: "joinPassword", label: "Join password", type: "password" },
       { key: "rconPassword", label: "RCON password", type: "password" }
     ]
   },
   {
-    id: "matchzy", title: "MatchZy behavior", description: "Used only while MatchZy is the active server mode.", mode: "matchzy",
+    id: "matchzy", title: "MatchZy behavior", description: "Used while MatchZy or Nades is active.", mode: "matchzy",
     fields: [
       { key: "matchZySmokeColor", label: "Colored practice smokes", type: "boolean" },
       { key: "matchZySaveNadesGlobally", label: "Share saved nades globally", type: "boolean" },
@@ -196,7 +198,7 @@ export function validateSettings(input) {
     throw new Error("Unsupported settings schema version");
   }
   if (source.serverMode !== undefined && !GAME_MODES.some((mode) => mode.id === String(source.serverMode).toLowerCase())) {
-    throw new Error("Server mode must be matchzy, executes, or vanilla");
+    throw new Error("Server mode must be matchzy, nades, warmup, executes, or vanilla");
   }
   if (source.restartTime !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.restartTime))) {
     throw new Error("Restart time must use HH:mm in 24-hour format");
@@ -255,7 +257,7 @@ const PLUGINS: any[] = [
 export function buildControlModel(input) {
   const settings = normalizeSettings(input);
   const mode = GAME_MODES.find((item) => item.id === settings.serverMode)!;
-  const modePlugin = mode.id === "vanilla" ? [] : [{ id: mode.id, name: mode.name, detail: mode.description, enabled: true, locked: true, settingKey: null, dependencies: ["CounterStrikeSharp"], warning: null }];
+  const modePlugin = ["vanilla", "warmup"].includes(mode.id) ? [] : [{ id: mode.id, name: mode.name, detail: mode.description, enabled: true, locked: true, settingKey: null, dependencies: ["CounterStrikeSharp"], warning: null }];
   const plugins = [...modePlugin, ...PLUGINS.map((plugin) => ({
     ...plugin,
     enabled: plugin.locked ? true : settings[plugin.settingKey],
@@ -264,7 +266,7 @@ export function buildControlModel(input) {
   }))];
   return {
     mode, modes: GAME_MODES, plugins, settingsGroups: SETTINGS_GROUPS, adminRoles: ADMIN_ROLES,
-    rules: ["MatchZy and Executes are mutually exclusive server modes.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
+    rules: ["MatchZy-based modes and Executes are mutually exclusive.", "Nades starts MatchZy practice mode automatically.", "Warmup starts Aim Botz as a dedicated Workshop map.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
   };
 }
 

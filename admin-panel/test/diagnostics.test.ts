@@ -88,6 +88,26 @@ test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   assert.equal(report.nades.relevant, false);
 });
 
+test("buildDiagnostics treats warmup as a dedicated Workshop map", () => {
+  const report = buildDiagnostics(input({ desired: { serverMode: "warmup" } }));
+
+  assert.equal(report.overall, "healthy");
+  assert.equal(report.mode.id, "warmup");
+  assert.equal(report.checks.at(-1).id, "warmup");
+  assert.equal(report.nades.relevant, false);
+  assert.equal(report.versions.find((item) => item.key === "MATCHZY").relevant, false);
+});
+
+test("buildDiagnostics treats nades as a MatchZy-backed mode", () => {
+  const report = buildDiagnostics(input({ desired: { serverMode: "nades" } }));
+
+  assert.equal(report.overall, "healthy");
+  assert.equal(report.mode.id, "nades");
+  assert.equal(report.checks.at(-1).id, "nades");
+  assert.equal(report.nades.relevant, true);
+  assert.equal(report.versions.find((item) => item.key === "MATCHZY").relevant, true);
+});
+
 test("buildDiagnostics reports incomplete enabled optional plugins", () => {
   const report = buildDiagnostics(input({ desired: { serverMode: "matchzy", simpleAdminEnabled: true } }));
   assert.equal(report.overall, "critical");
