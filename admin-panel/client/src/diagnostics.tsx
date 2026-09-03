@@ -47,9 +47,9 @@ function overallVariant(overall) {
   return "destructive";
 }
 
-function LoadChain({ checks }) {
+function LoadChain({ checks, label }) {
   return (
-    <ol className="diagnostic-rail" aria-label="MatchZy load chain">
+    <ol className="diagnostic-rail" aria-label={`${label} load chain`}>
       {checks.map((item) => {
         const meta = STATUS_META[item.status] || STATUS_META.warn;
         const Icon = meta.icon;
@@ -71,7 +71,8 @@ function LoadChain({ checks }) {
 }
 
 function DiagnosticsReport({ diagnostics }) {
-  const detectedVersions = diagnostics.versions.filter((item) => item.installed !== "not detected");
+  const relevantVersions = diagnostics.versions.filter((item) => item.relevant);
+  const detectedVersions = relevantVersions.filter((item) => item.installed !== "not detected");
 
   return (
     <div className="grid gap-4">
@@ -80,14 +81,14 @@ function DiagnosticsReport({ diagnostics }) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex flex-col gap-2">
               <p className="diagnostic-kicker">Live load path</p>
-              <CardTitle className="diagnostic-title">MatchZy startup trace</CardTitle>
+              <CardTitle className="diagnostic-title">{diagnostics.mode?.name || "Server"} startup trace</CardTitle>
               <CardDescription>{diagnostics.summary}</CardDescription>
             </div>
             <Badge variant={overallVariant(diagnostics.overall)}>{overallLabel(diagnostics.overall)}</Badge>
           </div>
         </CardHeader>
         <CardContent>
-          <LoadChain checks={diagnostics.checks} />
+          <LoadChain checks={diagnostics.checks} label={diagnostics.mode?.name || "Server"} />
         </CardContent>
       </Card>
 
@@ -102,6 +103,17 @@ function DiagnosticsReport({ diagnostics }) {
         </Alert>
       ))}
 
+      {diagnostics.plugins?.length > 0 ? (
+        <Card>
+          <CardHeader><CardTitle>Configured plugin health</CardTitle><CardDescription>Enabled optional plugins and the dependency markers expected inside the container.</CardDescription></CardHeader>
+          <CardContent className="divide-y divide-border">
+            {diagnostics.plugins.map((plugin) => (
+              <div key={plugin.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"><span className="text-sm font-semibold">{plugin.label}</span><Badge variant={plugin.status === "pass" ? "success" : "destructive"}>{plugin.status === "pass" ? "complete" : `${plugin.missingFiles.length} missing`}</Badge></div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <Card>
           <CardHeader>
@@ -111,7 +123,7 @@ function DiagnosticsReport({ diagnostics }) {
           <CardContent>
             {detectedVersions.length > 0 ? (
               <dl className="divide-y divide-border">
-                {diagnostics.versions.map((item) => (
+                {relevantVersions.map((item) => (
                   <div key={item.key} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1.3fr_1fr_1fr] sm:items-center">
                     <dt className="text-sm font-semibold">{item.label}</dt>
                     <dd className="font-mono text-xs text-foreground">{item.installed}</dd>
@@ -152,14 +164,14 @@ function DiagnosticsReport({ diagnostics }) {
                 <dt className="text-muted-foreground">Control</dt>
                 <dd><Badge variant="outline">{diagnostics.service.controlMode}</Badge></dd>
               </div>
-              <div className="flex items-center justify-between gap-4">
+              {diagnostics.nades.relevant ? <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">MatchZy config</dt>
                 <dd><Badge variant={diagnostics.nades.configPresent ? "success" : "warning"}>{diagnostics.nades.configPresent ? "present" : "missing"}</Badge></dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
+              </div> : null}
+              {diagnostics.nades.relevant ? <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">Saved nades</dt>
                 <dd><Badge variant={diagnostics.nades.savedNadesPresent ? "success" : "warning"}>{diagnostics.nades.savedNadesPresent ? "present" : "missing"}</Badge></dd>
-              </div>
+              </div> : null}
             </dl>
           </CardContent>
         </Card>

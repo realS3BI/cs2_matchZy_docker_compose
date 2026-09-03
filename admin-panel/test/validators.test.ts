@@ -16,7 +16,7 @@ test("sanitizeEnv rejects unsafe keys", () => {
 
 test("sanitizeAdmins validates steam ids and defaults flags", () => {
   assert.deepEqual(sanitizeAdmins([{ identitySteam64: "76561198000000001" }]), [
-    { name: "", identitySteam64: "76561198000000001", flags: ["@css/root"] }
+    { name: "", identitySteam64: "76561198000000001", role: "owner", flags: ["@css/root"] }
   ]);
 });
 
@@ -29,10 +29,17 @@ test("adminsToCssConfig builds CounterStrikeSharp config", () => {
   });
 });
 
-test("adminsToMatchZyConfig derives MatchZy admin ids", () => {
-  assert.deepEqual(adminsToMatchZyConfig([{ identitySteam64: "76561198000000001", flags: ["@css/root"] }]), {
-    "76561198000000001": ""
-  });
+test("adminsToMatchZyConfig keeps the legacy admin file empty", () => {
+  assert.deepEqual(adminsToMatchZyConfig([{ identitySteam64: "76561198000000001", flags: ["@css/root"] }]), {});
+});
+
+test("sanitizeAdmins derives permissions from the selected role", () => {
+  const [entry]: any = sanitizeAdmins([{ identitySteam64: "76561198000000001", role: "match_operator", flags: ["@css/root"] }]);
+  assert.deepEqual(entry.flags, ["@css/config", "@custom/prac", "@css/map", "@css/chat"]);
+});
+
+test("custom admins cannot silently escalate from an empty permission list", () => {
+  assert.throws(() => sanitizeAdmins([{ identitySteam64: "76561198000000001", role: "custom", flags: [] }]), /at least one permission/);
 });
 
 test("sanitizeNades validates and defaults owner", () => {

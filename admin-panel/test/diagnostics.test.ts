@@ -74,3 +74,23 @@ test("buildDiagnostics treats an active bootstrap as in progress", () => {
   assert.equal(report.checks.find((item) => item.id === "bootstrap").status, "warn");
   assert.equal(report.overall, "degraded");
 });
+
+test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
+  const report = buildDiagnostics(input({
+    desired: { SERVER_MODE: "executes" },
+    probe: { ok: true, stdout: `${healthyProbe.replace("FILE\tmatchZy\t1", "FILE\tmatchZy\t0")}\nFILE\texecutes\t1`, stderr: "" },
+    logs: "[pre.sh] Mod bootstrap complete"
+  }));
+
+  assert.equal(report.overall, "healthy");
+  assert.equal(report.mode.id, "executes");
+  assert.equal(report.checks.at(-1).id, "executes");
+  assert.equal(report.nades.relevant, false);
+});
+
+test("buildDiagnostics reports incomplete enabled optional plugins", () => {
+  const report = buildDiagnostics(input({ desired: { SERVER_MODE: "matchzy", SIMPLEADMIN_ENABLED: "1" } }));
+  assert.equal(report.overall, "critical");
+  assert.equal(report.plugins[0].id, "simpleadmin");
+  assert.match(report.findings[0].title, /SimpleAdmin/);
+});

@@ -1,4 +1,5 @@
 import { FLAG_PRESETS } from "./defaults.js";
+import { flagsForRole, roleForFlags } from "./policy.js";
 
 const STEAM64_RE = /^[0-9]{17}$/;
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -28,7 +29,9 @@ export function sanitizeAdmins(entries) {
   return entries.map((entry) => {
     const name = String(entry.name ?? "").trim();
     const identitySteam64 = String(entry.identitySteam64 ?? "").trim();
-    const flags = Array.isArray(entry.flags) ? entry.flags.map((flag) => String(flag).trim()).filter(Boolean) : [];
+    const inputFlags = Array.isArray(entry.flags) ? entry.flags.map((flag) => String(flag).trim()).filter(Boolean) : [];
+    const role = String(entry.role || roleForFlags(inputFlags.length > 0 ? inputFlags : ["@css/root"]));
+    const flags = [...new Set(flagsForRole(role, inputFlags))];
 
     if (!STEAM64_RE.test(identitySteam64)) {
       throw new Error(`Invalid Steam64 ID: ${identitySteam64 || "(empty)"}`);
@@ -42,11 +45,15 @@ export function sanitizeAdmins(entries) {
         throw new Error(`Invalid admin flag: ${flag}`);
       }
     }
+    if (role === "custom" && flags.length === 0) {
+      throw new Error("Custom admin role requires at least one permission");
+    }
 
     return {
       name,
       identitySteam64,
-      flags: flags.length > 0 ? flags : ["@css/root"]
+      role,
+      flags
     };
   });
 }
@@ -63,11 +70,8 @@ export function adminsToCssConfig(entries) {
 }
 
 export function adminsToMatchZyConfig(entries) {
-  const config = {};
-  for (const entry of sanitizeAdmins(entries)) {
-    config[entry.identitySteam64] = "";
-  }
-  return config;
+  sanitizeAdmins(entries);
+  return {};
 }
 
 function normalizeVector(value, fieldName) {

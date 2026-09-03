@@ -31,18 +31,155 @@ body {
   min-width: 320px;
   min-height: 100vh;
   color: var(--color-foreground);
-  background:
-    linear-gradient(135deg, rgba(24, 106, 90, 0.12), transparent 38%),
-    repeating-linear-gradient(90deg, rgba(32, 35, 31, 0.035) 0 1px, transparent 1px 88px),
-    var(--color-background);
+  background: var(--color-background);
   font-family: "Segoe UI", "Aptos", "Trebuchet MS", sans-serif;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
+.control-shell {
+  background: var(--color-background);
+}
+
+.control-sidebar,
+.control-hero {
+  background: #13211c;
+}
+
+.control-kicker {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.control-title {
+  font-family: "Bahnschrift Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  font-stretch: condensed;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+}
+
+.control-nav-item {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  color: rgb(255 255 255 / 58%);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  transition: 140ms ease;
+}
+
+.control-nav-item svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.control-nav-item:hover {
+  background: rgb(255 255 255 / 7%);
+  color: white;
+}
+
+.control-nav-item-active {
+  border-color: rgb(143 212 190 / 28%);
+  background: rgb(143 212 190 / 12%);
+  color: #b8efdd;
+}
+
+.mode-choice {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  padding: 1rem;
+  background: var(--color-background);
+  text-align: left;
+  transition: 140ms ease;
+}
+
+.mode-choice svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-muted-foreground);
+}
+
+.mode-choice:hover {
+  border-color: var(--color-primary);
+}
+
+.mode-choice-active {
+  border-color: var(--color-primary);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.mode-choice-active svg {
+  color: var(--color-primary);
+}
+
+.lifecycle-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lifecycle-rail li {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  color: var(--color-muted-foreground);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.lifecycle-rail li:not(:last-child)::after {
+  position: absolute;
+  top: 1rem;
+  left: calc(50% + 1rem);
+  width: calc(100% - 2rem);
+  height: 1px;
+  background: var(--color-border);
+  content: "";
+}
+
+.lifecycle-node {
+  z-index: 1;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+}
+
+.lifecycle-node svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.lifecycle-node-active {
+  border-color: var(--color-success);
+  color: var(--color-success);
 }
 
 .diagnostic-hero {
   overflow: hidden;
-  background:
-    linear-gradient(112deg, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 48%),
-    var(--color-card);
+  background: var(--color-card);
 }
 
 .diagnostic-kicker {
@@ -129,5 +266,12 @@ body {
   .diagnostic-step {
     position: relative;
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .control-shell {
+    min-height: 100vh;
+    box-shadow: 0 0 0 1px rgb(32 35 31 / 7%);
   }
 }

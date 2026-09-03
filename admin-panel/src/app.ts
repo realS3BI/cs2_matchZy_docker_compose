@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CURATED_FIELDS, FLAG_PRESETS, SERVER_ENV_KEYS } from "./defaults.js";
+import { FLAG_PRESETS, SERVER_ENV_KEYS } from "./defaults.js";
 import { writeEnvFile } from "./env-file.js";
 import { uploadRouter } from "./uploadthing.js";
 import {
@@ -19,6 +19,7 @@ import {
 } from "./validators.js";
 import { createRouteHandler } from "uploadthing/express";
 import { buildDiagnostics } from "./diagnostics.js";
+import { buildControlModel, normalizeServerSettings, SETTINGS_GROUPS, validateServerSettings } from "./policy.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -104,7 +105,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
   );
 }
 
-export function createApp({ config, store, compose, nadesSync }) {
+export function createApp({ config, store, compose, nadesSync, restartScheduler = null }) {
   const app = express();
   app.disable("x-powered-by");
   app.use(
@@ -156,19 +157,21 @@ export function createApp({ config, store, compose, nadesSync }) {
   app.get("/api/settings", async (req, res) => {
     res.json({
       env: await store.getSettings(),
-      curatedFields: CURATED_FIELDS
+      curatedFields: SETTINGS_GROUPS.flatMap((group) => group.fields),
+      settingsGroups: SETTINGS_GROUPS
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const env = sanitizeEnv(req.body?.env);
+    const env = normalizeServerSettings(validateServerSettings(sanitizeEnv(req.body?.env)));
     res.json({ env: await store.saveSettings(env) });
   });
 
   app.get("/api/admins", async (req, res) => {
     res.json({
       entries: await store.getAdmins(),
-      flagPresets: FLAG_PRESETS
+      flagPresets: FLAG_PRESETS,
+      roles: buildControlModel(await store.getSettings()).adminRoles
     });
   });
 
@@ -183,6 +186,26 @@ export function createApp({ config, store, compose, nadesSync }) {
     res.json({
       entries: await store.getNades()
     });
+  });
+
+  app.get("/api/control", async (req, res) => {
+    const [env, admins, nades, service, lastAction, maintenance] = await Promise.all([
+      store.getSettings(),
+      store.getAdmins(),
+      store.getNades(),
+      compose.serviceStatus(),
+      store.getLastAction(["apply", "restart", "scheduled_restart", "repair", "save", "nades_sync", "login_fail"]),
+      restartScheduler?.status() || Promise.resolve({ enabled: false })
+    ]);
+    res.json({ env, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, nadesSync: nadesSync?.status() || { enabled: false } }, policy: buildControlModel(env) });
+  });
+
+  app.put("/api/control", async (req, res) => {
+    const env = normalizeServerSettings(validateServerSettings(sanitizeEnv(req.body?.env)));
+    const admins = sanitizeAdmins(req.body?.admins);
+    const [savedEnv, savedAdmins] = await Promise.all([store.saveSettings(env), store.saveAdmins(admins)]);
+    await writeAdminRuntimeFiles(config, savedAdmins);
+    res.json({ env: savedEnv, admins: savedAdmins, policy: buildControlModel(savedEnv) });
   });
 
   app.put("/api/nades", async (req, res) => {
@@ -216,14 +239,10 @@ export function createApp({ config, store, compose, nadesSync }) {
   });
 
   app.post("/api/server/apply", async (req, res) => {
-    const env = await store.getSettings();
+    const env = normalizeServerSettings(await store.getSettings());
     const admins = await store.getAdmins();
     const nades = await store.getNades();
-    const nextEnv = sanitizeEnv({
-      ...env,
-      MATCHZY_SAVE_NADES_AS_GLOBAL: env.MATCHZY_SAVE_NADES_AS_GLOBAL ?? "1",
-      ADMINS: admins.map((entry) => entry.identitySteam64).join(",")
-    });
+    const nextEnv = normalizeServerSettings(env);
 
     await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
     if (config.envFile) {
@@ -242,13 +261,25 @@ export function createApp({ config, store, compose, nadesSync }) {
     res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result) });
   });
 
+  app.post("/api/control/apply", async (req, res) => {
+    const nextEnv = normalizeServerSettings(validateServerSettings(sanitizeEnv(req.body?.env)));
+    const admins = sanitizeAdmins(req.body?.admins);
+    const nades = await store.getNades();
+    await Promise.all([store.saveSettings(nextEnv), store.saveAdmins(admins)]);
+    await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
+    if (config.envFile) await writeEnvFile(config.envFile, nextEnv);
+
+    const result = await compose.recreateService();
+    await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { code: result.code, mode: nextEnv.SERVER_MODE });
+    res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result), env: nextEnv, admins, policy: buildControlModel(nextEnv) });
+  });
+
   app.post("/api/server/repair", async (req, res) => {
     const admins = await store.getAdmins();
     const nades = await store.getNades();
-    const repairEnv = sanitizeEnv({
+    const repairEnv = normalizeServerSettings({
       ...(await store.getSettings()),
-      MOD_REINSTALL: "1",
-      ADMINS: admins.map((entry) => entry.identitySteam64).join(",")
+      MOD_REINSTALL: "1"
     });
 
     const repairStartedAt = new Date().toISOString();
@@ -277,7 +308,8 @@ export function createApp({ config, store, compose, nadesSync }) {
     res.json({
       service: await compose.serviceStatus(),
       nadesSync: nadesSync?.status() || { enabled: false },
-      lastAction: await store.getLastAction(["apply", "restart", "repair", "save", "nades_sync", "login_fail"])
+      maintenance: restartScheduler ? await restartScheduler.status() : { enabled: false },
+      lastAction: await store.getLastAction(["apply", "restart", "scheduled_restart", "repair", "save", "nades_sync", "login_fail"])
     });
   });
 

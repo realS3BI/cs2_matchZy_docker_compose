@@ -24,6 +24,16 @@ probe_file counterStrikeSharpApi "$root/addons/counterstrikesharp/api/CounterStr
 probe_file matchZy "$root/addons/counterstrikesharp/plugins/MatchZy/MatchZy.dll"
 probe_file matchZyConfig "$root/cfg/MatchZy/config.cfg"
 probe_file matchZySavedNades "$root/cfg/MatchZy/savednades.json"
+probe_file executes "$root/addons/counterstrikesharp/plugins/ExecutesPlugin/ExecutesPlugin.dll"
+probe_file fakeRcon "$root/addons/fake_rcon/bin/linuxsteamrt64/fake_rcon.so"
+probe_file weaponPaints "$root/addons/counterstrikesharp/plugins/WeaponPaints/WeaponPaints.dll"
+probe_file playerSettings "$root/addons/counterstrikesharp/plugins/PlayerSettings/PlayerSettings.dll"
+probe_file anyBaseLib "$root/addons/counterstrikesharp/shared/AnyBaseLib/AnyBaseLib.dll"
+probe_file menuManager "$root/addons/counterstrikesharp/plugins/MenuManagerCore/MenuManagerCore.dll"
+probe_file simpleAdmin "$root/addons/counterstrikesharp/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.dll"
+probe_file multiAddonManager "$root/addons/multiaddonmanager/bin/multiaddonmanager.so"
+probe_file rayTrace "$root/addons/RayTrace/bin/linuxsteamrt64/RayTrace.so"
+probe_file fortniteEmotes "$root/addons/counterstrikesharp/plugins/FortniteEmotesNDances/FortniteEmotesNDances.dll"
 
 if [ -f "$root/gameinfo.gi" ] && grep -Eq '^[[:space:]]*Game[[:space:]]+csgo/addons/metamod[[:space:]]*$' "$root/gameinfo.gi"; then
   printf 'FILE\tgameinfoMetamod\t1\n'
@@ -90,6 +100,11 @@ export class Compose {
     return this.firstId(result.stdout);
   }
 
+  exactNameFilter(name) {
+    const escaped = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return `name=^/${escaped}$`;
+  }
+
   async findServiceContainer() {
     if (await this.containerExists(this.config.containerName)) {
       return this.config.containerName;
@@ -102,18 +117,18 @@ export class Compose {
         `label=com.docker.compose.project=${this.config.composeProjectName}`,
         `label=com.docker.compose.service=${this.config.serviceName}`
       ]);
-      candidates.push([`name=${this.config.composeProjectName}-${this.config.serviceName}`]);
-      candidates.push([`name=${this.config.composeProjectName}_${this.config.serviceName}`]);
+      candidates.push([this.exactNameFilter(`${this.config.composeProjectName}-${this.config.serviceName}`)]);
+      candidates.push([this.exactNameFilter(`${this.config.composeProjectName}_${this.config.serviceName}`)]);
     }
 
     if (this.config.containerName) {
-      candidates.push([`name=${this.config.containerName}-${this.config.serviceName}`]);
-      candidates.push([`name=${this.config.containerName}_${this.config.serviceName}`]);
-      candidates.push([`name=${this.config.containerName}`]);
+      candidates.push([this.exactNameFilter(`${this.config.containerName}-${this.config.serviceName}`)]);
+      candidates.push([this.exactNameFilter(`${this.config.containerName}_${this.config.serviceName}`)]);
+      candidates.push([this.exactNameFilter(this.config.containerName)]);
     }
 
     candidates.push([`label=com.docker.compose.service=${this.config.serviceName}`]);
-    candidates.push([`name=${this.config.serviceName}`]);
+    candidates.push([this.exactNameFilter(this.config.serviceName)]);
 
     for (const filters of candidates) {
       const containerId = await this.findContainerByFilters(filters);

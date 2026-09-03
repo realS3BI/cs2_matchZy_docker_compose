@@ -5,15 +5,10 @@ Dieses Repository liefert einen bewusst kleinen Stack:
 - CS2 Dedicated Server auf Basis von `cm2network/cs2`
 - automatischen Mod-Install beim Serverstart
 - `Metamod Source 2.0-dev`
-- `MatchZy`
+- genau einen Servermodus: `MatchZy`, `cs2-executes` oder Vanilla mit Framework
 - `CounterStrikeSharp` aus dem offiziellen Release
-- `cs2-fake-rcon`
-- `WeaponPaints`
-- `CS2-SimpleAdmin` inklusive `PlayerSettingsCS2`, `AnyBaseLibCS2` und `MenuManagerCS2`
-- `FortniteEmotesNDances` inklusive `MultiAddonManager` und `Ray-Trace`
-- Workshop-Maps per `CS2_WORKSHOP_MAPS`
-- `cs2-executes`
-- Web-Admin-Panel mit React, Tailwind CSS v4, shadcn-style Komponenten und MongoDB-Persistenz fuer Settings, CounterStrikeSharp-Admins, MatchZy-Nades und Restart/Recreate
+- optionale Plugins: `cs2-fake-rcon`, `WeaponPaints`, `CS2-SimpleAdmin`, `FortniteEmotesNDances` und Workshop-Maps
+- Web-Control-Room mit zentraler Modus-/Plugin-Policy, rollenbasiertem Zugriff, Diagnostik und geplantem Neustart
 
 ## Enthaltene Dateien
 
@@ -38,6 +33,7 @@ Dieses Repository liefert einen bewusst kleinen Stack:
    - `CS2_PW`
    - `CS2_STARTMAP`
    - `CS2_MAXPLAYERS`
+   - `SERVER_MODE` (`matchzy`, `executes` oder `vanilla`)
    - `METAMOD_VERSION`
    - `MATCHZY_VERSION`
    - `COUNTERSTRIKESHARP_VERSION`
@@ -46,11 +42,13 @@ Dieses Repository liefert einen bewusst kleinen Stack:
    - `FORTNITE_EMOTES_ENABLED`
    - `CS2_WORKSHOP_MAPS_ENABLED`
    - `CS2_WORKSHOP_MAPS`
-   - `EXECUTES_ENABLED`
    - `SIMPLEADMIN_ENABLED`
    - `MATCHZY_SMOKE_COLOR`
    - `MATCHZY_CHAT_PREFIX`
-   - `ADMINS` (nur Fallback; das Panel schreibt Admins als Runtime-Datei)
+   - `AUTO_RESTART_ENABLED`, `AUTO_RESTART_TIME` und `AUTO_RESTART_TIMEZONE`
+   - `ADMINS` nur fuer die einmalige Migration einer alten Installation
+
+Neue Installationen starten bewusst schlank: MatchZy ist der Standardmodus, Zusatzplugins und Workshop-Maps sind aus. Im Panel koennen sie mit sichtbaren Abhaengigkeiten einzeln aktiviert werden.
 
 ## 2) Deploy mit Docker Compose oder Coolify
 
@@ -78,7 +76,7 @@ Das Compose-Projekt enthaelt zusaetzlich:
 - `admin-panel` auf `${ADMIN_PANEL_PORT:-8080}`
 - `mongodb` mit Volume `admin_panel_mongodb`
 
-Das Panel-Frontend ist eine Vite/React-App mit Tailwind CSS v4 und lokalen shadcn-style UI-Komponenten. Der Produktionsbuild wird beim Docker-Build erzeugt und vom Express-Backend ausgeliefert.
+Das Panel-Frontend ist eine Vite/React-App mit Tailwind CSS v4 und lokalen shadcn-style UI-Komponenten. Die Navigation trennt Overview, Server, Plugins, Access, Maintenance, Nades, Diagnostics und Logs. Der Produktionsbuild wird beim Docker-Build erzeugt und vom Express-Backend ausgeliefert.
 
 `ADMIN_PANEL_CONTROL_MODE=docker` ist der Standard fuer Coolify. Das Panel findet den `cs2` Container ueber Docker-Compose-Labels und typische Compose-Namensmuster. `ADMIN_PANEL_CS2_CONTAINER` sollte normalerweise leer bleiben. Setze es nur, wenn du den exakten Container-Namen oder die Container-ID kennst; der Compose-Projektname wie `cs2-matchzy` ist dafuer nicht ausreichend.
 
@@ -88,14 +86,14 @@ Start:
 docker compose up -d --build admin-panel mongodb
 ```
 
-Das Panel liest bestehende Werte aus den Container-ENV oder aus MongoDB, speichert Aenderungen in MongoDB und schreibt beim Button `Apply & Restart CS2` Runtime-Dateien in das gemeinsame Volume `admin_panel_runtime`:
+Das Panel liest bestehende Werte aus den gemeinsamen Container-ENV oder aus MongoDB. `Save draft` speichert ohne Unterbrechung; `Apply & restart` validiert die gesamte Konfiguration, schreibt Runtime-Dateien und startet CS2 neu:
 
 - `settings.env` fuer Server- und Plugin-Settings
 - `csharp-admins.json` fuer CounterStrikeSharp-Admins inklusive Flags
-- `matchzy-admins.json` fuer die daraus abgeleiteten MatchZy-Admins
+- `matchzy-admins.json` als bewusst leere Legacy-Datei
 - `matchzy-savednades.json` als Start-/Apply-Fallback fuer MatchZy-Nades
 
-Der `cs2` Container liest diese lokalen Dateien beim Start ein. MongoDB bleibt damit im Admin-Panel; der Gameserver braucht keine DB-Verbindung und kann auch mit den letzten gueltigen Runtime-Dateien starten, wenn MongoDB nicht verfuegbar ist.
+Der `cs2` Container liest diese lokalen Dateien beim Start ein. MongoDB bleibt damit im Admin-Panel; der Gameserver braucht keine DB-Verbindung und kann auch mit den letzten gueltigen Runtime-Dateien starten, wenn MongoDB nicht verfuegbar ist. `SERVER_MODE` ist die einzige Moduswahl. Der Bootstrap leitet daraus `MATCHZY_ENABLED` und `EXECUTES_ENABLED` ab und kann beide nie gleichzeitig laden.
 
 MatchZy-Nades werden zusaetzlich live bidirektional synchronisiert. Das Panel schreibt beim Speichern sofort in die echte Datei `game/csgo/cfg/MatchZy/savednades.json` im `cs2_data` Volume. Wenn MatchZy oder ein Spieler ingame diese Datei aendert, importiert das Panel die Aenderung automatisch zurueck nach MongoDB. Der Sync prueft die Datei standardmaessig alle 2 Sekunden und verhindert Rueckkopplungen ueber Dateihashes.
 
@@ -114,18 +112,28 @@ Im Standardmodus `ADMIN_PANEL_CONTROL_MODE=docker` entspricht Apply technisch:
 docker restart <cs2-container>
 ```
 
-Der Button `Restart CS2` fuehrt nur aus:
+Der Button `Restart now` fuehrt nur aus:
 
 ```bash
 docker restart <cs2-container>
 ```
+
+### Geplanter Neustart
+
+Das Panel startet CS2 standardmaessig taeglich um `05:00` in `Europe/Vienna` neu. Die Uhrzeit und IANA-Zeitzone werden im Maintenance-Bereich gepflegt:
+
+- `AUTO_RESTART_ENABLED=1`
+- `AUTO_RESTART_TIME=05:00`
+- `AUTO_RESTART_TIMEZONE=Europe/Vienna`
+
+Der Scheduler beansprucht den Tages-Slot atomar in MongoDB. Dadurch fuehren auch mehrere Panel-Instanzen denselben geplanten Neustart nur einmal aus. Das ist eine pragmatische Uptime-Massnahme gegen schleichende Server-Degradation; ein allgemeiner Tick-Counter-Overflow wird damit nicht als gesicherte Ursache behauptet.
 
 ### MatchZy-Diagnose und One-shot-Reparatur
 
 Der Tab `Diagnostics` verfolgt die komplette Startkette:
 
 ```text
-CS2 container -> Mod bootstrap -> Metamod -> CounterStrikeSharp -> MatchZy
+CS2 container -> Mod bootstrap -> Metamod -> CounterStrikeSharp -> aktiver Servermodus
 ```
 
 Das Panel liest dafuer den Zustand des `cs2` Containers, die Startup-Logs seit dem letzten Containerstart, feste Plugin-Dateipfade und die Versions-Tags aus `.mod-installer/state.env`. Der Diagnose-Report enthaelt keine Environment-Werte oder Zugangsdaten und kann ueber `Copy report` sicher fuer die Fehlersuche kopiert werden.
@@ -146,9 +154,9 @@ In Coolify bei der Domain fuer den Service `admin-panel` den Container-Port `808
 
 Wichtig: Der `admin-panel` Container mountet den Docker-Socket, damit er den `cs2` Container neu starten kann. Das ist funktional, aber sicherheitsrelevant: Wer Zugriff auf das Panel bekommt, kann indirekt Docker auf dem Host steuern. Wenn das Panel oeffentlich erreichbar ist, sollte es hinter HTTPS/Reverse-Proxy laufen; fuer produktiven Betrieb sind zusaetzlich IP-Allowlisting oder VPN empfehlenswert.
 
-### CounterStrikeSharp Admins
+### Einheitliche Rollen und Admins
 
-Das Panel pflegt CounterStrikeSharp-Admins als Steam64ID plus Flags, z. B.:
+MongoDB ist die einzige Adminquelle des Panels. Jede Steam64ID bekommt eine der Rollen `Owner`, `Match operator`, `Moderator` oder `Custom`. Daraus werden CounterStrikeSharp-Flags erzeugt, z. B.:
 
 - `@css/root`
 - `@css/config`
@@ -157,12 +165,12 @@ Das Panel pflegt CounterStrikeSharp-Admins als Steam64ID plus Flags, z. B.:
 - `@css/rcon`
 - `@css/chat`
 
-Beim Anwenden erzeugt das Panel `csharp-admins.json` und `matchzy-admins.json`. Wenn beide Dateien existieren, kopiert `cs2/pre.sh` sie an die Plugin-Zielpfade:
+Beim Anwenden erzeugt das Panel `csharp-admins.json`. MatchZy nutzt diese CounterStrikeSharp-Rechte ebenfalls; die alte MatchZy-Adminliste bleibt leer, damit keine zweite, abweichende Berechtigungsquelle entsteht:
 
 - `game/csgo/addons/counterstrikesharp/configs/admins.json`
 - `game/csgo/cfg/MatchZy/admins.json`
 
-Wenn diese Runtime-Dateien fehlen, bleibt der alte `ADMINS`-Flow als Fallback aktiv.
+Falls bei einer bestehenden Installation noch keine Admin-Daten in MongoDB liegen, migriert das Panel gueltige IDs aus `ADMINS` einmalig als `Owner`. Danach wird `ADMINS` aus der gespeicherten Serverkonfiguration entfernt.
 
 ### MatchZy Nades
 
@@ -186,7 +194,7 @@ Panel-Aenderungen werden ohne CS2-Restart in die Live-Datei geschrieben. Ingame 
 `cs2/entrypoint.sh` synchronisiert vor jedem Start `/etc/pre.sh` und `/etc/post.sh` in das Persistenz-Volume. Danach wird `cs2/pre.sh` vor dem Start des CS2-Prozesses ausgefuehrt und erledigt Folgendes:
 
 1. Loest Metamod fuer CS2 ueber die offiziellen `2.0-dev` Builds auf.
-2. Loest das gewuenschte MatchZy-Release auf.
+2. Loest nur das Release des mit `SERVER_MODE` gewaehlten Modus auf und entfernt den jeweils anderen Modus.
 3. Installiert `CounterStrikeSharp` separat aus dem offiziellen Release, damit Plugin-Anforderungen nicht am im MatchZy-Archiv gebuendelten Stand haengen bleiben.
 4. Installiert optional weitere Plugins ueber deren offizielle Release-Archive:
    - `cs2-fake-rcon`
@@ -199,8 +207,8 @@ Panel-Aenderungen werden ohne CS2-Restart in die Live-Datei geschrieben. Ingame 
    - `Ray-Trace`
    - `FortniteEmotesNDances`
    - `cs2-executes`
-5. Schreibt `cfg/MatchZy/admins.json` und `addons/counterstrikesharp/configs/admins.json` aus den Runtime-Dateien `matchzy-admins.json` und `csharp-admins.json` oder fallback aus `ADMINS` neu.
-6. Schreibt `cfg/MatchZy/config.cfg` mit `matchzy_smoke_color_enabled` aus `MATCHZY_SMOKE_COLOR` und Chat-Prefix aus ENV neu.
+5. Schreibt `addons/counterstrikesharp/configs/admins.json` aus der Runtime-Datei oder migriert als Fallback `ADMINS`; `cfg/MatchZy/admins.json` bleibt leer.
+6. Schreibt nur im MatchZy-Modus `cfg/MatchZy/config.cfg` und die Nade-Runtime-Datei.
 7. Schreibt bei Bedarf `cfg/multiaddonmanager/multiaddonmanager.cfg` aus Fortnite Emotes und aktivierten `CS2_WORKSHOP_MAPS` neu.
 8. Patcht `gameinfo.gi` erneut, damit `csgo/addons/metamod` in den `SearchPaths` enthalten ist.
 9. Speichert die installierten Versionen in `/home/steam/cs2-dedicated/.mod-installer/state.env`.
@@ -209,20 +217,21 @@ Panel-Aenderungen werden ohne CS2-Restart in die Live-Datei geschrieben. Ingame 
 
 ### cs2-fake-rcon
 
-- Wird standardmaessig installiert.
+- Ist standardmaessig deaktiviert.
 - Stellt `fake_rcon_password` und `fake_rcon` bereit.
 
 ### WeaponPaints
 
-- Wird standardmaessig installiert.
+- Ist standardmaessig deaktiviert und muss bewusst aktiviert werden.
 - Benoetigt MySQL laut Projekt-Doku.
 - `cs2/pre.sh` kopiert automatisch `weaponpaints.json` nach `addons/counterstrikesharp/gamedata/`.
 - `cs2/pre.sh` setzt in `addons/counterstrikesharp/configs/core.json` nach Moeglichkeit `FollowCS2ServerGuidelines` auf `false`, wie vom Projekt verlangt.
+- Das Panel zeigt deshalb eine GSLT-/Server-Guideline-Warnung.
 - Danach musst du `addons/counterstrikesharp/configs/plugins/WeaponPaints/WeaponPaints.json` mit deinen DB-Daten pflegen.
 
 ### CS2-SimpleAdmin
 
-- Wird standardmaessig installiert.
+- Ist standardmaessig deaktiviert.
 - Abhaengigkeiten `PlayerSettingsCS2`, `AnyBaseLibCS2` und `MenuManagerCS2` werden automatisch mit installiert.
 - Beim ersten Start erzeugt das Plugin seine Konfiguration unter:
 
@@ -232,7 +241,7 @@ addons/counterstrikesharp/configs/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.json
 
 ### FortniteEmotesNDances
 
-- Wird standardmaessig installiert.
+- Ist standardmaessig deaktiviert.
 - Benoetigt laut Projekt `MultiAddonManager` und `Ray-Trace`; beides wird automatisch mit installiert.
 - `cs2/pre.sh` traegt automatisch die Workshop-Addon-ID `3328582199` in `cfg/multiaddonmanager/multiaddonmanager.cfg` ein.
 - Wenn du das Plugin nicht willst, setze `FORTNITE_EMOTES_ENABLED=0`.
@@ -246,7 +255,7 @@ CS2_WORKSHOP_MAPS=https://steamcommunity.com/sharedfiles/filedetails/?id=3070244
 CS2_WORKSHOP_MAPS=3070244462,3077265396
 ```
 
-Mit `CS2_WORKSHOP_MAPS_ENABLED=0` bleiben die IDs/Links in `CS2_WORKSHOP_MAPS` gespeichert, werden aber beim Containerstart nicht geladen, nicht validiert und nicht in `MultiAddonManager` geschrieben. Standard ist `1`.
+Mit `CS2_WORKSHOP_MAPS_ENABLED=0` bleiben die IDs/Links in `CS2_WORKSHOP_MAPS` gespeichert, werden aber beim Containerstart nicht geladen, nicht validiert und nicht in `MultiAddonManager` geschrieben. Standard ist `0`.
 
 Wenn `CS2_WORKSHOP_MAPS_ENABLED=1` ist, extrahiert `cs2/pre.sh` beim Containerstart daraus die IDs, entfernt Duplikate und schreibt sie in:
 
@@ -258,32 +267,33 @@ Wenn `FORTNITE_EMOTES_ENABLED=1` ist, wird die Fortnite-Emotes-Workshop-ID zusae
 
 Optional kannst du mit `CS2_WORKSHOP_FORCE_DOWNLOAD=1` setzen, dass MultiAddonManager die gemounteten Workshop-Addons bei jedem Laden erneut prueft/downloadet. Standard ist `0`.
 
-### cs2-executes
+### Servermodi
 
-- Wird standardmaessig installiert.
-- Das Plugin ist eher ein eigener Trainings-/Executes-Modus als ein klassisches Scrim-Plugin.
-- Wenn du nur MatchZy fuer Pracc/Scrims willst, kannst du es ueber `EXECUTES_ENABLED=0` deaktivieren.
+- `SERVER_MODE=matchzy` installiert MatchZy und entfernt Executes.
+- `SERVER_MODE=executes` installiert Executes und entfernt MatchZy.
+- `SERVER_MODE=vanilla` entfernt beide; Metamod und CounterStrikeSharp bleiben installiert.
+
+`MATCHZY_ENABLED` und `EXECUTES_ENABLED` bleiben nur als abgeleitete Kompatibilitaetswerte bestehen. Entscheidend ist immer `SERVER_MODE`.
 
 ## 6) Erste Nutzung mit MatchZy
 
 Nach erfolgreichem Start kannst du MatchZy direkt im Server verwenden.
 
-Wenn du MatchZy-Admins per Environment setzen willst, nutze `ADMINS` als komma-separierte Liste von Steam64IDs. Leerzeichen um die Kommata sind erlaubt.
+Wenn du eine alte MatchZy-Installation migrierst, kannst du `ADMINS` einmalig als komma-separierte Liste von Steam64IDs belassen. Das Panel uebernimmt die IDs beim ersten Start als Owner.
 
 ```bash
 ADMINS=76561198000000001, 76561198000000002
 ```
 
-Beim Containerstart schreibt `cs2/pre.sh` daraus automatisch:
+Ohne vorhandene Panel-Runtime-Datei schreibt `cs2/pre.sh` daraus als Fallback:
 
-- `game/csgo/cfg/MatchZy/admins.json`
 - `game/csgo/addons/counterstrikesharp/configs/admins.json`
 
 Zusätzlich schreibt der Bootstrap immer auch:
 
 - `game/csgo/cfg/MatchZy/config.cfg`
 
-Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`, wenn du den alten `ADMINS`-Flow nutzt. Wenn du Admins ueber das Web-Panel pflegst, ist `csharp-admins.json` fuehrend und erlaubt rollenbasierte Flags pro Admin. Ein leeres `ADMINS` erzeugt entsprechend leere Adminlisten, solange keine Runtime-Admin-Datei existiert.
+Die CounterStrikeSharp-Datei bekommt pro Steam64ID automatisch `@css/root`, wenn der alte Fallback greift. Sobald das Panel Daten verwaltet, ist `csharp-admins.json` fuehrend; MatchZys eigene Admin-Datei wird leer geschrieben.
 
 Die MatchZy-Config enthaelt aktuell diese automatisch gesetzten Werte:
 
@@ -360,7 +370,7 @@ In der CS2-Konsole:
 
 - `meta list` sollte Metamod anzeigen
 - `meta list` sollte auch `fake_rcon`, `multiaddonmanager` und `RayTrace` zeigen, falls aktiviert oder fuer Workshop-Maps benoetigt
-- `css_plugins list` sollte MatchZy anzeigen
+- `css_plugins list` sollte den mit `SERVER_MODE` gewaehlten Modus anzeigen
 - `css_plugins list` sollte je nach aktivierten Plugins auch `WeaponPaints`, `CS2-SimpleAdmin`, `PlayerSettings`, `MenuManagerCore`, `FortniteEmotesNDances` und `ExecutesPlugin` zeigen
 - `docker compose ps admin-panel mongodb` sollte das Admin-Panel und MongoDB anzeigen
 

@@ -8,7 +8,9 @@ export const SERVER_ENV_KEYS = [
   "CS2_PORT",
   "TV_PORT",
   "CS2_ADDITIONAL_ARGS",
+  "SERVER_MODE",
   "METAMOD_VERSION",
+  "MATCHZY_ENABLED",
   "MATCHZY_VERSION",
   "COUNTERSTRIKESHARP_VERSION",
   "FAKE_RCON_ENABLED",
@@ -21,6 +23,7 @@ export const SERVER_ENV_KEYS = [
   "MULTIADDONMANAGER_VERSION",
   "RAYTRACE_VERSION",
   "CS2_WORKSHOP_MAPS",
+  "CS2_WORKSHOP_MAPS_ENABLED",
   "CS2_WORKSHOP_FORCE_DOWNLOAD",
   "EXECUTES_ENABLED",
   "EXECUTES_VERSION",
@@ -32,6 +35,9 @@ export const SERVER_ENV_KEYS = [
   "MATCHZY_SMOKE_COLOR",
   "MATCHZY_SAVE_NADES_AS_GLOBAL",
   "MATCHZY_CHAT_PREFIX",
+  "AUTO_RESTART_ENABLED",
+  "AUTO_RESTART_TIME",
+  "AUTO_RESTART_TIMEZONE",
   "ADMINS",
   "MOD_REINSTALL"
 ];
@@ -46,29 +52,17 @@ export const ENV_KEYS = [
   "MONGODB_URI"
 ];
 
-export const CURATED_FIELDS = [
-  { key: "CS2_SERVERNAME", label: "Server name", type: "text" },
-  { key: "CS2_RCONPW", label: "RCON password", type: "password" },
-  { key: "CS2_PW", label: "Join password", type: "text" },
-  { key: "CS2_MAXPLAYERS", label: "Max players", type: "number" },
-  { key: "CS2_STARTMAP", label: "Start map", type: "text" },
-  { key: "CS2_WORKSHOP_MAPS", label: "Workshop maps", type: "textarea" },
-  { key: "MATCHZY_SMOKE_COLOR", label: "MatchZy smoke color", type: "boolean" },
-  { key: "MATCHZY_SAVE_NADES_AS_GLOBAL", label: "MatchZy global saved nades", type: "boolean" },
-  { key: "MATCHZY_CHAT_PREFIX", label: "MatchZy chat prefix", type: "text" },
-  { key: "FAKE_RCON_ENABLED", label: "Fake RCON", type: "boolean" },
-  { key: "WEAPONPAINTS_ENABLED", label: "WeaponPaints", type: "boolean" },
-  { key: "FORTNITE_EMOTES_ENABLED", label: "Fortnite Emotes", type: "boolean" },
-  { key: "EXECUTES_ENABLED", label: "Executes", type: "boolean" },
-  { key: "SIMPLEADMIN_ENABLED", label: "SimpleAdmin", type: "boolean" },
-  { key: "MOD_REINSTALL", label: "Force mod reinstall on next start", type: "boolean" }
-];
-
 export const FLAG_PRESETS = [
   "@css/root",
+  "@css/generic",
+  "@css/kick",
+  "@css/ban",
+  "@css/unban",
+  "@css/slay",
   "@css/config",
   "@custom/prac",
   "@css/map",
   "@css/rcon",
-  "@css/chat"
+  "@css/chat",
+  "@css/vote"
 ];

@@ -1,12 +1,26 @@
+import { normalizeServerSettings } from "./policy.js";
+
 const VERSION_FIELDS = [
   ["METAMOD", "Metamod", "METAMOD_VERSION"],
   ["MATCHZY", "MatchZy", "MATCHZY_VERSION"],
   ["COUNTERSTRIKESHARP", "CounterStrikeSharp", "COUNTERSTRIKESHARP_VERSION"],
   ["FAKE_RCON", "Fake RCON", "FAKE_RCON_VERSION"],
+  ["WEAPONPAINTS", "WeaponPaints", "WEAPONPAINTS_VERSION"],
+  ["PLAYERSETTINGS", "PlayerSettings", "PLAYERSETTINGS_VERSION"],
+  ["ANYBASELIB", "AnyBaseLib", "ANYBASELIB_VERSION"],
+  ["MENUMANAGER", "MenuManager", "MENUMANAGER_VERSION"],
+  ["SIMPLEADMIN", "SimpleAdmin", "SIMPLEADMIN_VERSION"],
   ["MULTIADDONMANAGER", "MultiAddonManager", "MULTIADDONMANAGER_VERSION"],
   ["RAYTRACE", "Ray-Trace", "RAYTRACE_VERSION"],
   ["FORTNITE_EMOTES", "Fortnite Emotes", "FORTNITE_EMOTES_VERSION"],
   ["EXECUTES", "Executes", "EXECUTES_VERSION"]
+];
+
+const OPTIONAL_PLUGIN_FILES = [
+  { id: "fake-rcon", label: "Fake RCON", enabled: (env) => env.FAKE_RCON_ENABLED === "1", files: ["fakeRcon"] },
+  { id: "weaponpaints", label: "WeaponPaints", enabled: (env) => env.WEAPONPAINTS_ENABLED === "1", files: ["weaponPaints", "playerSettings", "anyBaseLib", "menuManager"] },
+  { id: "simpleadmin", label: "SimpleAdmin", enabled: (env) => env.SIMPLEADMIN_ENABLED === "1", files: ["simpleAdmin", "playerSettings", "anyBaseLib", "menuManager"] },
+  { id: "fortnite-emotes", label: "Fortnite Emotes", enabled: (env) => env.FORTNITE_EMOTES_ENABLED === "1", files: ["fortniteEmotes", "multiAddonManager", "rayTrace"] }
 ];
 
 function parseProbeOutput(output = "") {
@@ -40,7 +54,20 @@ function check(id, label, status, detail) {
   return { id, label, status, detail };
 }
 
+function isVersionRelevant(key, env) {
+  if (key === "MATCHZY") return env.SERVER_MODE === "matchzy";
+  if (key === "EXECUTES") return env.SERVER_MODE === "executes";
+  if (key === "FAKE_RCON") return env.FAKE_RCON_ENABLED === "1";
+  if (key === "WEAPONPAINTS") return env.WEAPONPAINTS_ENABLED === "1";
+  if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return env.WEAPONPAINTS_ENABLED === "1" || env.SIMPLEADMIN_ENABLED === "1";
+  if (key === "SIMPLEADMIN") return env.SIMPLEADMIN_ENABLED === "1";
+  if (key === "MULTIADDONMANAGER") return env.FORTNITE_EMOTES_ENABLED === "1" || env.CS2_WORKSHOP_MAPS_ENABLED === "1";
+  if (["RAYTRACE", "FORTNITE_EMOTES"].includes(key)) return env.FORTNITE_EMOTES_ENABLED === "1";
+  return true;
+}
+
 export function buildDiagnostics({ service, container, probe, logs = "", desired = {}, controlMode = "docker" }) {
+  const env = normalizeServerSettings(desired);
   const { files, versions } = parseProbeOutput(probe?.stdout);
   const normalizedLogs = String(logs).toLowerCase();
   const bootstrapSuccess = normalizedLogs.lastIndexOf("[pre.sh] mod bootstrap complete");
@@ -80,6 +107,26 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         ? "warn"
         : "fail";
 
+  const modeCheck = env.SERVER_MODE === "matchzy"
+    ? check(
+      "matchzy",
+      "MatchZy",
+      matchZyRuntimeStatus,
+      matchZyRuntimeStatus === "pass"
+        ? "MatchZy reported a successful load."
+        : matchZyRuntimeStatus === "fail"
+          ? matchZyInstalled ? "MatchZy reported a load failure." : "MatchZy.dll is missing."
+          : "MatchZy.dll exists, but no load confirmation is present in retained logs."
+    )
+    : env.SERVER_MODE === "executes"
+      ? check(
+        "executes",
+        "Executes",
+        files.executes ? "pass" : "fail",
+        files.executes ? "The selected Executes mode plugin is installed." : "ExecutesPlugin.dll is missing."
+      )
+      : check("vanilla", "Vanilla mode", "pass", "No match mode plugin is selected.");
+
   const checks = [
     check(
       "container",
@@ -111,19 +158,21 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       cssReady ? "pass" : "fail",
       cssReady ? "Native loader and API assembly are present." : "Native loader or API assembly is missing."
     ),
-    check(
-      "matchzy",
-      "MatchZy",
-      matchZyRuntimeStatus,
-      matchZyRuntimeStatus === "pass"
-        ? "MatchZy reported a successful load."
-        : matchZyRuntimeStatus === "fail"
-          ? matchZyInstalled ? "MatchZy reported a load failure." : "MatchZy.dll is missing."
-          : "MatchZy.dll exists, but no load confirmation is present in retained logs."
-    )
+    modeCheck
   ];
 
   const findings = [];
+  const plugins = OPTIONAL_PLUGIN_FILES.filter((plugin) => plugin.enabled(env)).map((plugin) => {
+    const missingFiles = plugin.files.filter((file) => !files[file]);
+    return { id: plugin.id, label: plugin.label, status: missingFiles.length === 0 ? "pass" : "fail", missingFiles };
+  });
+  for (const plugin of plugins.filter((item) => item.status === "fail")) {
+    findings.push({
+      severity: "error",
+      title: `${plugin.label} is enabled but incomplete`,
+      detail: `Missing runtime markers: ${plugin.missingFiles.join(", ")}. Run the one-shot repair and inspect the bootstrap log if it remains incomplete.`
+    });
+  }
   const assetFailures = findAssetFailures(String(logs));
   if (assetFailures.length > 0) {
     findings.push({
@@ -146,7 +195,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       detail: "Open Docker Logs and inspect the first [pre.sh] ERROR from the latest container start."
     });
   }
-  if (matchZyRuntimeStatus === "fail" && matchZyInstalled) {
+  if (env.SERVER_MODE === "matchzy" && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
     findings.push({
       severity: "error",
       title: "MatchZy did not enter the loaded state",
@@ -161,16 +210,17 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     });
   }
 
-  const hasCriticalFailure = checks.some((item) => item.status === "fail");
+  const hasCriticalFailure = checks.some((item) => item.status === "fail") || findings.some((item) => item.severity === "error");
   const hasWarning = checks.some((item) => item.status === "warn") || findings.some((item) => item.severity === "warning");
   const overall = hasCriticalFailure ? "critical" : hasWarning ? "degraded" : "healthy";
   const firstProblem = checks.find((item) => item.status === "fail") || checks.find((item) => item.status === "warn");
 
   return {
     generatedAt: new Date().toISOString(),
+    mode: { id: env.SERVER_MODE, name: modeCheck.label },
     overall,
     summary: overall === "healthy"
-      ? "The complete MatchZy load chain is healthy."
+      ? `The complete ${env.SERVER_MODE === "vanilla" ? "framework" : modeCheck.label} load chain is healthy.`
       : firstProblem?.detail || "Diagnostics need attention.",
     service: {
       state: service?.state || "unknown",
@@ -181,15 +231,18 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       restartCount: Number(container?.restartCount || 0)
     },
     checks,
+    plugins,
     findings,
     versions: VERSION_FIELDS.map(([key, label, envKey]) => ({
       key,
       label,
       installed: versions[key] || "not detected",
-      wanted: desired[envKey] || "latest"
+      wanted: env[envKey] || "latest",
+      relevant: isVersionRelevant(key, env)
     })),
     repairAvailable: serviceRunning && overall !== "healthy",
     nades: {
+      relevant: env.SERVER_MODE === "matchzy",
       configPresent: Boolean(files.matchZyConfig),
       savedNadesPresent: Boolean(files.matchZySavedNades)
     }

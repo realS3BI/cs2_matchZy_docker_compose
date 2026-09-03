@@ -574,6 +574,12 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/configs/plugins/ExecutesPlugin"
   }
 
+  remove_matchzy_component() {
+    rm -rf \
+      "$CSS_DIR/plugins/MatchZy" \
+      "$CSS_DIR/configs/plugins/MatchZy"
+  }
+
   patch_gameinfo_for_metamod() {
     local gameinfo="$1"
     local tmp_file=""
@@ -815,24 +821,26 @@ _matchzy_bootstrap_main() (
   local GAMEINFO_FILE="$GAME_DIR/gameinfo.gi"
 
   local METAMOD_VERSION="${METAMOD_VERSION:-latest}"
+  local SERVER_MODE="${SERVER_MODE:-matchzy}"
+  local MATCHZY_ENABLED="${MATCHZY_ENABLED:-1}"
   local MATCHZY_VERSION="${MATCHZY_VERSION:-latest}"
   local COUNTERSTRIKESHARP_VERSION="${COUNTERSTRIKESHARP_VERSION:-latest}"
   local MOD_REINSTALL="${MOD_REINSTALL:-0}"
-  local FAKE_RCON_ENABLED="${FAKE_RCON_ENABLED:-1}"
+  local FAKE_RCON_ENABLED="${FAKE_RCON_ENABLED:-0}"
   local FAKE_RCON_VERSION="${FAKE_RCON_VERSION:-latest}"
-  local WEAPONPAINTS_ENABLED="${WEAPONPAINTS_ENABLED:-1}"
+  local WEAPONPAINTS_ENABLED="${WEAPONPAINTS_ENABLED:-0}"
   local WEAPONPAINTS_VERSION="${WEAPONPAINTS_VERSION:-latest}"
-  local FORTNITE_EMOTES_ENABLED="${FORTNITE_EMOTES_ENABLED:-1}"
+  local FORTNITE_EMOTES_ENABLED="${FORTNITE_EMOTES_ENABLED:-0}"
   local FORTNITE_EMOTES_VERSION="${FORTNITE_EMOTES_VERSION:-latest}"
   local FORTNITE_EMOTES_WORKSHOP_ADDON_ID="${FORTNITE_EMOTES_WORKSHOP_ADDON_ID:-3328582199}"
   local MULTIADDONMANAGER_VERSION="${MULTIADDONMANAGER_VERSION:-latest}"
   local RAYTRACE_VERSION="${RAYTRACE_VERSION:-latest}"
-  local CS2_WORKSHOP_MAPS_ENABLED="${CS2_WORKSHOP_MAPS_ENABLED:-1}"
+  local CS2_WORKSHOP_MAPS_ENABLED="${CS2_WORKSHOP_MAPS_ENABLED:-0}"
   local CS2_WORKSHOP_MAPS="${CS2_WORKSHOP_MAPS:-}"
   local CS2_WORKSHOP_FORCE_DOWNLOAD="${CS2_WORKSHOP_FORCE_DOWNLOAD:-0}"
-  local EXECUTES_ENABLED="${EXECUTES_ENABLED:-1}"
+  local EXECUTES_ENABLED="${EXECUTES_ENABLED:-0}"
   local EXECUTES_VERSION="${EXECUTES_VERSION:-latest}"
-  local SIMPLEADMIN_ENABLED="${SIMPLEADMIN_ENABLED:-1}"
+  local SIMPLEADMIN_ENABLED="${SIMPLEADMIN_ENABLED:-0}"
   local SIMPLEADMIN_VERSION="${SIMPLEADMIN_VERSION:-latest}"
   local PLAYERSETTINGS_VERSION="${PLAYERSETTINGS_VERSION:-latest}"
   local ANYBASELIB_VERSION="${ANYBASELIB_VERSION:-latest}"
@@ -844,6 +852,26 @@ _matchzy_bootstrap_main() (
   local CSHARP_ADMINS_FILE="${CSHARP_ADMINS_FILE:-}"
   local MATCHZY_ADMINS_FILE="${MATCHZY_ADMINS_FILE:-}"
   local MATCHZY_SAVEDNADES_FILE="${MATCHZY_SAVEDNADES_FILE:-}"
+
+  case "$SERVER_MODE" in
+    matchzy)
+      MATCHZY_ENABLED=1
+      EXECUTES_ENABLED=0
+      ;;
+    executes)
+      MATCHZY_ENABLED=0
+      EXECUTES_ENABLED=1
+      ;;
+    vanilla)
+      MATCHZY_ENABLED=0
+      EXECUTES_ENABLED=0
+      ;;
+    *)
+      fail "SERVER_MODE must be one of: matchzy, executes, vanilla"
+      ;;
+  esac
+  log "Server mode '$SERVER_MODE' selected (MatchZy=$MATCHZY_ENABLED, Executes=$EXECUTES_ENABLED)"
+
   local NEED_MENU_STACK=0
   if is_enabled "$SIMPLEADMIN_ENABLED" || is_enabled "$WEAPONPAINTS_ENABLED"; then
     NEED_MENU_STACK=1
@@ -885,6 +913,11 @@ _matchzy_bootstrap_main() (
   fi
 
   remove_obsolete_plugins
+
+  if ! is_enabled "$MATCHZY_ENABLED"; then
+    log "MatchZy disabled by server mode; removing installed plugin files"
+    remove_matchzy_component
+  fi
 
   if ! is_enabled "$FAKE_RCON_ENABLED"; then
     log "cs2-fake-rcon disabled; removing installed files"
@@ -930,19 +963,24 @@ _matchzy_bootstrap_main() (
   [[ -n "${METAMOD_TAG:-}" && -n "${METAMOD_URL:-}" ]] || fail "Could not resolve Metamod linux asset"
   log "Metamod resolved to tag '$METAMOD_TAG'"
 
-  log "Resolving MatchZy release: $MATCHZY_VERSION"
-  local matchzy_json
-  matchzy_json="$(get_release_json shobhit-pathak/MatchZy "$MATCHZY_VERSION")" \
-    || fail "Unable to resolve MatchZy release for '$MATCHZY_VERSION'"
-  local MATCHZY_TAG MATCHZY_URL
-  MATCHZY_TAG="$(extract_tag_name "$matchzy_json")"
-  MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'with-cssharp.*linux.*\.(zip|tar\.gz)$')"
-  if [[ -z "${MATCHZY_URL:-}" ]]; then
-    MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'linux.*\.(zip|tar\.gz)$')"
+  local MATCHZY_TAG=""
+  local MATCHZY_URL=""
+  if is_enabled "$MATCHZY_ENABLED"; then
+    log "Resolving MatchZy release: $MATCHZY_VERSION"
+    local matchzy_json
+    matchzy_json="$(get_release_json shobhit-pathak/MatchZy "$MATCHZY_VERSION")" \
+      || fail "Unable to resolve MatchZy release for '$MATCHZY_VERSION'"
+    MATCHZY_TAG="$(extract_tag_name "$matchzy_json")"
+    MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'with-cssharp.*linux.*\.(zip|tar\.gz)$')"
+    if [[ -z "${MATCHZY_URL:-}" ]]; then
+      MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'linux.*\.(zip|tar\.gz)$')"
+    fi
+    [[ -n "${MATCHZY_TAG:-}" && -n "${MATCHZY_URL:-}" ]] \
+      || fail "Could not resolve MatchZy linux asset"
+    log "MatchZy resolved to tag '$MATCHZY_TAG'"
+  else
+    log "MatchZy installation disabled"
   fi
-  [[ -n "${MATCHZY_TAG:-}" && -n "${MATCHZY_URL:-}" ]] \
-    || fail "Could not resolve MatchZy linux asset"
-  log "MatchZy resolved to tag '$MATCHZY_TAG'"
 
   local COUNTERSTRIKESHARP_TAG=""
   local COUNTERSTRIKESHARP_URL=""
@@ -1212,11 +1250,13 @@ _matchzy_bootstrap_main() (
     log "Metamod already current; skipping"
   fi
 
-  if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MATCHZY_TAG" != "$MATCHZY_TAG" || ! -d "$matchzy_marker" ]]; then
-    log "Installing or updating MatchZy"
-    install_archive_component "matchzy" "$MATCHZY_URL" "$GAME_DIR" "$matchzy_marker" "csgo"
-  else
-    log "MatchZy already current; skipping"
+  if is_enabled "$MATCHZY_ENABLED"; then
+    if [[ "$MOD_REINSTALL" == "1" || "$INSTALLED_MATCHZY_TAG" != "$MATCHZY_TAG" || ! -d "$matchzy_marker" ]]; then
+      log "Installing or updating MatchZy"
+      install_archive_component "matchzy" "$MATCHZY_URL" "$GAME_DIR" "$matchzy_marker" "csgo"
+    else
+      log "MatchZy already current; skipping"
+    fi
   fi
 
   installed_css_api_version="$(read_css_api_version "$css_marker")"
@@ -1233,19 +1273,20 @@ _matchzy_bootstrap_main() (
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
 
-  if [[ -n "$CSHARP_ADMINS_FILE" && -f "$CSHARP_ADMINS_FILE" && -n "$MATCHZY_ADMINS_FILE" && -f "$MATCHZY_ADMINS_FILE" ]]; then
-    write_admin_files_from_runtime "$CSHARP_ADMINS_FILE" "$MATCHZY_ADMINS_FILE" "$matchzy_admins_file" "$css_admins_file"
+  if [[ -n "$CSHARP_ADMINS_FILE" && -f "$CSHARP_ADMINS_FILE" ]]; then
+    copy_file_atomic "$CSHARP_ADMINS_FILE" "$css_admins_file"
+    log "Wrote CounterStrikeSharp admins from the runtime file"
   else
-    write_matchzy_admins_file "$ADMINS" "$matchzy_admins_file"
-  fi
-  write_matchzy_config_file \
-    "$MATCHZY_SMOKE_COLOR" \
-    "$MATCHZY_CHAT_PREFIX" \
-    "$MATCHZY_SAVE_NADES_AS_GLOBAL" \
-    "$matchzy_config_file"
-  write_matchzy_savednades_file_from_runtime "$MATCHZY_SAVEDNADES_FILE" "$matchzy_savednades_file"
-  if [[ -z "$CSHARP_ADMINS_FILE" || ! -f "$CSHARP_ADMINS_FILE" || -z "$MATCHZY_ADMINS_FILE" || ! -f "$MATCHZY_ADMINS_FILE" ]]; then
     write_css_admins_file "$ADMINS" "$css_admins_file"
+  fi
+  if is_enabled "$MATCHZY_ENABLED"; then
+    write_matchzy_admins_file "" "$matchzy_admins_file"
+    write_matchzy_config_file \
+      "$MATCHZY_SMOKE_COLOR" \
+      "$MATCHZY_CHAT_PREFIX" \
+      "$MATCHZY_SAVE_NADES_AS_GLOBAL" \
+      "$matchzy_config_file"
+    write_matchzy_savednades_file_from_runtime "$MATCHZY_SAVEDNADES_FILE" "$matchzy_savednades_file"
   fi
 
   if is_enabled "$FAKE_RCON_ENABLED"; then
@@ -1354,6 +1395,7 @@ _matchzy_bootstrap_main() (
 
   cat > "$STATE_FILE" <<EOF
 METAMOD_TAG=$METAMOD_TAG
+SERVER_MODE=$SERVER_MODE
 MATCHZY_TAG=$MATCHZY_TAG
 COUNTERSTRIKESHARP_TAG=$COUNTERSTRIKESHARP_TAG
 FAKE_RCON_TAG=$FAKE_RCON_TAG

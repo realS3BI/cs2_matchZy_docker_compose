@@ -4,6 +4,7 @@ import { createApp } from "./app.js";
 import { NadesSyncService } from "./nades-sync.js";
 import { Store } from "./store.js";
 import { setTimeout as wait } from "node:timers/promises";
+import { RestartScheduler } from "./restart-scheduler.js";
 
 const config = getConfig();
 const store = new Store(config);
@@ -24,11 +25,16 @@ if (config.nadesSyncEnabled) {
   await nadesSync.start();
 }
 
+const compose = new Compose(config);
+const restartScheduler = new RestartScheduler({ store, compose });
+restartScheduler.start();
+
 const app = createApp({
   config,
   store,
-  compose: new Compose(config),
-  nadesSync
+  compose,
+  nadesSync,
+  restartScheduler
 });
 
 const server = app.listen(config.port, "0.0.0.0", () => {
@@ -37,6 +43,7 @@ const server = app.listen(config.port, "0.0.0.0", () => {
 
 async function shutdown() {
   server.close();
+  restartScheduler.stop();
   await nadesSync.stop();
   await store.close();
   process.exit(0);

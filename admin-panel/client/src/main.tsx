@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  Boxes,
+  CalendarClock,
+  Check,
+  ChevronRight,
+  CircleDot,
   Copy,
   Crosshair,
   Download,
@@ -14,6 +19,7 @@ import {
   RotateCcw,
   Save,
   Server,
+  Settings2,
   Shield,
   Terminal,
   Trash2,
@@ -23,7 +29,8 @@ import { api } from "./lib/api";
 import { cn } from "./lib/utils";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +41,9 @@ import {
 } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
+import { Field, FieldDescription, FieldLabel } from "./components/ui/field";
+import { NativeSelect } from "./components/ui/native-select";
+import { Switch } from "./components/ui/switch";
 import { parseSetposSetang } from "./lib/nades";
 import { UploadButton } from "./lib/uploadthing";
 import "./index.css";
@@ -41,25 +51,23 @@ import "@uploadthing/react/styles.css";
 import { Diagnostics } from "./diagnostics";
 
 const tabs = [
-  { id: "dashboard", label: "Dashboard", icon: Server },
-  { id: "diagnostics", label: "Diagnostics", icon: Activity },
-  { id: "settings", label: "Settings", icon: Save },
-  { id: "admins", label: "Admins", icon: Shield },
+  { id: "overview", label: "Overview", icon: Server },
+  { id: "server", label: "Server", icon: Settings2 },
+  { id: "plugins", label: "Plugins", icon: Boxes },
+  { id: "access", label: "Access", icon: Shield },
+  { id: "maintenance", label: "Maintenance", icon: CalendarClock },
   { id: "nades", label: "Nades", icon: Crosshair },
-  { id: "logs", label: "Docker Logs", icon: Terminal }
+  { id: "diagnostics", label: "Diagnostics", icon: Activity },
+  { id: "logs", label: "Logs", icon: Terminal }
 ];
 
 function Message({ message = "", error = "" }: { message?: string; error?: string }) {
   if (!message && !error) return null;
   return (
-    <div
-      className={cn(
-        "mb-4 rounded-md border px-4 py-3 text-sm whitespace-pre-wrap",
-        error ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-[#f7f3df] text-[#8a5d0e]"
-      )}
-    >
-      {error || message}
-    </div>
+    <Alert className="mb-4" variant={error ? "destructive" : "success"}>
+      <AlertTitle>{error ? "Action failed" : "Control room updated"}</AlertTitle>
+      <AlertDescription className="whitespace-pre-wrap">{error || message}</AlertDescription>
+    </Alert>
   );
 }
 
@@ -81,8 +89,9 @@ function Login({ error, onLogin }) {
     <main className="mx-auto mt-[12vh] w-[min(420px,calc(100vw-32px))]">
       <Card className="shadow-[0_18px_60px_rgba(32,35,31,0.12)]">
         <CardHeader>
-          <CardTitle className="text-2xl">CS2 Admin Panel</CardTitle>
-          <p className="text-sm text-muted-foreground">Enter the configured panel password.</p>
+          <p className="control-kicker">Private operations</p>
+          <CardTitle className="control-title text-3xl">CS2 control room</CardTitle>
+          <p className="text-sm text-muted-foreground">Sign in to manage the Coolify deployment.</p>
         </CardHeader>
         <CardContent>
           <Message error={error} />
@@ -105,162 +114,161 @@ function Login({ error, onLogin }) {
   );
 }
 
-function Shell({ children, tab, setTab, message, error, onLogout }) {
+function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, onSave, onApply }) {
   return (
-    <main className="mx-auto mb-12 mt-6 w-[min(1220px,calc(100vw-24px))]">
-      <header className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold">CS2 MatchZy Admin</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Coolify service control, MatchZy diagnostics, and server configuration.</p>
+    <main className="control-shell mx-auto min-h-screen w-full max-w-[1500px] lg:grid lg:grid-cols-[248px_1fr]">
+      <aside className="control-sidebar border-b border-white/10 px-4 py-5 text-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
+        <div className="mb-5 flex items-start justify-between gap-3 lg:mb-9">
+          <div>
+            <p className="control-kicker text-[#8fd4be]">CS2 / OPS</p>
+            <h1 className="control-title mt-2 text-2xl text-white">Control room</h1>
+            <p className="mt-2 hidden text-xs leading-relaxed text-white/55 lg:block">One source of truth for your Coolify game server.</p>
+          </div>
+          <Button className="text-white hover:bg-white/10" variant="ghost" size="icon" title="Log out" onClick={onLogout}>
+            <LogOut />
+          </Button>
         </div>
-        <Button variant="secondary" onClick={onLogout}>
-          <LogOut className="h-4 w-4" />
-          Logout
-        </Button>
-      </header>
-      <nav className="mb-5 flex gap-2 overflow-x-auto border-b border-border pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {tabs.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Button
-              key={item.id}
-              variant={tab === item.id ? "default" : "ghost"}
-              onClick={() => setTab(item.id)}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
+        <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:grid" aria-label="Control room sections">
+          {tabs.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.id} type="button" className={cn("control-nav-item", tab === item.id && "control-nav-item-active")} onClick={() => setTab(item.id)}>
+                <Icon aria-hidden="true" />
+                <span>{item.label}</span>
+                <ChevronRight className="ml-auto hidden lg:block" aria-hidden="true" />
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+      <div className="min-w-0 px-3 pb-28 pt-5 sm:px-6 lg:px-9 lg:pt-8">
+        <Message message={message} error={error} />
+        {children}
+      </div>
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-3 py-3 shadow-[0_-8px_30px_rgba(20,27,24,0.08)] backdrop-blur lg:left-[248px]">
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-3">
+          <span className="hidden text-sm text-muted-foreground sm:block">{dirty ? "Draft changes are not active yet." : "Configuration matches the saved draft."}</span>
+          <div className="ml-auto flex gap-2">
+            <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}>
+              <Save data-icon="inline-start" /> Save draft
             </Button>
-          );
-        })}
-      </nav>
-      <Message message={message} error={error} />
-      {children}
+            <Button onClick={onApply} disabled={busy}>
+              <UploadCloud data-icon="inline-start" /> Apply & restart
+            </Button>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }
 
-function Dashboard({ env, admins, nades, status, onRefresh, onApply, onRestart, busy }) {
+function formatDate(value) {
+  if (!value) return "Not yet";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+}
+
+function PageHeader({ eyebrow, title, description, actions = null }) {
+  return (
+    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="max-w-3xl">
+        <p className="control-kicker">{eyebrow}</p>
+        <h2 className="control-title mt-2 text-4xl">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+      {actions}
+    </header>
+  );
+}
+
+function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, busy }) {
   const service = status?.service;
   const last = status?.lastAction;
-  const globalNadesEnabled = ["1", "true", "yes", "on"].includes(String(env.MATCHZY_SAVE_NADES_AS_GLOBAL ?? "1").toLowerCase());
+  const maintenance = status?.maintenance;
+  const [restartOpen, setRestartOpen] = useState(false);
+  const activeMode = (policy?.modes || []).find((mode) => mode.id === env.SERVER_MODE) || policy?.mode;
+  const enabledPlugins = (policy?.plugins || []).filter((plugin) => plugin.locked || (plugin.envKey ? env[plugin.envKey] === "1" : plugin.enabled)).length;
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={onRefresh} disabled={busy}>
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
-        <Button onClick={onApply} disabled={busy}>
-          <UploadCloud className="h-4 w-4" />
-          Apply & Restart CS2
-        </Button>
-        <Button variant="destructive" onClick={onRestart} disabled={busy}>
-          <RotateCcw className="h-4 w-4" />
-          Restart CS2
-        </Button>
-      </div>
-      <section className="grid gap-4 md:grid-cols-3">
+      <PageHeader
+        eyebrow="Live operations"
+        title={env.CS2_SERVERNAME || "CS2 server"}
+        description="The server's current lifecycle, selected game mode and next maintenance window."
+        actions={<div className="flex gap-2"><Button variant="secondary" onClick={onRefresh} disabled={busy}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} /> Refresh</Button><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
+      />
+      <section className="control-hero mb-5 overflow-hidden rounded-lg border border-white/10 p-5 text-white sm:p-7">
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={service?.state === "running" ? "success" : "destructive"}>{service?.state || "unknown"}</Badge>
+              <Badge className="border-white/20 text-white" variant="outline">{activeMode?.name || env.SERVER_MODE}</Badge>
+            </div>
+            <p className="control-title mt-5 max-w-2xl text-4xl text-white">{activeMode?.description}</p>
+          </div>
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md bg-white/10">
+            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Start map</dt><dd className="mt-2 font-mono text-sm">{env.CS2_STARTMAP}</dd></div>
+            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Players</dt><dd className="mt-2 font-mono text-sm">0–{env.CS2_MAXPLAYERS}</dd></div>
+            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Plugins</dt><dd className="mt-2 font-mono text-sm">{enabledPlugins} active</dd></div>
+            <div className="bg-black/20 p-4"><dt className="text-xs uppercase tracking-wider text-white/50">Access</dt><dd className="mt-2 font-mono text-sm">{admins.length} people</dd></div>
+          </dl>
+        </div>
+      </section>
+      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <Card>
-          <CardHeader>
-            <CardTitle>Server</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm text-muted-foreground">
-            <span>State: <Badge>{service?.state || "unknown"}</Badge></span>
-            <span>Service: <code className="text-primary">cs2</code></span>
+          <CardHeader><CardTitle>Server lifecycle</CardTitle><CardDescription>The same path is checked by Diagnostics after every boot.</CardDescription></CardHeader>
+          <CardContent>
+            <ol className="lifecycle-rail">
+              {["Coolify image", "Bootstrap", "Game process", "Daily recycle"].map((label, index) => (
+                <li key={label}><span className={cn("lifecycle-node", index < 3 && service?.state === "running" && "lifecycle-node-active")}>{index < 3 && service?.state === "running" ? <Check /> : <CircleDot />}</span><span>{label}</span></li>
+              ))}
+            </ol>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle>Last action</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm text-muted-foreground">
-            <span>Type: <Badge>{last?.type || "none"}</Badge></span>
-            <span>Status: <Badge variant={last?.status === "failed" ? "destructive" : "default"}>{last?.status || "none"}</Badge></span>
-            <span className="line-clamp-3">{last?.message || ""}</span>
+          <CardHeader><CardTitle>Next maintenance</CardTitle><CardDescription>A short daily restart limits long-running degradation.</CardDescription></CardHeader>
+          <CardContent className="grid gap-4">
+            <div><p className="text-2xl font-semibold">{maintenance?.enabled ? maintenance.time : "Disabled"}</p><p className="text-sm text-muted-foreground">{maintenance?.timezone || env.AUTO_RESTART_TIMEZONE}</p></div>
+            <div className="border-t border-border pt-4 text-sm"><span className="text-muted-foreground">Next run</span><p className="mt-1 font-medium">{formatDate(maintenance?.nextRunAt)}</p></div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Active config</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm text-muted-foreground">
-            <span>Name: <code className="text-primary">{env.CS2_SERVERNAME || ""}</code></span>
-            <span>Map: <code className="text-primary">{env.CS2_STARTMAP || ""}</code></span>
-            <span>Admins: <Badge>{admins.length}</Badge></span>
-            <span>Nades: <Badge>{nades.length}</Badge></span>
-            <span>Global nades: <Badge>{globalNadesEnabled ? "on" : "off"}</Badge></span>
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle>Latest control action</CardTitle></CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-[160px_130px_1fr] sm:items-start">
+            <span className="text-sm">{last?.type || "No action"}</span>
+            <Badge className="w-fit" variant={last?.status === "failed" ? "destructive" : "success"}>{last?.status || "idle"}</Badge>
+            <span className="line-clamp-2 text-sm text-muted-foreground">{last?.message || "The server has not recorded a control action yet."}</span>
           </CardContent>
         </Card>
       </section>
+      <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. Saved draft changes are not applied by this action.</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><Button variant="destructive" onClick={() => { setRestartOpen(false); onRestart(); }}><RotateCcw data-icon="inline-start" /> Restart server</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-function Settings({ env, setEnv, curatedFields, onSave }) {
-  const rawRows = useMemo(() => Object.keys(env).sort(), [env]);
-
+function Settings({ env, setEnv, policy }) {
   function setValue(key, value) {
     setEnv((current) => ({ ...current, [key]: value }));
   }
 
-  function renameKey(oldKey, newKey) {
-    setEnv((current) => {
-      const next = { ...current };
-      const value = next[oldKey];
-      delete next[oldKey];
-      if (newKey.trim()) next[newKey.trim()] = value;
-      return next;
-    });
-  }
-
   return (
     <>
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Button onClick={onSave}>
-          <Save className="h-4 w-4" />
-          Save settings
-        </Button>
-        <Button variant="secondary" onClick={() => setValue("NEW_KEY", "")}>
-          <Plus className="h-4 w-4" />
-          Add ENV
-        </Button>
+      <PageHeader eyebrow="Configuration" title="Server" description="Only supported settings are exposed here. The panel writes one validated runtime configuration for Coolify." />
+      <div className="grid gap-4">
+        {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || env.SERVER_MODE === "matchzy").map((group) => (
+          <Card key={group.id}>
+            <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {group.fields.map((field) => <SettingField key={field.key} field={field} value={env[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
+            </CardContent>
+          </Card>
+        ))}
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {curatedFields.map((field) => (
-            <SettingField key={field.key} field={field} value={env[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />
-          ))}
-        </CardContent>
-      </Card>
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Raw ENV</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          {rawRows.map((key) => (
-            <div key={key} className="grid gap-2 md:grid-cols-[220px_1fr_44px]">
-              <Input defaultValue={key} onBlur={(event) => renameKey(key, event.target.value)} />
-              <Input value={env[key] ?? ""} onChange={(event) => setValue(key, event.target.value)} />
-              <Button
-                variant="secondary"
-                size="icon"
-                title="Remove"
-                onClick={() => setEnv((current) => {
-                  const next = { ...current };
-                  delete next[key];
-                  return next;
-                })}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
     </>
   );
 }
@@ -269,22 +277,56 @@ function SettingField({ field, value, onChange }) {
   if (field.type === "boolean") {
     const checked = ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
     return (
-      <label className="flex min-h-10 items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-muted-foreground">
-        {field.label}
-        <input className="h-5 w-5 accent-primary" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked ? "1" : "0")} />
-      </label>
+      <Field className="flex min-h-16 grid-cols-[1fr_auto] items-center rounded-md border border-border bg-background px-4 py-3">
+        <span><FieldLabel>{field.label}</FieldLabel>{field.description ? <FieldDescription className="mt-1 block">{field.description}</FieldDescription> : null}</span>
+        <Switch checked={checked} onCheckedChange={(next) => onChange(next ? "1" : "0")} />
+      </Field>
     );
   }
   const Control = field.type === "textarea" ? Textarea : Input;
   return (
-    <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
-      {field.label}
-      <Control type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
+    <Field className={field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : ""}>
+      <FieldLabel>{field.label}</FieldLabel>
+      <Control placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </Field>
   );
 }
 
-function Admins({ admins, setAdmins, flagPresets, onSave }) {
+function Plugins({ env, setEnv, policy }) {
+  const mode = env.SERVER_MODE || "matchzy";
+  return (
+    <>
+      <PageHeader eyebrow="Compatibility policy" title="Modes & plugins" description="Choose one game mode. Optional plugins show the dependency stack the installer will manage." />
+      <Card className="mb-4">
+        <CardHeader><CardTitle>Server mode</CardTitle><CardDescription>MatchZy and Executes solve different game flows and cannot run together.</CardDescription></CardHeader>
+        <CardContent className="grid gap-3 lg:grid-cols-3">
+          {(policy?.modes || []).map((item) => (
+            <button key={item.id} type="button" className={cn("mode-choice", mode === item.id && "mode-choice-active")} onClick={() => setEnv((current) => ({ ...current, SERVER_MODE: item.id, MATCHZY_ENABLED: item.id === "matchzy" ? "1" : "0", EXECUTES_ENABLED: item.id === "executes" ? "1" : "0" }))}>
+              <span className="flex items-center justify-between"><strong>{item.name}</strong>{mode === item.id ? <Check /> : <CircleDot />}</span>
+              <span className="text-sm leading-relaxed text-muted-foreground">{item.description}</span>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
+        <CardContent className="divide-y divide-border">
+          {(policy?.plugins || []).filter((plugin) => !["matchzy", "executes"].includes(plugin.id)).map((plugin) => {
+            const enabled = plugin.locked || env[plugin.envKey] === "1";
+            return (
+              <div key={plugin.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">
+                <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{plugin.name}</h3>{plugin.locked ? <Badge variant="outline">core</Badge> : null}{enabled ? <Badge variant="success">enabled</Badge> : <Badge variant="outline">off</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{plugin.detail}</p><p className="mt-2 text-xs text-muted-foreground">Requires: {plugin.dependencies.length ? plugin.dependencies.join(" · ") : "none"}</p>{plugin.warning && enabled ? <Alert className="mt-3" variant="warning"><AlertDescription>{plugin.warning}</AlertDescription></Alert> : null}</div>
+                {plugin.locked ? <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required</span> : <Switch aria-label={`Enable ${plugin.name}`} checked={enabled} onCheckedChange={(next) => setEnv((current) => ({ ...current, [plugin.envKey]: next ? "1" : "0" }))} />}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function Admins({ admins, setAdmins, flagPresets, roles }) {
   function updateAdmin(index, patch) {
     setAdmins((current) => current.map((admin, itemIndex) => (itemIndex === index ? { ...admin, ...patch } : admin)));
   }
@@ -297,27 +339,19 @@ function Admins({ admins, setAdmins, flagPresets, onSave }) {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Button onClick={onSave}>
-          <Save className="h-4 w-4" />
-          Save admins
-        </Button>
-        <Button variant="secondary" onClick={() => setAdmins((current) => [...current, { name: "", identitySteam64: "", flags: ["@css/root"] }])}>
-          <Plus className="h-4 w-4" />
-          Add admin
-        </Button>
-      </div>
+      <PageHeader eyebrow="One permission system" title="Access" description="Every person gets one role. CounterStrikeSharp enforces it for the server and MatchZy." actions={<Button variant="secondary" onClick={() => setAdmins((current) => [...current, { name: "", identitySteam64: "", role: "match_operator", flags: [] }])}><Plus data-icon="inline-start" /> Add person</Button>} />
+      <Alert className="mb-4"><AlertTitle>Single source of truth</AlertTitle><AlertDescription>MatchZy's legacy admins.json stays empty. Roles below generate CounterStrikeSharp permissions only.</AlertDescription></Alert>
       <Card>
-        <CardHeader>
-          <CardTitle>CounterStrikeSharp Admins</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>People with server access</CardTitle><CardDescription>Use Custom only when the predefined roles are not precise enough.</CardDescription></CardHeader>
         <CardContent className="grid gap-3">
-          {admins.length === 0 ? <p className="text-sm text-muted-foreground">No admins configured.</p> : null}
+          {admins.length === 0 ? <p className="text-sm text-muted-foreground">No one has panel-managed in-game permissions.</p> : null}
           {admins.map((admin, index) => (
-            <div key={index} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1.2fr_1.6fr_44px]">
-              <Input value={admin.name || ""} placeholder="Name" onChange={(event) => updateAdmin(index, { name: event.target.value })} />
-              <Input value={admin.identitySteam64 || ""} placeholder="Steam64 ID" onChange={(event) => updateAdmin(index, { identitySteam64: event.target.value })} />
-              <div className="flex flex-wrap gap-2 rounded-md border border-border bg-card p-2">
+            <div key={index} className="grid gap-3 rounded-md border border-border bg-background p-4 xl:grid-cols-[1fr_1.2fr_220px_44px]">
+              <Field><FieldLabel>Name</FieldLabel><Input value={admin.name || ""} placeholder="Display name" onChange={(event) => updateAdmin(index, { name: event.target.value })} /></Field>
+              <Field><FieldLabel>Steam64 ID</FieldLabel><Input value={admin.identitySteam64 || ""} placeholder="7656119…" onChange={(event) => updateAdmin(index, { identitySteam64: event.target.value })} /></Field>
+              <Field><FieldLabel>Role</FieldLabel><NativeSelect value={admin.role || "owner"} onChange={(event) => updateAdmin(index, { role: event.target.value })}>{(roles || []).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</NativeSelect></Field>
+              <Button className="self-end" variant="secondary" size="icon" title="Remove" onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
+              {admin.role === "custom" ? <div className="flex flex-wrap gap-2 rounded-md border border-border bg-card p-3 xl:col-span-4">
                 {flagPresets.map((flag) => (
                   <label key={flag} className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                     <input
@@ -329,14 +363,43 @@ function Admins({ admins, setAdmins, flagPresets, onSave }) {
                     {flag}
                   </label>
                 ))}
-              </div>
-              <Button variant="secondary" size="icon" title="Remove" onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              </div> : <p className="text-xs text-muted-foreground xl:col-span-4">{(roles || []).find((role) => role.id === (admin.role || "owner"))?.description}</p>}
             </div>
           ))}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+function Maintenance({ env, setEnv, status, onRestart, busy }) {
+  const enabled = env.AUTO_RESTART_ENABLED === "1";
+  const [restartOpen, setRestartOpen] = useState(false);
+  return (
+    <>
+      <PageHeader eyebrow="Uptime policy" title="Maintenance" description="A coordinated daily restart refreshes the long-running CS2 process without redeploying the Coolify resource." />
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <CardHeader><CardTitle>Daily server recycle</CardTitle><CardDescription>The panel claims one restart slot in MongoDB, so duplicate panel instances cannot restart the server twice.</CardDescription></CardHeader>
+          <CardContent className="grid gap-5">
+            <Field className="flex grid-cols-[1fr_auto] items-center rounded-md border border-border bg-background p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch checked={enabled} onCheckedChange={(next) => setEnv((current) => ({ ...current, AUTO_RESTART_ENABLED: next ? "1" : "0" }))} /></Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field><FieldLabel>Local time</FieldLabel><Input type="time" value={env.AUTO_RESTART_TIME || "05:00"} disabled={!enabled} onChange={(event) => setEnv((current) => ({ ...current, AUTO_RESTART_TIME: event.target.value }))} /></Field>
+              <Field><FieldLabel>IANA timezone</FieldLabel><Input value={env.AUTO_RESTART_TIMEZONE || "Europe/Vienna"} disabled={!enabled} onChange={(event) => setEnv((current) => ({ ...current, AUTO_RESTART_TIMEZONE: event.target.value }))} /><FieldDescription>Example: Europe/Vienna; daylight-saving changes are handled automatically.</FieldDescription></Field>
+            </div>
+            <Alert variant="warning"><AlertTitle>Operational mitigation</AlertTitle><AlertDescription>This restart limits problems that accumulate over uptime. It does not claim a confirmed engine tick-counter overflow.</AlertDescription></Alert>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Schedule state</CardTitle><CardDescription>Reported by the running scheduler.</CardDescription></CardHeader>
+          <CardContent className="grid gap-4 text-sm">
+            <div><span className="text-muted-foreground">Next run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.nextRunAt)}</p></div>
+            <div className="border-t border-border pt-4"><span className="text-muted-foreground">Last run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.lastRun?.lastRunAt)}</p></div>
+            <Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button>
+          </CardContent>
+        </Card>
+      </div>
+      <Dialog open={restartOpen} onOpenChange={setRestartOpen}><DialogContent><DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. This does not apply unsaved draft changes.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><Button variant="destructive" onClick={() => { setRestartOpen(false); onRestart(); }}><RotateCcw data-icon="inline-start" /> Restart server</Button></DialogFooter></DialogContent></Dialog>
     </>
   );
 }
@@ -435,13 +498,12 @@ function NadeDialog({ env, open, onOpenChange, onAdd }) {
           </label>
           <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
             Type
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <NativeSelect
               value={draft.type || ""}
               onChange={(event) => updateDraft({ type: event.target.value })}
             >
               {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
-            </select>
+            </NativeSelect>
           </label>
           <label className="grid gap-2 text-sm font-semibold text-muted-foreground">
             Owner
@@ -489,7 +551,7 @@ function NadeDialog({ env, open, onOpenChange, onAdd }) {
                     {image.name}
                   </a>
                   <Button variant="secondary" size="icon" title="Remove image" onClick={() => removeImage(image.key)}>
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 />
                   </Button>
                 </div>
               ))}
@@ -584,21 +646,22 @@ function Nades({ env, nades, setNades, onSave }) {
 
   return (
     <>
+      <PageHeader eyebrow="Match library" title="Nade lineups" description="MongoDB and MatchZy's savednades.json stay synchronized while MatchZy mode is active." />
       <div className="mb-5 flex flex-wrap gap-2">
         <Button onClick={onSave}>
-          <Save className="h-4 w-4" />
+          <Save data-icon="inline-start" />
           Save nades
         </Button>
         <Button variant="secondary" onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" />
+          <Plus data-icon="inline-start" />
           Add nade
         </Button>
         <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
-          <FileInput className="h-4 w-4" />
+          <FileInput data-icon="inline-start" />
           Import JSON
         </Button>
         <Button variant="secondary" onClick={exportNades}>
-          <Download className="h-4 w-4" />
+          <Download data-icon="inline-start" />
           Export JSON
         </Button>
       </div>
@@ -618,7 +681,7 @@ function Nades({ env, nades, setNades, onSave }) {
             <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}}' />
             <div className="flex flex-wrap gap-2">
               <Button onClick={importNades}>
-                <FileInput className="h-4 w-4" />
+                <FileInput data-icon="inline-start" />
                 Replace nades
               </Button>
               <Button variant="secondary" onClick={() => setImportOpen(false)}>Cancel</Button>
@@ -635,11 +698,11 @@ function Nades({ env, nades, setNades, onSave }) {
             <Textarea readOnly value={exportJson} />
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={copyExport}>
-                <Copy className="h-4 w-4" />
+                <Copy data-icon="inline-start" />
                 Copy
               </Button>
               <Button variant="secondary" onClick={downloadExport}>
-                <Download className="h-4 w-4" />
+                <Download data-icon="inline-start" />
                 Download
               </Button>
             </div>
@@ -653,22 +716,20 @@ function Nades({ env, nades, setNades, onSave }) {
         <CardContent className="grid gap-4">
           <div className="grid gap-2 md:grid-cols-[1fr_180px_180px]">
             <Input value={query} placeholder="Search name or description" onChange={(event) => setQuery(event.target.value)} />
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <NativeSelect
               value={mapFilter}
               onChange={(event) => setMapFilter(event.target.value)}
             >
               <option value="">All maps</option>
               {maps.map((map) => <option key={map} value={map}>{map}</option>)}
-            </select>
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            </NativeSelect>
+            <NativeSelect
               value={typeFilter}
               onChange={(event) => setTypeFilter(event.target.value)}
             >
               <option value="">All types</option>
               {nadeTypes.filter(Boolean).map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
+            </NativeSelect>
           </div>
           {nades.length === 0 ? <p className="text-sm text-muted-foreground">No nades configured.</p> : null}
           {groupedNades.map(([map, mapNades]) => (
@@ -678,13 +739,12 @@ function Nades({ env, nades, setNades, onSave }) {
                 <div key={nade.id} className="grid gap-2 rounded-md border border-border bg-background p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_44px]">
                   <Input value={nade.name || ""} placeholder="Name" onChange={(event) => updateNade(nade.id, { name: event.target.value })} />
                   <Input value={nade.map || ""} placeholder="Map" onChange={(event) => updateNade(nade.id, { map: event.target.value })} />
-                  <select
-                    className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <NativeSelect
                     value={nade.type || ""}
                     onChange={(event) => updateNade(nade.id, { type: event.target.value })}
                   >
                     {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
-                  </select>
+                  </NativeSelect>
                   <Input value={nade.desc || ""} placeholder="Description" onChange={(event) => updateNade(nade.id, { desc: event.target.value })} />
                   <Input value={nade.lineupPos || ""} placeholder="LineupPos" onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} />
                   <Input value={nade.lineupAng || ""} placeholder="LineupAng" onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} />
@@ -696,7 +756,7 @@ function Nades({ env, nades, setNades, onSave }) {
                     <span className="flex h-10 items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">No image</span>
                   )}
                   <Button variant="secondary" size="icon" title="Remove" onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}>
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 />
                   </Button>
                 </div>
               ))}
@@ -745,19 +805,19 @@ function DockerLogs({ active }) {
 
   return (
     <>
+      <PageHeader eyebrow="Runtime output" title="Docker logs" description="Live output from the CS2 container, newest lines at the bottom." />
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <Button variant="secondary" onClick={loadLogs} disabled={loading}>
-          <RefreshCw className={cn("h-4 w-4", loading ? "animate-spin" : "")} />
+          <RefreshCw data-icon="inline-start" className={cn(loading && "animate-spin")} />
           Refresh
         </Button>
         <Button variant={autoRefresh ? "default" : "secondary"} onClick={() => setAutoRefresh((current) => !current)}>
-          {autoRefresh ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
           {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
         </Button>
         <label className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
           Lines
-          <select
-            className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <NativeSelect className="w-auto"
             value={tail}
             onChange={(event) => setTail(Number(event.target.value))}
           >
@@ -765,7 +825,7 @@ function DockerLogs({ active }) {
             <option value={300}>300</option>
             <option value={800}>800</option>
             <option value={1500}>1500</option>
-          </select>
+          </NativeSelect>
         </label>
         <span className="text-sm text-muted-foreground">{updatedAt ? `Updated ${updatedAt}` : ""}</span>
       </div>
@@ -789,31 +849,28 @@ function DockerLogs({ active }) {
 
 function App() {
   const [authenticated, setAuthenticated] = useState(false);
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("overview");
   const [env, setEnv] = useState({});
-  const [curatedFields, setCuratedFields] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
   const [flagPresets, setFlagPresets] = useState([]);
+  const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
+  const [savedSignature, setSavedSignature] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function loadAll() {
-    const [settings, adminData, nadesData, statusData] = await Promise.all([
-      api("/api/settings"),
-      api("/api/admins"),
-      api("/api/nades"),
-      api("/api/server/status")
-    ]);
+    const control = await api("/api/control");
     setAuthenticated(true);
-    setEnv(settings.env || {});
-    setCuratedFields(settings.curatedFields || []);
-    setAdmins(adminData.entries || []);
-    setNades(nadesData.entries || []);
-    setFlagPresets(adminData.flagPresets || []);
-    setStatus(statusData);
+    setEnv(control.env || {});
+    setAdmins(control.admins || []);
+    setNades(control.nades || []);
+    setFlagPresets(control.flagPresets || []);
+    setPolicy(control.policy || null);
+    setStatus(control.status || null);
+    setSavedSignature(JSON.stringify({ env: control.env || {}, admins: control.admins || [] }));
   }
 
   async function runAction(action) {
@@ -833,6 +890,18 @@ function App() {
   useEffect(() => {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
+
+  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ env, admins });
+
+  useEffect(() => {
+    function warnBeforeLeave(event) {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [dirty]);
 
   if (!authenticated) {
     return (
@@ -861,53 +930,53 @@ function App() {
       }}
       message={message}
       error={error}
+      dirty={dirty}
+      busy={busy}
+      onSave={() => runAction(async () => {
+        await api("/api/control", { method: "PUT", body: JSON.stringify({ env, admins }) });
+        return { message: "Draft saved. Apply it when you are ready to restart CS2." };
+      })}
+      onApply={() => runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ env, admins }) }))}
       onLogout={async () => {
         await api("/api/auth/logout", { method: "POST" });
         setAuthenticated(false);
       }}
     >
-      {tab === "dashboard" ? (
-        <Dashboard
+      {tab === "overview" ? (
+        <Overview
           env={env}
           admins={admins}
           nades={nades}
           status={status}
+          policy={policy}
           busy={busy}
           onRefresh={() => runAction(async () => {
             await loadAll();
             return { message: "Refreshed." };
           })}
-          onApply={() => runAction(() => api("/api/server/apply", { method: "POST", body: "{}" }))}
           onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))}
         />
       ) : null}
       {tab === "diagnostics" ? (
-        <Diagnostics active={tab === "diagnostics"} onOpenLogs={() => setTab("logs")} />
+        <><PageHeader eyebrow="Health trace" title="Diagnostics" description="Follow the container, installer, framework and selected game mode through one load path." /><Diagnostics active={tab === "diagnostics"} onOpenLogs={() => setTab("logs")} /></>
       ) : null}
-      {tab === "settings" ? (
+      {tab === "server" ? (
         <Settings
           env={env}
           setEnv={setEnv}
-          curatedFields={curatedFields}
-          onSave={() => runAction(async () => {
-            const result = await api("/api/settings", { method: "PUT", body: JSON.stringify({ env }) });
-            setEnv(result.env);
-            return { message: "Settings saved." };
-          })}
+          policy={policy}
         />
       ) : null}
-      {tab === "admins" ? (
+      {tab === "plugins" ? <Plugins env={env} setEnv={setEnv} policy={policy} /> : null}
+      {tab === "access" ? (
         <Admins
           admins={admins}
           setAdmins={setAdmins}
           flagPresets={flagPresets}
-          onSave={() => runAction(async () => {
-            const result = await api("/api/admins", { method: "PUT", body: JSON.stringify({ entries: admins }) });
-            setAdmins(result.entries);
-            return { message: "Admins saved." };
-          })}
+          roles={policy?.adminRoles || []}
         />
       ) : null}
+      {tab === "maintenance" ? <Maintenance env={env} setEnv={setEnv} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))} /> : null}
       {tab === "nades" ? (
         <Nades
           env={env}
