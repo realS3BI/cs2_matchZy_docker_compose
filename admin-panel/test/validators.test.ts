@@ -6,12 +6,13 @@ import {
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
   sanitizeAdmins,
-  sanitizeEnv,
+  sanitizeSettings,
   sanitizeNades
 } from "../src/validators.js";
 
-test("sanitizeEnv rejects unsafe keys", () => {
-  assert.throws(() => sanitizeEnv({ "BAD-KEY": "1" }), /Invalid env key/);
+test("sanitizeSettings rejects fields outside the application schema", () => {
+  assert.throws(() => sanitizeSettings(undefined), /must be an object/);
+  assert.throws(() => sanitizeSettings({ unknownSetting: "value" }), /Unknown setting/);
 });
 
 test("sanitizeAdmins validates steam ids and defaults flags", () => {
@@ -29,7 +30,7 @@ test("adminsToCssConfig builds CounterStrikeSharp config", () => {
   });
 });
 
-test("adminsToMatchZyConfig keeps the legacy admin file empty", () => {
+test("adminsToMatchZyConfig keeps the MatchZy admin file empty", () => {
   assert.deepEqual(adminsToMatchZyConfig([{ identitySteam64: "76561198000000001", flags: ["@css/root"] }]), {});
 });
 

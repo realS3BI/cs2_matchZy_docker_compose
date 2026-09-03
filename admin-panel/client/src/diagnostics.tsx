@@ -284,12 +284,12 @@ export function Diagnostics({ active, onOpenLogs }) {
           <DialogHeader>
             <DialogTitle>Repair the mod installation?</DialogTitle>
             <DialogDescription>
-              This sets MOD_REINSTALL for one start and restarts the CS2 container. Connected players will be disconnected.
+              This enables a one-shot mod repair and restarts the CS2 container. Connected players will be disconnected.
             </DialogDescription>
           </DialogHeader>
           <Alert role="status" variant="warning">
             <AlertTitle>One restart</AlertTitle>
-            <AlertDescription>The panel resets MOD_REINSTALL after the bootstrap hook finishes, including a failed hook.</AlertDescription>
+            <AlertDescription>The panel resets the repair switch after the bootstrap hook finishes, including a failed hook.</AlertDescription>
           </Alert>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setRepairOpen(false)}>Cancel</Button>

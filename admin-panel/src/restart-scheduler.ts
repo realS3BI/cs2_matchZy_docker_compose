@@ -1,4 +1,4 @@
-import { isEnabled, normalizeServerSettings } from "./policy.js";
+import { normalizeSettings } from "./policy.js";
 
 function localParts(date, timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -13,25 +13,25 @@ function localParts(date, timeZone) {
   return Object.fromEntries(parts.map((part) => [part.type, part.value]));
 }
 
-function slotForSettings(date, env) {
-  const parts = localParts(date, env.AUTO_RESTART_TIMEZONE);
+function slotForSettings(date, settings) {
+  const parts = localParts(date, settings.restartTimezone);
   const localTime = `${parts.hour}:${parts.minute}`;
-  if (!isEnabled(env.AUTO_RESTART_ENABLED) || localTime !== env.AUTO_RESTART_TIME) return "";
-  return `${parts.year}-${parts.month}-${parts.day}T${localTime}@${env.AUTO_RESTART_TIMEZONE}`;
+  if (!settings.automaticRestartEnabled || localTime !== settings.restartTime) return "";
+  return `${parts.year}-${parts.month}-${parts.day}T${localTime}@${settings.restartTimezone}`;
 }
 
 export function scheduledSlot(date, settings) {
-  return slotForSettings(date, normalizeServerSettings(settings));
+  return slotForSettings(date, normalizeSettings(settings));
 }
 
 export function nextScheduledRestart(now, settings) {
-  const env = normalizeServerSettings(settings);
-  if (!isEnabled(env.AUTO_RESTART_ENABLED)) return null;
+  const normalized = normalizeSettings(settings);
+  if (!normalized.automaticRestartEnabled) return null;
   const cursor = new Date(now);
   cursor.setUTCSeconds(0, 0);
   cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
   for (let minute = 0; minute < 60 * 49; minute += 1) {
-    if (slotForSettings(cursor, env)) return cursor.toISOString();
+    if (slotForSettings(cursor, normalized)) return cursor.toISOString();
     cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
   }
   return null;
@@ -82,12 +82,12 @@ export class RestartScheduler {
 
   async status() {
     const [settings, lastRun] = await Promise.all([this.store.getSettings(), this.store.getMaintenanceState()]);
-    const env = normalizeServerSettings(settings);
+    const normalized = normalizeSettings(settings);
     return {
-      enabled: isEnabled(env.AUTO_RESTART_ENABLED),
-      time: env.AUTO_RESTART_TIME,
-      timezone: env.AUTO_RESTART_TIMEZONE,
-      nextRunAt: nextScheduledRestart(new Date(), env),
+      enabled: normalized.automaticRestartEnabled,
+      time: normalized.restartTime,
+      timezone: normalized.restartTimezone,
+      nextRunAt: nextScheduledRestart(new Date(), normalized),
       lastRun
     };
   }

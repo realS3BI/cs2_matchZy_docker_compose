@@ -10,12 +10,12 @@ import {
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
   sanitizeAdmins,
-  sanitizeEnv,
+  sanitizeSettings,
   sanitizeNades
 } from "./validators.js";
 import { buildDiagnostics } from "./diagnostics.js";
-import { buildControlModel, normalizeServerSettings, SETTINGS_GROUPS, validateRunnableServerSettings, validateServerSettings } from "./policy.js";
-import { writeAdminRuntimeFiles, writeServerRuntimeEnv, writeServerRuntimeFiles } from "./runtime-files.js";
+import { buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
+import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -62,15 +62,15 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
     since
   );
 
-  const resetEnv = sanitizeEnv({ ...(await store.getSettings()), MOD_REINSTALL: "0" });
-  await writeServerRuntimeEnv(config, resetEnv);
-  await store.saveSettings(resetEnv);
+  const resetSettings = sanitizeSettings({ ...(await store.getSettings()), repairMods: false });
+  await writeServerRuntimeSettings(config, resetSettings);
+  await store.saveSettings(resetSettings);
   await store.logAction(
     "repair_reset",
     observed ? "success" : "failed",
     observed
-      ? "Reset MOD_REINSTALL after the one-shot repair"
-      : "Reset MOD_REINSTALL after timing out while waiting for the mod bootstrap"
+      ? "Reset the one-shot repair switch after the mod bootstrap"
+      : "Reset the one-shot repair switch after timing out while waiting for the mod bootstrap"
   );
 }
 
@@ -158,15 +158,15 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
 
   app.get("/api/settings", async (req, res) => {
     res.json({
-      env: await store.getSettings(),
+      settings: await store.getSettings(),
       curatedFields: SETTINGS_GROUPS.flatMap((group) => group.fields),
       settingsGroups: SETTINGS_GROUPS
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const env = normalizeServerSettings(validateServerSettings(sanitizeEnv(req.body?.env)));
-    res.json({ env: await store.saveSettings(env) });
+    const settings = normalizeSettings(validateSettings(sanitizeSettings(req.body?.settings)));
+    res.json({ settings: await store.saveSettings(settings) });
   });
 
   app.get("/api/admins", async (req, res) => {
@@ -191,7 +191,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.get("/api/control", async (req, res) => {
-    const [env, admins, nades, service, lastAction, maintenance] = await Promise.all([
+    const [settings, admins, nades, service, lastAction, maintenance] = await Promise.all([
       store.getSettings(),
       store.getAdmins(),
       store.getNades(),
@@ -199,15 +199,15 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       store.getLastAction(["apply", "restart", "scheduled_restart", "repair", "save", "nades_sync", "login_fail"]),
       restartScheduler?.status() || Promise.resolve({ enabled: false })
     ]);
-    res.json({ env, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, nadesSync: nadesSync?.status() || { enabled: false } }, policy: buildControlModel(env) });
+    res.json({ settings, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, nadesSync: nadesSync?.status() || { enabled: false } }, policy: buildControlModel(settings) });
   });
 
   app.put("/api/control", async (req, res) => {
-    const env = normalizeServerSettings(validateServerSettings(sanitizeEnv(req.body?.env)));
+    const settings = normalizeSettings(validateSettings(sanitizeSettings(req.body?.settings)));
     const admins = sanitizeAdmins(req.body?.admins);
-    const [savedEnv, savedAdmins] = await Promise.all([store.saveSettings(env), store.saveAdmins(admins)]);
+    const [savedSettings, savedAdmins] = await Promise.all([store.saveSettings(settings), store.saveAdmins(admins)]);
     await writeAdminRuntimeFiles(config, savedAdmins);
-    res.json({ env: savedEnv, admins: savedAdmins, policy: buildControlModel(savedEnv) });
+    res.json({ settings: savedSettings, admins: savedAdmins, policy: buildControlModel(savedSettings) });
   });
 
   app.put("/api/nades", async (req, res) => {
@@ -241,13 +241,13 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.post("/api/server/apply", async (req, res) => {
-    const env = normalizeServerSettings(validateRunnableServerSettings(await store.getSettings()));
+    const settings = normalizeSettings(validateRunnableSettings(await store.getSettings()));
     const admins = await store.getAdmins();
     const nades = await store.getNades();
-    const nextEnv = normalizeServerSettings(env);
+    const nextSettings = normalizeSettings(settings);
 
-    await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
-    await store.saveSettings(nextEnv);
+    await writeServerRuntimeFiles(config, nadesSync, nextSettings, admins, nades);
+    await store.saveSettings(nextSettings);
 
     const result = await compose.recreateService();
     await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { code: result.code });
@@ -261,38 +261,38 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.post("/api/control/apply", async (req, res) => {
-    const nextEnv = normalizeServerSettings(validateRunnableServerSettings(sanitizeEnv(req.body?.env)));
+    const nextSettings = normalizeSettings(validateRunnableSettings(sanitizeSettings(req.body?.settings)));
     const admins = sanitizeAdmins(req.body?.admins);
     const nades = await store.getNades();
-    await Promise.all([store.saveSettings(nextEnv), store.saveAdmins(admins)]);
-    await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
+    await Promise.all([store.saveSettings(nextSettings), store.saveAdmins(admins)]);
+    await writeServerRuntimeFiles(config, nadesSync, nextSettings, admins, nades);
 
     const result = await compose.recreateService();
-    await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { code: result.code, mode: nextEnv.SERVER_MODE });
-    res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result), env: nextEnv, admins, policy: buildControlModel(nextEnv) });
+    await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { code: result.code, mode: nextSettings.serverMode });
+    res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result), settings: nextSettings, admins, policy: buildControlModel(nextSettings) });
   });
 
   app.post("/api/server/repair", async (req, res) => {
     const admins = await store.getAdmins();
     const nades = await store.getNades();
-    const repairEnv = normalizeServerSettings({
+    const repairSettings = normalizeSettings({
       ...(await store.getSettings()),
-      MOD_REINSTALL: "1"
+      repairMods: true
     });
 
     const repairStartedAt = new Date().toISOString();
-    await writeServerRuntimeFiles(config, nadesSync, repairEnv, admins, nades);
-    await store.saveSettings(repairEnv);
+    await writeServerRuntimeFiles(config, nadesSync, repairSettings, admins, nades);
+    await store.saveSettings(repairSettings);
     const result = await compose.restartService();
 
     if (result.ok) {
       void resetRepairFlagAfterBootstrap({ config, store, compose, since: repairStartedAt }).catch(async (error) => {
-        await store.logAction("repair_reset", "failed", error.message || "Could not reset MOD_REINSTALL");
+        await store.logAction("repair_reset", "failed", error.message || "Could not reset the repair switch");
       });
     } else {
-      const resetEnv = sanitizeEnv({ ...repairEnv, MOD_REINSTALL: "0" });
-      await writeServerRuntimeEnv(config, resetEnv);
-      await store.saveSettings(resetEnv);
+      const resetSettings = sanitizeSettings({ ...repairSettings, repairMods: false });
+      await writeServerRuntimeSettings(config, resetSettings);
+      await store.saveSettings(resetSettings);
     }
 
     await store.logAction("repair", result.ok ? "success" : "failed", actionMessage(result), { code: result.code });

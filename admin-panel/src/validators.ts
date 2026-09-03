@@ -1,21 +1,23 @@
 import { FLAG_PRESETS } from "./defaults.js";
-import { flagsForRole, roleForFlags } from "./policy.js";
+import { flagsForRole, roleForFlags, SETTING_KEYS } from "./policy.js";
 
 const STEAM64_RE = /^[0-9]{17}$/;
-const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NAMES_WITHOUT_SLASHES_RE = /^[^\\/]+$/;
 const VECTOR_RE = /^-?(?:\d+(?:\.\d+)?|\.\d+)\s+-?(?:\d+(?:\.\d+)?|\.\d+)\s+-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const NADE_TYPES = new Set(["", "Smoke", "Flash", "HE", "Molly", "Decoy"]);
 const MAX_LINEUP_IMAGES = 10;
 
-export function sanitizeEnv(input) {
+export function sanitizeSettings(input) {
   const output = {};
-  const source = input && typeof input === "object" ? input : {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Settings must be an object");
+  }
+  const source = input;
   for (const [key, value] of Object.entries(source)) {
-    if (!ENV_KEY_RE.test(key)) {
-      throw new Error(`Invalid env key: ${key}`);
+    if (!SETTING_KEYS.includes(key as any)) {
+      throw new Error(`Unknown setting: ${key}`);
     }
-    output[key] = String(value ?? "");
+    output[key] = value;
   }
   return output;
 }

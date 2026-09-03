@@ -6,7 +6,7 @@ const execFileAsync = promisify(execFile);
 
 const DIAGNOSTIC_PROBE = String.raw`
 root=/home/steam/cs2-dedicated/game/csgo
-state=/home/steam/cs2-dedicated/.mod-installer/state.env
+state=/home/steam/cs2-dedicated/.mod-installer/state.json
 
 probe_file() {
   if [ -f "$2" ]; then
@@ -42,12 +42,26 @@ else
 fi
 
 if [ -f "$state" ]; then
-  for key in METAMOD MATCHZY COUNTERSTRIKESHARP FAKE_RCON WEAPONPAINTS PLAYERSETTINGS ANYBASELIB MENUMANAGER SIMPLEADMIN MULTIADDONMANAGER RAYTRACE FORTNITE_EMOTES EXECUTES; do
-    value="$(grep "^$key"_TAG= "$state" 2>/dev/null | head -n 1 | cut -d= -f2-)"
+  while IFS="$(printf '\t')" read -r key state_key; do
+    value="$(jq -r --arg key "$state_key" '.[$key] // empty' "$state" 2>/dev/null)"
     if [ -n "$value" ]; then
       printf 'VERSION\t%s\t%s\n' "$key" "$value"
     fi
-  done
+  done <<'VERSION_KEYS'
+METAMOD	metamodTag
+MATCHZY	matchZyTag
+COUNTERSTRIKESHARP	counterStrikeSharpTag
+FAKE_RCON	fakeRconTag
+WEAPONPAINTS	weaponPaintsTag
+PLAYERSETTINGS	playerSettingsTag
+ANYBASELIB	anyBaseLibTag
+MENUMANAGER	menuManagerTag
+SIMPLEADMIN	simpleAdminTag
+MULTIADDONMANAGER	multiAddonManagerTag
+RAYTRACE	rayTraceTag
+FORTNITE_EMOTES	fortniteEmotesTag
+EXECUTES	executesTag
+VERSION_KEYS
 fi
 `;
 

@@ -1,26 +1,26 @@
-import { normalizeServerSettings } from "./policy.js";
+import { normalizeSettings } from "./policy.js";
 
 const VERSION_FIELDS = [
-  ["METAMOD", "Metamod", "METAMOD_VERSION"],
-  ["MATCHZY", "MatchZy", "MATCHZY_VERSION"],
-  ["COUNTERSTRIKESHARP", "CounterStrikeSharp", "COUNTERSTRIKESHARP_VERSION"],
-  ["FAKE_RCON", "Fake RCON", "FAKE_RCON_VERSION"],
-  ["WEAPONPAINTS", "WeaponPaints", "WEAPONPAINTS_VERSION"],
-  ["PLAYERSETTINGS", "PlayerSettings", "PLAYERSETTINGS_VERSION"],
-  ["ANYBASELIB", "AnyBaseLib", "ANYBASELIB_VERSION"],
-  ["MENUMANAGER", "MenuManager", "MENUMANAGER_VERSION"],
-  ["SIMPLEADMIN", "SimpleAdmin", "SIMPLEADMIN_VERSION"],
-  ["MULTIADDONMANAGER", "MultiAddonManager", "MULTIADDONMANAGER_VERSION"],
-  ["RAYTRACE", "Ray-Trace", "RAYTRACE_VERSION"],
-  ["FORTNITE_EMOTES", "Fortnite Emotes", "FORTNITE_EMOTES_VERSION"],
-  ["EXECUTES", "Executes", "EXECUTES_VERSION"]
+  ["METAMOD", "Metamod", "metamodVersion"],
+  ["MATCHZY", "MatchZy", "matchZyVersion"],
+  ["COUNTERSTRIKESHARP", "CounterStrikeSharp", "counterStrikeSharpVersion"],
+  ["FAKE_RCON", "Fake RCON", "fakeRconVersion"],
+  ["WEAPONPAINTS", "WeaponPaints", "weaponPaintsVersion"],
+  ["PLAYERSETTINGS", "PlayerSettings", "playerSettingsVersion"],
+  ["ANYBASELIB", "AnyBaseLib", "anyBaseLibVersion"],
+  ["MENUMANAGER", "MenuManager", "menuManagerVersion"],
+  ["SIMPLEADMIN", "SimpleAdmin", "simpleAdminVersion"],
+  ["MULTIADDONMANAGER", "MultiAddonManager", "multiAddonManagerVersion"],
+  ["RAYTRACE", "Ray-Trace", "rayTraceVersion"],
+  ["FORTNITE_EMOTES", "Fortnite Emotes", "fortniteEmotesVersion"],
+  ["EXECUTES", "Executes", "executesVersion"]
 ];
 
 const OPTIONAL_PLUGIN_FILES = [
-  { id: "fake-rcon", label: "Fake RCON", enabled: (env) => env.FAKE_RCON_ENABLED === "1", files: ["fakeRcon"] },
-  { id: "weaponpaints", label: "WeaponPaints", enabled: (env) => env.WEAPONPAINTS_ENABLED === "1", files: ["weaponPaints", "playerSettings", "anyBaseLib", "menuManager"] },
-  { id: "simpleadmin", label: "SimpleAdmin", enabled: (env) => env.SIMPLEADMIN_ENABLED === "1", files: ["simpleAdmin", "playerSettings", "anyBaseLib", "menuManager"] },
-  { id: "fortnite-emotes", label: "Fortnite Emotes", enabled: (env) => env.FORTNITE_EMOTES_ENABLED === "1", files: ["fortniteEmotes", "multiAddonManager", "rayTrace"] }
+  { id: "fake-rcon", label: "Fake RCON", enabled: (settings) => settings.fakeRconEnabled, files: ["fakeRcon"] },
+  { id: "weaponpaints", label: "WeaponPaints", enabled: (settings) => settings.weaponPaintsEnabled, files: ["weaponPaints", "playerSettings", "anyBaseLib", "menuManager"] },
+  { id: "simpleadmin", label: "SimpleAdmin", enabled: (settings) => settings.simpleAdminEnabled, files: ["simpleAdmin", "playerSettings", "anyBaseLib", "menuManager"] },
+  { id: "fortnite-emotes", label: "Fortnite Emotes", enabled: (settings) => settings.fortniteEmotesEnabled, files: ["fortniteEmotes", "multiAddonManager", "rayTrace"] }
 ];
 
 function parseProbeOutput(output = "") {
@@ -54,20 +54,20 @@ function check(id, label, status, detail) {
   return { id, label, status, detail };
 }
 
-function isVersionRelevant(key, env) {
-  if (key === "MATCHZY") return env.SERVER_MODE === "matchzy";
-  if (key === "EXECUTES") return env.SERVER_MODE === "executes";
-  if (key === "FAKE_RCON") return env.FAKE_RCON_ENABLED === "1";
-  if (key === "WEAPONPAINTS") return env.WEAPONPAINTS_ENABLED === "1";
-  if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return env.WEAPONPAINTS_ENABLED === "1" || env.SIMPLEADMIN_ENABLED === "1";
-  if (key === "SIMPLEADMIN") return env.SIMPLEADMIN_ENABLED === "1";
-  if (key === "MULTIADDONMANAGER") return env.FORTNITE_EMOTES_ENABLED === "1" || env.CS2_WORKSHOP_MAPS_ENABLED === "1";
-  if (["RAYTRACE", "FORTNITE_EMOTES"].includes(key)) return env.FORTNITE_EMOTES_ENABLED === "1";
+function isVersionRelevant(key, settings) {
+  if (key === "MATCHZY") return settings.serverMode === "matchzy";
+  if (key === "EXECUTES") return settings.serverMode === "executes";
+  if (key === "FAKE_RCON") return settings.fakeRconEnabled;
+  if (key === "WEAPONPAINTS") return settings.weaponPaintsEnabled;
+  if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return settings.weaponPaintsEnabled || settings.simpleAdminEnabled;
+  if (key === "SIMPLEADMIN") return settings.simpleAdminEnabled;
+  if (key === "MULTIADDONMANAGER") return settings.fortniteEmotesEnabled || settings.workshopMapsEnabled;
+  if (["RAYTRACE", "FORTNITE_EMOTES"].includes(key)) return settings.fortniteEmotesEnabled;
   return true;
 }
 
 export function buildDiagnostics({ service, container, probe, logs = "", desired = {}, controlMode = "docker" }) {
-  const env = normalizeServerSettings(desired);
+  const settings = normalizeSettings(desired);
   const { files, versions } = parseProbeOutput(probe?.stdout);
   const normalizedLogs = String(logs).toLowerCase();
   const bootstrapSuccess = normalizedLogs.lastIndexOf("[pre.sh] mod bootstrap complete");
@@ -107,7 +107,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         ? "warn"
         : "fail";
 
-  const modeCheck = env.SERVER_MODE === "matchzy"
+  const modeCheck = settings.serverMode === "matchzy"
     ? check(
       "matchzy",
       "MatchZy",
@@ -118,7 +118,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
           ? matchZyInstalled ? "MatchZy reported a load failure." : "MatchZy.dll is missing."
           : "MatchZy.dll exists, but no load confirmation is present in retained logs."
     )
-    : env.SERVER_MODE === "executes"
+    : settings.serverMode === "executes"
       ? check(
         "executes",
         "Executes",
@@ -162,7 +162,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
   ];
 
   const findings = [];
-  const plugins = OPTIONAL_PLUGIN_FILES.filter((plugin) => plugin.enabled(env)).map((plugin) => {
+  const plugins = OPTIONAL_PLUGIN_FILES.filter((plugin) => plugin.enabled(settings)).map((plugin) => {
     const missingFiles = plugin.files.filter((file) => !files[file]);
     return { id: plugin.id, label: plugin.label, status: missingFiles.length === 0 ? "pass" : "fail", missingFiles };
   });
@@ -195,7 +195,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       detail: "Open Docker Logs and inspect the first [pre.sh] ERROR from the latest container start."
     });
   }
-  if (env.SERVER_MODE === "matchzy" && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
+  if (settings.serverMode === "matchzy" && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
     findings.push({
       severity: "error",
       title: "MatchZy did not enter the loaded state",
@@ -217,10 +217,10 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
 
   return {
     generatedAt: new Date().toISOString(),
-    mode: { id: env.SERVER_MODE, name: modeCheck.label },
+    mode: { id: settings.serverMode, name: modeCheck.label },
     overall,
     summary: overall === "healthy"
-      ? `The complete ${env.SERVER_MODE === "vanilla" ? "framework" : modeCheck.label} load chain is healthy.`
+      ? `The complete ${settings.serverMode === "vanilla" ? "framework" : modeCheck.label} load chain is healthy.`
       : firstProblem?.detail || "Diagnostics need attention.",
     service: {
       state: service?.state || "unknown",
@@ -233,16 +233,16 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     checks,
     plugins,
     findings,
-    versions: VERSION_FIELDS.map(([key, label, envKey]) => ({
+    versions: VERSION_FIELDS.map(([key, label, settingKey]) => ({
       key,
       label,
       installed: versions[key] || "not detected",
-      wanted: env[envKey] || "latest",
-      relevant: isVersionRelevant(key, env)
+      wanted: settings[settingKey] || "latest",
+      relevant: isVersionRelevant(key, settings)
     })),
     repairAvailable: serviceRunning && overall !== "healthy",
     nades: {
-      relevant: env.SERVER_MODE === "matchzy",
+      relevant: settings.serverMode === "matchzy",
       configPresent: Boolean(files.matchZyConfig),
       savedNadesPresent: Boolean(files.matchZySavedNades)
     }

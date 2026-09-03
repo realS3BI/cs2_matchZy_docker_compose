@@ -1,29 +1,6 @@
 import { Collection, Db, MongoClient } from "mongodb";
-import { readFile } from "node:fs/promises";
-import { loadEnvFile } from "./env-file.js";
-import { sanitizeAdmins, sanitizeEnv, sanitizeNades } from "./validators.js";
-import { normalizeServerSettings } from "./policy.js";
-
-async function loadRuntimeAdmins(path, legacyAdmins = "") {
-  try {
-    const config = JSON.parse(await readFile(path, "utf8"));
-    const entries = sanitizeAdmins(Object.entries(config).map(([identitySteam64, entry]: [string, any]) => ({
-      name: String(entry?.name || "Imported admin"),
-      identitySteam64: String(entry?.identity || identitySteam64),
-      flags: Array.isArray(entry?.flags) ? entry.flags : ["@css/root"]
-    })));
-    if (entries.length > 0) return entries;
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
-
-  const identities = [...new Set(String(legacyAdmins).split(",").map((value) => value.trim()).filter((value) => /^[0-9]{17}$/.test(value)))];
-  return sanitizeAdmins(identities.map((identitySteam64) => ({
-    name: "Imported admin",
-    identitySteam64,
-    role: "owner"
-  })));
-}
+import { sanitizeAdmins, sanitizeNades, sanitizeSettings } from "./validators.js";
+import { normalizeSettings } from "./policy.js";
 
 export class Store {
   config: any;
@@ -54,18 +31,13 @@ export class Store {
       { $setOnInsert: { createdAt: new Date() } },
       { upsert: true }
     );
-    const runtimeEnv: Record<string, any> = await loadEnvFile(this.config.runtimeEnvFile);
-    await this.settings.updateOne(
-      { _id: "current" },
-      { $setOnInsert: { env: normalizeServerSettings(runtimeEnv), createdAt: new Date() } },
-      { upsert: true }
-    );
-    if (!(await this.admins.findOne({ _id: "current" }))) {
-      const entries = await loadRuntimeAdmins(this.config.runtimeAdminsFile, runtimeEnv.ADMINS);
-      if (entries.length > 0) {
-        await this.admins.insertOne({ _id: "current", entries, createdAt: new Date(), migratedFrom: "runtime" });
-        await this.logAction("admin_migration", "success", `Imported ${entries.length} admin${entries.length === 1 ? "" : "s"} from the runtime volume`);
-      }
+    const current = await this.settings.findOne({ _id: "current" });
+    if (!current?.settings || current.settings.schemaVersion !== 1) {
+      await this.settings.replaceOne(
+        { _id: "current" },
+        { _id: "current", settings: normalizeSettings({}), createdAt: new Date() },
+        { upsert: true }
+      );
     }
   }
 
@@ -75,19 +47,19 @@ export class Store {
 
   async getSettings() {
     const doc = await this.settings.findOne({ _id: "current" });
-    if (doc?.env) return normalizeServerSettings(doc.env);
-    return normalizeServerSettings({});
+    if (doc?.settings) return normalizeSettings(doc.settings);
+    return normalizeSettings({});
   }
 
-  async saveSettings(env) {
-    const cleanEnv = normalizeServerSettings(sanitizeEnv(env));
+  async saveSettings(settings) {
+    const cleanSettings = normalizeSettings(sanitizeSettings(settings));
     await this.settings.updateOne(
       { _id: "current" },
-      { $set: { env: cleanEnv, updatedAt: new Date() } },
+      { $set: { settings: cleanSettings, updatedAt: new Date() } },
       { upsert: true }
     );
     await this.logAction("save", "success", "Settings saved");
-    return cleanEnv;
+    return cleanSettings;
   }
 
   async getAdmins() {

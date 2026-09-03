@@ -5,17 +5,11 @@ import { getConfig } from "../src/config.js";
 test("only the two bootstrap secrets come from deployment environment", () => {
   const previous = {
     ADMIN_PANEL_PASSWORD: process.env.ADMIN_PANEL_PASSWORD,
-    ADMIN_PANEL_SESSION_SECRET: process.env.ADMIN_PANEL_SESSION_SECRET,
-    ADMIN_PANEL_PORT: process.env.ADMIN_PANEL_PORT,
-    MONGODB_URI: process.env.MONGODB_URI,
-    ADMIN_PANEL_CONTROL_MODE: process.env.ADMIN_PANEL_CONTROL_MODE
+    ADMIN_PANEL_SESSION_SECRET: process.env.ADMIN_PANEL_SESSION_SECRET
   };
   Object.assign(process.env, {
     ADMIN_PANEL_PASSWORD: "panel-password",
-    ADMIN_PANEL_SESSION_SECRET: "session-secret",
-    ADMIN_PANEL_PORT: "9999",
-    MONGODB_URI: "mongodb://external.invalid/db",
-    ADMIN_PANEL_CONTROL_MODE: "compose"
+    ADMIN_PANEL_SESSION_SECRET: "session-secret"
   });
 
   try {

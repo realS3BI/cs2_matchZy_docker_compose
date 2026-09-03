@@ -35,12 +35,6 @@ services:
       - "27015:27015/tcp"
       - "27015:27015/udp"
       - "27020:27020/udp"
-    environment:
-      STEAMAPPDIR: /home/steam/cs2-dedicated
-      CS2_RUNTIME_ENV_FILE: /config-runtime/settings.env
-      CSHARP_ADMINS_FILE: /config-runtime/csharp-admins.json
-      MATCHZY_ADMINS_FILE: /config-runtime/matchzy-admins.json
-      MATCHZY_SAVEDNADES_FILE: /config-runtime/matchzy-savednades.json
     volumes:
       - cs2_data:/home/steam/cs2-dedicated
       - admin_panel_runtime:/config-runtime

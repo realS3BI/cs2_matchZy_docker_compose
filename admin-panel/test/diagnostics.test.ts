@@ -27,7 +27,7 @@ function input(patch = {}) {
     },
     probe: { ok: true, stdout: healthyProbe, stderr: "" },
     logs: "[pre.sh] Mod bootstrap complete\n[MatchZy 0.8.15 LOADED] MatchZy by WD-",
-    desired: { MATCHZY_VERSION: "latest" },
+    desired: { matchZyVersion: "latest" },
     controlMode: "docker",
     ...patch
   };
@@ -77,7 +77,7 @@ test("buildDiagnostics treats an active bootstrap as in progress", () => {
 
 test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   const report = buildDiagnostics(input({
-    desired: { SERVER_MODE: "executes" },
+    desired: { serverMode: "executes" },
     probe: { ok: true, stdout: `${healthyProbe.replace("FILE\tmatchZy\t1", "FILE\tmatchZy\t0")}\nFILE\texecutes\t1`, stderr: "" },
     logs: "[pre.sh] Mod bootstrap complete"
   }));
@@ -89,7 +89,7 @@ test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
 });
 
 test("buildDiagnostics reports incomplete enabled optional plugins", () => {
-  const report = buildDiagnostics(input({ desired: { SERVER_MODE: "matchzy", SIMPLEADMIN_ENABLED: "1" } }));
+  const report = buildDiagnostics(input({ desired: { serverMode: "matchzy", simpleAdminEnabled: true } }));
   assert.equal(report.overall, "critical");
   assert.equal(report.plugins[0].id, "simpleadmin");
   assert.match(report.findings[0].title, /SimpleAdmin/);

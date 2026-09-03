@@ -244,15 +244,16 @@ function PageHeader({ eyebrow, title, description, actions = null }) {
   );
 }
 
-function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, busy }) {
+function Overview({ settings, admins, nades, status, policy, onRefresh, onRestart, busy }) {
   const service = status?.service;
   const last = status?.lastAction;
   const maintenance = status?.maintenance;
   const [restartOpen, setRestartOpen] = useState(false);
-  const activeMode = (policy?.modes || []).find((mode) => mode.id === env.SERVER_MODE) || policy?.mode;
-  const enabledPlugins = (policy?.plugins || []).filter((plugin) => plugin.locked || (plugin.envKey ? env[plugin.envKey] === "1" : plugin.enabled)).length;
+  const setupRequired = !String(settings.steamToken || "").trim() || !String(settings.rconPassword || "").trim();
+  const activeMode = (policy?.modes || []).find((mode) => mode.id === settings.serverMode) || policy?.mode;
+  const enabledPlugins = (policy?.plugins || []).filter((plugin) => plugin.locked || (plugin.settingKey ? settings[plugin.settingKey] : plugin.enabled)).length;
   const metrics = [
-    { label: "Player slots", value: env.CS2_MAXPLAYERS || "Not set", detail: "Configured capacity", icon: UsersRound },
+    { label: "Player slots", value: settings.maxPlayers || "Not set", detail: "Configured capacity", icon: UsersRound },
     { label: "Plugins", value: enabledPlugins, detail: "Enabled components", icon: Boxes },
     { label: "Server access", value: admins.length, detail: admins.length === 1 ? "Authorized person" : "Authorized people", icon: Shield },
     { label: "Nade library", value: nades.length, detail: nades.length === 1 ? "Saved lineup" : "Saved lineups", icon: Crosshair }
@@ -262,10 +263,16 @@ function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, bu
     <>
       <PageHeader
         eyebrow="Live operations"
-        title={env.CS2_SERVERNAME || "CS2 server"}
+        title={settings.serverName || "CS2 server"}
         description="The server's current lifecycle, selected game mode and next maintenance window."
         actions={<div className="flex gap-2"><Button variant="secondary" onClick={onRefresh} disabled={busy}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} /> Refresh</Button><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
       />
+      {setupRequired ? (
+        <Alert className="mb-4" variant="warning">
+          <AlertTitle>Initial server setup required</AlertTitle>
+          <AlertDescription>Open Server, enter the Steam Game Server Login Token and an RCON password, then choose Apply &amp; restart. The CS2 process waits until both values exist.</AlertDescription>
+        </Alert>
+      ) : null}
       <section className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => {
           const Icon = metric.icon;
@@ -290,15 +297,15 @@ function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, bu
               <CardTitle>Server overview</CardTitle>
               <CardDescription>{activeMode?.description || "Current runtime configuration."}</CardDescription>
             </div>
-            <Badge variant={service?.state === "running" ? "success" : "destructive"}>
+            <Badge variant={setupRequired ? "warning" : service?.state === "running" ? "success" : "destructive"}>
               <span className="server-status-dot" />
-              {service?.state || "unknown"}
+              {setupRequired ? "waiting for setup" : service?.state || "unknown"}
             </Badge>
           </CardHeader>
           <CardContent className="grid gap-6">
             <dl className="grid gap-4 rounded-lg border border-border bg-muted/35 p-4 sm:grid-cols-3">
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Game mode</dt><dd className="text-sm font-medium">{activeMode?.name || env.SERVER_MODE || "Not set"}</dd></div>
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Start map</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{env.CS2_STARTMAP || "Not set"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Game mode</dt><dd className="text-sm font-medium">{activeMode?.name || settings.serverMode || "Not set"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Start map</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{settings.startMap || "Not set"}</dd></div>
               <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Container</dt><dd className="font-mono text-xs">{service?.containerName || "Not detected"}</dd></div>
             </dl>
             <div>
@@ -317,7 +324,7 @@ function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, bu
             <div className="grid gap-1">
               <p className="text-xs text-muted-foreground">Next maintenance</p>
               <p className="text-2xl font-semibold tracking-tight">{maintenance?.enabled ? maintenance.time : "Disabled"}</p>
-              <p className="text-xs text-muted-foreground">{maintenance?.timezone || env.AUTO_RESTART_TIMEZONE}</p>
+              <p className="text-xs text-muted-foreground">{maintenance?.timezone || settings.restartTimezone}</p>
             </div>
             <Separator />
             <div className="grid gap-1">
@@ -349,20 +356,20 @@ function Overview({ env, admins, nades, status, policy, onRefresh, onRestart, bu
   );
 }
 
-function Settings({ env, setEnv, policy }) {
+function Settings({ settings, setSettings, policy }) {
   function setValue(key, value) {
-    setEnv((current) => ({ ...current, [key]: value }));
+    setSettings((current) => ({ ...current, [key]: value }));
   }
 
   return (
     <>
       <PageHeader eyebrow="Configuration" title="Server settings" description="Edit the supported runtime settings used by the Coolify deployment." />
       <div className="grid gap-4">
-        {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || env.SERVER_MODE === "matchzy").map((group) => (
+        {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || settings.serverMode === "matchzy").map((group) => (
           <Card key={group.id}>
             <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {group.fields.map((field) => <SettingField key={field.key} field={field} value={env[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
+              {group.fields.map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
             </CardContent>
           </Card>
         ))}
@@ -373,11 +380,10 @@ function Settings({ env, setEnv, policy }) {
 
 function SettingField({ field, value, onChange }) {
   if (field.type === "boolean") {
-    const checked = ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
     return (
       <Field className="flex min-h-16 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 px-4 py-3">
         <span><FieldLabel>{field.label}</FieldLabel>{field.description ? <FieldDescription className="mt-1 block">{field.description}</FieldDescription> : null}</span>
-        <Switch checked={checked} onCheckedChange={(next) => onChange(next ? "1" : "0")} />
+        <Switch checked={value === true} onCheckedChange={onChange} />
       </Field>
     );
   }
@@ -385,14 +391,14 @@ function SettingField({ field, value, onChange }) {
   return (
     <Field className={field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : ""}>
       <FieldLabel>{field.label}</FieldLabel>
-      <Control placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <Control placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)} />
       {field.description ? <FieldDescription>{field.description}</FieldDescription> : null}
     </Field>
   );
 }
 
-function Plugins({ env, setEnv, policy }) {
-  const mode = env.SERVER_MODE || "matchzy";
+function Plugins({ settings, setSettings, policy }) {
+  const mode = settings.serverMode || "matchzy";
   return (
     <>
       <PageHeader eyebrow="Compatibility policy" title="Game modes & plugins" description="Choose one game mode and control the optional components installed with it." />
@@ -402,7 +408,7 @@ function Plugins({ env, setEnv, policy }) {
           <RadioGroup
             className="lg:grid-cols-3"
             value={mode}
-            onValueChange={(nextMode) => setEnv((current) => ({ ...current, SERVER_MODE: nextMode, MATCHZY_ENABLED: nextMode === "matchzy" ? "1" : "0", EXECUTES_ENABLED: nextMode === "executes" ? "1" : "0" }))}
+            onValueChange={(nextMode) => setSettings((current) => ({ ...current, serverMode: nextMode }))}
           >
             {(policy?.modes || []).map((item) => (
               <label key={item.id} className={cn("mode-choice", mode === item.id && "mode-choice-active")}>
@@ -417,11 +423,11 @@ function Plugins({ env, setEnv, policy }) {
         <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
           {(policy?.plugins || []).filter((plugin) => !["matchzy", "executes"].includes(plugin.id)).map((plugin) => {
-            const enabled = plugin.locked || env[plugin.envKey] === "1";
+            const enabled = plugin.locked || settings[plugin.settingKey] === true;
             return (
               <div key={plugin.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">
                 <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{plugin.name}</h3>{plugin.locked ? <Badge variant="outline">core</Badge> : null}{enabled ? <Badge variant="success">enabled</Badge> : <Badge variant="outline">off</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{plugin.detail}</p><p className="mt-2 text-xs text-muted-foreground">Requires: {plugin.dependencies.length ? plugin.dependencies.join(" · ") : "none"}</p>{plugin.warning && enabled ? <Alert className="mt-3" variant="warning"><AlertDescription>{plugin.warning}</AlertDescription></Alert> : null}</div>
-                {plugin.locked ? <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required</span> : <Switch aria-label={`Enable ${plugin.name}`} checked={enabled} onCheckedChange={(next) => setEnv((current) => ({ ...current, [plugin.envKey]: next ? "1" : "0" }))} />}
+                {plugin.locked ? <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required</span> : <Switch aria-label={`Enable ${plugin.name}`} checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, [plugin.settingKey]: next }))} />}
               </div>
             );
           })}
@@ -445,7 +451,7 @@ function Admins({ admins, setAdmins, flagPresets, roles }) {
   return (
     <>
       <PageHeader eyebrow="One permission system" title="Access" description="Every person gets one role. CounterStrikeSharp enforces it for the server and MatchZy." actions={<Button variant="secondary" onClick={() => setAdmins((current) => [...current, { name: "", identitySteam64: "", role: "match_operator", flags: [] }])}><Plus data-icon="inline-start" /> Add person</Button>} />
-      <Alert className="mb-4"><AlertTitle>Single source of truth</AlertTitle><AlertDescription>MatchZy's legacy admins.json stays empty. Roles below generate CounterStrikeSharp permissions only.</AlertDescription></Alert>
+      <Alert className="mb-4"><AlertTitle>Single source of truth</AlertTitle><AlertDescription>MatchZy's own admins.json stays empty. Roles below generate CounterStrikeSharp permissions only.</AlertDescription></Alert>
       <Card>
         <CardHeader><CardTitle>People with server access</CardTitle><CardDescription>Use Custom only when the predefined roles are not precise enough.</CardDescription></CardHeader>
         <CardContent className="grid gap-3">
@@ -475,8 +481,8 @@ function Admins({ admins, setAdmins, flagPresets, roles }) {
   );
 }
 
-function Maintenance({ env, setEnv, status, onRestart, busy }) {
-  const enabled = env.AUTO_RESTART_ENABLED === "1";
+function Maintenance({ settings, setSettings, status, onRestart, busy }) {
+  const enabled = settings.automaticRestartEnabled === true;
   const [restartOpen, setRestartOpen] = useState(false);
   return (
     <>
@@ -485,10 +491,10 @@ function Maintenance({ env, setEnv, status, onRestart, busy }) {
         <Card>
           <CardHeader><CardTitle>Daily server recycle</CardTitle><CardDescription>The panel claims one restart slot in MongoDB, so duplicate panel instances cannot restart the server twice.</CardDescription></CardHeader>
           <CardContent className="grid gap-5">
-            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch checked={enabled} onCheckedChange={(next) => setEnv((current) => ({ ...current, AUTO_RESTART_ENABLED: next ? "1" : "0" }))} /></Field>
+            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, automaticRestartEnabled: next }))} /></Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field><FieldLabel>Local time</FieldLabel><Input type="time" value={env.AUTO_RESTART_TIME || "05:00"} disabled={!enabled} onChange={(event) => setEnv((current) => ({ ...current, AUTO_RESTART_TIME: event.target.value }))} /></Field>
-              <Field><FieldLabel>IANA timezone</FieldLabel><Input value={env.AUTO_RESTART_TIMEZONE || "Europe/Vienna"} disabled={!enabled} onChange={(event) => setEnv((current) => ({ ...current, AUTO_RESTART_TIMEZONE: event.target.value }))} /><FieldDescription>Example: Europe/Vienna; daylight-saving changes are handled automatically.</FieldDescription></Field>
+              <Field><FieldLabel>Local time</FieldLabel><Input type="time" value={settings.restartTime || "05:00"} disabled={!enabled} onChange={(event) => setSettings((current) => ({ ...current, restartTime: event.target.value }))} /></Field>
+              <Field><FieldLabel>IANA timezone</FieldLabel><Input value={settings.restartTimezone || "Europe/Vienna"} disabled={!enabled} onChange={(event) => setSettings((current) => ({ ...current, restartTimezone: event.target.value }))} /><FieldDescription>Example: Europe/Vienna; daylight-saving changes are handled automatically.</FieldDescription></Field>
             </div>
             <Alert variant="warning"><AlertTitle>Operational mitigation</AlertTitle><AlertDescription>This restart limits problems that accumulate over uptime. It does not claim a confirmed engine tick-counter overflow.</AlertDescription></Alert>
           </CardContent>
@@ -557,11 +563,11 @@ function LineupImageUpload({ onUploaded, onError }) {
   );
 }
 
-function createNade(env) {
+function createNade(settings) {
   return {
     id: window.crypto?.randomUUID?.() || String(Date.now()),
     name: "",
-    map: env.CS2_STARTMAP || "",
+    map: settings.startMap || "",
     type: "Smoke",
     desc: "",
     lineupPos: "0 0 0",
@@ -571,17 +577,17 @@ function createNade(env) {
   };
 }
 
-function NadeDialog({ env, open, onOpenChange, onAdd }) {
-  const [draft, setDraft] = useState(() => createNade(env));
+function NadeDialog({ settings, open, onOpenChange, onAdd }) {
+  const [draft, setDraft] = useState(() => createNade(settings));
   const [setposText, setSetposText] = useState("");
   const [dialogError, setDialogError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setDraft(createNade(env));
+    setDraft(createNade(settings));
     setSetposText("");
     setDialogError("");
-  }, [open, env]);
+  }, [open, settings]);
 
   function updateDraft(patch) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -709,7 +715,7 @@ function NadeDialog({ env, open, onOpenChange, onAdd }) {
   );
 }
 
-function Nades({ env, nades, setNades, onSave }) {
+function Nades({ settings, nades, setNades, onSave }) {
   const [mapFilter, setMapFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [query, setQuery] = useState("");
@@ -813,7 +819,7 @@ function Nades({ env, nades, setNades, onSave }) {
         )}
       />
       <NadeDialog
-        env={env}
+        settings={settings}
         open={addOpen}
         onOpenChange={setAddOpen}
         onAdd={(entry) => setNades((current) => [...current, entry])}
@@ -1006,7 +1012,7 @@ function DockerLogs({ active }) {
 function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [tab, setTab] = useState("overview");
-  const [env, setEnv] = useState({});
+  const [settings, setSettings] = useState({});
   const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
   const [flagPresets, setFlagPresets] = useState([]);
@@ -1020,13 +1026,13 @@ function App() {
   async function loadAll() {
     const control = await api("/api/control");
     setAuthenticated(true);
-    setEnv(control.env || {});
+    setSettings(control.settings || {});
     setAdmins(control.admins || []);
     setNades(control.nades || []);
     setFlagPresets(control.flagPresets || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
-    setSavedSignature(JSON.stringify({ env: control.env || {}, admins: control.admins || [] }));
+    setSavedSignature(JSON.stringify({ settings: control.settings || {}, admins: control.admins || [] }));
   }
 
   async function runAction(action) {
@@ -1047,7 +1053,7 @@ function App() {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
 
-  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ env, admins });
+  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings, admins });
 
   useEffect(() => {
     function warnBeforeLeave(event) {
@@ -1090,10 +1096,10 @@ function App() {
       busy={busy}
       serviceState={status?.service?.state}
       onSave={() => runAction(async () => {
-        await api("/api/control", { method: "PUT", body: JSON.stringify({ env, admins }) });
+        await api("/api/control", { method: "PUT", body: JSON.stringify({ settings, admins }) });
         return { message: "Draft saved. Apply it when you are ready to restart CS2." };
       })}
-      onApply={() => runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ env, admins }) }))}
+      onApply={() => runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings, admins }) }))}
       onLogout={async () => {
         await api("/api/auth/logout", { method: "POST" });
         setAuthenticated(false);
@@ -1101,7 +1107,7 @@ function App() {
     >
       {tab === "overview" ? (
         <Overview
-          env={env}
+          settings={settings}
           admins={admins}
           nades={nades}
           status={status}
@@ -1119,12 +1125,12 @@ function App() {
       ) : null}
       {tab === "server" ? (
         <Settings
-          env={env}
-          setEnv={setEnv}
+          settings={settings}
+          setSettings={setSettings}
           policy={policy}
         />
       ) : null}
-      {tab === "plugins" ? <Plugins env={env} setEnv={setEnv} policy={policy} /> : null}
+      {tab === "plugins" ? <Plugins settings={settings} setSettings={setSettings} policy={policy} /> : null}
       {tab === "access" ? (
         <Admins
           admins={admins}
@@ -1133,10 +1139,10 @@ function App() {
           roles={policy?.adminRoles || []}
         />
       ) : null}
-      {tab === "maintenance" ? <Maintenance env={env} setEnv={setEnv} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))} /> : null}
+      {tab === "maintenance" ? <Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))} /> : null}
       {tab === "nades" ? (
         <Nades
-          env={env}
+          settings={settings}
           nades={nades}
           setNades={setNades}
           onSave={() => runAction(async () => {

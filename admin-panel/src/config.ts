@@ -1,22 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { parseEnvFile } from "./env-file.js";
-
-function loadLocalEnvFile() {
-  const candidates = [join(process.cwd(), ".env"), join(process.cwd(), "..", ".env")];
-
-  for (const path of candidates) {
-    if (!existsSync(path)) continue;
-    const env = parseEnvFile(readFileSync(path, "utf8"));
-    for (const [key, value] of Object.entries(env)) {
-      process.env[key] ??= String(value);
-    }
-    return;
-  }
-}
-
-loadLocalEnvFile();
-
 export function requireEnv(name) {
   const value = process.env[name];
   if (!value) {
@@ -34,8 +15,7 @@ export function getConfig() {
     mongoDbName: "cs2_admin_panel",
     projectDir: "",
     composeFile: "docker-compose.yml",
-    envFile: "",
-    runtimeEnvFile: "/runtime/settings.env",
+    runtimeSettingsFile: "/runtime/settings.json",
     runtimeAdminsFile: "/runtime/csharp-admins.json",
     runtimeMatchZyAdminsFile: "/runtime/matchzy-admins.json",
     runtimeMatchZyNadesFile: "/runtime/matchzy-savednades.json",

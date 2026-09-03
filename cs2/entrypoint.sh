@@ -1,49 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-steamappdir="${STEAMAPPDIR:-/home/steam/cs2-dedicated}"
+steamappdir="/home/steam/cs2-dedicated"
+settings_file="/config-runtime/settings.json"
 runtime_pre_hook="$steamappdir/pre.sh"
 runtime_post_hook="$steamappdir/post.sh"
-runtime_env_file="${CS2_RUNTIME_ENV_FILE:-/config-runtime/settings.env}"
 
-load_runtime_env_file() {
-  local file="$1"
-  local line=""
-  local key=""
-  local value=""
-
-  [[ -f "$file" ]] || return 0
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%$'\r'}"
-    [[ -n "$line" ]] || continue
-    [[ "$line" == \#* ]] && continue
-    [[ "$line" == *=* ]] || continue
-
-    key="${line%%=*}"
-    value="${line#*=}"
-    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-
-    if [[ "$value" == '"'*'"' ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-      value="${value//\\\"/\"}"
-      value="${value//\\\\/\\}"
-    elif [[ "$value" == "'"*"'" ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-
-    export "$key=$value"
-  done < "$file"
+read_setting() {
+  jq -er "$1" "$settings_file"
 }
 
 wait_for_platform_configuration() {
   local announced=0
   while true; do
-    unset SRCDS_TOKEN CS2_RCONPW
-    load_runtime_env_file "$runtime_env_file"
-    if [[ -n "${SRCDS_TOKEN:-}" && -n "${CS2_RCONPW:-}" ]]; then
+    if jq -e '
+      type == "object" and
+      (.schemaVersion == 1) and
+      (.steamToken | type == "string" and length > 0) and
+      (.rconPassword | type == "string" and length > 0)
+    ' "$settings_file" >/dev/null 2>&1; then
       return 0
     fi
     if (( announced == 0 )); then
@@ -54,9 +29,28 @@ wait_for_platform_configuration() {
   done
 }
 
+configure_upstream_process() {
+  # cm2network/cs2 consumes these process variables directly. They are derived
+  # exclusively from the platform-owned JSON file and are not deployment inputs.
+  export SRCDS_TOKEN="$(read_setting '.steamToken')"
+  export CS2_SERVERNAME="$(read_setting '.serverName')"
+  export CS2_RCONPW="$(read_setting '.rconPassword')"
+  export CS2_PW="$(read_setting '.joinPassword')"
+  export CS2_MAXPLAYERS="$(read_setting '.maxPlayers')"
+  export CS2_STARTMAP="$(read_setting '.startMap')"
+  export CS2_ADDITIONAL_ARGS="$(read_setting '.additionalArgs')"
+  export CS2_PORT=27015
+  export TV_PORT=27020
+}
+
+command -v jq >/dev/null 2>&1 || {
+  echo "[entrypoint] jq is required to read platform settings" >&2
+  exit 1
+}
+
 mkdir -p "$steamappdir"
 wait_for_platform_configuration
-unset ADMINS
+configure_upstream_process
 
 # Recover from broken state where pre.sh became a directory in the volume.
 if [[ -d "$runtime_pre_hook" ]]; then
