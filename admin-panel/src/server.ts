@@ -5,6 +5,7 @@ import { NadesSyncService } from "./nades-sync.js";
 import { Store } from "./store.js";
 import { setTimeout as wait } from "node:timers/promises";
 import { RestartScheduler } from "./restart-scheduler.js";
+import { writeServerRuntimeFiles } from "./runtime-files.js";
 
 const config = getConfig();
 const store = new Store(config);
@@ -24,6 +25,13 @@ const nadesSync = new NadesSyncService({ config, store });
 if (config.nadesSyncEnabled) {
   await nadesSync.start();
 }
+await writeServerRuntimeFiles(
+  config,
+  nadesSync,
+  await store.getSettings(),
+  await store.getAdmins(),
+  await store.getNades()
+);
 
 const compose = new Compose(config);
 const restartScheduler = new RestartScheduler({ store, compose });

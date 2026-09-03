@@ -110,8 +110,8 @@ function sanitizeLineupImages(images) {
     if (!key) {
       throw new Error("Lineup image key is required");
     }
-    if (!/^https?:\/\//i.test(url)) {
-      throw new Error("Lineup image URL must be http or https");
+    if (!/^https?:\/\//i.test(url) && !/^\/api\/uploads\/[0-9a-f-]+\.(?:jpg|png|webp|gif)$/i.test(url)) {
+      throw new Error("Lineup image URL must be an external HTTP URL or a panel upload");
     }
     if (!name) {
       throw new Error("Lineup image name is required");

@@ -38,8 +38,25 @@ load_runtime_env_file() {
   done < "$file"
 }
 
+wait_for_platform_configuration() {
+  local announced=0
+  while true; do
+    unset SRCDS_TOKEN CS2_RCONPW
+    load_runtime_env_file "$runtime_env_file"
+    if [[ -n "${SRCDS_TOKEN:-}" && -n "${CS2_RCONPW:-}" ]]; then
+      return 0
+    fi
+    if (( announced == 0 )); then
+      echo "[entrypoint] Waiting for Steam token and RCON password from MatchZy Control"
+      announced=1
+    fi
+    sleep 5
+  done
+}
+
 mkdir -p "$steamappdir"
-load_runtime_env_file "$runtime_env_file"
+wait_for_platform_configuration
+unset ADMINS
 
 # Recover from broken state where pre.sh became a directory in the volume.
 if [[ -d "$runtime_pre_hook" ]]; then

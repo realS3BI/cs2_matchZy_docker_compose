@@ -2,24 +2,20 @@ import crypto from "node:crypto";
 import express from "express";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FLAG_PRESETS, SERVER_ENV_KEYS } from "./defaults.js";
-import { writeEnvFile } from "./env-file.js";
-import { uploadRouter } from "./uploadthing.js";
+import { FLAG_PRESETS } from "./defaults.js";
 import {
-  adminsToCssConfig,
-  adminsToMatchZyConfig,
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
   sanitizeAdmins,
   sanitizeEnv,
   sanitizeNades
 } from "./validators.js";
-import { createRouteHandler } from "uploadthing/express";
 import { buildDiagnostics } from "./diagnostics.js";
-import { buildControlModel, normalizeServerSettings, SETTINGS_GROUPS, validateServerSettings } from "./policy.js";
+import { buildControlModel, normalizeServerSettings, SETTINGS_GROUPS, validateRunnableServerSettings, validateServerSettings } from "./policy.js";
+import { writeAdminRuntimeFiles, writeServerRuntimeEnv, writeServerRuntimeFiles } from "./runtime-files.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -60,33 +56,6 @@ function actionMessage(result) {
   return output || (result.ok ? "Command completed" : "Command failed");
 }
 
-function serverRuntimeEnv(env) {
-  const output = {};
-  for (const key of SERVER_ENV_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(env, key)) {
-      output[key] = env[key];
-    }
-  }
-  return output;
-}
-
-async function writeJsonFile(path, value) {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
-async function writeAdminRuntimeFiles(config, admins) {
-  await writeJsonFile(config.runtimeAdminsFile, adminsToCssConfig(admins));
-  await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(admins));
-}
-
-async function writeServerRuntimeFiles(config, nadesSync, env, admins, nades) {
-  await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(env));
-  await writeAdminRuntimeFiles(config, admins);
-  await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
-  await nadesSync?.writeFromMongo(nades);
-}
-
 async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) {
   const observed = await compose.waitForServiceLog(
     ["[pre.sh] Hook finished successfully", "[pre.sh] Hook failed"],
@@ -94,7 +63,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
   );
 
   const resetEnv = sanitizeEnv({ ...(await store.getSettings()), MOD_REINSTALL: "0" });
-  await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(resetEnv));
+  await writeServerRuntimeEnv(config, resetEnv);
   await store.saveSettings(resetEnv);
   await store.logAction(
     "repair_reset",
@@ -108,12 +77,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
 export function createApp({ config, store, compose, nadesSync, restartScheduler = null }) {
   const app = express();
   app.disable("x-powered-by");
-  app.use(
-    "/api/uploadthing",
-    createRouteHandler({
-      router: uploadRouter(config)
-    })
-  );
+  app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
 
@@ -137,7 +101,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     res.cookie(COOKIE_NAME, createSession(config.sessionSecret), {
       httpOnly: true,
       sameSite: "strict",
-      secure: process.env.ADMIN_PANEL_SECURE_COOKIE === "1",
+      secure: req.secure,
       maxAge: 12 * 60 * 60 * 1000
     });
     return res.json({ ok: true });
@@ -153,6 +117,44 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.use("/api", requireAuth(config));
+
+  app.post(
+    "/api/uploads/lineup-image",
+    express.raw({ type: ["image/jpeg", "image/png", "image/webp", "image/gif"], limit: "4mb" }),
+    async (req, res) => {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: "Select a JPEG, PNG, WebP or GIF image" });
+      }
+      const extensions = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif" };
+      const extension = extensions[String(req.headers["content-type"] || "").split(";")[0]];
+      if (!extension) return res.status(415).json({ error: "Unsupported image type" });
+
+      const originalName = decodeURIComponent(String(req.headers["x-file-name"] || "lineup-image")).slice(0, 180);
+      const key = `${crypto.randomUUID()}${extension}`;
+      await mkdir(config.uploadDir, { recursive: true });
+      await writeFile(join(config.uploadDir, key), req.body);
+      return res.json({
+        key,
+        url: `/api/uploads/${key}`,
+        name: originalName || `lineup-image${extname(key)}`,
+        size: req.body.length,
+        uploadedAt: new Date().toISOString()
+      });
+    }
+  );
+
+  app.get("/api/uploads/:key", async (req, res) => {
+    const key = String(req.params.key || "");
+    if (!/^[0-9a-f-]+\.(?:jpg|png|webp|gif)$/i.test(key)) return res.status(404).end();
+    try {
+      const content = await readFile(join(config.uploadDir, key));
+      const contentTypes = { ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif" };
+      res.type(contentTypes[extname(key).toLowerCase()] || "application/octet-stream").send(content);
+    } catch (error) {
+      if (error.code === "ENOENT") return res.status(404).end();
+      throw error;
+    }
+  });
 
   app.get("/api/settings", async (req, res) => {
     res.json({
@@ -239,15 +241,12 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.post("/api/server/apply", async (req, res) => {
-    const env = normalizeServerSettings(await store.getSettings());
+    const env = normalizeServerSettings(validateRunnableServerSettings(await store.getSettings()));
     const admins = await store.getAdmins();
     const nades = await store.getNades();
     const nextEnv = normalizeServerSettings(env);
 
     await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
-    if (config.envFile) {
-      await writeEnvFile(config.envFile, nextEnv);
-    }
     await store.saveSettings(nextEnv);
 
     const result = await compose.recreateService();
@@ -262,12 +261,11 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.post("/api/control/apply", async (req, res) => {
-    const nextEnv = normalizeServerSettings(validateServerSettings(sanitizeEnv(req.body?.env)));
+    const nextEnv = normalizeServerSettings(validateRunnableServerSettings(sanitizeEnv(req.body?.env)));
     const admins = sanitizeAdmins(req.body?.admins);
     const nades = await store.getNades();
     await Promise.all([store.saveSettings(nextEnv), store.saveAdmins(admins)]);
     await writeServerRuntimeFiles(config, nadesSync, nextEnv, admins, nades);
-    if (config.envFile) await writeEnvFile(config.envFile, nextEnv);
 
     const result = await compose.recreateService();
     await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { code: result.code, mode: nextEnv.SERVER_MODE });
@@ -293,7 +291,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       });
     } else {
       const resetEnv = sanitizeEnv({ ...repairEnv, MOD_REINSTALL: "0" });
-      await writeEnvFile(config.runtimeEnvFile, serverRuntimeEnv(resetEnv));
+      await writeServerRuntimeEnv(config, resetEnv);
       await store.saveSettings(resetEnv);
     }
 

@@ -51,7 +51,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "./components/ui/switch";
 import { parseSetposSetang } from "./lib/nades";
-import { UploadButton } from "./lib/uploadthing";
 import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
@@ -510,6 +509,54 @@ function Maintenance({ env, setEnv, status, onRestart, busy }) {
 
 const nadeTypes = ["", "Smoke", "Flash", "HE", "Molly", "Decoy"];
 
+function LineupImageUpload({ onUploaded, onError }) {
+  const inputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function upload(event) {
+    const files = [...(event.target.files || [])];
+    event.target.value = "";
+    if (files.length === 0) return;
+    setUploading(true);
+    onError("");
+    try {
+      for (const file of files) {
+        const image = await api("/api/uploads/lineup-image", {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type,
+            "X-File-Name": encodeURIComponent(file.name)
+          },
+          body: file
+        });
+        onUploaded(image);
+      }
+    } catch (error) {
+      onError(error.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        ref={inputRef}
+        className="hidden"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        multiple
+        onChange={upload}
+      />
+      <Button type="button" variant="secondary" disabled={uploading} onClick={() => inputRef.current?.click()}>
+        <UploadCloud data-icon="inline-start" />
+        {uploading ? "Uploading..." : "Upload lineup images"}
+      </Button>
+      <span className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF · 4 MB each</span>
+    </div>
+  );
+}
+
 function createNade(env) {
   return {
     id: window.crypto?.randomUUID?.() || String(Date.now()),
@@ -635,17 +682,7 @@ function NadeDialog({ env, open, onOpenChange, onAdd }) {
           </Field>
         </FieldGroup>
         <div className="grid gap-3">
-          <UploadButton
-            endpoint="lineupImageUploader"
-            onClientUploadComplete={(files) => {
-              for (const file of files || []) addImage(file);
-            }}
-            onUploadError={(error) => setDialogError(error.message)}
-            appearance={{
-              button: "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md h-10 px-4 text-sm font-semibold",
-              allowedContent: "text-xs text-muted-foreground"
-            }}
-          />
+          <LineupImageUpload onUploaded={addImage} onError={setDialogError} />
           {(draft.lineupImages || []).length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {(draft.lineupImages || []).map((image) => (

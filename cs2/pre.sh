@@ -848,7 +848,6 @@ _matchzy_bootstrap_main() (
   local MATCHZY_SMOKE_COLOR="${MATCHZY_SMOKE_COLOR:-0}"
   local MATCHZY_SAVE_NADES_AS_GLOBAL="${MATCHZY_SAVE_NADES_AS_GLOBAL:-1}"
   local MATCHZY_CHAT_PREFIX="${MATCHZY_CHAT_PREFIX:-}"
-  local ADMINS="${ADMINS:-}"
   local CSHARP_ADMINS_FILE="${CSHARP_ADMINS_FILE:-}"
   local MATCHZY_ADMINS_FILE="${MATCHZY_ADMINS_FILE:-}"
   local MATCHZY_SAVEDNADES_FILE="${MATCHZY_SAVEDNADES_FILE:-}"
@@ -1277,7 +1276,7 @@ _matchzy_bootstrap_main() (
     copy_file_atomic "$CSHARP_ADMINS_FILE" "$css_admins_file"
     log "Wrote CounterStrikeSharp admins from the runtime file"
   else
-    write_css_admins_file "$ADMINS" "$css_admins_file"
+    write_css_admins_file "" "$css_admins_file"
   fi
   if is_enabled "$MATCHZY_ENABLED"; then
     write_matchzy_admins_file "" "$matchzy_admins_file"

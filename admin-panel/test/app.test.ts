@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "../src/app.js";
 
 function listen(server) {
@@ -35,5 +38,52 @@ test("healthz is public while diagnostics remain authenticated", async () => {
     assert.equal(diagnostics.status, 401);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("authenticated lineup uploads are stored locally", async () => {
+  const uploadDir = await mkdtemp(join(tmpdir(), "matchzy-uploads-"));
+  const app = createApp({
+    config: {
+      password: "test-password",
+      sessionSecret: "test-session-secret",
+      uploadDir
+    },
+    store: {
+      logAction: async () => undefined
+    },
+    compose: {},
+    nadesSync: null
+  });
+  const server = createServer(app);
+
+  try {
+    const address: any = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "test-password" })
+    });
+    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const content = Buffer.from("test-image");
+    const upload = await fetch(`${baseUrl}/api/uploads/lineup-image`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "image/png", "X-File-Name": encodeURIComponent("lineup.png") },
+      body: content
+    });
+    const image: any = await upload.json();
+
+    assert.equal(upload.status, 200);
+    assert.match(image.url, /^\/api\/uploads\/[0-9a-f-]+\.png$/);
+    assert.deepEqual(await readFile(join(uploadDir, image.key)), content);
+
+    const served = await fetch(`${baseUrl}${image.url}`, { headers: { Cookie: cookie } });
+    assert.equal(served.status, 200);
+    assert.equal(served.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await served.arrayBuffer()), content);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(uploadDir, { recursive: true, force: true });
   }
 });

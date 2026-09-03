@@ -3,10 +3,7 @@ import { join } from "node:path";
 import { parseEnvFile } from "./env-file.js";
 
 function loadLocalEnvFile() {
-  const explicitPath = process.env.ADMIN_PANEL_DOTENV_FILE;
-  const candidates = explicitPath
-    ? [explicitPath]
-    : [join(process.cwd(), ".env"), join(process.cwd(), "..", ".env")];
+  const candidates = [join(process.cwd(), ".env"), join(process.cwd(), "..", ".env")];
 
   for (const path of candidates) {
     if (!existsSync(path)) continue;
@@ -14,7 +11,6 @@ function loadLocalEnvFile() {
     for (const [key, value] of Object.entries(env)) {
       process.env[key] ??= String(value);
     }
-    process.env.ADMIN_PANEL_DOTENV_FILE = path;
     return;
   }
 }
@@ -31,24 +27,25 @@ export function requireEnv(name) {
 
 export function getConfig() {
   return {
-    port: Number(process.env.ADMIN_PANEL_PORT || 8080),
+    port: 8080,
     password: requireEnv("ADMIN_PANEL_PASSWORD"),
     sessionSecret: requireEnv("ADMIN_PANEL_SESSION_SECRET"),
-    mongodbUri: requireEnv("MONGODB_URI"),
-    mongoDbName: process.env.MONGODB_DB || "cs2_admin_panel",
-    projectDir: process.env.COMPOSE_PROJECT_DIR || "",
-    composeFile: process.env.COMPOSE_FILE || "docker-compose.yml",
-    envFile: process.env.ADMIN_PANEL_ENV_FILE || "",
-    runtimeEnvFile: process.env.ADMIN_PANEL_RUNTIME_ENV_FILE || "/runtime/settings.env",
-    runtimeAdminsFile: process.env.ADMIN_PANEL_RUNTIME_ADMINS_FILE || "/runtime/csharp-admins.json",
-    runtimeMatchZyAdminsFile: process.env.ADMIN_PANEL_RUNTIME_MATCHZY_ADMINS_FILE || "/runtime/matchzy-admins.json",
-    runtimeMatchZyNadesFile: process.env.ADMIN_PANEL_RUNTIME_MATCHZY_NADES_FILE || "/runtime/matchzy-savednades.json",
-    liveMatchZyNadesFile: process.env.ADMIN_PANEL_LIVE_MATCHZY_NADES_FILE || "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
-    nadesSyncEnabled: process.env.ADMIN_PANEL_NADES_SYNC_ENABLED !== "0",
-    nadesSyncIntervalMs: Number(process.env.ADMIN_PANEL_NADES_SYNC_INTERVAL_MS || 2000),
-    controlMode: process.env.ADMIN_PANEL_CONTROL_MODE || "docker",
-    composeProjectName: process.env.COMPOSE_PROJECT_NAME || "",
-    serviceName: process.env.ADMIN_PANEL_CS2_SERVICE || "cs2",
-    containerName: process.env.ADMIN_PANEL_CS2_CONTAINER || ""
+    mongodbUri: "mongodb://mongodb:27017/cs2_admin_panel",
+    mongoDbName: "cs2_admin_panel",
+    projectDir: "",
+    composeFile: "docker-compose.yml",
+    envFile: "",
+    runtimeEnvFile: "/runtime/settings.env",
+    runtimeAdminsFile: "/runtime/csharp-admins.json",
+    runtimeMatchZyAdminsFile: "/runtime/matchzy-admins.json",
+    runtimeMatchZyNadesFile: "/runtime/matchzy-savednades.json",
+    liveMatchZyNadesFile: "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
+    uploadDir: "/uploads",
+    nadesSyncEnabled: true,
+    nadesSyncIntervalMs: 2000,
+    controlMode: "docker",
+    composeProjectName: "cs2-matchzy",
+    serviceName: "cs2",
+    containerName: ""
   };
 }

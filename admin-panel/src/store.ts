@@ -1,17 +1,28 @@
 import { Collection, Db, MongoClient } from "mongodb";
+import { readFile } from "node:fs/promises";
 import { loadEnvFile } from "./env-file.js";
-import { SERVER_ENV_KEYS } from "./defaults.js";
 import { sanitizeAdmins, sanitizeEnv, sanitizeNades } from "./validators.js";
 import { normalizeServerSettings } from "./policy.js";
 
-function currentProcessEnv() {
-  const env = {};
-  for (const key of SERVER_ENV_KEYS) {
-    if (process.env[key] !== undefined) {
-      env[key] = process.env[key];
-    }
+async function loadRuntimeAdmins(path, legacyAdmins = "") {
+  try {
+    const config = JSON.parse(await readFile(path, "utf8"));
+    const entries = sanitizeAdmins(Object.entries(config).map(([identitySteam64, entry]: [string, any]) => ({
+      name: String(entry?.name || "Imported admin"),
+      identitySteam64: String(entry?.identity || identitySteam64),
+      flags: Array.isArray(entry?.flags) ? entry.flags : ["@css/root"]
+    })));
+    if (entries.length > 0) return entries;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
   }
-  return env;
+
+  const identities = [...new Set(String(legacyAdmins).split(",").map((value) => value.trim()).filter((value) => /^[0-9]{17}$/.test(value)))];
+  return sanitizeAdmins(identities.map((identitySteam64) => ({
+    name: "Imported admin",
+    identitySteam64,
+    role: "owner"
+  })));
 }
 
 export class Store {
@@ -43,7 +54,19 @@ export class Store {
       { $setOnInsert: { createdAt: new Date() } },
       { upsert: true }
     );
-    await this.migrateLegacyAdmins();
+    const runtimeEnv: Record<string, any> = await loadEnvFile(this.config.runtimeEnvFile);
+    await this.settings.updateOne(
+      { _id: "current" },
+      { $setOnInsert: { env: normalizeServerSettings(runtimeEnv), createdAt: new Date() } },
+      { upsert: true }
+    );
+    if (!(await this.admins.findOne({ _id: "current" }))) {
+      const entries = await loadRuntimeAdmins(this.config.runtimeAdminsFile, runtimeEnv.ADMINS);
+      if (entries.length > 0) {
+        await this.admins.insertOne({ _id: "current", entries, createdAt: new Date(), migratedFrom: "runtime" });
+        await this.logAction("admin_migration", "success", `Imported ${entries.length} admin${entries.length === 1 ? "" : "s"} from the runtime volume`);
+      }
+    }
   }
 
   async close() {
@@ -53,11 +76,7 @@ export class Store {
   async getSettings() {
     const doc = await this.settings.findOne({ _id: "current" });
     if (doc?.env) return normalizeServerSettings(doc.env);
-    if (this.config.envFile) {
-      const fileEnv = await loadEnvFile(this.config.envFile);
-      if (Object.keys(fileEnv).length > 0) return normalizeServerSettings(fileEnv);
-    }
-    return normalizeServerSettings(currentProcessEnv());
+    return normalizeServerSettings({});
   }
 
   async saveSettings(env) {
@@ -85,29 +104,6 @@ export class Store {
     );
     await this.logAction("save", "success", "Admins saved");
     return cleanEntries;
-  }
-
-  async migrateLegacyAdmins() {
-    if (await this.admins.findOne({ _id: "current" })) return;
-
-    let rawEnv: Record<string, any> = currentProcessEnv();
-    if (this.config.envFile) {
-      const fileEnv = await loadEnvFile(this.config.envFile);
-      if (Object.keys(fileEnv).length > 0) rawEnv = fileEnv;
-    }
-    const ids = [...new Set(String(rawEnv.ADMINS || "").split(",").map((value) => value.trim()).filter((value) => /^[0-9]{17}$/.test(value)))];
-    if (ids.length === 0) return;
-    const entries = sanitizeAdmins(ids.map((identitySteam64, index) => ({
-      name: `Migrated admin ${index + 1}`,
-      identitySteam64,
-      role: "owner"
-    })));
-    await this.admins.updateOne(
-      { _id: "current" },
-      { $set: { entries, updatedAt: new Date(), migratedFrom: "ADMINS" } },
-      { upsert: true }
-    );
-    await this.logAction("admin_migration", "success", `Migrated ${entries.length} legacy ADMINS entr${entries.length === 1 ? "y" : "ies"} to roles`);
   }
 
   async claimScheduledRestart(slot) {
