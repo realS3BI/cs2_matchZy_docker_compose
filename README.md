@@ -39,12 +39,12 @@ Neue Installationen starten das Web-Panel zuerst. Der CS2-Container wartet, bis 
 1. Repository als Compose-Ressource in Coolify verbinden oder lokal mit `docker compose` nutzen.
 2. `docker-compose.yml` deployen.
 3. In Coolify nur `ADMIN_PANEL_PASSWORD` und `ADMIN_PANEL_SESSION_SECRET` setzen.
-4. Nur die Spielports und bei Bedarf den Panel-Port freigeben:
+4. Nur die Spielports am Host freigeben:
    - `27015/tcp`
    - `27015/udp`
    - `27020/udp`
-   - Web-Admin-Panel ueber Coolify-Domain auf Container-Port `8080`
-5. Panel oeffnen, Steam-Token und RCON-Passwort im Bereich `Server` eintragen und `Apply & restart` ausfuehren.
+5. In Coolify eine Domain fuer den Service `admin-panel` anlegen und als Ziel den internen Container-Port `8080` waehlen.
+6. Panel oeffnen, Steam-Token und RCON-Passwort im Bereich `Server` eintragen und `Apply & restart` ausfuehren.
 
 Nach Code-Aenderungen den Stack neu bauen:
 
@@ -71,7 +71,7 @@ Auch weitere alte `COMPOSE_*`- oder `ADMIN_PANEL_*`-Overrides haben keine Wirkun
 
 Das Compose-Projekt enthaelt zusaetzlich:
 
-- `admin-panel` auf Port `8080`
+- `admin-panel` auf dem internen Container-Port `8080`, ohne Host-Port-Binding
 - `mongodb` mit Volume `admin_panel_mongodb`
 
 Das Panel-Frontend ist eine Vite/React-App mit Tailwind CSS v4 und lokalen shadcn-style UI-Komponenten. Die Navigation trennt Overview, Server, Plugins, Access, Maintenance, Nades, Diagnostics und Logs. Der Produktionsbuild wird beim Docker-Build erzeugt und vom Express-Backend ausgeliefert.
@@ -133,9 +133,9 @@ Nach Aenderungen an `cs2/` oder `admin-panel/` muss in Coolify die gesamte Compo
 
 ### Coolify Domain / Vite Routing
 
-Das Panel lauscht intern auf Port `8080` und liefert den gebauten Vite/React-Client direkt ueber Express aus. Alle API-Calls nutzen relative Pfade wie `/api/settings`. Dadurch funktioniert das Routing hinter einer Coolify-Domain ohne separate Vite-Proxy-Konfiguration.
+Das Panel lauscht intern auf Port `8080` und liefert den gebauten Vite/React-Client direkt ueber Express aus. Der Stack bindet diesen Port nicht an den Host. Deshalb koennen weitere Coolify-Projekte intern ebenfalls Port `8080` verwenden, ohne miteinander zu kollidieren.
 
-In Coolify bei der Domain fuer den Service `admin-panel` den Container-Port `8080` hinterlegen, z. B. `https://panel.example.com:8080`. Der Port sagt Coolify nur, an welchen Container-Port weitergeleitet wird; extern bleibt die Domain normal ueber HTTPS erreichbar.
+In Coolify die Domain dem Service `admin-panel` zuordnen und den Zielport `8080` eintragen. Aufgerufen wird das Panel normal ueber die Domain, zum Beispiel `https://panel.example.com`. An die URL kommt kein `:8080`.
 
 Wichtig: Der `admin-panel` Container mountet den Docker-Socket, damit er den `cs2` Container neu starten kann. Das ist funktional, aber sicherheitsrelevant: Wer Zugriff auf das Panel bekommt, kann indirekt Docker auf dem Host steuern. Wenn das Panel oeffentlich erreichbar ist, sollte es hinter HTTPS/Reverse-Proxy laufen; fuer produktiven Betrieb sind zusaetzlich IP-Allowlisting oder VPN empfehlenswert.
 

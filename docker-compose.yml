@@ -17,8 +17,6 @@ services:
         condition: service_started
     expose:
       - "8080"
-    ports:
-      - "127.0.0.1:8080:8080"
     environment:
       ADMIN_PANEL_PASSWORD: ${ADMIN_PANEL_PASSWORD:?ADMIN_PANEL_PASSWORD is required}
       ADMIN_PANEL_SESSION_SECRET: ${ADMIN_PANEL_SESSION_SECRET:?ADMIN_PANEL_SESSION_SECRET is required}
