@@ -34,6 +34,12 @@ test("new installations receive complete typed defaults", () => {
   assert.equal(settings.matchZyVersion, "latest");
   assert.equal(settings.maxPlayers, 10);
   assert.equal(settings.fakeRconEnabled, false);
+  assert.equal(settings.workshopMapCatalog, "[]");
+});
+
+test("normalizeSettings persists Workshop map metadata", () => {
+  const catalog = '[{"title":"Aim Botz","mapName":"aim_botz","workshopId":"3070244462"}]';
+  assert.equal(normalizeSettings({ workshopMapCatalog: catalog }).workshopMapCatalog, catalog);
 });
 
 test("control model reports installed dependency chains", () => {

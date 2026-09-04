@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   ArrowLeftRight,
+  BookOpen,
   Boxes,
   CalendarClock,
   Check,
@@ -12,6 +13,7 @@ import {
   Crosshair,
   Database,
   Download,
+  ExternalLink,
   FileInput,
   FileJson,
   Globe2,
@@ -19,6 +21,7 @@ import {
   LockKeyhole,
   LogOut,
   MapPinned,
+  PackagePlus,
   Pause,
   Play,
   Plus,
@@ -36,7 +39,7 @@ import { api } from "./lib/api";
 import { cn } from "./lib/utils";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import {
@@ -57,6 +60,15 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "./components/ui/switch";
 import { parseSetposSetang } from "./lib/nades";
+import {
+  ACTIVE_DUTY_MAPS,
+  CSNADES_REFERENCE_MAPS,
+  addWorkshopMap,
+  mapMatchesNade,
+  removeWorkshopMap,
+  workshopMapsFromSettings,
+  type MapDefinition
+} from "./lib/maps";
 import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
@@ -69,6 +81,7 @@ const tabs = [
   { id: "plugins", label: "Plugins", icon: Boxes, group: "Workspace" },
   { id: "access", label: "Access", icon: Shield, group: "Workspace" },
   { id: "maintenance", label: "Maintenance", icon: CalendarClock, group: "Operations" },
+  { id: "maps", label: "Maps", icon: MapPinned, group: "Operations" },
   { id: "nades", label: "Nades", icon: Crosshair, group: "Operations" },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, group: "Operations" },
   { id: "logs", label: "Logs", icon: Terminal, group: "Operations" }
@@ -647,11 +660,11 @@ function LineupImageUpload({ onUploaded, onError }) {
   );
 }
 
-function createNade(settings) {
+function createNade(settings, initialMap = "") {
   return {
     id: window.crypto?.randomUUID?.() || String(Date.now()),
     name: "",
-    map: settings.startMap || "",
+    map: initialMap || settings.startMap || "",
     type: "Smoke",
     desc: "",
     lineupPos: "0 0 0",
@@ -661,17 +674,17 @@ function createNade(settings) {
   };
 }
 
-function NadeDialog({ settings, open, onOpenChange, onAdd }) {
-  const [draft, setDraft] = useState(() => createNade(settings));
+function NadeDialog({ settings, initialMap = "", open, onOpenChange, onAdd }) {
+  const [draft, setDraft] = useState(() => createNade(settings, initialMap));
   const [setposText, setSetposText] = useState("");
   const [dialogError, setDialogError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setDraft(createNade(settings));
+    setDraft(createNade(settings, initialMap));
     setSetposText("");
     setDialogError("");
-  }, [open, settings]);
+  }, [open, settings, initialMap]);
 
   function updateDraft(patch) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -797,6 +810,478 @@ function NadeDialog({ settings, open, onOpenChange, onAdd }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const MAP_SKETCH_PATHS = [
+  ["M14 70 36 70 36 48 61 48 61 25 92 25 92 44 128 44 128 76 148 76", "M36 70 58 88 91 88 91 66 112 66 128 44", "M61 48 80 62 91 66"],
+  ["M16 29 48 29 48 46 75 46 75 77 105 77 105 58 144 58", "M32 85 32 62 48 46 69 25 113 25 113 42 144 58", "M75 46 101 46 105 58"],
+  ["M18 55 43 55 43 29 77 29 77 48 117 48 117 25 145 25", "M43 55 58 77 92 77 92 62 128 62 145 80", "M77 48 92 62"],
+  ["M15 78 41 78 41 54 65 54 65 23 94 23 94 42 132 42 146 58", "M41 54 63 76 101 76 101 59 132 42", "M65 54 81 62 101 59"],
+  ["M17 36 42 36 42 60 69 60 69 82 104 82 104 58 143 58", "M29 18 61 18 69 38 96 38 96 24 129 24 143 58", "M42 60 69 38 96 38 104 58"],
+  ["M14 63 38 63 38 38 66 38 66 20 99 20 99 45 132 45 148 68", "M28 84 58 84 58 66 88 66 88 48 115 48 132 45", "M38 63 58 66 66 38 88 48"],
+  ["M15 27 50 27 50 46 80 46 80 67 109 67 109 48 145 48", "M28 82 28 59 50 46 67 71 80 67", "M80 46 104 26 132 26 145 48"]
+];
+
+function lineupCoordinates(nades) {
+  const coordinates = nades.flatMap((nade) => {
+    const values = String(nade.lineupPos || "").trim().split(/\s+/).map(Number);
+    return values.length >= 2 && values.slice(0, 2).every(Number.isFinite) ? [{ x: values[0], y: values[1] }] : [];
+  });
+  if (coordinates.length === 0) return [];
+  const xs = coordinates.map((point) => point.x);
+  const ys = coordinates.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return coordinates.map((point) => ({
+    x: maxX === minX ? 80 : 18 + ((point.x - minX) / (maxX - minX)) * 124,
+    y: maxY === minY ? 52 : 84 - ((point.y - minY) / (maxY - minY)) * 68
+  }));
+}
+
+function MapSketch({ map, nades = [], compact = false }: { map: MapDefinition; nades?: any[]; compact?: boolean }) {
+  const paths = MAP_SKETCH_PATHS[map.sketch % MAP_SKETCH_PATHS.length];
+  const points = lineupCoordinates(nades);
+  const patternId = `grid-${map.key.replace(/[^a-z0-9]/gi, "")}-${compact ? "small" : "large"}`;
+  const markerOffset = map.sketch % 3;
+  return (
+    <svg className={cn("map-sketch", compact && "map-sketch-compact")} viewBox="0 0 160 104" role="img" aria-label={`${map.name} lineup coordinate sketch`}>
+      <defs>
+        <pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse">
+          <path d="M 8 0 L 0 0 0 8" className="map-sketch-grid" />
+        </pattern>
+      </defs>
+      <rect width="160" height="104" rx="9" className="map-sketch-ground" />
+      <rect width="160" height="104" rx="9" fill={`url(#${patternId})`} />
+      <g className="map-sketch-routes">
+        {paths.map((path) => <path key={path} d={path} />)}
+      </g>
+      <g className="map-sketch-sites" aria-hidden="true">
+        <circle cx={25 + markerOffset * 9} cy={25 + markerOffset * 4} r="9" />
+        <text x={25 + markerOffset * 9} y={28 + markerOffset * 4}>A</text>
+        <circle cx={133 - markerOffset * 7} cy={78 - markerOffset * 5} r="9" />
+        <text x={133 - markerOffset * 7} y={81 - markerOffset * 5}>B</text>
+      </g>
+      <g className="map-sketch-lineups">
+        {points.map((point, index) => <circle key={`${point.x}-${point.y}-${index}`} cx={point.x} cy={point.y} r={compact ? 2.4 : 3.2} />)}
+      </g>
+    </svg>
+  );
+}
+
+function CopyCommand({ value, label = "Copy" }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    await navigator.clipboard?.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+  return (
+    <div className="command-block">
+      <code>{value}</code>
+      <Button type="button" variant="secondary" size="sm" onClick={copy}>
+        {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
+        {copied ? "Copied" : label}
+      </Button>
+    </div>
+  );
+}
+
+function MapChoice({ map, nades, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      className={cn("map-choice", selected && "map-choice-selected")}
+      aria-pressed={selected}
+      onClick={() => onSelect(map.key)}
+    >
+      <MapSketch map={map} nades={nades} compact />
+      <span className="flex items-start justify-between gap-3 px-3 pb-3 pt-2.5">
+        <span className="min-w-0 text-left">
+          <strong className="block truncate text-sm">{map.name}</strong>
+          <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">{map.mapName || map.workshopId}</span>
+        </span>
+        <Badge variant={nades.length > 0 ? "secondary" : "outline"}>{nades.length}</Badge>
+      </span>
+    </button>
+  );
+}
+
+function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
+  const [draft, setDraft] = useState({ title: "", mapName: "", workshopId: "" });
+  const [dialogError, setDialogError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft({ title: "", mapName: "", workshopId: "" });
+    setDialogError("");
+  }, [open]);
+
+  function submit(event) {
+    event.preventDefault();
+    setDialogError("");
+    try {
+      onAdd(draft);
+      onOpenChange(false);
+    } catch (error) {
+      setDialogError(error.message);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Workshop map</DialogTitle>
+          <DialogDescription>Store the Workshop addon and the internal map name used by CS2.</DialogDescription>
+        </DialogHeader>
+        {dialogError ? <Message error={dialogError} /> : null}
+        <form className="grid gap-5" onSubmit={submit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel>Display name</FieldLabel>
+              <Input value={draft.title} placeholder="Recoil Master" onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} />
+            </Field>
+            <Field>
+              <FieldLabel>Game map name</FieldLabel>
+              <Input value={draft.mapName} placeholder="recoil_master" onChange={(event) => setDraft((current) => ({ ...current, mapName: event.target.value }))} />
+              <FieldDescription>The BSP name used with changelevel and inside savednades.json.</FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel>Workshop ID or item URL</FieldLabel>
+              <Input value={draft.workshopId} placeholder="3070244462" onChange={(event) => setDraft((current) => ({ ...current, workshopId: event.target.value }))} />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit"><PackagePlus data-icon="inline-start" />Add map</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AnnotationGuide({ map }: { map: MapDefinition }) {
+  const fileName = `matchzy_${map.key.replace(/[^a-z0-9_]/gi, "_")}_01`;
+  const practiceCommands = `map ${map.mapName}\nsv_cheats 1\nsv_allow_annotations_access_level 2\nsv_infinite_ammo 1\nammo_grenade_limit_total 6\nmp_warmup_end`;
+  return (
+    <Card id="annotation-guide">
+      <CardHeader className="border-b border-border">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid gap-1.5">
+            <CardTitle className="flex items-center gap-2"><BookOpen className="size-4 text-primary" aria-hidden="true" />Build the {map.name} map guide</CardTitle>
+            <CardDescription>Create the landing point in CS2, save the guide locally, then publish it to the Workshop if other players should use it.</CardDescription>
+          </div>
+          <Badge variant="secondary">{map.mapName}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-6 pt-5 sm:pt-6">
+        <Alert variant="warning">
+          <AlertTitle>MatchZy lineups and Valve map guides are two formats</AlertTitle>
+          <AlertDescription>MatchZy stores the standing position and view angle on the server. A grenade annotation also needs the grenade's landing point, which CS2 records after your throw. The panel can keep both workflows together, but it cannot safely convert savednades.json into a complete guide file.</AlertDescription>
+        </Alert>
+        <ol className="annotation-steps">
+          <li>
+            <span className="annotation-step-number">1</span>
+            <div className="grid gap-2">
+              <h4 className="font-semibold">Open a local practice match</h4>
+              <p>In CS2 choose Play, Practice, Casual and {map.name}. Enable the developer console, then paste this setup.</p>
+              <CopyCommand value={practiceCommands} label="Copy setup" />
+            </div>
+          </li>
+          <li>
+            <span className="annotation-step-number">2</span>
+            <div className="grid gap-2">
+              <h4 className="font-semibold">Throw the nade, then capture it</h4>
+              <p>Stand on the lineup, aim and throw. Run the matching command only after the grenade lands. CS2 creates the standing, aim and destination nodes as one set.</p>
+              <div className="grid gap-2 lg:grid-cols-2">
+                <CopyCommand value={'annotation_create grenade smoke "Window smoke"'} />
+                <CopyCommand value={'annotation_create grenade flash "A site pop flash"'} />
+                <CopyCommand value={'annotation_create grenade he "Default HE"'} />
+                <CopyCommand value={'annotation_create grenade molotov "Close corner molly"'} />
+              </div>
+            </div>
+          </li>
+          <li>
+            <span className="annotation-step-number">3</span>
+            <div className="grid gap-2">
+              <h4 className="font-semibold">Save after every useful lineup</h4>
+              <p>The current format stores the guide in its own folder under <code>game/csgo/annotations/local</code>.</p>
+              <CopyCommand value={`annotation_save ${fileName}`} label="Copy save command" />
+              <p className="font-mono text-xs text-muted-foreground">...\Counter-Strike Global Offensive\game\csgo\annotations\local\{fileName}\{fileName}.txt</p>
+            </div>
+          </li>
+          <li>
+            <span className="annotation-step-number">4</span>
+            <div className="grid gap-2">
+              <h4 className="font-semibold">Edit, reload and split large guides</h4>
+              <p>Edit labels, instructions, colors or text offsets in the KV3 file. Reload the open file after saving. Use append when a second file should remain loaded beside the first.</p>
+              <div className="grid gap-2 lg:grid-cols-3">
+                <CopyCommand value="annotation_reload" />
+                <CopyCommand value={`annotation_load ${fileName}`} />
+                <CopyCommand value={`annotation_append ${fileName.replace(/_01$/, "_02")}`} />
+              </div>
+              <p>Undo the last created set with <code>annotation_delete_previous_node_set</code>. Clear everything in memory with <code>annotation_clear</code>.</p>
+            </div>
+          </li>
+          <li>
+            <span className="annotation-step-number">5</span>
+            <div className="grid gap-2">
+              <h4 className="font-semibold">Publish the guide</h4>
+              <p>Save once so CS2 creates the guide folder and preview. Submit a new Workshop item without an ID. For an update, pass the item ID from its Workshop URL.</p>
+              <div className="grid gap-2 lg:grid-cols-2">
+                <CopyCommand value="workshop_annotation_submit" />
+                <CopyCommand value="workshop_annotation_submit 1234567890" />
+              </div>
+            </div>
+          </li>
+        </ol>
+        <Alert>
+          <AlertTitle>Limits in current CS2 builds</AlertTitle>
+          <AlertDescription>Local and offline sessions can load up to 300 nodes. Competitive and Retakes allow up to 30 nodes during the first five rounds of each half by default. In a live match, players choose a subscribed guide from the pause menu.</AlertDescription>
+        </Alert>
+      </CardContent>
+      <CardFooter className="flex-wrap border-t border-border pt-5 sm:pt-6">
+        <Button variant="secondary" asChild>
+          <a href="https://www.counter-strike.net/newsentry/532126482488623353" target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Valve map guide update</a>
+        </Button>
+        <Button variant="secondary" asChild>
+          <a href="https://csnades.gg/maps" target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />CSNADES map index</a>
+        </Button>
+        <Button variant="secondary" asChild>
+          <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3367125162" target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Annotation file reference</a>
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onApply }) {
+  const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
+  const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
+  const initialMap = allMaps.find((map) => mapMatchesNade(map, settings.startMap)) || ACTIVE_DUTY_MAPS[0];
+  const [selectedKey, setSelectedKey] = useState(initialMap.key);
+  const [addNadeOpen, setAddNadeOpen] = useState(false);
+  const [addWorkshopOpen, setAddWorkshopOpen] = useState(false);
+
+  useEffect(() => {
+    if (!allMaps.some((map) => map.key === selectedKey)) setSelectedKey(ACTIVE_DUTY_MAPS[0].key);
+  }, [allMaps, selectedKey]);
+
+  const selectedMap = allMaps.find((map) => map.key === selectedKey) || ACTIVE_DUTY_MAPS[0];
+  const nadesForMap = useCallback((map) => nades.filter((nade) => mapMatchesNade(map, nade.map)), [nades]);
+  const selectedNades = nadesForMap(selectedMap);
+  const typeCounts = selectedNades.reduce((counts, nade) => {
+    const type = nade.type || "Other";
+    counts[type] = (counts[type] || 0) + 1;
+    return counts;
+  }, {});
+  const canStartMap = Boolean(selectedMap.mapName) && selectedMap.category !== "community";
+  const isStartMap = mapMatchesNade(selectedMap, settings.startMap);
+
+  function selectMap(key) {
+    setSelectedKey(key);
+    window.requestAnimationFrame(() => document.getElementById("selected-map")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Tactical atlas"
+        title="Maps & map guides"
+        description="Pick a map to see every saved lineup, prepare the game server and build a Valve annotation guide for the same map."
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setAddNadeOpen(true)}><Plus data-icon="inline-start" />Add {selectedMap.name} nade</Button>
+            <Button onClick={onSaveNades} disabled={busy || !nadesDirty}><Save data-icon="inline-start" />Save lineups</Button>
+          </div>
+        )}
+      />
+      <NadeDialog
+        settings={settings}
+        initialMap={selectedMap.mapName}
+        open={addNadeOpen}
+        onOpenChange={setAddNadeOpen}
+        onAdd={(entry) => setNades((current) => [...current, entry])}
+      />
+      <WorkshopMapDialog
+        open={addWorkshopOpen}
+        onOpenChange={setAddWorkshopOpen}
+        onAdd={(input) => setSettings((current) => ({ ...current, ...addWorkshopMap(current, input), workshopMapsEnabled: true }))}
+      />
+
+      <Card className="mb-4">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
+          <div className="grid gap-1.5">
+            <CardTitle>Active Duty</CardTitle>
+            <CardDescription>Valve Season Five pool, updated 8 July 2026. Cache replaced Overpass.</CardDescription>
+          </div>
+          <Badge variant="secondary">7 maps</Badge>
+        </CardHeader>
+        <CardContent className="pt-5 sm:pt-6">
+          <div className="map-choice-grid">
+            {ACTIVE_DUTY_MAPS.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
+          </div>
+        </CardContent>
+        <CardFooter className="border-t border-border pt-5 text-xs text-muted-foreground sm:pt-6">
+          The current pool follows Valve. CSNADES still lists Overpass under Active Duty and Cache under Reserve.
+        </CardFooter>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>More maps on CSNADES</CardTitle>
+          <CardDescription>Reserve and community maps from the CSNADES map index. They stay available here for older and custom lineup libraries.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="map-choice-grid">
+            {CSNADES_REFERENCE_MAPS.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div className="grid gap-1.5">
+            <CardTitle>Workshop maps</CardTitle>
+            <CardDescription>Maps added here also update the MultiAddonManager list used by the CS2 container.</CardDescription>
+          </div>
+          <Button variant="secondary" onClick={() => setAddWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Add map</Button>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <Field className="flex min-h-20 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-background px-4 py-3">
+            <span>
+              <FieldLabel>Load Workshop maps on the server</FieldLabel>
+              <FieldDescription className="mt-1 block">Enables MultiAddonManager and mounts every Workshop ID in this list.</FieldDescription>
+            </span>
+            <Switch aria-label="Load Workshop maps on the server" checked={settings.workshopMapsEnabled === true} onCheckedChange={(checked) => setSettings((current) => ({ ...current, workshopMapsEnabled: checked }))} />
+          </Field>
+          {workshopMaps.length > 0 ? (
+            <div className="map-choice-grid">
+              {workshopMaps.map((map) => (
+                <div key={map.key} className="workshop-map-choice">
+                  <MapChoice map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />
+                  <Button
+                    className="workshop-map-remove"
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    title={`Remove ${map.name}`}
+                    onClick={() => setSettings((current) => ({ ...current, ...removeWorkshopMap(current, map.workshopId) }))}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Alert>
+              <AlertTitle>No Workshop maps pinned</AlertTitle>
+              <AlertDescription>Add a Workshop item ID, a display name and its internal map name. It will appear beside the fixed CS2 maps.</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+        <CardFooter className="flex-wrap">
+          <Button onClick={onApply} disabled={busy}><UploadCloud data-icon="inline-start" />Apply maps & restart</Button>
+          <span className="text-xs text-muted-foreground">A restart downloads and mounts newly added Workshop addons.</span>
+        </CardFooter>
+      </Card>
+
+      <Card className="map-atlas-detail mb-4 scroll-mt-24" id="selected-map">
+        <CardHeader className="border-b border-border">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="grid gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={selectedMap.category === "active" ? "success" : "secondary"}>{selectedMap.category === "active" ? "Active Duty" : selectedMap.category === "workshop" ? "Workshop" : selectedMap.category}</Badge>
+                {isStartMap ? <Badge variant="outline"><span className="server-status-dot" />Server start map</Badge> : null}
+              </div>
+              <CardTitle className="control-title text-2xl">{selectedMap.name}</CardTitle>
+              <CardDescription className="font-mono text-xs">{selectedMap.mapName || `Workshop ${selectedMap.workshopId}`}</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedMap.workshopId ? (
+                <Button variant="secondary" asChild><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMap.workshopId}`} target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Workshop</a></Button>
+              ) : null}
+              <Button variant="secondary" disabled={!canStartMap || isStartMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap.mapName }))}><MapPinned data-icon="inline-start" />{isStartMap ? "Start map selected" : "Set as start map"}</Button>
+              <Button onClick={() => setAddNadeOpen(true)}><Plus data-icon="inline-start" />Add lineup</Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="map-atlas-layout grid gap-6 pt-5 sm:pt-6">
+          <div className="map-stage">
+            <MapSketch map={selectedMap} nades={selectedNades} />
+            <div className="map-stage-legend">
+              <span><i className="map-lineup-dot" />{selectedNades.length} saved lineup{selectedNades.length === 1 ? "" : "s"}</span>
+              <span>Dots are positioned relative to this map's saved LineupPos coordinates.</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-5">
+            <div>
+              <p className="control-kicker">Library coverage</p>
+              <p className="mt-2 text-4xl font-semibold tracking-tight">{selectedNades.length}</p>
+              <p className="mt-1 text-sm text-muted-foreground">lineups synchronized with MatchZy</p>
+            </div>
+            <Separator />
+            <dl className="grid grid-cols-2 gap-3">
+              {Object.keys(typeCounts).length > 0 ? Object.entries(typeCounts).map(([type, count]) => (
+                <div key={type} className="rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">{type}</dt><dd className="mt-1 font-mono text-lg font-medium">{String(count)}</dd></div>
+              )) : <div className="col-span-2 text-sm text-muted-foreground">No utility saved for this map yet.</div>}
+            </dl>
+            <CopyCommand value={`rcon changelevel ${selectedMap.mapName}`} label="Copy map command" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
+          <div className="grid gap-1.5">
+            <CardTitle>{selectedMap.name} lineups</CardTitle>
+            <CardDescription>Everything saved for this map in the shared MatchZy library.</CardDescription>
+          </div>
+          <Badge variant="secondary">{selectedNades.length}</Badge>
+        </CardHeader>
+        <CardContent className="pt-5 sm:pt-6">
+          {selectedNades.length > 0 ? (
+            <div className="lineup-card-grid">
+              {selectedNades.map((nade) => (
+                <Card key={nade.id} className="lineup-gallery-card overflow-hidden">
+                  {(nade.lineupImages || []).length > 0 ? (
+                    <a className="lineup-gallery-image" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer">
+                      <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || nade.name} />
+                      {nade.lineupImages.length > 1 ? <Badge variant="secondary">+{nade.lineupImages.length - 1} images</Badge> : null}
+                    </a>
+                  ) : <div className="lineup-gallery-sketch"><MapSketch map={selectedMap} nades={[nade]} compact /></div>}
+                  <CardHeader className="pb-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0"><CardTitle className="truncate">{nade.name}</CardTitle><CardDescription className="mt-1 line-clamp-2">{nade.desc || "No description"}</CardDescription></div>
+                      <Badge variant="outline">{nade.type || "Nade"}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-2 text-xs">
+                    <div className="grid gap-1"><span className="text-muted-foreground">Position</span><code className="truncate">{nade.lineupPos}</code></div>
+                    <div className="grid gap-1"><span className="text-muted-foreground">Angle</span><code className="truncate">{nade.lineupAng}</code></div>
+                  </CardContent>
+                  <CardFooter className="justify-between border-t border-border pt-4">
+                    <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"}>{String(nade.owner || "default") === "default" ? "Shared" : "Private"}</Badge>
+                    <CopyCommand value={`.loadnade ${nade.name}`} label="Copy load" />
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Alert>
+              <AlertTitle>No {selectedMap.name} lineups yet</AlertTitle>
+              <AlertDescription>Add one in the panel or save it in-game with MatchZy. The sync service will place it here automatically.</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <AnnotationGuide map={selectedMap} />
+    </>
   );
 }
 
@@ -1365,6 +1850,22 @@ function App() {
         />
       ) : null}
       {tab === "maintenance" ? <Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")} /> : null}
+      {tab === "maps" ? (
+        <Maps
+          settings={settings}
+          setSettings={setSettings}
+          nades={nades}
+          setNades={setNades}
+          nadesDirty={nadesDirty}
+          busy={busy}
+          onApply={applyControl}
+          onSaveNades={() => runAction(async () => {
+            const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
+            setNades(result.entries);
+            return { message: "Nades saved." };
+          })}
+        />
+      ) : null}
       {tab === "nades" ? (
         <Nades
           settings={settings}

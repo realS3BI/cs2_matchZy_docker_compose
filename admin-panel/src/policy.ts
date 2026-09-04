@@ -22,6 +22,7 @@ export type ServerSettings = {
   multiAddonManagerVersion: string;
   rayTraceVersion: string;
   workshopMaps: string;
+  workshopMapCatalog: string;
   workshopMapsEnabled: boolean;
   workshopForceDownload: boolean;
   executesVersion: string;
@@ -151,6 +152,7 @@ const DEFAULTS: ServerSettings = {
   multiAddonManagerVersion: "latest",
   rayTraceVersion: "latest",
   workshopMaps: "",
+  workshopMapCatalog: "[]",
   workshopMapsEnabled: false,
   workshopForceDownload: false,
   executesVersion: "latest",

@@ -83,6 +83,7 @@ Das Desktop-Dashboard umfasst:
 - `Plugins`: genau ein Servermodus und optionale Komponenten
 - `Access`: CounterStrikeSharp-Rollen und Steam64-IDs
 - `Maintenance`: taeglicher Neustart mit IANA-Zeitzone
+- `Maps`: Active-Duty-Atlas, CSNADES-Referenzkarten, Workshop-Katalog, Lineup-Galerie und Annotation-Guide
 - `Nades`: gemeinsame MatchZy-Lineups, lokale Bilder und Live-Sync-Status
 - `Diagnostics`: Startkette und One-shot-Reparatur
 - `Logs`: aktuelle CS2-Containerlogs
@@ -131,6 +132,16 @@ Der Nades-Bereich zeigt, ob beide Sync-Dateien erreichbar sind, wann der letzte 
 `Save new in-game lineups for everyone` setzt MatchZys globale Nade-Option. Nach `Apply sharing & restart` speichert `.savenade` neue Lineups unter dem MatchZy-Owner `default`; damit koennen alle Spieler sie mit `.listnades` sehen und mit `.loadnade` laden. Bereits privat gespeicherte Lineups bleiben privat und werden im Panel entsprechend markiert.
 
 Beim Import einer Ingame-Aenderung behaelt das Panel vorhandene Bildzuordnungen fuer dasselbe Lineup (Owner, Map und Name) bei. MatchZys eigene JSON-Datei enthaelt weiterhin nur die Felder, die das Plugin versteht.
+
+## Maps und Valve Map Guides
+
+Der Maps-Bereich enthaelt den Active-Duty-Pool aus CS2 Season Five: Mirage, Dust II, Nuke, Inferno, Ancient, Anubis und Cache. Valve hat Cache am 8. Juli 2026 fuer Overpass eingewechselt. Der zusaetzliche Referenzkatalog uebernimmt die Reserve- und Community-Maps aus dem [CSNADES-Map-Index](https://csnades.gg/maps).
+
+Eigene Workshop-Maps werden mit Anzeigename, internem BSP-Namen und Steam-Workshop-ID gespeichert. Dieselbe ID landet in `workshopMaps`, sodass MultiAddonManager die Map nach `Apply maps & restart` laedt. Der interne Map-Name verbindet die Map-Karte mit den passenden MatchZy-Nades.
+
+Die Kartenansicht zeigt vorhandene Lineup-Bilder, Position, Winkel, Nade-Typ und Owner. Die Positionspunkte sind relativ zu den gespeicherten `LineupPos`-Koordinaten derselben Map dargestellt. Sie sind kein Ersatz fuer Valves Radar-Textur.
+
+Valves Map Guides verwenden ein anderes Dateiformat als MatchZy. `savednades.json` kennt Standposition und Blickwinkel. Eine Grenade-Annotation braucht zusaetzlich den Landepunkt, den der CS2-Client nach dem Wurf erfasst. Deshalb erzeugt das Panel keine unvollstaendigen Annotation-Dateien. Der Guide im Maps-Bereich enthaelt stattdessen fuer jede ausgewaehlte Map die aktuellen Befehle zum Erstellen, Speichern, Laden, Aufteilen und Veroeffentlichen im Steam Workshop. Seit dem [Map-Guide-Update vom 18. Maerz 2026](https://www.counter-strike.net/newsentry/532126482488623353) gilt `sv_allow_annotations_access_level 2` fuer den Editiermodus. Lokale Sessions erlauben 300 Nodes; Competitive und Retakes sind standardmaessig auf 30 Nodes und die ersten fuenf Runden je Haelfte begrenzt.
 
 ## Wartung und Diagnose
 
