@@ -170,6 +170,27 @@ test("sync keeps lineup images when MatchZy updates the same nade", async (t) =>
   assert.deepEqual(store.entries[0].lineupImages, [image]);
 });
 
+test("sync keeps panel-only landing and radar positions", async (t) => {
+  const existing = sampleEntry({
+    landingPos: "7 8 9",
+    throwFromTitle: "T Spawn",
+    throwToTitle: "Window",
+    radarFrom: { x: 0.72, y: 0.18 },
+    radarTo: { x: 0.43, y: 0.49 }
+  });
+  const { store, service } = await createHarness(t, [existing]);
+  await writeJson(service.liveFile, sampleConfig({ desc: "updated in game" }));
+
+  await service.importLiveFile("test");
+
+  assert.equal(store.entries[0].desc, "updated in game");
+  assert.equal(store.entries[0].landingPos, "7 8 9");
+  assert.equal(store.entries[0].throwFromTitle, "T Spawn");
+  assert.equal(store.entries[0].throwToTitle, "Window");
+  assert.deepEqual(store.entries[0].radarFrom, { x: 0.72, y: 0.18 });
+  assert.deepEqual(store.entries[0].radarTo, { x: 0.43, y: 0.49 });
+});
+
 test("status reports the applied MatchZy global-save setting", async (t) => {
   const { service } = await createHarness(t, [sampleEntry()]);
   await writeJson(service.liveFile, sampleConfig());

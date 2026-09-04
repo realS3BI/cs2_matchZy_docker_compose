@@ -135,11 +135,20 @@ Beim Import einer Ingame-Aenderung behaelt das Panel vorhandene Bildzuordnungen 
 
 ## Maps und Valve Map Guides
 
-Der Maps-Bereich enthaelt den Active-Duty-Pool aus CS2 Season Five: Mirage, Dust II, Nuke, Inferno, Ancient, Anubis und Cache. Valve hat Cache am 8. Juli 2026 fuer Overpass eingewechselt. Der zusaetzliche Referenzkatalog uebernimmt die Reserve- und Community-Maps aus dem [CSNADES-Map-Index](https://csnades.gg/maps).
+Der Maps-Bereich enthaelt den Active-Duty-Pool aus CS2 Season Five: Mirage, Dust II, Nuke, Inferno, Ancient, Anubis und Cache. Valve hat Cache am 8. Juli 2026 fuer Overpass eingewechselt. Der zusaetzliche Referenzkatalog uebernimmt die Reserve- und Community-Maps aus dem [CSNADES-Map-Index](https://csnades.gg/maps). Fuer alle 18 Karten liegt eine lokale Radaransicht im Panel; die Auswahl haengt deshalb nicht von der Erreichbarkeit von CSNADES ab.
 
-Eigene Workshop-Maps werden mit Anzeigename, internem BSP-Namen und Steam-Workshop-ID gespeichert. Dieselbe ID landet in `workshopMaps`, sodass MultiAddonManager die Map nach `Apply maps & restart` laedt. Der interne Map-Name verbindet die Map-Karte mit den passenden MatchZy-Nades.
+Eigene Workshop-Maps werden mit Anzeigename, internem BSP-Namen und Steam-Workshop-ID gespeichert. Optional kann eine Radaransicht hochgeladen oder per URL hinterlegt werden; ihr kompletter Bildrahmen ist die feste Platzierungsgrenze. Dieselbe Workshop-ID landet in `workshopMaps`, sodass MultiAddonManager die Map nach `Apply maps & restart` laedt. Der interne Map-Name verbindet die Map-Karte mit den passenden MatchZy-Nades.
 
-Die Kartenansicht zeigt vorhandene Lineup-Bilder, Position, Winkel, Nade-Typ und Owner. Die Positionspunkte sind relativ zu den gespeicherten `LineupPos`-Koordinaten derselben Map dargestellt. Sie sind kein Ersatz fuer Valves Radar-Textur.
+Die Kartenansicht zeichnet jede vollstaendig platzierte Nade auf dem echten Radar ein: Kreis fuer die Wurfposition, Raute fuer den Landepunkt und eine farbige, gerichtete Verbindung dazwischen. Die Kurve visualisiert die Richtung in der Draufsicht, nicht die ballistische Flughoehe. Ein Klick auf eine Route oeffnet das Lineup zum Bearbeiten.
+
+Neue und bereits aus MatchZy importierte Lineups lassen sich ueber `Add nade` beziehungsweise `Edit route` vervollstaendigen:
+
+1. Start- und Zielbezeichnung eintragen.
+2. `getpos` am Abwurfpunkt sowie am Landepunkt einfuegen.
+3. Auf dem Radar zuerst den Start und danach das Ziel anklicken.
+4. Speichern; die Route erscheint sofort in der Kartenansicht.
+
+Die Radarpositionen werden normiert zwischen `0` und `1` gespeichert. Dadurch bleiben sie unabhaengig von Bildschirmgroesse und Bildauflösung. `landingPos`, `throwFromTitle`, `throwToTitle`, `radarFrom` und `radarTo` sind Panel-Metadaten in MongoDB. Sie werden beim Ingame-Sync erhalten, aber nicht in MatchZys `savednades.json` geschrieben, weil das Plugin diese Felder nicht kennt.
 
 Valves Map Guides verwenden ein anderes Dateiformat als MatchZy. `savednades.json` kennt Standposition und Blickwinkel. Eine Grenade-Annotation braucht zusaetzlich den Landepunkt, den der CS2-Client nach dem Wurf erfasst. Deshalb erzeugt das Panel keine unvollstaendigen Annotation-Dateien. Der Guide im Maps-Bereich enthaelt stattdessen fuer jede ausgewaehlte Map die aktuellen Befehle zum Erstellen, Speichern, Laden, Aufteilen und Veroeffentlichen im Steam Workshop. Seit dem [Map-Guide-Update vom 18. Maerz 2026](https://www.counter-strike.net/newsentry/532126482488623353) gilt `sv_allow_annotations_access_level 2` fuer den Editiermodus. Lokale Sessions erlauben 300 Nodes; Competitive und Retakes sind standardmaessig auf 30 Nodes und die ersten fuenf Runden je Haelfte begrenzt.
 

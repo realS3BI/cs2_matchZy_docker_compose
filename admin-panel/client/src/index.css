@@ -441,64 +441,235 @@ button:not(:disabled),
   box-shadow: inset 0 -3px 0 var(--primary), 0 8px 24px rgb(17 24 39 / 9%);
 }
 
-.map-sketch {
-  display: block;
-  width: 100%;
-  height: 15rem;
+.map-choice-radar {
+  position: relative;
+  display: grid;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 38%, rgb(82 110 126 / 18%), transparent 55%),
+    var(--sidebar);
 }
 
-.map-sketch-compact {
+.map-choice-radar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.94;
+}
+
+.radar-map {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 38%, rgb(82 110 126 / 18%), transparent 55%),
+    var(--sidebar);
+}
+
+.radar-map svg {
+  display: block;
+  width: 100%;
   height: auto;
+}
+
+.radar-map image {
+  opacity: 0.94;
+}
+
+.radar-map-compact {
   aspect-ratio: 16 / 9;
 }
 
-.map-sketch-ground {
-  fill: var(--sidebar);
+.radar-map-compact svg {
+  height: 100%;
 }
 
-.map-sketch-grid {
-  fill: none;
-  stroke: color-mix(in srgb, var(--sidebar-foreground) 10%, transparent);
-  stroke-width: 0.65;
+.radar-map-editable {
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  cursor: crosshair;
 }
 
-.map-sketch-routes {
+.radar-route-halo,
+.radar-route-line {
   fill: none;
-  stroke: color-mix(in srgb, var(--sidebar-foreground) 50%, var(--sidebar));
+  vector-effect: non-scaling-stroke;
+}
+
+.radar-route-halo {
+  stroke: rgb(5 10 15 / 76%);
+  stroke-width: 6px;
+}
+
+.radar-route-line {
+  stroke: var(--route-color);
+  stroke-dasharray: 7 6;
   stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 8;
+  stroke-width: 2.5px;
+  filter: drop-shadow(0 0 3px rgb(0 0 0 / 75%));
 }
 
-.map-sketch-routes path:nth-child(2) {
-  stroke-width: 5;
+.radar-origin-ring,
+.radar-target-ring {
+  fill: rgb(8 14 20 / 88%);
+  stroke: rgb(255 255 255 / 84%);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
 }
 
-.map-sketch-routes path:nth-child(3) {
-  stroke: color-mix(in srgb, var(--primary) 55%, var(--sidebar-foreground));
-  stroke-dasharray: 3 5;
-  stroke-width: 2;
+.radar-origin,
+.radar-target {
+  fill: var(--route-color);
+  stroke: rgb(7 12 16 / 76%);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
 }
 
-.map-sketch-sites circle {
-  fill: var(--sidebar);
-  stroke: color-mix(in srgb, var(--sidebar-foreground) 60%, transparent);
-  stroke-width: 1;
-}
-
-.map-sketch-sites text {
-  fill: var(--sidebar-foreground);
+.radar-marker-label {
+  fill: #071016;
   font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
   text-anchor: middle;
 }
 
-.map-sketch-lineups circle {
-  fill: var(--primary);
-  stroke: var(--primary-foreground);
-  stroke-width: 1.2;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--primary) 80%, transparent));
+.radar-route-selectable {
+  cursor: pointer;
+}
+
+.radar-route-selectable:hover .radar-route-line {
+  stroke-width: 4px;
+}
+
+.radar-map-message {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.8rem;
+  color: rgb(255 255 255 / 76%);
+  background: rgb(7 12 16 / 78%);
+  font-size: 0.75rem;
+  text-align: center;
+  backdrop-filter: blur(6px);
+}
+
+.radar-map-empty,
+.radar-placement-empty {
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+  gap: 0.65rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.radar-map-empty svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.radar-map-empty.radar-map-compact {
+  min-height: 0;
+}
+
+.nade-dialog-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.nade-position-section {
+  display: grid;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.nade-position-heading {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.nade-position-heading > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.nade-position-heading span:last-child {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.nade-position-number {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
+.nade-radar-editor {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  background: color-mix(in srgb, var(--muted) 45%, var(--card));
+}
+
+.radar-placement-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.radar-placement-status > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.radar-status-dot,
+.radar-status-diamond {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--muted-foreground);
+  background: transparent;
+}
+
+.radar-status-dot {
+  border-radius: 999px;
+}
+
+.radar-status-diamond {
+  transform: rotate(45deg);
+}
+
+.radar-status-dot-ready {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 .workshop-map-choice {
@@ -526,10 +697,6 @@ button:not(:disabled),
   grid-template-columns: minmax(0, 1fr);
 }
 
-.map-stage .map-sketch-ground {
-  fill: transparent;
-}
-
 .map-stage-legend {
   display: flex;
   flex-wrap: wrap;
@@ -547,15 +714,6 @@ button:not(:disabled),
   align-items: center;
   gap: 0.45rem;
   color: var(--sidebar-foreground);
-}
-
-.map-lineup-dot {
-  display: inline-block;
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 999px;
-  background: var(--primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .command-block {
@@ -663,7 +821,11 @@ button:not(:disabled),
   bottom: 0.65rem;
 }
 
-.lineup-gallery-sketch .map-sketch {
+.lineup-gallery-sketch .radar-map {
+  height: 100%;
+}
+
+.lineup-gallery-sketch .radar-map svg {
   height: 100%;
 }
 
@@ -678,6 +840,17 @@ button:not(:disabled),
 @media (min-width: 640px) {
   .map-choice-grid {
     grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .nade-dialog-layout {
+    grid-template-columns: minmax(0, 1.05fr) minmax(21rem, 0.95fr);
+  }
+
+  .nade-radar-editor {
+    position: sticky;
+    top: 0;
   }
 }
 

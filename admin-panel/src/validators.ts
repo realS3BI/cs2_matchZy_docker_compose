@@ -84,6 +84,24 @@ function normalizeVector(value, fieldName) {
   return normalized;
 }
 
+function normalizeOptionalVector(value, fieldName) {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalizeVector(normalized, fieldName) : "";
+}
+
+function sanitizeRadarPoint(point, fieldName) {
+  if (point === undefined || point === null || point === "") return null;
+  if (!point || typeof point !== "object" || Array.isArray(point)) {
+    throw new Error(`${fieldName} must be a point`);
+  }
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+    throw new Error(`${fieldName} coordinates must be between 0 and 1`);
+  }
+  return { x, y };
+}
+
 function nadeId(entry) {
   const source = `${entry.owner}:${entry.map}:${entry.name}`;
   return source.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "nade";
@@ -140,6 +158,11 @@ export function sanitizeNades(entries) {
     const owner = String(entry.owner ?? "default").trim() || "default";
     const lineupPos = normalizeVector(entry.lineupPos, "Lineup position");
     const lineupAng = normalizeVector(entry.lineupAng, "Lineup angle");
+    const landingPos = normalizeOptionalVector(entry.landingPos, "Landing position");
+    const throwFromTitle = String(entry.throwFromTitle ?? "").trim();
+    const throwToTitle = String(entry.throwToTitle ?? "").trim();
+    const radarFrom = sanitizeRadarPoint(entry.radarFrom, "Radar start");
+    const radarTo = sanitizeRadarPoint(entry.radarTo, "Radar target");
 
     if (!name) {
       throw new Error("Nade name is required");
@@ -160,7 +183,7 @@ export function sanitizeNades(entries) {
     }
     seen.add(duplicateKey);
 
-    const cleanEntry = {
+    const cleanEntry: any = {
       id: String(entry.id ?? "").trim(),
       name,
       map,
@@ -172,6 +195,11 @@ export function sanitizeNades(entries) {
       owner,
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
+    if (landingPos) cleanEntry.landingPos = landingPos;
+    if (throwFromTitle) cleanEntry.throwFromTitle = throwFromTitle;
+    if (throwToTitle) cleanEntry.throwToTitle = throwToTitle;
+    if (radarFrom) cleanEntry.radarFrom = radarFrom;
+    if (radarTo) cleanEntry.radarTo = radarTo;
     if (!cleanEntry.id) cleanEntry.id = nadeId(cleanEntry);
     return cleanEntry;
   });

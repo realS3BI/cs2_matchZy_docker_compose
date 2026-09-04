@@ -34,11 +34,15 @@ function preservePanelMetadata(importedEntries, currentEntries) {
   return importedEntries.map((entry) => {
     const current = currentByKey.get(nadeKey(entry));
     if (!current) return entry;
-    return {
+    const merged: any = {
       ...entry,
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
+    for (const key of ["landingPos", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+      if (current[key] !== undefined) merged[key] = current[key];
+    }
+    return merged;
   });
 }
 

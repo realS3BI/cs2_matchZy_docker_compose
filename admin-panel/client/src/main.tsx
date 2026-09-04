@@ -59,16 +59,19 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "./components/ui/switch";
-import { parseSetposSetang } from "./lib/nades";
+import { parseSetpos, parseSetposSetang } from "./lib/nades";
 import {
   ACTIVE_DUTY_MAPS,
+  BUILT_IN_MAPS,
   CSNADES_REFERENCE_MAPS,
   addWorkshopMap,
+  isRadarPoint,
   mapMatchesNade,
   removeWorkshopMap,
   workshopMapsFromSettings,
   type MapDefinition
 } from "./lib/maps";
+import { NadeFlightMap, NadePlacementEditor } from "./components/map-radar";
 import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
@@ -612,7 +615,7 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
 
 const nadeTypes = ["", "Smoke", "Flash", "HE", "Molly", "Decoy"];
 
-function LineupImageUpload({ onUploaded, onError }) {
+function LineupImageUpload({ onUploaded, onError, label = "Upload lineup images", multiple = true }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
@@ -648,12 +651,12 @@ function LineupImageUpload({ onUploaded, onError }) {
         className="hidden"
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif"
-        multiple
+        multiple={multiple}
         onChange={upload}
       />
       <Button type="button" variant="secondary" disabled={uploading} onClick={() => inputRef.current?.click()}>
         <UploadCloud data-icon="inline-start" />
-        {uploading ? "Uploading..." : "Upload lineup images"}
+        {uploading ? "Uploading..." : label}
       </Button>
       <span className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF · 4 MB each</span>
     </div>
@@ -669,22 +672,31 @@ function createNade(settings, initialMap = "") {
     desc: "",
     lineupPos: "0 0 0",
     lineupAng: "0 0 0",
+    landingPos: "",
+    throwFromTitle: "",
+    throwToTitle: "",
+    radarFrom: null,
+    radarTo: null,
     lineupImages: [],
     owner: "default"
   };
 }
 
-function NadeDialog({ settings, initialMap = "", open, onOpenChange, onAdd }) {
-  const [draft, setDraft] = useState(() => createNade(settings, initialMap));
+function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpenChange, onAdd }) {
+  const [draft, setDraft] = useState(() => ({ ...createNade(settings, initialMap), ...(initialNade || {}) }));
   const [setposText, setSetposText] = useState("");
+  const [landingSetposText, setLandingSetposText] = useState("");
   const [dialogError, setDialogError] = useState("");
+  const availableMaps = useMemo(() => [...BUILT_IN_MAPS, ...workshopMapsFromSettings(settings)], [settings.workshopMaps, settings.workshopMapCatalog]);
+  const draftMap = availableMaps.find((map) => mapMatchesNade(map, draft.map));
 
   useEffect(() => {
     if (!open) return;
-    setDraft(createNade(settings, initialMap));
+    setDraft({ ...createNade(settings, initialMap), ...(initialNade || {}) });
     setSetposText("");
+    setLandingSetposText("");
     setDialogError("");
-  }, [open, settings, initialMap]);
+  }, [open, settings, initialMap, initialNade]);
 
   function updateDraft(patch) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -698,6 +710,16 @@ function NadeDialog({ settings, initialMap = "", open, onOpenChange, onAdd }) {
       return;
     }
     updateDraft(parsed);
+  }
+
+  function applyLandingPosition() {
+    setDialogError("");
+    const parsed = parseSetpos(landingSetposText);
+    if (!parsed) {
+      setDialogError("Landing setpos format is invalid.");
+      return;
+    }
+    updateDraft({ landingPos: parsed });
   }
 
   function addImage(image) {
@@ -725,9 +747,21 @@ function NadeDialog({ settings, initialMap = "", open, onOpenChange, onAdd }) {
 
   function submit() {
     setDialogError("");
+    if (!String(draft.name || "").trim()) {
+      setDialogError("Name is required.");
+      return;
+    }
+    if (!String(draft.map || "").trim()) {
+      setDialogError("Map is required.");
+      return;
+    }
+    if (draftMap?.radarUrl && (!isRadarPoint(draft.radarFrom) || !isRadarPoint(draft.radarTo))) {
+      setDialogError("Place both the start and target on the radar.");
+      return;
+    }
     onAdd({
       ...draft,
-      id: window.crypto?.randomUUID?.() || String(Date.now()),
+      id: draft.id || window.crypto?.randomUUID?.() || String(Date.now()),
       lineupImages: draft.lineupImages || []
     });
     onOpenChange(false);
@@ -735,56 +769,102 @@ function NadeDialog({ settings, initialMap = "", open, onOpenChange, onAdd }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[min(1120px,calc(100vw-24px))]">
         <DialogHeader>
-          <DialogTitle>Add nade</DialogTitle>
-          <DialogDescription>Add a lineup and attach up to ten reference images.</DialogDescription>
+          <DialogTitle>{initialNade ? "Edit nade route" : "Add nade"}</DialogTitle>
+          <DialogDescription>Import the in-game positions, then mark where the nade starts and lands on the radar.</DialogDescription>
         </DialogHeader>
         {dialogError ? <Message error={dialogError} /> : null}
-        <FieldGroup className="grid gap-4 md:grid-cols-2">
-          <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input value={draft.name || ""} onChange={(event) => updateDraft({ name: event.target.value })} />
-          </Field>
-          <Field>
-            <FieldLabel>Map</FieldLabel>
-            <Input value={draft.map || ""} onChange={(event) => updateDraft({ map: event.target.value })} />
-          </Field>
-          <Field>
-            <FieldLabel>Type</FieldLabel>
-            <NativeSelect
-              value={draft.type || ""}
-              onChange={(event) => updateDraft({ type: event.target.value })}
-            >
-              {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
-            </NativeSelect>
-          </Field>
-          <Field>
-            <FieldLabel>Owner</FieldLabel>
-            <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
-            <FieldDescription>Use default to make this lineup available to every player.</FieldDescription>
-          </Field>
-          <Field className="md:col-span-2">
-            <FieldLabel>Description</FieldLabel>
-            <Input value={draft.desc || ""} onChange={(event) => updateDraft({ desc: event.target.value })} />
-          </Field>
-          <Field>
-            <FieldLabel>Lineup position</FieldLabel>
-            <Input value={draft.lineupPos || ""} onChange={(event) => updateDraft({ lineupPos: event.target.value })} />
-          </Field>
-          <Field>
-            <FieldLabel>Lineup angle</FieldLabel>
-            <Input value={draft.lineupAng || ""} onChange={(event) => updateDraft({ lineupAng: event.target.value })} />
-          </Field>
-          <Field className="md:col-span-2">
-            <FieldLabel>setpos/setang</FieldLabel>
-            <Textarea
-              value={setposText}
-              onChange={(event) => setSetposText(event.target.value)}
-              placeholder="setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000"
-            />
-          </Field>
-        </FieldGroup>
+        <div className="nade-dialog-layout">
+          <FieldGroup className="grid content-start gap-4 md:grid-cols-2">
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input value={draft.name || ""} placeholder="Window smoke" onChange={(event) => updateDraft({ name: event.target.value })} />
+            </Field>
+            <Field>
+              <FieldLabel>Map</FieldLabel>
+              <NativeSelect
+                value={draft.map || ""}
+                onChange={(event) => updateDraft({ map: event.target.value, radarFrom: null, radarTo: null })}
+              >
+                {!availableMaps.some((map) => mapMatchesNade(map, draft.map)) && draft.map ? <option value={draft.map}>{draft.map}</option> : null}
+                {availableMaps.map((map) => <option key={map.key} value={map.mapName}>{map.name}</option>)}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel>Type</FieldLabel>
+              <NativeSelect value={draft.type || ""} onChange={(event) => updateDraft({ type: event.target.value })}>
+                {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel>Owner</FieldLabel>
+              <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
+              <FieldDescription>Use default to share it with every player.</FieldDescription>
+            </Field>
+            <Field className="md:col-span-2">
+              <FieldLabel>Description</FieldLabel>
+              <Input value={draft.desc || ""} placeholder="Jumpthrow from T spawn" onChange={(event) => updateDraft({ desc: event.target.value })} />
+            </Field>
+
+            <div className="nade-position-section md:col-span-2">
+              <div className="nade-position-heading">
+                <span className="nade-position-number">01</span>
+                <div><strong>Throw position</strong><span>Stand at the lineup, enter <code>getpos</code>, then paste the output.</span></div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field>
+                  <FieldLabel>Start label</FieldLabel>
+                  <Input value={draft.throwFromTitle || ""} placeholder="T Spawn" onChange={(event) => updateDraft({ throwFromTitle: event.target.value })} />
+                </Field>
+                <Field>
+                  <FieldLabel>Lineup position</FieldLabel>
+                  <Input value={draft.lineupPos || ""} onChange={(event) => updateDraft({ lineupPos: event.target.value })} />
+                </Field>
+                <Field className="md:col-span-2">
+                  <FieldLabel>Lineup angle</FieldLabel>
+                  <Input value={draft.lineupAng || ""} onChange={(event) => updateDraft({ lineupAng: event.target.value })} />
+                </Field>
+                <Field className="md:col-span-2">
+                  <FieldLabel>getpos output</FieldLabel>
+                  <Textarea value={setposText} onChange={(event) => setSetposText(event.target.value)} placeholder="setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000" />
+                  <Button type="button" size="sm" variant="secondary" onClick={applyPosition}>Apply start position</Button>
+                </Field>
+              </div>
+            </div>
+
+            <div className="nade-position-section md:col-span-2">
+              <div className="nade-position-heading">
+                <span className="nade-position-number">02</span>
+                <div><strong>Landing position</strong><span>Move to the landing spot with noclip and copy <code>getpos</code> again.</span></div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field>
+                  <FieldLabel>Target label</FieldLabel>
+                  <Input value={draft.throwToTitle || ""} placeholder="Window" onChange={(event) => updateDraft({ throwToTitle: event.target.value })} />
+                </Field>
+                <Field>
+                  <FieldLabel>Landing position</FieldLabel>
+                  <Input value={draft.landingPos || ""} placeholder="Optional until captured in-game" onChange={(event) => updateDraft({ landingPos: event.target.value })} />
+                </Field>
+                <Field className="md:col-span-2">
+                  <FieldLabel>Landing getpos output</FieldLabel>
+                  <Textarea value={landingSetposText} onChange={(event) => setLandingSetposText(event.target.value)} placeholder="setpos -1175.20 -48.14 -167.97;setang 0 0 0" />
+                  <Button type="button" size="sm" variant="secondary" onClick={applyLandingPosition}>Apply landing position</Button>
+                </Field>
+              </div>
+            </div>
+          </FieldGroup>
+
+          <div className="nade-radar-editor">
+            <div>
+              <p className="control-kicker">Route placement</p>
+              <h3 className="mt-1 font-semibold">{draftMap?.name || "Unknown map"}</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">The radar frame is the fixed map boundary. Place the start circle and landing diamond directly on it.</p>
+            </div>
+            <NadePlacementEditor map={draftMap} value={draft} onChange={updateDraft} />
+          </div>
+        </div>
         <div className="grid gap-3">
           <LineupImageUpload onUploaded={addImage} onError={setDialogError} />
           {(draft.lineupImages || []).length > 0 ? (
@@ -805,69 +885,10 @@ function NadeDialog({ settings, initialMap = "", open, onOpenChange, onAdd }) {
         </div>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="secondary" onClick={applyPosition}>Apply position</Button>
-          <Button onClick={submit}>Add nade</Button>
+          <Button onClick={submit}>{initialNade ? "Save route" : "Add nade"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-const MAP_SKETCH_PATHS = [
-  ["M14 70 36 70 36 48 61 48 61 25 92 25 92 44 128 44 128 76 148 76", "M36 70 58 88 91 88 91 66 112 66 128 44", "M61 48 80 62 91 66"],
-  ["M16 29 48 29 48 46 75 46 75 77 105 77 105 58 144 58", "M32 85 32 62 48 46 69 25 113 25 113 42 144 58", "M75 46 101 46 105 58"],
-  ["M18 55 43 55 43 29 77 29 77 48 117 48 117 25 145 25", "M43 55 58 77 92 77 92 62 128 62 145 80", "M77 48 92 62"],
-  ["M15 78 41 78 41 54 65 54 65 23 94 23 94 42 132 42 146 58", "M41 54 63 76 101 76 101 59 132 42", "M65 54 81 62 101 59"],
-  ["M17 36 42 36 42 60 69 60 69 82 104 82 104 58 143 58", "M29 18 61 18 69 38 96 38 96 24 129 24 143 58", "M42 60 69 38 96 38 104 58"],
-  ["M14 63 38 63 38 38 66 38 66 20 99 20 99 45 132 45 148 68", "M28 84 58 84 58 66 88 66 88 48 115 48 132 45", "M38 63 58 66 66 38 88 48"],
-  ["M15 27 50 27 50 46 80 46 80 67 109 67 109 48 145 48", "M28 82 28 59 50 46 67 71 80 67", "M80 46 104 26 132 26 145 48"]
-];
-
-function lineupCoordinates(nades) {
-  const coordinates = nades.flatMap((nade) => {
-    const values = String(nade.lineupPos || "").trim().split(/\s+/).map(Number);
-    return values.length >= 2 && values.slice(0, 2).every(Number.isFinite) ? [{ x: values[0], y: values[1] }] : [];
-  });
-  if (coordinates.length === 0) return [];
-  const xs = coordinates.map((point) => point.x);
-  const ys = coordinates.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  return coordinates.map((point) => ({
-    x: maxX === minX ? 80 : 18 + ((point.x - minX) / (maxX - minX)) * 124,
-    y: maxY === minY ? 52 : 84 - ((point.y - minY) / (maxY - minY)) * 68
-  }));
-}
-
-function MapSketch({ map, nades = [], compact = false }: { map: MapDefinition; nades?: any[]; compact?: boolean }) {
-  const paths = MAP_SKETCH_PATHS[map.sketch % MAP_SKETCH_PATHS.length];
-  const points = lineupCoordinates(nades);
-  const patternId = `grid-${map.key.replace(/[^a-z0-9]/gi, "")}-${compact ? "small" : "large"}`;
-  const markerOffset = map.sketch % 3;
-  return (
-    <svg className={cn("map-sketch", compact && "map-sketch-compact")} viewBox="0 0 160 104" role="img" aria-label={`${map.name} lineup coordinate sketch`}>
-      <defs>
-        <pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse">
-          <path d="M 8 0 L 0 0 0 8" className="map-sketch-grid" />
-        </pattern>
-      </defs>
-      <rect width="160" height="104" rx="9" className="map-sketch-ground" />
-      <rect width="160" height="104" rx="9" fill={`url(#${patternId})`} />
-      <g className="map-sketch-routes">
-        {paths.map((path) => <path key={path} d={path} />)}
-      </g>
-      <g className="map-sketch-sites" aria-hidden="true">
-        <circle cx={25 + markerOffset * 9} cy={25 + markerOffset * 4} r="9" />
-        <text x={25 + markerOffset * 9} y={28 + markerOffset * 4}>A</text>
-        <circle cx={133 - markerOffset * 7} cy={78 - markerOffset * 5} r="9" />
-        <text x={133 - markerOffset * 7} y={81 - markerOffset * 5}>B</text>
-      </g>
-      <g className="map-sketch-lineups">
-        {points.map((point, index) => <circle key={`${point.x}-${point.y}-${index}`} cx={point.x} cy={point.y} r={compact ? 2.4 : 3.2} />)}
-      </g>
-    </svg>
   );
 }
 
@@ -897,7 +918,11 @@ function MapChoice({ map, nades, selected, onSelect }) {
       aria-pressed={selected}
       onClick={() => onSelect(map.key)}
     >
-      <MapSketch map={map} nades={nades} compact />
+      {map.radarUrl ? (
+        <div className="map-choice-radar"><img src={map.radarUrl} alt={`${map.name} radar`} loading="lazy" /></div>
+      ) : (
+        <NadeFlightMap map={map} nades={nades} compact />
+      )}
       <span className="flex items-start justify-between gap-3 px-3 pb-3 pt-2.5">
         <span className="min-w-0 text-left">
           <strong className="block truncate text-sm">{map.name}</strong>
@@ -910,24 +935,45 @@ function MapChoice({ map, nades, selected, onSelect }) {
 }
 
 function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
-  const [draft, setDraft] = useState({ title: "", mapName: "", workshopId: "" });
+  const [draft, setDraft] = useState({ title: "", mapName: "", workshopId: "", radarUrl: "" });
   const [dialogError, setDialogError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setDraft({ title: "", mapName: "", workshopId: "" });
+    setDraft({ title: "", mapName: "", workshopId: "", radarUrl: "" });
     setDialogError("");
+    setSubmitting(false);
   }, [open]);
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     setDialogError("");
+    setSubmitting(true);
     try {
-      onAdd(draft);
+      let radarSize = {};
+      if (draft.radarUrl) {
+        const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+          image.onerror = () => reject(new Error("Radar image could not be loaded."));
+          image.src = draft.radarUrl;
+        });
+        radarSize = { radarWidth: dimensions.width, radarHeight: dimensions.height };
+      }
+      onAdd({ ...draft, ...radarSize });
       onOpenChange(false);
     } catch (error) {
       setDialogError(error.message);
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function useRadarUpload(image) {
+    const serverData = image.serverData || {};
+    const url = String(serverData.url || image.url || "");
+    if (url) setDraft((current) => ({ ...current, radarUrl: url }));
   }
 
   return (
@@ -935,7 +981,7 @@ function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Workshop map</DialogTitle>
-          <DialogDescription>Store the Workshop addon and the internal map name used by CS2.</DialogDescription>
+          <DialogDescription>Store the Workshop addon, its internal map name and an optional radar for route placement.</DialogDescription>
         </DialogHeader>
         {dialogError ? <Message error={dialogError} /> : null}
         <form className="grid gap-5" onSubmit={submit}>
@@ -953,10 +999,17 @@ function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
               <FieldLabel>Workshop ID or item URL</FieldLabel>
               <Input value={draft.workshopId} placeholder="3070244462" onChange={(event) => setDraft((current) => ({ ...current, workshopId: event.target.value }))} />
             </Field>
+            <Field>
+              <FieldLabel>Radar image URL</FieldLabel>
+              <Input value={draft.radarUrl} placeholder="Optional https://…/radar.webp" onChange={(event) => setDraft((current) => ({ ...current, radarUrl: event.target.value }))} />
+              <FieldDescription>The complete radar frame becomes this map's placement boundary.</FieldDescription>
+            </Field>
+            <LineupImageUpload label="Upload radar image" multiple={false} onUploaded={useRadarUpload} onError={setDialogError} />
+            {draft.radarUrl ? <img className="max-h-56 w-full rounded-lg border border-border bg-sidebar object-contain" src={draft.radarUrl} alt="Workshop radar preview" /> : null}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit"><PackagePlus data-icon="inline-start" />Add map</Button>
+            <Button type="submit" disabled={submitting}><PackagePlus data-icon="inline-start" />{submitting ? "Adding…" : "Add map"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -1065,6 +1118,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
   const initialMap = allMaps.find((map) => mapMatchesNade(map, settings.startMap)) || ACTIVE_DUTY_MAPS[0];
   const [selectedKey, setSelectedKey] = useState(initialMap.key);
   const [addNadeOpen, setAddNadeOpen] = useState(false);
+  const [editingNade, setEditingNade] = useState<any>(null);
   const [addWorkshopOpen, setAddWorkshopOpen] = useState(false);
 
   useEffect(() => {
@@ -1074,6 +1128,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
   const selectedMap = allMaps.find((map) => map.key === selectedKey) || ACTIVE_DUTY_MAPS[0];
   const nadesForMap = useCallback((map) => nades.filter((nade) => mapMatchesNade(map, nade.map)), [nades]);
   const selectedNades = nadesForMap(selectedMap);
+  const placedNades = selectedNades.filter((nade) => isRadarPoint(nade.radarFrom) && isRadarPoint(nade.radarTo));
   const typeCounts = selectedNades.reduce((counts, nade) => {
     const type = nade.type || "Other";
     counts[type] = (counts[type] || 0) + 1;
@@ -1095,7 +1150,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         description="Pick a map to see every saved lineup, prepare the game server and build a Valve annotation guide for the same map."
         actions={(
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setAddNadeOpen(true)}><Plus data-icon="inline-start" />Add {selectedMap.name} nade</Button>
+            <Button variant="secondary" onClick={() => { setEditingNade(null); setAddNadeOpen(true); }}><Plus data-icon="inline-start" />Add {selectedMap.name} nade</Button>
             <Button onClick={onSaveNades} disabled={busy || !nadesDirty}><Save data-icon="inline-start" />Save lineups</Button>
           </div>
         )}
@@ -1103,9 +1158,15 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
       <NadeDialog
         settings={settings}
         initialMap={selectedMap.mapName}
-        open={addNadeOpen}
-        onOpenChange={setAddNadeOpen}
-        onAdd={(entry) => setNades((current) => [...current, entry])}
+        initialNade={editingNade}
+        open={addNadeOpen || Boolean(editingNade)}
+        onOpenChange={(nextOpen) => {
+          setAddNadeOpen(nextOpen);
+          if (!nextOpen) setEditingNade(null);
+        }}
+        onAdd={(entry) => setNades((current) => editingNade
+          ? current.map((nade) => nade.id === editingNade.id ? entry : nade)
+          : [...current, entry])}
       />
       <WorkshopMapDialog
         open={addWorkshopOpen}
@@ -1202,20 +1263,24 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
               <CardDescription className="font-mono text-xs">{selectedMap.mapName || `Workshop ${selectedMap.workshopId}`}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
+              {selectedMap.sourceUrl ? (
+                <Button variant="secondary" asChild><a href={selectedMap.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />CSNADES</a></Button>
+              ) : null}
               {selectedMap.workshopId ? (
                 <Button variant="secondary" asChild><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMap.workshopId}`} target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Workshop</a></Button>
               ) : null}
               <Button variant="secondary" disabled={!canStartMap || isStartMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap.mapName }))}><MapPinned data-icon="inline-start" />{isStartMap ? "Start map selected" : "Set as start map"}</Button>
-              <Button onClick={() => setAddNadeOpen(true)}><Plus data-icon="inline-start" />Add lineup</Button>
+              <Button onClick={() => { setEditingNade(null); setAddNadeOpen(true); }}><Plus data-icon="inline-start" />Add lineup</Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="map-atlas-layout grid gap-6 pt-5 sm:pt-6">
           <div className="map-stage">
-            <MapSketch map={selectedMap} nades={selectedNades} />
+            <NadeFlightMap map={selectedMap} nades={selectedNades} emptyMessage="No start-to-target routes placed yet" onSelectNade={setEditingNade} />
             <div className="map-stage-legend">
-              <span><i className="map-lineup-dot" />{selectedNades.length} saved lineup{selectedNades.length === 1 ? "" : "s"}</span>
-              <span>Dots are positioned relative to this map's saved LineupPos coordinates.</span>
+              <span><i className="radar-status-dot radar-status-dot-ready" />Start position</span>
+              <span><i className="radar-status-diamond radar-status-dot-ready" />Landing position</span>
+              <span>{placedNades.length}/{selectedNades.length} routes placed · curves show direction, not vertical trajectory</span>
             </div>
           </div>
           <div className="flex flex-col gap-5">
@@ -1253,7 +1318,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                       <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || nade.name} />
                       {nade.lineupImages.length > 1 ? <Badge variant="secondary">+{nade.lineupImages.length - 1} images</Badge> : null}
                     </a>
-                  ) : <div className="lineup-gallery-sketch"><MapSketch map={selectedMap} nades={[nade]} compact /></div>}
+                  ) : <div className="lineup-gallery-sketch"><NadeFlightMap map={selectedMap} nades={[nade]} compact /></div>}
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0"><CardTitle className="truncate">{nade.name}</CardTitle><CardDescription className="mt-1 line-clamp-2">{nade.desc || "No description"}</CardDescription></div>
@@ -1261,12 +1326,17 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                     </div>
                   </CardHeader>
                   <CardContent className="grid gap-2 text-xs">
+                    <div className="grid gap-1"><span className="text-muted-foreground">Route</span><strong>{nade.throwFromTitle || "Start"} → {nade.throwToTitle || "Target"}</strong></div>
                     <div className="grid gap-1"><span className="text-muted-foreground">Position</span><code className="truncate">{nade.lineupPos}</code></div>
                     <div className="grid gap-1"><span className="text-muted-foreground">Angle</span><code className="truncate">{nade.lineupAng}</code></div>
+                    {nade.landingPos ? <div className="grid gap-1"><span className="text-muted-foreground">Landing</span><code className="truncate">{nade.landingPos}</code></div> : null}
                   </CardContent>
                   <CardFooter className="justify-between border-t border-border pt-4">
                     <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"}>{String(nade.owner || "default") === "default" ? "Shared" : "Private"}</Badge>
-                    <CopyCommand value={`.loadnade ${nade.name}`} label="Copy load" />
+                    <div className="flex flex-1 flex-wrap justify-end gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setEditingNade(nade)}><MapPinned data-icon="inline-start" />Edit route</Button>
+                      <CopyCommand value={`.loadnade ${nade.name}`} label="Copy load" />
+                    </div>
                   </CardFooter>
                 </Card>
               ))}

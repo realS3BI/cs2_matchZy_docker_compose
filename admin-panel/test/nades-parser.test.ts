@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseSetposSetang } from "../client/src/lib/nades.js";
+import { parseSetpos, parseSetposSetang } from "../client/src/lib/nades.js";
 
 test("parseSetposSetang parses CS2 setpos setang commands", () => {
   assert.deepEqual(
@@ -23,4 +23,10 @@ test("parseSetposSetang rejects invalid commands", () => {
   assert.equal(parseSetposSetang("setpos 1 2 3"), null);
   assert.equal(parseSetposSetang("setpos 1 2;setang 3 4 5"), null);
   assert.equal(parseSetposSetang("setpos 1 nope 3;setang 4 5 6"), null);
+});
+
+test("parseSetpos extracts a landing position from getpos output", () => {
+  assert.equal(parseSetpos("setpos -1044.062744 -1059.530518 192.241104;setang 37.9 98.2 0"), "-1044.062744 -1059.530518 192.241104");
+  assert.equal(parseSetpos("setpos 1 2 3"), "1 2 3");
+  assert.equal(parseSetpos("setang 1 2 3"), null);
 });

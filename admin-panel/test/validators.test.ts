@@ -178,3 +178,34 @@ test("nadesToMatchZySavedNadesConfig omits lineup images", () => {
     Type: ""
   });
 });
+
+test("panel radar metadata is validated and omitted from MatchZy output", () => {
+  const config: any = nadesToMatchZySavedNadesConfig([{
+    name: "window_smoke",
+    map: "de_mirage",
+    type: "Smoke",
+    desc: "from T roof",
+    lineupPos: "1 2 3",
+    lineupAng: "4 5 6",
+    landingPos: "7 8 9",
+    throwFromTitle: "T Spawn",
+    throwToTitle: "Window",
+    radarFrom: { x: 0.72, y: 0.18 },
+    radarTo: { x: 0.43, y: 0.49 }
+  }]);
+
+  assert.deepEqual(config.default.window_smoke, {
+    LineupPos: "1 2 3",
+    LineupAng: "4 5 6",
+    Desc: "from T roof",
+    Map: "de_mirage",
+    Type: "Smoke"
+  });
+  assert.throws(() => nadesToMatchZySavedNadesConfig([{
+    name: "bad",
+    map: "de_mirage",
+    lineupPos: "1 2 3",
+    lineupAng: "4 5 6",
+    radarFrom: { x: 1.2, y: 0.4 }
+  }]), /between 0 and 1/);
+});
