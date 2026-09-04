@@ -20,6 +20,7 @@ export function getConfig() {
     runtimeMatchZyAdminsFile: "/runtime/matchzy-admins.json",
     runtimeMatchZyNadesFile: "/runtime/matchzy-savednades.json",
     liveMatchZyNadesFile: "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
+    liveMatchZyConfigFile: "/cs2-data/game/csgo/cfg/MatchZy/config.cfg",
     uploadDir: "/uploads",
     nadesSyncEnabled: true,
     nadesSyncIntervalMs: 2000,

@@ -56,6 +56,13 @@ function actionMessage(result) {
   return output || (result.ok ? "Command completed" : "Command failed");
 }
 
+function nadesLibraryStatus(document) {
+  return {
+    count: Array.isArray(document?.entries) ? document.entries.length : 0,
+    updatedAt: document?.updatedAt || null
+  };
+}
+
 async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) {
   const observed = await compose.waitForServiceLog(
     ["[pre.sh] Hook finished successfully", "[pre.sh] Hook failed"],
@@ -185,21 +192,33 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.get("/api/nades", async (req, res) => {
+    const document = await store.getNadesDocument();
     res.json({
-      entries: await store.getNades()
+      entries: document?.entries || [],
+      library: nadesLibraryStatus(document),
+      sync: nadesSync?.status() || { enabled: false, state: "disabled" }
+    });
+  });
+
+  app.get("/api/nades/status", async (req, res) => {
+    const document = await store.getNadesDocument();
+    res.json({
+      library: nadesLibraryStatus(document),
+      sync: nadesSync?.status() || { enabled: false, state: "disabled" }
     });
   });
 
   app.get("/api/control", async (req, res) => {
-    const [settings, admins, nades, service, lastAction, maintenance] = await Promise.all([
+    const [settings, admins, nadesDocument, service, lastAction, maintenance] = await Promise.all([
       store.getSettings(),
       store.getAdmins(),
-      store.getNades(),
+      store.getNadesDocument(),
       compose.serviceStatus(),
       store.getLastAction(["apply", "restart", "scheduled_restart", "repair", "save", "nades_sync", "login_fail"]),
       restartScheduler?.status() || Promise.resolve({ enabled: false })
     ]);
-    res.json({ settings, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, nadesSync: nadesSync?.status() || { enabled: false } }, policy: buildControlModel(settings) });
+    const nades = nadesDocument?.entries || [];
+    res.json({ settings, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, nadesSync: nadesSync?.status() || { enabled: false, state: "disabled" }, nadesLibrary: nadesLibraryStatus(nadesDocument) }, policy: buildControlModel(settings) });
   });
 
   app.put("/api/control", async (req, res) => {

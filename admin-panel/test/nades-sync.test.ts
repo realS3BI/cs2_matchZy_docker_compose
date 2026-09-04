@@ -117,6 +117,14 @@ test("writeFromMongo atomically updates live and runtime files", async (t) => {
   assert.deepEqual(JSON.parse(await readFile(service.liveFile, "utf8")), sampleConfig(updated));
   assert.deepEqual(JSON.parse(await readFile(service.runtimeFile, "utf8")), sampleConfig(updated));
   assert.ok(service.status().lastWriteAt);
+  assert.equal(service.status().state, "stopped");
+
+  await service.start();
+
+  assert.equal(service.status().state, "healthy");
+  assert.equal(service.status().liveFilePresent, true);
+  assert.equal(service.status().runtimeFilePresent, true);
+  await service.stop();
 });
 
 test("poll ignores a file change written by the service itself", async (t) => {
@@ -140,6 +148,40 @@ test("poll imports external live file changes", async (t) => {
 
   assert.deepEqual(comparable(store.entries), [external]);
   assert.equal(store.actions.at(-1).status, "success");
+  assert.equal(service.status().lastDirection, "matchzy-to-panel");
+});
+
+test("sync keeps lineup images when MatchZy updates the same nade", async (t) => {
+  const image = {
+    key: "lineup-image",
+    url: "https://example.com/lineup.jpg",
+    name: "lineup.jpg",
+    size: 1234,
+    uploadedAt: "2026-09-04T00:00:00.000Z"
+  };
+  const existing = sampleEntry({ lineupImages: [image] });
+  const { store, service } = await createHarness(t, [existing]);
+  const updated = sampleEntry({ desc: "updated in game" });
+  await writeJson(service.liveFile, sampleConfig(updated));
+
+  await service.importLiveFile("test");
+
+  assert.equal(store.entries[0].desc, "updated in game");
+  assert.deepEqual(store.entries[0].lineupImages, [image]);
+});
+
+test("status reports the applied MatchZy global-save setting", async (t) => {
+  const { service } = await createHarness(t, [sampleEntry()]);
+  await writeJson(service.liveFile, sampleConfig());
+  await writeJson(service.runtimeFile, sampleConfig());
+  await writeFile(service.matchZyConfigFile, 'matchzy_save_nades_as_global_enabled "true"\n', "utf8");
+
+  await service.start();
+
+  assert.equal(service.status().state, "healthy");
+  assert.equal(service.status().matchZyConfigPresent, true);
+  assert.equal(service.status().globalSavesEnabled, true);
+  await service.stop();
 });
 
 test("invalid live JSON is logged and does not overwrite Mongo entries", async (t) => {
@@ -153,4 +195,5 @@ test("invalid live JSON is logged and does not overwrite Mongo entries", async (
   assert.deepEqual(comparable(store.entries), [existing]);
   assert.equal(store.actions.at(-1).type, "nades_sync");
   assert.equal(store.actions.at(-1).status, "failed");
+  assert.equal(service.status().state, "error");
 });

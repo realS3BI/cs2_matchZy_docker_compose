@@ -83,7 +83,7 @@ Das Desktop-Dashboard umfasst:
 - `Plugins`: genau ein Servermodus und optionale Komponenten
 - `Access`: CounterStrikeSharp-Rollen und Steam64-IDs
 - `Maintenance`: taeglicher Neustart mit IANA-Zeitzone
-- `Nades`: MatchZy-Lineups mit lokalen Bildern
+- `Nades`: gemeinsame MatchZy-Lineups, lokale Bilder und Live-Sync-Status
 - `Diagnostics`: Startkette und One-shot-Reparatur
 - `Logs`: aktuelle CS2-Containerlogs
 
@@ -125,6 +125,12 @@ game/csgo/cfg/MatchZy/savednades.json
 ```
 
 Panel-Aenderungen werden ohne Server-Neustart geschrieben. Ingame-Aenderungen werden beim naechsten Sync importiert. Lineup-Bilder liegen lokal im persistenten Volume `admin_panel_uploads`; es wird kein externer Upload-Dienst benoetigt.
+
+Der Nades-Bereich zeigt, ob beide Sync-Dateien erreichbar sind, wann der letzte Abgleich bestaetigt wurde und in welche Richtung zuletzt Daten uebertragen wurden. Er prueft den Status alle 2,5 Sekunden. Aendert MatchZy die Bibliothek, weist das Panel auf die neuere Fassung hin.
+
+`Save new in-game lineups for everyone` setzt MatchZys globale Nade-Option. Nach `Apply sharing & restart` speichert `.savenade` neue Lineups unter dem MatchZy-Owner `default`; damit koennen alle Spieler sie mit `.listnades` sehen und mit `.loadnade` laden. Bereits privat gespeicherte Lineups bleiben privat und werden im Panel entsprechend markiert.
+
+Beim Import einer Ingame-Aenderung behaelt das Panel vorhandene Bildzuordnungen fuer dasselbe Lineup (Owner, Map und Name) bei. MatchZys eigene JSON-Datei enthaelt weiterhin nur die Felder, die das Plugin versteht.
 
 ## Wartung und Diagnose
 

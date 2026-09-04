@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  ArrowLeftRight,
   Boxes,
   CalendarClock,
   Check,
@@ -9,8 +10,11 @@ import {
   CircleDot,
   Copy,
   Crosshair,
+  Database,
   Download,
   FileInput,
+  FileJson,
+  Globe2,
   LayoutDashboard,
   LockKeyhole,
   LogOut,
@@ -449,7 +453,7 @@ function Settings({ settings, setSettings, policy }) {
           <Card key={group.id}>
             <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {group.fields.map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
+              {group.fields.filter((field) => field.key !== "matchZySaveNadesGlobally").map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
             </CardContent>
           </Card>
         ))}
@@ -745,6 +749,7 @@ function NadeDialog({ settings, open, onOpenChange, onAdd }) {
           <Field>
             <FieldLabel>Owner</FieldLabel>
             <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
+            <FieldDescription>Use default to make this lineup available to every player.</FieldDescription>
           </Field>
           <Field className="md:col-span-2">
             <FieldLabel>Description</FieldLabel>
@@ -795,7 +800,21 @@ function NadeDialog({ settings, open, onOpenChange, onAdd }) {
   );
 }
 
-function Nades({ settings, nades, setNades, onSave }) {
+function nadesSyncPresentation(sync) {
+  if (sync?.state === "healthy") return { label: "Sync healthy", variant: "success" as const };
+  if (sync?.state === "error") return { label: "Sync error", variant: "destructive" as const };
+  if (sync?.state === "waiting") return { label: "Waiting for files", variant: "warning" as const };
+  if (sync?.state === "stopped") return { label: "Sync stopped", variant: "destructive" as const };
+  return { label: "Sync disabled", variant: "outline" as const };
+}
+
+function syncDirectionLabel(direction) {
+  if (direction === "matchzy-to-panel") return "MatchZy → Dashboard";
+  if (direction === "panel-to-matchzy") return "Dashboard → MatchZy";
+  return "No transfer yet";
+}
+
+function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirty, onApply, onRefresh, onReload, onSave }) {
   const [mapFilter, setMapFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [query, setQuery] = useState("");
@@ -804,8 +823,50 @@ function Nades({ settings, nades, setNades, onSave }) {
   const [importJson, setImportJson] = useState("");
   const [exportJson, setExportJson] = useState("");
   const [localError, setLocalError] = useState("");
+  const [liveStatus, setLiveStatus] = useState({
+    sync: status?.nadesSync || { enabled: false, state: "disabled" },
+    library: status?.nadesLibrary || { count: nades.length, updatedAt: null }
+  });
+  const [statusError, setStatusError] = useState("");
+
+  useEffect(() => {
+    setLiveStatus({
+      sync: status?.nadesSync || { enabled: false, state: "disabled" },
+      library: status?.nadesLibrary || { count: nades.length, updatedAt: null }
+    });
+  }, [status?.nadesSync, status?.nadesLibrary, nades.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshSyncStatus() {
+      try {
+        const result = await api("/api/nades/status");
+        if (cancelled) return;
+        setLiveStatus(result);
+        setStatusError("");
+      } catch (error) {
+        if (!cancelled) setStatusError(error.message);
+      }
+    }
+    void refreshSyncStatus();
+    const timer = window.setInterval(refreshSyncStatus, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const maps = useMemo<string[]>(() => [...new Set<string>(nades.map((nade) => String(nade.map || "")).filter(Boolean))].sort(), [nades]);
+  const sharedNades = nades.filter((nade) => String(nade.owner || "default") === "default").length;
+  const privateNades = nades.length - sharedNades;
+  const syncPresentation = nadesSyncPresentation(statusError ? { state: "error" } : liveStatus.sync);
+  const desiredGlobalSaves = settings.matchZySaveNadesGlobally === true;
+  const appliedGlobalSaves = liveStatus.sync?.globalSavesEnabled;
+  const sharingNeedsApply = appliedGlobalSaves === null || appliedGlobalSaves === undefined || appliedGlobalSaves !== desiredGlobalSaves;
+  const matchZyModeActive = ["matchzy", "nades"].includes(settings.serverMode);
+  const loadedLibraryVersion = status?.nadesLibrary?.updatedAt || null;
+  const observedLibraryVersion = liveStatus.library?.updatedAt || null;
+  const libraryChanged = Boolean(observedLibraryVersion && observedLibraryVersion !== loadedLibraryVersion);
   const filteredNades = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return nades.filter((nade) => {
@@ -838,6 +899,7 @@ function Nades({ settings, nades, setNades, onSave }) {
         body: JSON.stringify({ matchzyConfig, mode: "replace" })
       });
       setNades(result.entries || []);
+      await onReload();
       setImportOpen(false);
       setImportJson("");
     } catch (error) {
@@ -876,9 +938,13 @@ function Nades({ settings, nades, setNades, onSave }) {
       <PageHeader
         eyebrow="Match library"
         title="Nade lineups"
-        description="MongoDB and MatchZy's savednades.json stay synchronized while MatchZy mode is active."
+        description="One library for every saved lineup. MatchZy and the dashboard keep the same savednades.json content."
         actions={(
           <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Save or discard your local edits before refreshing" : "Load the latest library from MongoDB"}>
+              <RefreshCw data-icon="inline-start" />
+              Refresh library
+            </Button>
             <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
               <FileInput data-icon="inline-start" />
               Import
@@ -891,7 +957,7 @@ function Nades({ settings, nades, setNades, onSave }) {
               <Plus data-icon="inline-start" />
               Add nade
             </Button>
-            <Button onClick={onSave}>
+            <Button onClick={onSave} disabled={busy}>
               <Save data-icon="inline-start" />
               Save nades
             </Button>
@@ -905,6 +971,65 @@ function Nades({ settings, nades, setNades, onSave }) {
         onAdd={(entry) => setNades((current) => [...current, entry])}
       />
       {localError ? <Message error={localError} /> : null}
+      <Card className="mb-4 overflow-hidden">
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div className="grid gap-1.5">
+            <CardTitle>Shared MatchZy library</CardTitle>
+            <CardDescription>New in-game lineups can be stored under MatchZy's default owner so every player can list and load them.</CardDescription>
+          </div>
+          <Badge variant={desiredGlobalSaves && !sharingNeedsApply ? "success" : sharingNeedsApply ? "warning" : "outline"}>
+            <span className="server-status-dot" />
+            {sharingNeedsApply ? "Restart required" : desiredGlobalSaves ? "Shared saves applied" : "Private saves applied"}
+          </Badge>
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          <div className="grid items-center gap-3 rounded-lg border border-border bg-muted/25 p-4 sm:grid-cols-[1fr_auto_1fr]">
+            <div className="flex items-center gap-3">
+              <span className="metric-icon"><Database aria-hidden="true" /></span>
+              <span><strong className="block text-sm">Dashboard library</strong><span className="text-xs text-muted-foreground">{liveStatus.library?.count ?? nades.length} lineups in MongoDB</span></span>
+            </div>
+            <div className="flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
+              <ArrowLeftRight className="size-4" aria-hidden="true" />
+              {Math.round((liveStatus.sync?.intervalMs || 2000) / 1000)}s
+            </div>
+            <div className="flex items-center gap-3 sm:justify-end">
+              <span className="metric-icon"><FileJson aria-hidden="true" /></span>
+              <span><strong className="block text-sm">MatchZy savednades.json</strong><span className="text-xs text-muted-foreground">{liveStatus.sync?.liveFilePresent ? "File reachable" : "File not found"}</span></span>
+            </div>
+          </div>
+
+          <Field className="flex min-h-20 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-background px-4 py-3">
+            <span>
+              <FieldLabel className="flex items-center gap-2"><Globe2 className="size-4 text-primary" aria-hidden="true" /> Save new in-game lineups for everyone</FieldLabel>
+              <FieldDescription className="mt-1 block">When enabled, MatchZy writes every player's .savenade entry to the shared default library.</FieldDescription>
+            </span>
+            <Switch
+              aria-label="Save new in-game lineups for everyone"
+              checked={desiredGlobalSaves}
+              onCheckedChange={(checked) => setSettings((current) => ({ ...current, matchZySaveNadesGlobally: checked }))}
+            />
+          </Field>
+
+          <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Sync status</dt><dd><Badge variant={syncPresentation.variant}><span className="server-status-dot" />{syncPresentation.label}</Badge></dd></div>
+            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last confirmed</dt><dd className="text-sm font-medium">{formatDate(liveStatus.sync?.lastConfirmedAt)}</dd></div>
+            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last transfer</dt><dd className="text-sm font-medium">{syncDirectionLabel(liveStatus.sync?.lastDirection)}</dd></div>
+            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Visibility</dt><dd className="flex flex-wrap gap-2"><Badge variant="success">{sharedNades} shared</Badge>{privateNades > 0 ? <Badge variant="warning">{privateNades} private</Badge> : null}</dd></div>
+          </dl>
+
+          {statusError || liveStatus.sync?.lastError ? <Alert variant="destructive"><AlertTitle>Nade sync cannot confirm the connection</AlertTitle><AlertDescription>{statusError || liveStatus.sync.lastError}</AlertDescription></Alert> : null}
+          {!matchZyModeActive ? <Alert variant="warning"><AlertTitle>MatchZy is not the active server mode</AlertTitle><AlertDescription>The files can stay synchronized, but players cannot use MatchZy's nade commands until MatchZy or Nades mode is active.</AlertDescription></Alert> : null}
+          {libraryChanged ? <Alert variant="warning"><AlertTitle>The shared library changed</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>MatchZy imported a newer library at {formatDate(observedLibraryVersion)}.</span><Button variant="secondary" onClick={onRefresh}>{nadesDirty ? "Discard edits & load latest" : "Load latest"}</Button></AlertDescription></Alert> : null}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={onApply} disabled={busy || !sharingNeedsApply}>
+              <UploadCloud data-icon="inline-start" />
+              Apply sharing & restart
+            </Button>
+            <span className="text-xs text-muted-foreground">Players save with .savenade and browse with .listnades.</span>
+          </div>
+        </CardContent>
+      </Card>
       {importOpen ? (
         <Card className="mb-4">
           <CardHeader>
@@ -949,7 +1074,7 @@ function Nades({ settings, nades, setNades, onSave }) {
               <CardTitle>Saved lineups</CardTitle>
               <CardDescription>Filter and edit the lineups that MatchZy can load.</CardDescription>
             </div>
-            <Badge variant="secondary">{filteredNades.length} shown</Badge>
+            <div className="flex flex-wrap justify-end gap-2">{nadesDirty ? <Badge variant="warning">Unsaved edits</Badge> : null}<Badge variant="secondary">{filteredNades.length} shown</Badge></div>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -979,7 +1104,7 @@ function Nades({ settings, nades, setNades, onSave }) {
             <section key={map} className="grid gap-2">
               <h3 className="text-sm font-semibold text-muted-foreground">{map} <Badge>{mapNades.length}</Badge></h3>
               {mapNades.map((nade) => (
-                <div key={nade.id} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_44px]">
+                <div key={nade.id} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_90px_44px]">
                   <Input value={nade.name || ""} placeholder="Name" onChange={(event) => updateNade(nade.id, { name: event.target.value })} />
                   <Input value={nade.map || ""} placeholder="Map" onChange={(event) => updateNade(nade.id, { map: event.target.value })} />
                   <NativeSelect
@@ -998,6 +1123,9 @@ function Nades({ settings, nades, setNades, onSave }) {
                   ) : (
                     <span className="flex h-9 items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">No image</span>
                   )}
+                  <Badge className="w-fit self-center" variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={String(nade.owner || "default") === "default" ? "Available to every player" : `Private owner: ${nade.owner}`}>
+                    {String(nade.owner || "default") === "default" ? "Shared" : "Private"}
+                  </Badge>
                   <Button variant="secondary" size="icon" title="Remove" onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}>
                     <Trash2 />
                   </Button>
@@ -1099,6 +1227,7 @@ function App() {
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
   const [savedSignature, setSavedSignature] = useState("");
+  const [savedNadesSignature, setSavedNadesSignature] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1114,6 +1243,7 @@ function App() {
     setPolicy(control.policy || null);
     setStatus(control.status || null);
     setSavedSignature(JSON.stringify({ settings: control.settings || {}, admins: control.admins || [] }));
+    setSavedNadesSignature(JSON.stringify(control.nades || []));
   }
 
   async function runAction(action, operationKind = null) {
@@ -1143,16 +1273,21 @@ function App() {
   }, []);
 
   const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings, admins });
+  const nadesDirty = savedNadesSignature !== "" && savedNadesSignature !== JSON.stringify(nades);
+
+  function applyControl() {
+    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings, admins }) }), "apply");
+  }
 
   useEffect(() => {
     function warnBeforeLeave(event) {
-      if (!dirty) return;
+      if (!dirty && !nadesDirty) return;
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", warnBeforeLeave);
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
-  }, [dirty]);
+  }, [dirty, nadesDirty]);
 
   if (!authenticated) {
     return (
@@ -1189,7 +1324,7 @@ function App() {
         await api("/api/control", { method: "PUT", body: JSON.stringify({ settings, admins }) });
         return { message: "Draft saved. Apply it when you are ready to restart CS2." };
       })}
-      onApply={() => runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings, admins }) }), "apply")}
+      onApply={applyControl}
       onLogout={async () => {
         await api("/api/auth/logout", { method: "POST" });
         setAuthenticated(false);
@@ -1233,8 +1368,15 @@ function App() {
       {tab === "nades" ? (
         <Nades
           settings={settings}
+          setSettings={setSettings}
           nades={nades}
           setNades={setNades}
+          status={status}
+          busy={busy}
+          nadesDirty={nadesDirty}
+          onApply={applyControl}
+          onRefresh={() => runAction(async () => ({ message: "Nade library refreshed." }))}
+          onReload={loadAll}
           onSave={() => runAction(async () => {
             const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
             setNades(result.entries);

@@ -25,14 +25,21 @@ function stableNades(entries) {
   })).sort((left, right) => `${left.owner}\0${left.map}\0${left.name}`.localeCompare(`${right.owner}\0${right.map}\0${right.name}`)));
 }
 
-async function exists(path) {
-  try {
-    await stat(path);
-    return true;
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
+function nadeKey(entry) {
+  return `${entry.owner}\0${entry.map}\0${entry.name}`.toLowerCase();
+}
+
+function preservePanelMetadata(importedEntries, currentEntries) {
+  const currentByKey = new Map(sanitizeNades(currentEntries).map((entry) => [nadeKey(entry), entry]));
+  return importedEntries.map((entry) => {
+    const current = currentByKey.get(nadeKey(entry));
+    if (!current) return entry;
+    return {
+      ...entry,
+      id: current.id || entry.id,
+      lineupImages: current.lineupImages || []
+    };
+  });
 }
 
 async function readJsonFile(path) {
@@ -66,6 +73,7 @@ export class NadesSyncService {
   store: any;
   liveFile: string;
   runtimeFile: string;
+  matchZyConfigFile: string;
   intervalMs: number;
   enabled: boolean;
   running: boolean;
@@ -77,12 +85,20 @@ export class NadesSyncService {
   lastReadAt: string;
   lastWriteAt: string;
   lastError: string;
+  lastCheckAt: string;
+  lastConfirmedAt: string;
+  lastDirection: string;
+  liveFilePresent: boolean;
+  runtimeFilePresent: boolean;
+  matchZyConfigPresent: boolean;
+  globalSavesEnabled: boolean | null;
 
   constructor({ config, store }) {
     this.config = config;
     this.store = store;
     this.liveFile = config.liveMatchZyNadesFile;
     this.runtimeFile = config.runtimeMatchZyNadesFile;
+    this.matchZyConfigFile = config.liveMatchZyConfigFile || `${dirname(this.liveFile)}/config.cfg`;
     this.intervalMs = Number.isFinite(config.nadesSyncIntervalMs) && config.nadesSyncIntervalMs > 0
       ? config.nadesSyncIntervalMs
       : 2000;
@@ -96,14 +112,39 @@ export class NadesSyncService {
     this.lastReadAt = "";
     this.lastWriteAt = "";
     this.lastError = "";
+    this.lastCheckAt = "";
+    this.lastConfirmedAt = "";
+    this.lastDirection = "";
+    this.liveFilePresent = false;
+    this.runtimeFilePresent = false;
+    this.matchZyConfigPresent = false;
+    this.globalSavesEnabled = null;
   }
 
   status() {
+    const state = !this.enabled
+      ? "disabled"
+      : this.lastError
+          ? "error"
+          : !this.running
+            ? "stopped"
+            : this.liveFilePresent && this.runtimeFilePresent && this.lastConfirmedAt
+              ? "healthy"
+              : "waiting";
     return {
       enabled: this.enabled,
+      state,
       liveFile: this.liveFile,
       runtimeFile: this.runtimeFile,
+      intervalMs: this.intervalMs,
       running: this.running,
+      liveFilePresent: this.liveFilePresent,
+      runtimeFilePresent: this.runtimeFilePresent,
+      matchZyConfigPresent: this.matchZyConfigPresent,
+      globalSavesEnabled: this.globalSavesEnabled,
+      lastCheckAt: this.lastCheckAt,
+      lastConfirmedAt: this.lastConfirmedAt,
+      lastDirection: this.lastDirection,
       lastReadAt: this.lastReadAt,
       lastWriteAt: this.lastWriteAt,
       lastError: this.lastError
@@ -127,7 +168,8 @@ export class NadesSyncService {
 
   async bootstrap() {
     try {
-      if (await exists(this.liveFile)) {
+      await this.refreshFileState();
+      if (this.liveFilePresent) {
         await this.importLiveFile("startup");
         return;
       }
@@ -153,13 +195,17 @@ export class NadesSyncService {
     if (this.polling) return;
     this.polling = true;
     try {
-      const fileStat = await stat(this.liveFile).catch((error) => {
-        if (error?.code === "ENOENT") return null;
-        throw error;
-      });
-      if (!fileStat) return;
+      const fileStat = await this.refreshFileState();
+      this.lastCheckAt = new Date().toISOString();
+      if (!fileStat) {
+        this.lastError = "";
+        return;
+      }
 
       const { content, hash, value } = await readJsonFile(this.liveFile);
+      this.lastReadAt = this.lastCheckAt;
+      this.lastConfirmedAt = this.lastCheckAt;
+      this.lastError = "";
       if (fileStat.mtimeMs === this.lastSeenMtimeMs && hash === this.lastSeenHash) return;
       this.lastSeenMtimeMs = fileStat.mtimeMs;
       this.lastSeenHash = hash;
@@ -179,16 +225,20 @@ export class NadesSyncService {
     const { content, hash, value } = await readJsonFile(this.liveFile);
     this.lastSeenMtimeMs = fileStat.mtimeMs;
     this.lastSeenHash = hash;
+    this.liveFilePresent = true;
     await this.importParsedConfig(value, hash, content.length, source);
   }
 
   async importParsedConfig(config, hash, bytes, source) {
-    const entries = matchZySavedNadesConfigToNades(config);
+    const importedEntries = matchZySavedNadesConfigToNades(config);
     const current = await this.store.getNades();
-    if (stableNades(entries) !== stableNades(current)) {
+    if (stableNades(importedEntries) !== stableNades(current)) {
+      const entries = preservePanelMetadata(importedEntries, current);
       await this.store.replaceNadesFromSync(entries, { source, hash, bytes });
+      this.lastDirection = "matchzy-to-panel";
     }
     this.lastReadAt = new Date().toISOString();
+    this.lastConfirmedAt = this.lastReadAt;
     this.lastError = "";
   }
 
@@ -205,11 +255,41 @@ export class NadesSyncService {
 
     await writeJsonFileAtomic(this.runtimeFile, config);
     this.lastWriteAt = new Date().toISOString();
+    this.lastConfirmedAt = this.lastWriteAt;
+    this.lastDirection = "panel-to-matchzy";
+    await this.refreshFileState();
     this.lastError = "";
+  }
+
+  async refreshFileState() {
+    const [liveFileStat, runtimeFileStat, matchZyConfig] = await Promise.all([
+      stat(this.liveFile).catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      }),
+      stat(this.runtimeFile).catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      }),
+      readFile(this.matchZyConfigFile, "utf8").catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      })
+    ]);
+
+    this.liveFilePresent = Boolean(liveFileStat);
+    this.runtimeFilePresent = Boolean(runtimeFileStat);
+    this.matchZyConfigPresent = matchZyConfig !== null;
+    const globalSavesMatch = matchZyConfig?.match(/^\s*matchzy_save_nades_as_global_enabled\s+"?([^"\s]+)"?/m);
+    this.globalSavesEnabled = globalSavesMatch
+      ? ["1", "true"].includes(globalSavesMatch[1].toLowerCase())
+      : null;
+    return liveFileStat;
   }
 
   async handleError(error, source) {
     this.lastError = error?.message || String(error);
+    this.lastCheckAt = new Date().toISOString();
     await this.store.logAction("nades_sync", "failed", this.lastError, { source }).catch(() => {});
   }
 }
