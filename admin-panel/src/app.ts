@@ -16,6 +16,7 @@ import {
 import { buildDiagnostics } from "./diagnostics.js";
 import { buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
 import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
+import { syncCoachOutbox } from "./coach-sync.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -198,6 +199,14 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       library: nadesLibraryStatus(document),
       sync: nadesSync?.status() || { enabled: false, state: "disabled" }
     });
+  });
+
+  app.get("/api/coach/sessions", async (req, res) => {
+    const steamId = String(req.query.steamId || "").trim();
+    if (steamId && !/^[0-9]{17}$/.test(steamId)) return res.status(400).json({ error: "Steam64 ID is invalid" });
+    const sync = await syncCoachOutbox({ directory: config.liveCoachOutboxDir, store });
+    const sessions = await store.getCoachSessions({ steamId, limit: req.query.limit });
+    res.json({ sessions, sync });
   });
 
   app.get("/api/nades/status", async (req, res) => {

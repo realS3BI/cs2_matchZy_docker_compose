@@ -562,6 +562,15 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/configs/plugins/MatchZy"
   }
 
+  install_matchzy_coach() {
+    local source_file="/opt/matchzy-coach/MatchZyCoach.dll"
+    local destination_dir="$CSS_DIR/plugins/MatchZyCoach"
+    [[ -f "$source_file" ]] || fail "Bundled MatchZy Coach plugin not found: $source_file"
+    mkdir -p "$destination_dir"
+    copy_file_atomic "$source_file" "$destination_dir/MatchZyCoach.dll"
+    log "Installed bundled MatchZy Coach plugin"
+  }
+
   patch_gameinfo_for_metamod() {
     local gameinfo="$1"
     local tmp_file=""
@@ -1171,6 +1180,7 @@ _matchzy_bootstrap_main() (
   fi
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
+  install_matchzy_coach
 
   write_admin_files_from_runtime \
     "$runtime_css_admins_file" \

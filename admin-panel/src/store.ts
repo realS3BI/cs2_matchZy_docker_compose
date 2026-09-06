@@ -11,6 +11,7 @@ export class Store {
   nades!: Collection<any>;
   actions!: Collection<any>;
   maintenance!: Collection<any>;
+  coachSessions!: Collection<any>;
 
   constructor(config) {
     this.config = config;
@@ -25,7 +26,9 @@ export class Store {
     this.nades = this.db.collection("nades");
     this.actions = this.db.collection("actions");
     this.maintenance = this.db.collection("maintenance");
+    this.coachSessions = this.db.collection("coach_sessions");
     await this.actions.createIndex({ createdAt: -1 });
+    await this.coachSessions.createIndex({ steamId: 1, endedAt: -1 });
     await this.maintenance.updateOne(
       { _id: "scheduled-restart" },
       { $setOnInsert: { createdAt: new Date() } },
@@ -142,5 +145,23 @@ export class Store {
   async getLastAction(types = []) {
     const query = types.length > 0 ? { type: { $in: types } } : {};
     return this.actions.find(query).sort({ createdAt: -1 }).limit(1).next();
+  }
+
+  async importCoachSessions(sessions) {
+    if (sessions.length === 0) return 0;
+    const importedAt = new Date();
+    const result = await this.coachSessions.bulkWrite(sessions.map((session) => ({
+      updateOne: {
+        filter: { _id: session.id },
+        update: { $setOnInsert: { ...session, _id: session.id, importedAt } },
+        upsert: true
+      }
+    })), { ordered: false });
+    return result.upsertedCount;
+  }
+
+  async getCoachSessions({ steamId = "", limit = 50 } = {}) {
+    const query = steamId ? { steamId } : {};
+    return this.coachSessions.find(query).sort({ endedAt: -1 }).limit(Math.min(Math.max(Number(limit) || 50, 1), 200)).toArray();
   }
 }

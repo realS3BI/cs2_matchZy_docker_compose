@@ -39,6 +39,92 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+.training-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.training-board {
+  overflow: hidden;
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--primary) 5%, transparent), transparent 42%);
+}
+
+.training-clock {
+  display: flex;
+  min-width: 9.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  border: 1px solid var(--border);
+  border-radius: .65rem;
+  background: var(--background);
+  padding: .65rem .9rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.35rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-clock svg { width: 1rem; color: var(--primary); }
+
+.training-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: .85rem;
+  border: 1px solid var(--border);
+  border-radius: .65rem;
+  padding: 1rem;
+  font-size: .875rem;
+  line-height: 1.55;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.training-step-done {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.training-step-number {
+  margin-right: .75rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .7rem;
+  color: var(--muted-foreground);
+}
+
+.coach-metric {
+  display: grid;
+  gap: .2rem;
+  border: 1px solid var(--border);
+  border-radius: .6rem;
+  background: var(--muted);
+  padding: .75rem;
+}
+
+.coach-metric span {
+  font-size: .68rem;
+  color: var(--muted-foreground);
+}
+
+.coach-metric strong {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.coach-metric small {
+  font-size: .62rem;
+  color: var(--muted-foreground);
+}
+
+@media (min-width: 1280px) {
+  .training-layout { grid-template-columns: minmax(0, 1fr) 310px; align-items: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-step { transition: none; }
+}
+
 :root {
   --radius: 0.625rem;
   --background: #f6f7f9;

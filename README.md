@@ -79,6 +79,7 @@ Coolify / Compose
 Das Desktop-Dashboard umfasst:
 
 - `Overview`: Containerzustand, Modus, Spielerplaetze und letzte Aktion
+- `Training`: fokussierte Uebungen, Ingame-Coach-Berichte und Vergleich mit der vorherigen Session
 - `Server`: Steam-Token, RCON, Name, Startmap, Slots, Workshop und Versions-Pins
 - `Plugins`: genau ein Servermodus und optionale Komponenten
 - `Access`: CounterStrikeSharp-Rollen und Steam64-IDs
@@ -103,6 +104,41 @@ Es ist immer genau ein Modus aktiv:
 - `Vanilla + framework`: Metamod und CounterStrikeSharp ohne Match-Plugin
 
 Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar sind Fake RCON, WeaponPaints, SimpleAdmin, Fortnite Emotes und Workshop-Maps. Notwendige Abhaengigkeiten werden automatisch installiert oder entfernt.
+
+## MatchZy Coach
+
+`MatchZyCoach.dll` ist ein eigenes CounterStrikeSharp-Plugin aus diesem Repository. Das CS2-Image baut es gegen CounterStrikeSharp `1.0.373` und installiert es bei jedem Bootstrap. Es laeuft als opt-in Coach ueber allen Servermodi. Dadurch kann Mechanik in Aim Botz, Utility im Nades-Modus und Entscheidungsverhalten in Executes mit derselben Metrikdefinition verglichen werden.
+
+Eine Session beginnt und endet im CS2-Chat:
+
+```text
+!coach start mechanics
+!coach start utility
+!coach start decisions
+!coach start match
+!coach note wide swing without flash
+!coach status
+!coach stop
+!coach cancel
+```
+
+Pro Spieler und Session misst das Plugin nur serverseitig beobachtbare Werte:
+
+- Schuesse und Schuesse mit Schaden, Kopf- und Moving-Shots oberhalb von 50 Units pro Sekunde
+- Burst-Laenge, Kills, Deaths, Damage und Zeit vom ersten Schaden bis zum Kill
+- Opening-Duelle, Trade-Kills und innerhalb von fuenf Sekunden getradete Deaths
+- geworfene Granaten, Utility-Damage sowie gegnerische und eigene Team-Flash-Zeit
+- bis zu acht kurze Spielernotizen
+
+Der Coach bewertet erst nach einer Mindestmenge. Zum Beispiel entstehen Aim-Hinweise erst ab 20 Schuessen und Headshot-Hinweise ab fuenf Firearm-Kills. Er behauptet keine Reaktionszeit oder Crosshair-Position zu kennen, weil der Server dafuer keine belastbare Sicht auf den Client hat.
+
+Beim Abschluss schreibt das Plugin eine atomare JSON-Datei nach:
+
+```text
+game/csgo/addons/counterstrikesharp/plugins/MatchZyCoach/data/outbox
+```
+
+Das Panel validiert neue Dateien, importiert sie idempotent in die MongoDB-Collection `coach_sessions` und zeigt den aktuellen Bericht neben der vorherigen Session desselben Fokus. Die Rohdateien bleiben im persistenten `cs2_data`-Volume erhalten.
 
 WeaponPaints benoetigt eine eigene Datenbankkonfiguration im erzeugten Plugin-Config-File und kann wegen der Server-Guideline-Einstellung ein Risiko fuer den Steam-Token darstellen. Das Dashboard zeigt deshalb eine Warnung an.
 

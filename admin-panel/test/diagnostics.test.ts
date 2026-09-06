@@ -9,6 +9,7 @@ const healthyProbe = [
   "FILE\tgameinfoMetamod\t1",
   "FILE\tcounterStrikeSharpNative\t1",
   "FILE\tcounterStrikeSharpApi\t1",
+  "FILE\tmatchZyCoach\t1",
   "FILE\tmatchZy\t1",
   "FILE\tmatchZyConfig\t1",
   "FILE\tmatchZySavedNades\t1",
@@ -26,7 +27,7 @@ function input(patch = {}) {
       restartCount: 2
     },
     probe: { ok: true, stdout: healthyProbe, stderr: "" },
-    logs: "[pre.sh] Mod bootstrap complete\n[MatchZy 0.8.15 LOADED] MatchZy by WD-",
+    logs: "[pre.sh] Mod bootstrap complete\nMatchZy Coach loaded\n[MatchZy 0.8.15 LOADED] MatchZy by WD-",
     desired: { matchZyVersion: "latest" },
     controlMode: "docker",
     ...patch
@@ -79,7 +80,7 @@ test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   const report = buildDiagnostics(input({
     desired: { serverMode: "executes" },
     probe: { ok: true, stdout: `${healthyProbe.replace("FILE\tmatchZy\t1", "FILE\tmatchZy\t0")}\nFILE\texecutes\t1`, stderr: "" },
-    logs: "[pre.sh] Mod bootstrap complete"
+    logs: "[pre.sh] Mod bootstrap complete\nMatchZy Coach loaded"
   }));
 
   assert.equal(report.overall, "healthy");

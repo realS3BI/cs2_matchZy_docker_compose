@@ -31,7 +31,10 @@ import {
   Save,
   Server,
   Shield,
+  Sparkles,
+  Target,
   Terminal,
+  Timer,
   Trash2,
   UploadCloud,
   UsersRound
@@ -81,6 +84,7 @@ import { Diagnostics } from "./diagnostics";
 
 const tabs = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, group: "Workspace" },
+  { id: "training", label: "Training", icon: Target, group: "Workspace" },
   { id: "server", label: "Server", icon: Server, group: "Workspace" },
   { id: "plugins", label: "Plugins", icon: Boxes, group: "Workspace" },
   { id: "access", label: "Access", icon: Shield, group: "Workspace" },
@@ -91,6 +95,34 @@ const tabs = [
   { id: "logs", label: "Logs", icon: Terminal, group: "Operations" },
   { id: "links", label: "Links", icon: Link2, group: "Resources" }
 ];
+
+const trainingTracks = [
+  { id: "mechanics", name: "Mechanics", mode: "warmup", map: "de_mirage", duration: 20, promise: "Cleaner first bullets and faster corrections", steps: ["5 min: stationary taps. Reset the crosshair after every kill.", "10 min: strafe, stop, then fire. A moving shot does not count.", "5 min: short bursts only. Stop when the spray leaves the head line."], check: "Could you stop fully before the shot when the pace increased?" },
+  { id: "utility", name: "Utility", mode: "nades", map: "de_mirage", duration: 20, promise: "Lineups you can reproduce without guessing", steps: ["Pick one site and no more than three lineups.", "Land each lineup three times in a row from memory.", "Finish with one full route. Move between lineups as you would in a round."], check: "Which lineup still needed a visual hint?" },
+  { id: "decisions", name: "Decisions", mode: "executes", map: "de_mirage", duration: 25, promise: "Better positioning when the round gets messy", steps: ["Play the first five rounds for survival, not highlight kills.", "Before every peek, name the teammate who can trade you.", "After each death, write one cause: timing, position, aim or information."], check: "What caused most deaths today?" }
+];
+
+function coachMetrics(session, focus) {
+  if (!session) return [];
+  if (focus === "utility") return [
+    ["Grenades", String(session.grenadesThrown)],
+    ["Utility damage", String(session.utilityDamage)],
+    ["Enemy flash time", `${session.enemyFlashSeconds.toFixed(1)}s`],
+    ["Team flash time", `${session.teamFlashSeconds.toFixed(1)}s`]
+  ];
+  if (focus === "decisions") return [
+    ["Opening duels", `${session.openingKills}W / ${session.openingDeaths}L`],
+    ["Trade kills", String(session.tradeKills)],
+    ["Deaths traded", `${session.deathsTraded} / ${session.deaths}`],
+    ["Avg. TTK", session.averageTimeToKillMs == null ? "—" : `${session.averageTimeToKillMs} ms`]
+  ];
+  return [
+    ["Measured accuracy", `${Math.round(session.shotAccuracy * 100)}%`],
+    ["Moving shots", `${Math.round(session.movingShotRate * 100)}%`],
+    ["Headshot rate", `${Math.round(session.headshotRate * 100)}%`],
+    ["Average burst", `${session.averageBurstLength.toFixed(1)} shots`]
+  ];
+}
 
 function Message({ message = "", error = "" }: { message?: string; error?: string }) {
   if (!message && !error) return null;
@@ -605,6 +637,118 @@ function Plugins({ settings, setSettings, policy }) {
           })}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+function Training({ settings, sessions, busy, onStart, onRefresh }) {
+  const [trackId, setTrackId] = useState("mechanics");
+  const [secondsLeft, setSecondsLeft] = useState(trainingTracks[0].duration * 60);
+  const [running, setRunning] = useState(false);
+  const [completed, setCompleted] = useState([]);
+  const [steamId, setSteamId] = useState("");
+  const track = trainingTracks.find((item) => item.id === trackId) || trainingTracks[0];
+  const players: any[] = [...new Map<string, any>((sessions || []).map((session) => [session.steamId, { steamId: session.steamId, name: session.playerName }])).values()];
+  const visibleSessions = (sessions || []).filter((session) => !steamId || session.steamId === steamId);
+  const focusSessions = visibleSessions.filter((session) => session.focus === track.id);
+  const latest = focusSessions[0];
+  const previous = focusSessions[1];
+  const metrics = coachMetrics(latest, track.id);
+  const previousMetrics = coachMetrics(previous, track.id);
+
+  useEffect(() => {
+    setSecondsLeft(track.duration * 60);
+    setRunning(false);
+    setCompleted([]);
+  }, [track.id]);
+
+  useEffect(() => {
+    if (!running || secondsLeft <= 0) return undefined;
+    const timer = window.setInterval(() => setSecondsLeft((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [running, secondsLeft]);
+
+  useEffect(() => { if (secondsLeft === 0) setRunning(false); }, [secondsLeft]);
+
+  const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
+  const seconds = String(secondsLeft % 60).padStart(2, "0");
+  const prepared = settings.serverMode === track.mode && (track.mode === "warmup" || settings.startMap === track.map);
+
+  return (
+    <>
+      <PageHeader eyebrow="Deliberate practice" title="Training lab" description="Choose one weakness, run a short session and leave with one useful note." />
+      <div className="training-layout">
+        <Card className="training-board">
+          <CardHeader className="border-b border-border">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <Badge variant="outline"><Sparkles data-icon="inline-start" /> One focus per session</Badge>
+                <CardTitle className="control-title mt-3 text-2xl">What are you training today?</CardTitle>
+              </div>
+              <div className="training-clock" aria-live="polite"><Timer aria-hidden="true" /><span>{minutes}:{seconds}</span></div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-6 pt-6">
+            <RadioGroup className="md:grid-cols-3" value={trackId} onValueChange={setTrackId}>
+              {trainingTracks.map((item) => (
+                <label key={item.id} className={cn("mode-choice", trackId === item.id && "mode-choice-active")}>
+                  <span className="flex items-center justify-between"><strong>{item.name}</strong><RadioGroupItem value={item.id} aria-label={item.name} /></span>
+                  <span className="text-sm leading-relaxed text-muted-foreground">{item.promise}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{item.duration} minutes</span>
+                </label>
+              ))}
+            </RadioGroup>
+            <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
+              <div className="grid gap-3">
+                {track.steps.map((step, index) => (
+                  <label key={step} className={cn("training-step", completed.includes(index) && "training-step-done")}>
+                    <Checkbox checked={completed.includes(index)} onCheckedChange={(checked) => setCompleted((current) => checked ? [...new Set([...current, index])] : current.filter((item) => item !== index))} />
+                    <span><span className="training-step-number">{String(index + 1).padStart(2, "0")}</span>{step}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="grid content-start gap-3 rounded-lg border border-border bg-muted/25 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Server setup</p>
+                <p className="text-sm"><strong>{track.mode === "warmup" ? "Aim Botz" : track.mode === "nades" ? "MatchZy practice" : "Executes"}</strong><br /><span className="text-muted-foreground">{track.mode === "warmup" ? "Workshop map" : track.map}</span></p>
+                <Button disabled={busy} onClick={() => onStart(track)}>{prepared ? <><RotateCcw data-icon="inline-start" /> Restart training</> : <><Play data-icon="inline-start" /> Prepare & restart</>}</Button>
+                <p className="text-xs leading-relaxed text-muted-foreground">Preparing disconnects current players and applies all saved panel settings.</p>
+              </div>
+            </div>
+            <Separator />
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-2 rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">1 · Start tracking</p><CopyCommand value={`!coach start ${track.id}`} label="Copy command" /></div>
+              <div className="grid gap-2 rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">2 · Save a thought</p><CopyCommand value="!coach note " label="Copy command" /></div>
+              <div className="grid gap-2 rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">3 · Finish & report</p><CopyCommand value="!coach stop" label="Copy command" /></div>
+            </div>
+            <Alert><AlertTitle>{track.check}</AlertTitle><AlertDescription>Write the answer during the session with <span className="font-mono">!coach note &lt;text&gt;</span>. The plugin stores up to eight notes beside the measured report.</AlertDescription></Alert>
+          </CardContent>
+          <CardFooter className="flex-wrap justify-between gap-3 border-t border-border">
+            <Button variant="secondary" onClick={() => setRunning((current) => !current)}>{running ? <><Pause data-icon="inline-start" /> Pause timer</> : <><Timer data-icon="inline-start" /> {secondsLeft < track.duration * 60 ? "Continue timer" : "Start timer"}</>}</Button>
+            <Button variant="secondary" disabled={busy} onClick={onRefresh}><RefreshCw data-icon="inline-start" /> Refresh reports</Button>
+          </CardFooter>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Coach reports</CardTitle><CardDescription>Sessions recorded by the game server and stored in MongoDB.</CardDescription></CardHeader>
+          <CardContent className="grid gap-5">
+            {players.length > 1 ? <Field><FieldLabel>Player</FieldLabel><NativeSelect value={steamId} onChange={(event) => setSteamId(event.target.value)}><option value="">All players</option>{players.map((player) => <option key={player.steamId} value={player.steamId}>{player.name}</option>)}</NativeSelect></Field> : null}
+            {!latest ? <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No server report yet. Start a session in CS2, play, then run <span className="font-mono">!coach stop</span>.</p> : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {metrics.map(([label, value], index) => <div className="coach-metric" key={label}><span>{label}</span><strong>{value}</strong>{previousMetrics[index] ? <small>Previous: {previousMetrics[index][1]}</small> : null}</div>)}
+                </div>
+                <div className="grid gap-2">
+                  {(latest.feedback || []).map((item) => <Alert key={item.code} variant={item.code === "baseline" ? "default" : "warning"}><AlertTitle>{item.title}</AlertTitle><AlertDescription>{item.detail}</AlertDescription></Alert>)}
+                </div>
+                {(latest.notes || []).length ? <div><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your notes</p><ul className="grid gap-1 text-sm text-muted-foreground">{latest.notes.map((note, index) => <li key={`${note}-${index}`}>• {note}</li>)}</ul></div> : null}
+                <Separator />
+                <div className="grid gap-0">
+                  {visibleSessions.slice(0, 8).map((session) => <div key={session.id} className="grid gap-1 border-b border-border py-3 last:border-0"><div className="flex items-center justify-between gap-3"><strong className="capitalize text-sm">{session.focus}</strong><span className="font-mono text-[11px] text-muted-foreground">{new Date(session.endedAt).toLocaleDateString()}</span></div><p className="text-xs text-muted-foreground">{session.map} · {session.kills}K/{session.deaths}D · {Math.round(session.durationSeconds / 60)} min</p></div>)}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </>
   );
 }
@@ -1850,6 +1994,7 @@ function App() {
   const [settings, setSettings] = useState({});
   const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
+  const [coachSessions, setCoachSessions] = useState([]);
   const [flagPresets, setFlagPresets] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
@@ -1861,11 +2006,12 @@ function App() {
   const [operation, setOperation] = useState(null);
 
   async function loadAll() {
-    const control = await api("/api/control");
+    const [control, coach] = await Promise.all([api("/api/control"), api("/api/coach/sessions")]);
     setAuthenticated(true);
     setSettings(control.settings || {});
     setAdmins(control.admins || []);
     setNades(control.nades || []);
+    setCoachSessions(coach.sessions || []);
     setFlagPresets(control.flagPresets || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
@@ -1970,6 +2116,19 @@ function App() {
             return { message: "Refreshed." };
           })}
           onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
+        />
+      ) : null}
+      {tab === "training" ? (
+        <Training
+          settings={settings}
+          sessions={coachSessions}
+          busy={busy}
+          onStart={(track) => {
+            const nextSettings = { ...settings, serverMode: track.mode, ...(track.mode === "warmup" ? {} : { startMap: track.map }) };
+            setSettings(nextSettings);
+            return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings: nextSettings, admins }) }), "apply");
+          }}
+          onRefresh={() => runAction(async () => ({ message: "Coach reports refreshed." }))}
         />
       ) : null}
       {tab === "diagnostics" ? (

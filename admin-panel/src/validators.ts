@@ -205,6 +205,50 @@ export function sanitizeNades(entries) {
   });
 }
 
+function finiteNumber(value, fieldName, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) {
+    throw new Error(`${fieldName} must be a number between ${minimum} and ${maximum}`);
+  }
+  return number;
+}
+
+export function sanitizeCoachSession(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Coach session must be an object");
+  if (entry.schemaVersion !== 1) throw new Error("Coach session schema version is unsupported");
+  const id = String(entry.id || "").trim();
+  const steamId = String(entry.steamId || "").trim();
+  const playerName = String(entry.playerName || "").trim().slice(0, 128);
+  const focus = String(entry.focus || "").toLowerCase();
+  const map = String(entry.map || "").trim().slice(0, 128);
+  const startedAt = new Date(String(entry.startedAt || ""));
+  const endedAt = new Date(String(entry.endedAt || ""));
+  if (!/^[a-f0-9]{32}$/i.test(id)) throw new Error("Coach session ID is invalid");
+  if (!STEAM64_RE.test(steamId)) throw new Error("Coach session Steam64 ID is invalid");
+  if (!playerName || !map) throw new Error("Coach session player and map are required");
+  if (!new Set(["mechanics", "utility", "decisions", "match"]).has(focus)) throw new Error("Coach session focus is invalid");
+  if (Number.isNaN(startedAt.valueOf()) || Number.isNaN(endedAt.valueOf()) || endedAt < startedAt) throw new Error("Coach session timestamps are invalid");
+
+  const integers = ["durationSeconds", "rounds", "shots", "shotsHit", "shotsWhileMoving", "burstCount", "longBursts", "kills", "firearmKills", "headshots", "deaths", "damage", "openingKills", "openingDeaths", "tradeKills", "deathsTraded", "grenadesThrown", "utilityDamage", "enemiesFlashed", "teammatesFlashed", "timeToKillSamples"];
+  const output: any = { schemaVersion: 1, id, steamId, playerName, focus, map, startedAt, endedAt, endReason: String(entry.endReason || "unknown").slice(0, 64) };
+  for (const key of integers) output[key] = Math.round(finiteNumber(entry[key], key, 0, 10_000_000));
+  if (output.shotsHit > output.shots || output.shotsWhileMoving > output.shots) throw new Error("Coach session shot counts are inconsistent");
+  if (output.firearmKills > output.kills || output.headshots > output.firearmKills) throw new Error("Coach session kill counts are inconsistent");
+  if (output.deathsTraded > output.deaths) throw new Error("Coach session trade counts are inconsistent");
+  for (const key of ["shotAccuracy", "movingShotRate", "headshotRate"]) output[key] = finiteNumber(entry[key], key, 0, 1);
+  output.averageBurstLength = finiteNumber(entry.averageBurstLength, "averageBurstLength", 0, 1000);
+  output.enemyFlashSeconds = finiteNumber(entry.enemyFlashSeconds, "enemyFlashSeconds", 0, 100_000);
+  output.teamFlashSeconds = finiteNumber(entry.teamFlashSeconds, "teamFlashSeconds", 0, 100_000);
+  output.averageTimeToKillMs = entry.averageTimeToKillMs === null || entry.averageTimeToKillMs === undefined ? null : Math.round(finiteNumber(entry.averageTimeToKillMs, "averageTimeToKillMs", 0, 10_000));
+  output.notes = (Array.isArray(entry.notes) ? entry.notes : []).slice(0, 8).map((note) => String(note).trim().slice(0, 240)).filter(Boolean);
+  output.feedback = (Array.isArray(entry.feedback) ? entry.feedback : []).slice(0, 3).map((item) => ({
+    code: String(item?.code || "").slice(0, 64),
+    title: String(item?.title || "").slice(0, 160),
+    detail: String(item?.detail || "").slice(0, 800)
+  })).filter((item) => item.code && item.title && item.detail);
+  return output;
+}
+
 export function nadesToMatchZySavedNadesConfig(entries) {
   const config = {};
   for (const entry of sanitizeNades(entries)) {

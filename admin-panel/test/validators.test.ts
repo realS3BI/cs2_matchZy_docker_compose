@@ -7,12 +7,74 @@ import {
   nadesToMatchZySavedNadesConfig,
   sanitizeAdmins,
   sanitizeSettings,
-  sanitizeNades
+  sanitizeNades,
+  sanitizeCoachSession
 } from "../src/validators.js";
+
+function coachSession(patch = {}) {
+  return {
+    schemaVersion: 1,
+    id: "0123456789abcdef0123456789abcdef",
+    steamId: "76561198000000001",
+    playerName: "Player",
+    focus: "mechanics",
+    map: "de_mirage",
+    startedAt: "2026-09-06T10:00:00.000Z",
+    endedAt: "2026-09-06T10:20:00.000Z",
+    durationSeconds: 1200,
+    rounds: 5,
+    shots: 100,
+    shotsHit: 40,
+    shotAccuracy: 0.4,
+    shotsWhileMoving: 10,
+    movingShotRate: 0.1,
+    burstCount: 30,
+    averageBurstLength: 3.3,
+    longBursts: 1,
+    kills: 20,
+    firearmKills: 18,
+    headshots: 12,
+    headshotRate: 0.6,
+    deaths: 5,
+    damage: 2100,
+    openingKills: 3,
+    openingDeaths: 1,
+    tradeKills: 2,
+    deathsTraded: 2,
+    grenadesThrown: 4,
+    utilityDamage: 80,
+    enemiesFlashed: 3,
+    enemyFlashSeconds: 5.4,
+    teammatesFlashed: 0,
+    teamFlashSeconds: 0,
+    timeToKillSamples: 12,
+    averageTimeToKillMs: 410,
+    endReason: "player_finished",
+    notes: ["lost the wide swing"],
+    feedback: [{ code: "movement", title: "Stop first", detail: "Moving shots were high." }],
+    ...patch
+  };
+}
 
 test("sanitizeSettings rejects fields outside the application schema", () => {
   assert.throws(() => sanitizeSettings(undefined), /must be an object/);
   assert.throws(() => sanitizeSettings({ unknownSetting: "value" }), /Unknown setting/);
+});
+
+test("sanitizeCoachSession keeps the plugin contract and strips unknown fields", () => {
+  const result: any = sanitizeCoachSession(coachSession({ injected: { $set: { admin: true } } }));
+  assert.equal(result.id, "0123456789abcdef0123456789abcdef");
+  assert.equal(result.shotAccuracy, 0.4);
+  assert.deepEqual(result.notes, ["lost the wide swing"]);
+  assert.equal(result.injected, undefined);
+  assert.ok(result.endedAt instanceof Date);
+});
+
+test("sanitizeCoachSession rejects impossible telemetry", () => {
+  assert.throws(() => sanitizeCoachSession(coachSession({ shotAccuracy: 1.2 })), /shotAccuracy/);
+  assert.throws(() => sanitizeCoachSession(coachSession({ steamId: "bot" })), /Steam64/);
+  assert.throws(() => sanitizeCoachSession(coachSession({ endedAt: "2026-09-06T09:00:00.000Z" })), /timestamps/);
+  assert.throws(() => sanitizeCoachSession(coachSession({ shots: 10, shotsHit: 11 })), /shot counts/);
 });
 
 test("sanitizeAdmins validates steam ids and defaults flags", () => {

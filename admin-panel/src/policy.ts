@@ -249,6 +249,7 @@ export function normalizeSettings(input): ServerSettings {
 const PLUGINS: any[] = [
   { id: "metamod", name: "Metamod", detail: "Native plugin loader", url: "https://www.metamodsource.net/", locked: true, enabled: true, dependencies: [] },
   { id: "counterstrikesharp", name: "CounterStrikeSharp", detail: "Admin and managed plugin framework", url: "https://docs.cssharp.dev/", locked: true, enabled: true, dependencies: ["Metamod"] },
+  { id: "matchzy-coach", name: "MatchZy Coach", detail: "Records personal training sessions and writes evidence-based feedback", url: "https://github.com/realS3BI/cs2_matchZy_docker_compose", locked: true, enabled: true, dependencies: ["CounterStrikeSharp"] },
   { id: "fake-rcon", name: "Fake RCON", detail: "In-game RCON bridge", url: "https://github.com/Salvatore-Als/cs2-fake-rcon", settingKey: "fakeRconEnabled", dependencies: ["Metamod"] },
   { id: "simpleadmin", name: "SimpleAdmin", detail: "Additional moderation commands", url: "https://github.com/daffyyyy/CS2-SimpleAdmin", settingKey: "simpleAdminEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager"], warning: "Configure its database or SQLite settings after the first start." },
   { id: "weaponpaints", name: "WeaponPaints", detail: "Cosmetic weapon inventory", url: "https://github.com/Nereziel/cs2-WeaponPaints", settingKey: "weaponPaintsEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager", "MySQL"], warning: "Experimental plugin. It disables CounterStrikeSharp's server-guideline guard and may put the GSLT at risk." },
@@ -268,7 +269,7 @@ export function buildControlModel(input) {
   }))];
   return {
     mode, modes: GAME_MODES, plugins, settingsGroups: SETTINGS_GROUPS, adminRoles: ADMIN_ROLES,
-    rules: ["MatchZy-based modes and Executes are mutually exclusive.", "Nades starts MatchZy practice mode automatically.", "Warmup starts Aim Botz as a dedicated Workshop map.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
+    rules: ["MatchZy-based modes and Executes are mutually exclusive.", "Nades starts MatchZy practice mode automatically.", "Warmup starts Aim Botz as a dedicated Workshop map.", "MatchZy Coach records opt-in sessions in every game mode.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
   };
 }
 

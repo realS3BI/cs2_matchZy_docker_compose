@@ -98,6 +98,10 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         : "fail";
   const metamodReady = Boolean(files.metamod && files.gameinfoMetamod);
   const cssReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
+  const coachInstalled = Boolean(files.matchZyCoach);
+  const coachLoaded = lastIndexOfAny(normalizedLogs, ["matchzy coach loaded", "finished loading plugin matchzycoach"]);
+  const coachFailed = lastIndexOfAny(normalizedLogs, ["failed to load plugin matchzycoach", "could not load plugin matchzycoach", "requires a newer version of counterstrikesharp"]);
+  const coachStatus = coachFailed > coachLoaded ? "fail" : coachLoaded >= 0 ? "pass" : coachInstalled ? "warn" : "fail";
   const matchZyInstalled = Boolean(files.matchZy);
   const matchZyRuntimeStatus = matchZyFailed > matchZyLoaded
     ? "fail"
@@ -159,6 +163,16 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       "CounterStrikeSharp",
       cssReady ? "pass" : "fail",
       cssReady ? "Native loader and API assembly are present." : "Native loader or API assembly is missing."
+    ),
+    check(
+      "matchzy-coach",
+      "MatchZy Coach",
+      coachStatus,
+      coachStatus === "pass"
+        ? "The coaching plugin reported a successful load."
+        : coachStatus === "warn"
+          ? "MatchZyCoach.dll exists, but no load confirmation is present in retained logs."
+          : coachInstalled ? "CounterStrikeSharp rejected MatchZy Coach during startup." : "MatchZyCoach.dll is missing. Rebuild the CS2 image."
     ),
     modeCheck
   ];

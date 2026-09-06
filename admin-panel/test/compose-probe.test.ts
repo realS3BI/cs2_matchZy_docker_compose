@@ -17,8 +17,10 @@ test("diagnostic probe recognizes the Metamod CS2 linux runtime", async (t) => {
   t.after(() => rm(fixture, { recursive: true, force: true }));
 
   await mkdir(join(root, "addons", "metamod", "bin", "linuxsteamrt64"), { recursive: true });
+  await mkdir(join(root, "addons", "counterstrikesharp", "plugins", "MatchZyCoach"), { recursive: true });
   await writeFile(join(root, "addons", "metamod", "bin", "linuxsteamrt64", "libserver.so"), "fixture");
   await writeFile(join(root, "gameinfo.gi"), "SearchPaths\n{\n  Game csgo/addons/metamod\n}\n");
+  await writeFile(join(root, "addons", "counterstrikesharp", "plugins", "MatchZyCoach", "MatchZyCoach.dll"), "fixture");
   await writeFile(preHook, "fixture");
 
   const { stdout } = await execFileAsync("sh", ["-lc", buildDiagnosticProbe({
@@ -30,4 +32,5 @@ test("diagnostic probe recognizes the Metamod CS2 linux runtime", async (t) => {
 
   assert.equal(files.metamod, true);
   assert.equal(files.gameinfoMetamod, true);
+  assert.equal(files.matchZyCoach, true);
 });
