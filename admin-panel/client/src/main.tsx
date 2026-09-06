@@ -18,6 +18,7 @@ import {
   FileJson,
   Globe2,
   LayoutDashboard,
+  Link2,
   LockKeyhole,
   LogOut,
   MapPinned,
@@ -87,7 +88,8 @@ const tabs = [
   { id: "maps", label: "Maps", icon: MapPinned, group: "Operations" },
   { id: "nades", label: "Nades", icon: Crosshair, group: "Operations" },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, group: "Operations" },
-  { id: "logs", label: "Logs", icon: Terminal, group: "Operations" }
+  { id: "logs", label: "Logs", icon: Terminal, group: "Operations" },
+  { id: "links", label: "Links", icon: Link2, group: "Resources" }
 ];
 
 function Message({ message = "", error = "" }: { message?: string; error?: string }) {
@@ -244,7 +246,7 @@ function Login({ error, onLogin }) {
 
 function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
-  const tabGroups = ["Workspace", "Operations"];
+  const tabGroups = ["Workspace", "Operations", "Resources"];
 
   return (
     <div className="control-shell">
@@ -494,6 +496,76 @@ function SettingField({ field, value, onChange }) {
       <Control placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)} />
       {field.description ? <FieldDescription>{field.description}</FieldDescription> : null}
     </Field>
+  );
+}
+
+const usefulLinks = [
+  {
+    title: "MatchZy documentation",
+    description: "Setup, configuration, match commands and API reference.",
+    href: "https://shobhit-pathak.github.io/MatchZy/",
+    category: "Documentation"
+  },
+  {
+    title: "MatchZy on GitHub",
+    description: "Source code, releases and issue tracker for the match plugin.",
+    href: "https://github.com/shobhit-pathak/MatchZy",
+    category: "Game mode"
+  },
+  {
+    title: "CS2 Executes",
+    description: "Source code, releases and configuration for Executes scenarios.",
+    href: "https://github.com/zwolof/cs2-executes",
+    category: "Game mode"
+  },
+  {
+    title: "Fortnite Emotes & Dances",
+    description: "Source code, commands and releases for the optional emote plugin.",
+    href: "https://github.com/Cruze03/FortniteEmotesNDances",
+    category: "Plugin"
+  },
+  {
+    title: "CounterStrikeSharp documentation",
+    description: "Framework installation, configuration and API documentation.",
+    href: "https://docs.cssharp.dev/",
+    category: "Framework"
+  }
+];
+
+function Links() {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Reference shelf"
+        title="Links"
+        description="Documentation, repositories and release pages used to run this server."
+      />
+      <div className="grid gap-3 md:grid-cols-2">
+        {usefulLinks.map((link) => {
+          const hostname = new URL(link.href).hostname;
+          return (
+            <a
+              key={link.href}
+              className="resource-link group"
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="resource-link-icon"><ExternalLink aria-hidden="true" /></span>
+              <span className="min-w-0">
+                <span className="mb-2 flex flex-wrap items-center gap-2">
+                  <strong className="text-sm font-semibold text-foreground">{link.title}</strong>
+                  <Badge variant="outline">{link.category}</Badge>
+                </span>
+                <span className="block text-sm leading-relaxed text-muted-foreground">{link.description}</span>
+                <span className="mt-3 block truncate font-mono text-[11px] text-muted-foreground">{hostname}</span>
+              </span>
+              <ChevronRight className="resource-link-arrow" aria-hidden="true" />
+            </a>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -1956,6 +2028,7 @@ function App() {
         />
       ) : null}
       {tab === "logs" ? <DockerLogs active={tab === "logs"} /> : null}
+      {tab === "links" ? <Links /> : null}
       <OperationDialog operation={operation} />
     </Shell>
   );

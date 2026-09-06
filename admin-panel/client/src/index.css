@@ -171,6 +171,66 @@ button:not(:disabled),
   box-shadow: inset 2px 0 0 var(--primary);
 }
 
+.resource-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  min-height: 9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  color: var(--foreground);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(17 24 39 / 4%);
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.resource-link:hover {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  box-shadow: 0 8px 24px rgb(17 24 39 / 8%);
+  transform: translateY(-1px);
+}
+
+.resource-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.resource-link-icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, var(--card));
+}
+
+.resource-link-icon svg,
+.resource-link-arrow {
+  width: 1rem;
+  height: 1rem;
+}
+
+.resource-link-arrow {
+  margin-top: 0.6rem;
+  color: var(--muted-foreground);
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.resource-link:hover .resource-link-arrow {
+  color: var(--primary);
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resource-link,
+  .resource-link-arrow {
+    transition: none;
+  }
+}
+
 .control-topbar {
   border-bottom: 1px solid var(--border);
   background: rgb(255 255 255 / 88%);
