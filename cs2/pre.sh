@@ -1220,7 +1220,7 @@ _matchzy_bootstrap_main() (
   fi
 
   if is_enabled "$weapon_paints_enabled"; then
-    if [[ "$repair_mods" == "1" || "$INSTALLED_WEAPONPAINTS_TAG" != "$WEAPONPAINTS_TAG" || ! -f "$weaponpaints_marker" ]]; then
+    if [[ "$repair_mods" == "1" || "$INSTALLED_WEAPONPAINTS_TAG" != "$WEAPONPAINTS_TAG" || ! -f "$weaponpaints_marker" || ! -f "$weaponpaints_gamedata_src" ]]; then
       log "Installing or updating WeaponPaints"
       install_archive_component "weaponpaints" "$WEAPONPAINTS_URL" "$CSS_DIR/plugins" "$weaponpaints_marker"
     else

@@ -247,13 +247,13 @@ export function normalizeSettings(input): ServerSettings {
 }
 
 const PLUGINS: any[] = [
-  { id: "metamod", name: "Metamod", detail: "Native plugin loader", locked: true, enabled: true, dependencies: [] },
-  { id: "counterstrikesharp", name: "CounterStrikeSharp", detail: "Admin and managed plugin framework", locked: true, enabled: true, dependencies: ["Metamod"] },
-  { id: "fake-rcon", name: "Fake RCON", detail: "In-game RCON bridge", settingKey: "fakeRconEnabled", dependencies: ["Metamod"] },
-  { id: "simpleadmin", name: "SimpleAdmin", detail: "Additional moderation commands", settingKey: "simpleAdminEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager"], warning: "Configure its database or SQLite settings after the first start." },
-  { id: "weaponpaints", name: "WeaponPaints", detail: "Cosmetic weapon inventory", settingKey: "weaponPaintsEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager", "MySQL"], warning: "Experimental plugin. It disables CounterStrikeSharp's server-guideline guard and may put the GSLT at risk." },
-  { id: "fortnite-emotes", name: "Fortnite Emotes", detail: "Emote and dance commands", settingKey: "fortniteEmotesEnabled", dependencies: ["CounterStrikeSharp", "MultiAddonManager", "RayTrace", "Workshop addon"] },
-  { id: "workshop-maps", name: "Workshop maps", detail: "Mount configured Workshop map addons", settingKey: "workshopMapsEnabled", dependencies: ["MultiAddonManager"] }
+  { id: "metamod", name: "Metamod", detail: "Native plugin loader", url: "https://www.metamodsource.net/", locked: true, enabled: true, dependencies: [] },
+  { id: "counterstrikesharp", name: "CounterStrikeSharp", detail: "Admin and managed plugin framework", url: "https://docs.cssharp.dev/", locked: true, enabled: true, dependencies: ["Metamod"] },
+  { id: "fake-rcon", name: "Fake RCON", detail: "In-game RCON bridge", url: "https://github.com/Salvatore-Als/cs2-fake-rcon", settingKey: "fakeRconEnabled", dependencies: ["Metamod"] },
+  { id: "simpleadmin", name: "SimpleAdmin", detail: "Additional moderation commands", url: "https://github.com/daffyyyy/CS2-SimpleAdmin", settingKey: "simpleAdminEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager"], warning: "Configure its database or SQLite settings after the first start." },
+  { id: "weaponpaints", name: "WeaponPaints", detail: "Cosmetic weapon inventory", url: "https://github.com/Nereziel/cs2-WeaponPaints", settingKey: "weaponPaintsEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager", "MySQL"], warning: "Experimental plugin. It disables CounterStrikeSharp's server-guideline guard and may put the GSLT at risk." },
+  { id: "fortnite-emotes", name: "Fortnite Emotes", detail: "Emote and dance commands", url: "https://github.com/Cruze03/FortniteEmotesNDances", settingKey: "fortniteEmotesEnabled", dependencies: ["CounterStrikeSharp", "MultiAddonManager", "RayTrace", "Workshop addon"] },
+  { id: "workshop-maps", name: "Workshop maps", detail: "Mount configured Workshop map addons", url: "https://steamcommunity.com/app/730/workshop/", settingKey: "workshopMapsEnabled", dependencies: ["MultiAddonManager"] }
 ];
 
 export function buildControlModel(input) {

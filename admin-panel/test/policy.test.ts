@@ -50,6 +50,14 @@ test("control model reports installed dependency chains", () => {
   assert.match(weaponPaints.warning, /GSLT/);
 });
 
+test("every plugin stack entry links to project documentation", () => {
+  const model: any = buildControlModel({ serverMode: "vanilla" });
+  assert.ok(model.plugins.length > 0);
+  for (const plugin of model.plugins) {
+    assert.match(plugin.url, /^https:\/\//, `${plugin.name} needs a documentation URL`);
+  }
+});
+
 test("save validation rejects invalid mode and maintenance settings", () => {
   assert.throws(() => validateSettings({ serverMode: "both" }), /Server mode/);
   assert.throws(() => validateSettings({ restartTime: "25:00" }), /HH:mm/);

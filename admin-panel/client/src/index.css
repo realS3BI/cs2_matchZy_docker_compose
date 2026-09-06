@@ -330,6 +330,35 @@ button:not(:disabled),
   color: var(--primary);
 }
 
+.plugin-reference-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 140ms ease;
+}
+
+.plugin-reference-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.plugin-reference-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid color-mix(in srgb, var(--ring) 45%, transparent);
+  outline-offset: 3px;
+}
+
+.plugin-reference-link svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
 .lifecycle-rail {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
