@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   ArrowLeftRight,
@@ -82,19 +83,41 @@ import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
 import { Diagnostics } from "./diagnostics";
 
+const routePaths = {
+  login: "/login",
+  overview: "/overview",
+  training: "/training",
+  server: "/server",
+  plugins: "/plugins",
+  access: "/access",
+  maintenance: "/maintenance",
+  maps: "/maps",
+  nades: "/nades",
+  diagnostics: "/diagnostics",
+  logs: "/logs",
+  links: "/links"
+};
+
 const tabs = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard, group: "Workspace" },
-  { id: "training", label: "Training", icon: Target, group: "Workspace" },
-  { id: "server", label: "Server", icon: Server, group: "Workspace" },
-  { id: "plugins", label: "Plugins", icon: Boxes, group: "Workspace" },
-  { id: "access", label: "Access", icon: Shield, group: "Workspace" },
-  { id: "maintenance", label: "Maintenance", icon: CalendarClock, group: "Operations" },
-  { id: "maps", label: "Maps", icon: MapPinned, group: "Operations" },
-  { id: "nades", label: "Nades", icon: Crosshair, group: "Operations" },
-  { id: "diagnostics", label: "Diagnostics", icon: Activity, group: "Operations" },
-  { id: "logs", label: "Logs", icon: Terminal, group: "Operations" },
-  { id: "links", label: "Links", icon: Link2, group: "Resources" }
+  { id: "overview", path: routePaths.overview, label: "Overview", icon: LayoutDashboard, group: "Workspace" },
+  { id: "training", path: routePaths.training, label: "Training", icon: Target, group: "Workspace" },
+  { id: "server", path: routePaths.server, label: "Server", icon: Server, group: "Workspace" },
+  { id: "plugins", path: routePaths.plugins, label: "Plugins", icon: Boxes, group: "Workspace" },
+  { id: "access", path: routePaths.access, label: "Access", icon: Shield, group: "Workspace" },
+  { id: "maintenance", path: routePaths.maintenance, label: "Maintenance", icon: CalendarClock, group: "Operations" },
+  { id: "maps", path: routePaths.maps, label: "Maps", icon: MapPinned, group: "Operations" },
+  { id: "nades", path: routePaths.nades, label: "Nades", icon: Crosshair, group: "Operations" },
+  { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnostics", icon: Activity, group: "Operations" },
+  { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Operations" },
+  { id: "links", path: routePaths.links, label: "Links", icon: Link2, group: "Resources" }
 ];
+
+const defaultRoute = routePaths.overview;
+
+function routeFromLoginSearch(search) {
+  const requestedRoute = new URLSearchParams(search).get("redirect");
+  return tabs.some((item) => item.path === requestedRoute) ? requestedRoute : defaultRoute;
+}
 
 const trainingTracks = [
   { id: "mechanics", name: "Mechanics", mode: "warmup", map: "de_mirage", duration: 20, promise: "Cleaner first bullets and faster corrections", steps: ["5 min: stationary taps. Reset the crosshair after every kill.", "10 min: strafe, stop, then fire. A moving shot does not count.", "5 min: short bursts only. Stop when the spray leaves the head line."], check: "Could you stop fully before the shot when the pace increased?" },
@@ -276,7 +299,7 @@ function Login({ error, onLogin }) {
   );
 }
 
-function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
+function Shell({ children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
   const tabGroups = ["Workspace", "Operations", "Resources"];
 
@@ -302,11 +325,20 @@ function Shell({ children, tab, setTab, message, error, onLogout, dirty, busy, o
               {tabs.filter((item) => item.group === group).map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button key={item.id} type="button" className={cn("control-nav-item", tab === item.id && "control-nav-item-active")} onClick={() => setTab(item.id)}>
+                  <NavLink
+                    key={item.id}
+                    to={item.path}
+                    end
+                    className={({ isActive }) => cn("control-nav-item", isActive && "control-nav-item-active")}
+                    onClick={(event) => {
+                      onNavigate();
+                      if (item.id === tab) event.preventDefault();
+                    }}
+                  >
                     <Icon aria-hidden="true" />
                     <span>{item.label}</span>
                     <ChevronRight className="ml-auto hidden lg:block" aria-hidden="true" />
-                  </button>
+                  </NavLink>
                 );
               })}
             </div>
@@ -1989,8 +2021,9 @@ function DockerLogs({ active }) {
 }
 
 function App() {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [tab, setTab] = useState("overview");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [authenticated, setAuthenticated] = useState(null);
   const [settings, setSettings] = useState({});
   const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
@@ -2045,6 +2078,20 @@ function App() {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
 
+  const activeTab = tabs.find((item) => item.path === location.pathname) || tabs[0];
+
+  useEffect(() => {
+    document.title = authenticated === false
+      ? "Sign in | MatchZy Control"
+      : `${activeTab.label} | MatchZy Control`;
+  }, [activeTab.label, authenticated]);
+
+  useEffect(() => {
+    setMessage("");
+    setError("");
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
   const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings, admins });
   const nadesDirty = savedNadesSignature !== "" && savedNadesSignature !== JSON.stringify(nades);
 
@@ -2062,7 +2109,20 @@ function App() {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [dirty, nadesDirty]);
 
+  if (authenticated === null) {
+    return (
+      <main className="grid min-h-screen place-items-center" aria-label="Loading control room">
+        <Spinner className="size-6" />
+      </main>
+    );
+  }
+
   if (!authenticated) {
+    if (location.pathname !== routePaths.login) {
+      const requestedRoute = tabs.some((item) => item.path === location.pathname) ? location.pathname : defaultRoute;
+      return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
+    }
+
     return (
       <Login
         error={error}
@@ -2071,6 +2131,7 @@ function App() {
             await api("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
             setError("");
             await loadAll();
+            navigate(routeFromLoginSearch(location.search), { replace: true });
           } catch (loginError) {
             setError(loginError.message);
           }
@@ -2081,11 +2142,10 @@ function App() {
 
   return (
     <Shell
-      tab={tab}
-      setTab={(nextTab) => {
+      tab={activeTab.id}
+      onNavigate={() => {
         setMessage("");
         setError("");
-        setTab(nextTab);
       }}
       message={message}
       error={error}
@@ -2101,96 +2161,117 @@ function App() {
       onLogout={async () => {
         await api("/api/auth/logout", { method: "POST" });
         setAuthenticated(false);
+        navigate(routePaths.login, { replace: true });
       }}
     >
-      {tab === "overview" ? (
-        <Overview
-          settings={settings}
-          admins={admins}
-          nades={nades}
-          status={status}
-          policy={policy}
-          busy={busy}
-          onRefresh={() => runAction(async () => {
-            await loadAll();
-            return { message: "Refreshed." };
-          })}
-          onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
+      <Routes>
+        <Route path="/" element={<Navigate to={defaultRoute} replace />} />
+        <Route
+          path={routePaths.overview}
+          element={(
+            <Overview
+              settings={settings}
+              admins={admins}
+              nades={nades}
+              status={status}
+              policy={policy}
+              busy={busy}
+              onRefresh={() => runAction(async () => {
+                await loadAll();
+                return { message: "Refreshed." };
+              })}
+              onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
+            />
+          )}
         />
-      ) : null}
-      {tab === "training" ? (
-        <Training
-          settings={settings}
-          sessions={coachSessions}
-          busy={busy}
-          onStart={(track) => {
-            const nextSettings = { ...settings, serverMode: track.mode, ...(track.mode === "warmup" ? {} : { startMap: track.map }) };
-            setSettings(nextSettings);
-            return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings: nextSettings, admins }) }), "apply");
-          }}
-          onRefresh={() => runAction(async () => ({ message: "Coach reports refreshed." }))}
+        <Route
+          path={routePaths.training}
+          element={(
+            <Training
+              settings={settings}
+              sessions={coachSessions}
+              busy={busy}
+              onStart={(track) => {
+                const nextSettings = { ...settings, serverMode: track.mode, ...(track.mode === "warmup" ? {} : { startMap: track.map }) };
+                setSettings(nextSettings);
+                return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings: nextSettings, admins }) }), "apply");
+              }}
+              onRefresh={() => runAction(async () => ({ message: "Coach reports refreshed." }))}
+            />
+          )}
         />
-      ) : null}
-      {tab === "diagnostics" ? (
-        <><PageHeader eyebrow="Health trace" title="Diagnostics" description="Follow the container, installer, framework and selected game mode through one load path." /><Diagnostics active={tab === "diagnostics"} onOpenLogs={() => setTab("logs")} /></>
-      ) : null}
-      {tab === "server" ? (
-        <Settings
-          settings={settings}
-          setSettings={setSettings}
-          policy={policy}
+        <Route
+          path={routePaths.diagnostics}
+          element={(
+            <>
+              <PageHeader eyebrow="Health trace" title="Diagnostics" description="Follow the container, installer, framework and selected game mode through one load path." />
+              <Diagnostics active onOpenLogs={() => navigate(routePaths.logs)} />
+            </>
+          )}
         />
-      ) : null}
-      {tab === "plugins" ? <Plugins settings={settings} setSettings={setSettings} policy={policy} /> : null}
-      {tab === "access" ? (
-        <Admins
-          admins={admins}
-          setAdmins={setAdmins}
-          flagPresets={flagPresets}
-          roles={policy?.adminRoles || []}
+        <Route path={routePaths.server} element={<Settings settings={settings} setSettings={setSettings} policy={policy} />} />
+        <Route path={routePaths.plugins} element={<Plugins settings={settings} setSettings={setSettings} policy={policy} />} />
+        <Route
+          path={routePaths.access}
+          element={<Admins admins={admins} setAdmins={setAdmins} flagPresets={flagPresets} roles={policy?.adminRoles || []} />}
         />
-      ) : null}
-      {tab === "maintenance" ? <Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")} /> : null}
-      {tab === "maps" ? (
-        <Maps
-          settings={settings}
-          setSettings={setSettings}
-          nades={nades}
-          setNades={setNades}
-          nadesDirty={nadesDirty}
-          busy={busy}
-          onApply={applyControl}
-          onSaveNades={() => runAction(async () => {
-            const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
-            setNades(result.entries);
-            return { message: "Nades saved." };
-          })}
+        <Route
+          path={routePaths.maintenance}
+          element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")} />}
         />
-      ) : null}
-      {tab === "nades" ? (
-        <Nades
-          settings={settings}
-          setSettings={setSettings}
-          nades={nades}
-          setNades={setNades}
-          status={status}
-          busy={busy}
-          nadesDirty={nadesDirty}
-          onApply={applyControl}
-          onRefresh={() => runAction(async () => ({ message: "Nade library refreshed." }))}
-          onReload={loadAll}
-          onSave={() => runAction(async () => {
-            const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
-            setNades(result.entries);
-            return { message: "Nades saved." };
-          })}
+        <Route
+          path={routePaths.maps}
+          element={(
+            <Maps
+              settings={settings}
+              setSettings={setSettings}
+              nades={nades}
+              setNades={setNades}
+              nadesDirty={nadesDirty}
+              busy={busy}
+              onApply={applyControl}
+              onSaveNades={() => runAction(async () => {
+                const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
+                setNades(result.entries);
+                return { message: "Nades saved." };
+              })}
+            />
+          )}
         />
-      ) : null}
-      {tab === "logs" ? <DockerLogs active={tab === "logs"} /> : null}
-      {tab === "links" ? <Links /> : null}
+        <Route
+          path={routePaths.nades}
+          element={(
+            <Nades
+              settings={settings}
+              setSettings={setSettings}
+              nades={nades}
+              setNades={setNades}
+              status={status}
+              busy={busy}
+              nadesDirty={nadesDirty}
+              onApply={applyControl}
+              onRefresh={() => runAction(async () => ({ message: "Nade library refreshed." }))}
+              onReload={loadAll}
+              onSave={() => runAction(async () => {
+                const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
+                setNades(result.entries);
+                return { message: "Nades saved." };
+              })}
+            />
+          )}
+        />
+        <Route path={routePaths.logs} element={<DockerLogs active />} />
+        <Route path={routePaths.links} element={<Links />} />
+        <Route path={routePaths.login} element={<Navigate to={routeFromLoginSearch(location.search)} replace />} />
+        <Route path="*" element={<Navigate to={defaultRoute} replace />} />
+      </Routes>
       <OperationDialog operation={operation} />
     </Shell>
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
+);
