@@ -1076,7 +1076,7 @@ _matchzy_bootstrap_main() (
       resolve_github_release_asset \
         "zwolof/cs2-executes" \
         "$executes_version" \
-        'cs2-executes-.*\.zip$' \
+        'cs2-executes-[0-9][0-9.]*\.zip$' \
         'cs2-executes'
     )
     EXECUTES_TAG="${_executes_release[0]:-}"
@@ -1135,6 +1135,7 @@ _matchzy_bootstrap_main() (
   local raytrace_marker="$ADDONS_DIR/RayTrace/bin/linuxsteamrt64/RayTrace.so"
   local fortnite_emotes_marker="$CSS_DIR/plugins/FortniteEmotesNDances/FortniteEmotesNDances.dll"
   local executes_marker="$CSS_DIR/plugins/ExecutesPlugin/ExecutesPlugin.dll"
+  local executes_map_config_marker="$CSS_DIR/plugins/ExecutesPlugin/map_config/de_mirage.json"
   local css_core_config="$CSS_DIR/configs/core.json"
   local matchzy_admins_file="$GAME_DIR/cfg/MatchZy/admins.json"
   local matchzy_config_file="$GAME_DIR/cfg/MatchZy/config.cfg"
@@ -1282,7 +1283,7 @@ _matchzy_bootstrap_main() (
   fi
 
   if is_enabled "$executes_enabled"; then
-    if [[ "$repair_mods" == "1" || "$INSTALLED_EXECUTES_TAG" != "$EXECUTES_TAG" || ! -f "$executes_marker" ]]; then
+    if [[ "$repair_mods" == "1" || "$INSTALLED_EXECUTES_TAG" != "$EXECUTES_TAG" || ! -f "$executes_marker" || ! -f "$executes_map_config_marker" ]]; then
       log "Installing or updating cs2-executes"
       install_archive_component "executes" "$EXECUTES_URL" "$CSS_DIR/plugins" "$executes_marker"
     else
