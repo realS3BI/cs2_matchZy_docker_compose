@@ -514,7 +514,7 @@ function Overview({ settings, admins, nades, status, policy, onRefresh, onRestar
       </section>
       <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. Saved draft changes are not applied by this action.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. The last saved settings will be applied; unsaved edits will not.</DialogDescription></DialogHeader>
           <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><Button variant="destructive" onClick={() => { setRestartOpen(false); onRestart(); }}><RotateCcw data-icon="inline-start" /> Restart server</Button></DialogFooter>
         </DialogContent>
       </Dialog>

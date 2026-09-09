@@ -89,7 +89,7 @@ Das Desktop-Dashboard umfasst:
 - `Diagnostics`: Startkette und One-shot-Reparatur
 - `Logs`: aktuelle CS2-Containerlogs
 
-`Save draft` speichert nur in MongoDB. `Apply & restart` validiert Steam-Token und RCON-Passwort, aktualisiert die Runtime-Dateien und startet den CS2-Container neu.
+`Save draft` speichert nur in MongoDB. `Apply & restart` validiert Steam-Token und RCON-Passwort, aktualisiert die Runtime-Dateien und startet den CS2-Container neu. Ein manueller Neustart schreibt ebenfalls zuerst den zuletzt gespeicherten Stand in die Runtime; noch ungespeicherte Browser-Aenderungen werden dabei nicht uebernommen.
 
 Das Dashboard findet den CS2-Container ueber Docker-Compose-Labels. Dafuer ist `/var/run/docker.sock` eingebunden. Dieser Zugriff ist sicherheitsrelevant; das Panel sollte ueber HTTPS und nach Moeglichkeit zusaetzlich per VPN oder IP-Allowlist geschuetzt werden.
 

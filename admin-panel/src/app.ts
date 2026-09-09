@@ -283,8 +283,16 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.post("/api/server/restart", async (req, res) => {
+    const settings = normalizeSettings(validateRunnableSettings(await store.getSettings()));
+    const admins = await store.getAdmins();
+    const nades = await store.getNades();
+    await writeServerRuntimeFiles(config, nadesSync, settings, admins, nades);
+
     const result = await compose.restartService();
-    await store.logAction("restart", result.ok ? "success" : "failed", actionMessage(result), { code: result.code });
+    await store.logAction("restart", result.ok ? "success" : "failed", actionMessage(result), {
+      code: result.code,
+      mode: settings.serverMode
+    });
     res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result) });
   });
 

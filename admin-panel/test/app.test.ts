@@ -125,3 +125,55 @@ test("authenticated nades status reports sync health and library version", async
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("restart writes the saved server mode before restarting CS2", async () => {
+  const runtimeDir = await mkdtemp(join(tmpdir(), "matchzy-restart-runtime-"));
+  const config = {
+    password: "test-password",
+    sessionSecret: "test-session-secret",
+    runtimeSettingsFile: join(runtimeDir, "settings.json"),
+    runtimeAdminsFile: join(runtimeDir, "csharp-admins.json"),
+    runtimeMatchZyAdminsFile: join(runtimeDir, "matchzy-admins.json"),
+    runtimeMatchZyNadesFile: join(runtimeDir, "matchzy-savednades.json")
+  };
+  let runtimeModeAtRestart = "";
+  const app = createApp({
+    config,
+    store: {
+      getSettings: async () => ({ steamToken: "token", rconPassword: "secret", serverMode: "matchzy" }),
+      getAdmins: async () => [],
+      getNades: async () => [],
+      logAction: async () => undefined
+    },
+    compose: {
+      restartService: async () => {
+        runtimeModeAtRestart = JSON.parse(await readFile(config.runtimeSettingsFile, "utf8")).serverMode;
+        return { ok: true, stdout: "restarted", stderr: "" };
+      }
+    },
+    nadesSync: { writeFromMongo: async () => undefined }
+  });
+  const server = createServer(app);
+
+  try {
+    const address: any = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "test-password" })
+    });
+    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const response = await fetch(`${baseUrl}/api/server/restart`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: "{}"
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(runtimeModeAtRestart, "matchzy");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(runtimeDir, { recursive: true, force: true });
+  }
+});

@@ -74,6 +74,19 @@ _matchzy_bootstrap_main() (
       | head -n1
   }
 
+  extract_asset_url_excluding() {
+    local json="$1"
+    local pattern="$2"
+    local excluded_pattern="$3"
+    printf '%s' "$json" \
+      | tr -d '\r\n' \
+      | grep -Eo '"browser_download_url":[[:space:]]*"[^"]+"' \
+      | sed -E 's/.*"([^"]+)"/\1/' \
+      | grep -Ei "$pattern" \
+      | grep -Eiv "$excluded_pattern" \
+      | head -n1
+  }
+
   read_state_value() {
     local key="$1"
     [[ -f "$STATE_FILE" ]] || return 0
@@ -878,9 +891,12 @@ _matchzy_bootstrap_main() (
     matchzy_json="$(get_release_json shobhit-pathak/MatchZy "$matchzy_version")" \
       || fail "Unable to resolve MatchZy release for '$matchzy_version'"
     MATCHZY_TAG="$(extract_tag_name "$matchzy_json")"
-    MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'with-cssharp.*linux.*\.(zip|tar\.gz)$')"
+    # CounterStrikeSharp is managed independently below. Using MatchZy's
+    # with-cssharp bundle here can downgrade the framework whenever MatchZy is
+    # restored after Warmup/Executes and leave the plugin stack inconsistent.
+    MATCHZY_URL="$(extract_asset_url_excluding "$matchzy_json" '\.(zip|tar\.gz)$' 'with-cssharp' || true)"
     if [[ -z "${MATCHZY_URL:-}" ]]; then
-      MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'linux.*\.(zip|tar\.gz)$')"
+      MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'with-cssharp.*linux.*\.(zip|tar\.gz)$' || true)"
     fi
     [[ -n "${MATCHZY_TAG:-}" && -n "${MATCHZY_URL:-}" ]] \
       || fail "Could not resolve MatchZy linux asset"
@@ -1127,7 +1143,7 @@ _matchzy_bootstrap_main() (
   INSTALLED_EXECUTES_TAG="$(read_state_value executesTag)"
 
   local metamod_marker="$GAME_DIR/addons/metamod"
-  local matchzy_marker="$CSS_DIR/plugins/MatchZy"
+  local matchzy_marker="$CSS_DIR/plugins/MatchZy/MatchZy.dll"
   local css_marker="$CSS_DIR/api/CounterStrikeSharp.API.dll"
   local installed_css_api_version=""
   local expected_css_api_version="${COUNTERSTRIKESHARP_TAG#v}"
@@ -1159,7 +1175,7 @@ _matchzy_bootstrap_main() (
   fi
 
   if is_enabled "$matchzy_enabled"; then
-    if [[ "$repair_mods" == "1" || "$INSTALLED_MATCHZY_TAG" != "$MATCHZY_TAG" || ! -d "$matchzy_marker" ]]; then
+    if [[ "$repair_mods" == "1" || "$INSTALLED_MATCHZY_TAG" != "$MATCHZY_TAG" || ! -f "$matchzy_marker" ]]; then
       log "Installing or updating MatchZy"
       install_archive_component "matchzy" "$MATCHZY_URL" "$GAME_DIR" "$matchzy_marker" "csgo"
     else
