@@ -105,6 +105,8 @@ Es ist immer genau ein Modus aktiv:
 
 Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar sind Fake RCON, WeaponPaints, SimpleAdmin, Fortnite Emotes und Workshop-Maps. Notwendige Abhaengigkeiten werden automatisch installiert oder entfernt.
 
+`METAMOD=latest` wird derzeit bewusst auf Build `1411` aufgeloest. Metamod `1459+` hat am 8. September 2026 die Plugin-Schnittstelle 18 eingefuehrt, waehrend CounterStrikeSharp `v1.0.374` noch Schnittstelle 17 verwendet. `dev` kann weiterhin explizit gewaehlt werden, ist mit dieser CounterStrikeSharp-Version aber nicht kompatibel.
+
 ## MatchZy Coach
 
 `MatchZyCoach.dll` ist ein eigenes CounterStrikeSharp-Plugin aus diesem Repository. Das CS2-Image baut es gegen CounterStrikeSharp `1.0.373` und installiert es bei jedem Bootstrap. Es laeuft als opt-in Coach ueber allen Servermodi. Dadurch kann Mechanik in Aim Botz, Utility im Nades-Modus und Entscheidungsverhalten in Executes mit derselben Metrikdefinition verglichen werden.

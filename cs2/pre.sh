@@ -332,13 +332,21 @@ _matchzy_bootstrap_main() (
 
   resolve_metamod_release() {
     local wanted="$1"
+    local compatible_build="1411"
     local build=""
     local page=""
     local tag=""
     local url=""
 
     case "$wanted" in
-      latest|2.0-dev|dev)
+      latest|compatible)
+        # Builds 1459+ switched Metamod's plugin interface from 17 to 18.
+        # CounterStrikeSharp v1.0.374 still implements interface 17 and is
+        # rejected by those snapshots. Keep "latest" on the last compatible
+        # 2.0 build until CounterStrikeSharp publishes interface-18 support.
+        build="$compatible_build"
+        ;;
+      2.0-dev|dev)
         page="$(http_get_text 'https://www.metamodsource.net/downloads.php/?branch=2.0-dev')" \
           || fail "Unable to resolve Metamod 2.0-dev downloads page"
         url="$(printf '%s' "$page" \
@@ -360,7 +368,7 @@ _matchzy_bootstrap_main() (
     esac
 
     if [[ -z "$tag" || -z "$url" ]]; then
-      [[ -n "$build" ]] || fail "Could not resolve Metamod build for '$wanted'. Use 'latest' or a 2.0 build number like '1395'."
+      [[ -n "$build" ]] || fail "Could not resolve Metamod build for '$wanted'. Use 'latest', 'dev', or a 2.0 build number like '1411'."
       tag="2.0.0-git${build}"
       url="https://github.com/alliedmodders/metamod-source/releases/download/2.0.0.${build}/mmsource-${tag}-linux.tar.gz"
     fi
@@ -593,7 +601,8 @@ _matchzy_bootstrap_main() (
   remove_fake_rcon_component() {
     rm -rf \
       "$ADDONS_DIR/fake_rcon" \
-      "$ADDONS_DIR/configs/fake_rcon"
+      "$ADDONS_DIR/configs/fake_rcon" \
+      "$ADDONS_DIR/fake_rcon.vdf"
   }
 
   remove_weaponpaints_component() {
@@ -633,12 +642,15 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/shared/RayTraceApi" \
       "$CSS_DIR/configs/plugins/FortniteEmotesNDances" \
       "$CSS_DIR/gamedata/fortnite_emotes.json" \
-      "$ADDONS_DIR/RayTrace"
+      "$ADDONS_DIR/RayTrace" \
+      "$ADDONS_DIR/RayTrace.vdf" \
+      "$ADDONS_DIR/raytrace.vdf"
   }
 
   remove_multiaddonmanager_component() {
     rm -rf \
       "$ADDONS_DIR/multiaddonmanager" \
+      "$ADDONS_DIR/multiaddonmanager.vdf" \
       "$GAME_DIR/cfg/multiaddonmanager"
   }
 
@@ -967,6 +979,9 @@ _matchzy_bootstrap_main() (
   unset _metamod_release
   [[ -n "${METAMOD_TAG:-}" && -n "${METAMOD_URL:-}" ]] || fail "Could not resolve Metamod linux asset"
   log "Metamod resolved to tag '$METAMOD_TAG'"
+  if [[ "$metamod_version" == "latest" || "$metamod_version" == "compatible" ]]; then
+    log "Using CounterStrikeSharp-compatible Metamod build (plugin interface 17)"
+  fi
 
   local MATCHZY_TAG=""
   local MATCHZY_URL=""

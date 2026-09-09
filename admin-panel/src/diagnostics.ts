@@ -91,6 +91,9 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     "cannot enable executable stack as shared object requires",
     "requires executable stack"
   ]);
+  const metamodInterfaceFailure = normalizedLogs.lastIndexOf(
+    "plugin uses old sourcehook metamod build"
+  );
 
   const serviceRunning = service?.state === "running";
   const bootstrapStatus = bootstrapFailure > bootstrapSuccess
@@ -100,7 +103,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       : bootstrapActivity >= 0 || files.installerState
         ? "warn"
         : "fail";
-  const metamodReady = Boolean(files.metamod && files.gameinfoMetamod);
+  const metamodReady = Boolean(files.metamod && files.gameinfoMetamod) && metamodInterfaceFailure < 0;
   const cssFilesReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
   const cssReady = cssFilesReady && cssExecutableStackFailure < 0;
   const coachInstalled = Boolean(files.matchZyCoach);
@@ -161,7 +164,11 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       "metamod",
       "Metamod",
       metamodReady ? "pass" : "fail",
-      metamodReady ? "Plugin file and gameinfo search path are present." : "Plugin file or gameinfo search path is missing."
+      metamodReady
+        ? "Plugin file and gameinfo search path are present."
+        : metamodInterfaceFailure >= 0
+          ? "The installed Metamod build requires plugin interface 18, but CounterStrikeSharp currently provides interface 17."
+          : "Plugin file or gameinfo search path is missing."
     ),
     check(
       "counterstrikesharp",
@@ -225,6 +232,13 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       severity: "error",
       title: "CounterStrikeSharp was blocked by the host",
       detail: "The native loader requested an executable stack. Rebuild and redeploy the CS2 image; the bootstrap now clears that unsafe ELF flag automatically."
+    });
+  }
+  if (metamodInterfaceFailure >= 0) {
+    findings.push({
+      severity: "error",
+      title: "Metamod and CounterStrikeSharp are incompatible",
+      detail: "Metamod builds 1459 and newer reject CounterStrikeSharp v1.0.374. Redeploy and restart to install the compatibility-pinned Metamod build 1411."
     });
   }
   if (["matchzy", "nades"].includes(settings.serverMode) && matchZyRuntimeStatus === "fail" && matchZyInstalled) {

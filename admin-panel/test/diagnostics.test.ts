@@ -90,6 +90,16 @@ test("buildDiagnostics explains an executable-stack rejection even when CSS file
   assert.match(report.findings.find((item) => item.title.includes("blocked")).detail, /Rebuild and redeploy/);
 });
 
+test("buildDiagnostics explains the Metamod interface-18 incompatibility", () => {
+  const report = buildDiagnostics(input({
+    logs: "[META] Failed to load plugin addons/counterstrikesharp: Plugin uses old SourceHook Metamod build, probably 1.12.x or an early 2.0 version (17 < 18)."
+  }));
+
+  assert.equal(report.overall, "critical");
+  assert.equal(report.checks.find((item) => item.id === "metamod").status, "fail");
+  assert.match(report.findings.find((item) => item.title.includes("incompatible")).detail, /build 1411/);
+});
+
 test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   const report = buildDiagnostics(input({
     desired: { serverMode: "executes" },

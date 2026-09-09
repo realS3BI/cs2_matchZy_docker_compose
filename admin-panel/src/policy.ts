@@ -113,7 +113,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: "versions", title: "Component versions", description: "Use latest for automatic updates or enter a release tag to pin a component.",
     fields: [
-      { key: "metamodVersion", label: "Metamod", type: "text", placeholder: "latest" },
+      { key: "metamodVersion", label: "Metamod", type: "text", placeholder: "1411 (CounterStrikeSharp compatible)" },
       { key: "counterStrikeSharpVersion", label: "CounterStrikeSharp", type: "text", placeholder: "latest" },
       { key: "matchZyVersion", label: "MatchZy", type: "text", placeholder: "latest" },
       { key: "executesVersion", label: "Executes", type: "text", placeholder: "latest" },
@@ -140,7 +140,7 @@ const DEFAULTS: ServerSettings = {
   startMap: "de_mirage",
   additionalArgs: "",
   serverMode: "matchzy",
-  metamodVersion: "latest",
+  metamodVersion: "1411",
   matchZyVersion: "latest",
   counterStrikeSharpVersion: "latest",
   fakeRconEnabled: false,
