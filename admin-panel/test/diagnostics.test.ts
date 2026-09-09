@@ -76,6 +76,20 @@ test("buildDiagnostics treats an active bootstrap as in progress", () => {
   assert.equal(report.overall, "degraded");
 });
 
+test("buildDiagnostics explains an executable-stack rejection even when CSS files exist", () => {
+  const report = buildDiagnostics(input({
+    logs: [
+      "[pre.sh] Mod bootstrap complete",
+      "Failed to load plugin addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so",
+      "cannot enable executable stack as shared object requires: Invalid argument"
+    ].join("\n")
+  }));
+
+  assert.equal(report.overall, "critical");
+  assert.equal(report.checks.find((item) => item.id === "counterstrikesharp").status, "fail");
+  assert.match(report.findings.find((item) => item.title.includes("blocked")).detail, /Rebuild and redeploy/);
+});
+
 test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   const report = buildDiagnostics(input({
     desired: { serverMode: "executes" },

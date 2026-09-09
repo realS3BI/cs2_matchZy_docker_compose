@@ -87,6 +87,10 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     "could not load plugin matchzy",
     "failed to load plugin \"matchzy.dll\""
   ]);
+  const cssExecutableStackFailure = lastIndexOfAny(normalizedLogs, [
+    "cannot enable executable stack as shared object requires",
+    "requires executable stack"
+  ]);
 
   const serviceRunning = service?.state === "running";
   const bootstrapStatus = bootstrapFailure > bootstrapSuccess
@@ -97,7 +101,8 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         ? "warn"
         : "fail";
   const metamodReady = Boolean(files.metamod && files.gameinfoMetamod);
-  const cssReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
+  const cssFilesReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
+  const cssReady = cssFilesReady && cssExecutableStackFailure < 0;
   const coachInstalled = Boolean(files.matchZyCoach);
   const coachLoaded = lastIndexOfAny(normalizedLogs, ["matchzy coach loaded", "finished loading plugin matchzycoach"]);
   const coachFailed = lastIndexOfAny(normalizedLogs, ["failed to load plugin matchzycoach", "could not load plugin matchzycoach", "requires a newer version of counterstrikesharp"]);
@@ -162,7 +167,11 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       "counterstrikesharp",
       "CounterStrikeSharp",
       cssReady ? "pass" : "fail",
-      cssReady ? "Native loader and API assembly are present." : "Native loader or API assembly is missing."
+      cssReady
+        ? "Native loader and API assembly are present."
+        : cssExecutableStackFailure >= 0
+          ? "The host rejected CounterStrikeSharp because its native module requested an executable stack. Rebuild the CS2 image to apply the compatibility patch."
+          : "Native loader or API assembly is missing."
     ),
     check(
       "matchzy-coach",
@@ -209,6 +218,13 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       severity: "error",
       title: "Mod bootstrap failed",
       detail: "Open Docker Logs and inspect the first [pre.sh] ERROR from the latest container start."
+    });
+  }
+  if (cssExecutableStackFailure >= 0) {
+    findings.push({
+      severity: "error",
+      title: "CounterStrikeSharp was blocked by the host",
+      detail: "The native loader requested an executable stack. Rebuild and redeploy the CS2 image; the bootstrap now clears that unsafe ELF flag automatically."
     });
   }
   if (["matchzy", "nades"].includes(settings.serverMode) && matchZyRuntimeStatus === "fail" && matchZyInstalled) {

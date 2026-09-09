@@ -206,6 +206,8 @@ Installierte Versions-Tags werden in folgender JSON-Datei gespeichert:
 
 `Repair mods once` aktiviert fuer einen Start eine vollstaendige Neuinstallation der Mods. Nach Erfolg, Fehler oder Timeout setzt das Panel den Schalter automatisch zurueck.
 
+Auf gehaerteten Linux-Hosts kann CounterStrikeSharp sonst mit `cannot enable executable stack as shared object requires` abgewiesen werden. Der Bootstrap entfernt das problematische ELF-Flag deshalb bei jedem Start automatisch. Nach einem Repository-Update muss das CS2-Image neu gebaut und deployed werden; ein reiner Neustart des alten Containers uebernimmt den neuen Bootstrap nicht.
+
 ## Persistente Volumes
 
 | Volume | Inhalt |

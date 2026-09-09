@@ -197,6 +197,85 @@ _matchzy_bootstrap_main() (
     grep -aom1 -E '1\.0\.[0-9]{3}' "$dll_path" 2>/dev/null || true
   }
 
+  read_elf_le() {
+    local file="$1"
+    local offset="$2"
+    local length="$3"
+    local value=0
+    local shift=0
+    local byte=""
+    local -a bytes=()
+
+    read -r -a bytes <<< "$(od -An -v -tu1 -j "$offset" -N "$length" "$file" 2>/dev/null)"
+    ((${#bytes[@]} == length)) || return 1
+    for byte in "${bytes[@]}"; do
+      ((value |= byte << shift))
+      ((shift += 8))
+    done
+    printf '%u\n' "$value"
+  }
+
+  clear_elf_execstack() {
+    local file="$1"
+    local elf_class=""
+    local elf_data=""
+    local phoff=""
+    local phentsize=""
+    local phnum=""
+    local header_offset=0
+    local header_type=0
+    local flags_offset=0
+    local flags=0
+    local safe_flags=0
+    local byte=0
+    local shift=0
+    local found=0
+
+    [[ -f "$file" ]] || return 0
+
+    # CounterStrikeSharp's current Linux release requests an executable stack.
+    # Hardened container hosts reject that module before its managed API starts.
+    # Clear PF_X on the ELF64 PT_GNU_STACK header without requiring host tools
+    # such as execstack or a recent patchelf.
+    elf_class="$(read_elf_le "$file" 4 1)" || fail "Could not inspect ELF class for $file"
+    elf_data="$(read_elf_le "$file" 5 1)" || fail "Could not inspect ELF byte order for $file"
+    [[ "$elf_class" == "2" && "$elf_data" == "1" ]] \
+      || fail "Unsupported CounterStrikeSharp native module format at $file"
+
+    phoff="$(read_elf_le "$file" 32 8)" || fail "Could not read ELF program-header offset for $file"
+    phentsize="$(read_elf_le "$file" 54 2)" || fail "Could not read ELF program-header size for $file"
+    phnum="$(read_elf_le "$file" 56 2)" || fail "Could not read ELF program-header count for $file"
+
+    for ((header_offset = phoff; header_offset < phoff + phentsize * phnum; header_offset += phentsize)); do
+      header_type="$(read_elf_le "$file" "$header_offset" 4)" \
+        || fail "Could not inspect ELF program header for $file"
+      if ((header_type == 0x6474e551)); then
+        found=1
+        flags_offset=$((header_offset + 4))
+        flags="$(read_elf_le "$file" "$flags_offset" 4)" \
+          || fail "Could not inspect PT_GNU_STACK flags for $file"
+        if ((flags & 1)); then
+          safe_flags=$((flags & ~1))
+          {
+            for shift in 0 8 16 24; do
+              byte=$(((safe_flags >> shift) & 255))
+              printf "\\$(printf '%03o' "$byte")"
+            done
+          } | dd of="$file" bs=1 seek="$flags_offset" count=4 conv=notrunc status=none
+          flags="$(read_elf_le "$file" "$flags_offset" 4)" \
+            || fail "Could not verify PT_GNU_STACK flags for $file"
+          ((flags & 1)) && fail "Could not clear executable-stack flag on $file"
+          log "Cleared executable-stack flag on CounterStrikeSharp native module"
+        else
+          log "CounterStrikeSharp native module does not request an executable stack"
+        fi
+        break
+      fi
+    done
+
+    ((found == 1)) || fail "PT_GNU_STACK header not found in $file"
+  }
+
   normalize_csgo_layout() {
     # Defensive: if a release ever ships with a nested csgo/ root, flatten it.
     local destination="$1"
@@ -720,6 +799,8 @@ _matchzy_bootstrap_main() (
   need_cmd mktemp
   need_cmd cut
   need_cmd jq
+  need_cmd od
+  need_cmd dd
 
   local steam_app_dir="/home/steam/cs2-dedicated"
   local SETTINGS_FILE="/config-runtime/settings.json"
@@ -808,6 +889,10 @@ _matchzy_bootstrap_main() (
   mkdir -p "$STATE_DIR"
 
   [[ -d "$GAME_DIR" ]] || fail "Game directory not found: $GAME_DIR"
+
+  # Repair an already-installed native loader before doing any network work, so
+  # CounterStrikeSharp can still start if a release endpoint is temporarily down.
+  clear_elf_execstack "$CSS_DIR/bin/linuxsteamrt64/counterstrikesharp.so"
 
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TMP_DIR"' EXIT
@@ -1194,6 +1279,8 @@ _matchzy_bootstrap_main() (
   else
     log "CounterStrikeSharp already current; skipping"
   fi
+
+  clear_elf_execstack "$CSS_DIR/bin/linuxsteamrt64/counterstrikesharp.so"
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
   install_matchzy_coach
