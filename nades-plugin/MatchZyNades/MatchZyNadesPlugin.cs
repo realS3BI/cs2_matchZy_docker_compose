@@ -17,7 +17,7 @@ namespace MatchZyNades;
 public sealed class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.0.1";
+    public override string ModuleVersion => "1.0.2";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -115,6 +115,12 @@ public sealed class MatchZyNadesPlugin : BasePlugin
         if (action.Equals("close", StringComparison.OrdinalIgnoreCase) || action == "9") { Close(player.Slot); return; }
         if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Nades-Menue geladen. Training ist noch aus: zuerst .prac starten, dann .nades."); return; }
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
+        if (action.Equals("check", StringComparison.OrdinalIgnoreCase))
+        {
+            Close(player.Slot);
+            CheckPlacement(player);
+            return;
+        }
         if (action.Equals("last", StringComparison.OrdinalIgnoreCase))
         {
             if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
@@ -122,7 +128,7 @@ public sealed class MatchZyNadesPlugin : BasePlugin
             return;
         }
         if (int.TryParse(action, out var key)) { Select(player, key); return; }
-        if (action.Length != 0) { Tell(player, ".nades | .nades 1-9 | .nades last | .nades close"); return; }
+        if (action.Length != 0) { Tell(player, ".nades | .nades 1-9 | .nades last | .nades check | .nades close"); return; }
         Open(player);
     }
 
@@ -200,12 +206,34 @@ public sealed class MatchZyNadesPlugin : BasePlugin
             // Same client slot commands used by MatchZy's own .loadnade; no user strings executed.
             player.ExecuteClientCommand(equipment.Slot);
         }
+        // Loading is a training action: leave noclip / ladder mode so normal gravity can
+        // settle MatchZy's saved Z+4 positions. Closing a menu alone still restores its old mode.
+        pawn.MoveType = MoveType_t.MOVETYPE_WALK;
+        pawn.ActualMoveType = MoveType_t.MOVETYPE_WALK;
+        Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
         pawn.Teleport(new Vector(lineup.Position.X, lineup.Position.Y, lineup.Position.Z),
             new QAngle(lineup.Angles.X, lineup.Angles.Y, lineup.Angles.Z), new Vector(0, 0, 0));
+        PlayerBodyRotation.Repair(pawn);
         _last[player.Slot] = lineup;
         Tell(player, $"Geladen: {NadeMenu.Plain(lineup.Name, 90)}. .nades last wiederholt; .nades oeffnet die Liste.");
         if (!string.IsNullOrWhiteSpace(lineup.Description)) Tell(player, NadeMenu.Plain(lineup.Description, 180));
         if (lineup.Kind == NadeKind.Other) Tell(player, "Dieses Lineup hat keinen Granatentyp. Passende Granate selbst waehlen.");
+    }
+
+    private void CheckPlacement(CCSPlayerController player)
+    {
+        var pawn = player.PlayerPawn.Value!;
+        var position = pawn.AbsOrigin;
+        if (position == null) return;
+        var scene = pawn.CBodyComponent?.SceneNode;
+        if (scene == null) return;
+        var eye = pawn.EyeAngles;
+        var body = scene.AbsRotation;
+        var message = FormattableString.Invariant($"Position {position.X:0.###} {position.Y:0.###} {position.Z:0.###}; Bewegung {pawn.MoveType}/{pawn.ActualMoveType}.");
+        var angles = FormattableString.Invariant($"Blick (Pitch/Yaw/Roll): {eye.X:0.###}/{eye.Y:0.###}/{eye.Z:0.###}; Koerper: {body.X:0.###}/{body.Y:0.###}/{body.Z:0.###}.");
+        Tell(player, message);
+        Tell(player, angles);
+        Logger.LogInformation("Nades position check: {Details} {Angles}", message, angles);
     }
 
     private static void LockAttacks(MenuSession session)
@@ -217,6 +245,16 @@ public sealed class MatchZyNadesPlugin : BasePlugin
 
     private void OnTick()
     {
+        // MatchZy's own .loadnade/.last/.loadpos bypass our loader. Repair the same
+        // scene-node tilt for living practice players (including practice bots).
+        // No changes in live matches or to parented/spectator/dead pawns.
+        if (TrainingEnabled)
+        {
+            foreach (var player in Utilities.GetPlayers())
+                if (player is { IsValid: true, PawnIsAlive: true } && player.TeamNum is 2 or 3 &&
+                    player.PlayerPawn.Value is { IsValid: true } pawn)
+                    PlayerBodyRotation.Repair(pawn);
+        }
         foreach (var (slot, session) in _menus.ToArray())
         {
             var player = session.Player;

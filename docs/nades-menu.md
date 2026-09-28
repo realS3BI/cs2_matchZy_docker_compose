@@ -29,6 +29,7 @@ Nach diesem Update beide Images (Dashboard und CS2) neu bauen und deployen. Ein 
 | `.nades 7` / `.nades 8` | Vorherige / naechste Seite |
 | `.nades 9` oder `.nades close` | Menue schliessen |
 | `.nades last` | Zuletzt ausgewaehltes Lineup erneut laden |
+| `.nades check` | Aktuelle Position, Bewegungsmodus, Blickwinkel und Koerperwinkel im Chat und Serverlog anzeigen |
 
 Die Angaben W/S/E beziehen sich auf die Aktionen Vorwaerts/Rueckwaerts/Benutzen: Bei eigenen Tastenbelegungen gelten die entsprechend belegten Tasten. Das Menue hat keinen frei anklickbaren Mauszeiger; Linksklick bestaetigt die markierte Zeile. Bewegung und neue Angriffe werden waehrend des Menues gesperrt. Beim Schliessen, Tod, Respawn, Rundenbeginn, Mapwechsel oder Plugin-Unload wird der gespeicherte Zustand wiederhergestellt. Nach 90 Sekunden ohne Eingabe schliesst sich das Menue automatisch.
 
@@ -46,7 +47,13 @@ Danach waehlen **1–5** die sichtbaren Eintraege, **6** die Typauswahl, **7/8**
 
 ## Training und Daten
 
-Die Auswahl setzt Standposition und Blickwinkel und stoppt vorhandene Bewegung. Fehlt die passende Granate im Inventar, gibt das Plugin sie dem Spieler und waehlt den Granaten-Slot aus. Bei Molly-Lineups verwendet es fuer CTs eine Incendiary und fuer Ts einen Molotov. Die gespeicherte Beschreibung erscheint im Chat, etwa als Hinweis auf einen Jumpthrow. `.nades last` setzt dich erneut an den Abwurfpunkt.
+Die Auswahl setzt die gespeicherte Standposition und Blickrichtung und stoppt vorhandene Bewegung. Ab Version **1.0.2** korrigiert das Plugin ausserdem einen bekannten CS2-Teleportfehler: Der vertikale Blickwinkel kann auf den gesamten Spielerkoerper uebertragen werden. Das kippt das Modell und beeintraechtigt Lineups (siehe [MatchZy #393](https://github.com/shobhit-pathak/MatchZy/issues/393) und den [entsprechenden Upstream-Fix](https://github.com/sivert-io/MatchZy-Enhanced/pull/13)). Die Korrektur setzt nur Neigung und seitliche Drehung des Koerpers auf null. Blickrichtung, horizontale Koerperdrehung und gespeicherte Position bleiben erhalten; die Bibliothek wird nicht veraendert.
+
+Beim erfolgreichen Laden wird normale Laufbewegung aktiviert und Noclip beendet. Das ist relevant, weil MatchZy `.savenade` mit einem Z-Aufschlag von 4 Units speichert: Ohne Schwerkraft im Noclip bleibt die Figur dort in der Luft. Vor dem Wurf kurz landen lassen. Das blosse Schliessen eines Menues ohne Laden behaelt weiterhin den vorherigen Bewegungsmodus bei.
+
+Fehlt die passende Granate im Inventar, gibt das Plugin sie dem Spieler und waehlt den Granaten-Slot aus. Bei Molly-Lineups verwendet es fuer CTs eine Incendiary und fuer Ts einen Molotov. Die gespeicherte Beschreibung erscheint im Chat, etwa als Hinweis auf einen Jumpthrow. `.nades last` setzt dich erneut an den Abwurfpunkt.
+
+Solange `sv_cheats` aktiv ist, prueft das Plugin in jedem Tick die Koerperneigung lebender Spieler beider Teams. Dadurch greift die Korrektur auch nach MatchZys `.loadnade`, `.last` und `.loadpos`, ohne dessen DLL zu veraendern. Spieler mit einer uebergeordneten Scene-Node werden ausgelassen. Bei bereits aufrechten Spielern wird kein Zustand geschrieben. `.nades check` zeigt Position, beide Bewegungsmodi sowie Blick- und Koerperwinkel fuer die Fehlersuche. Das vorhandene MatchZy-Format speichert den Duckzustand nicht; bei Duck-Lineups muss weiterhin selbst geduckt werden.
 
 Der eigentliche Wurf wird von dir ausgefuehrt. Die vorhandenen MatchZy-Daten enthalten Position, Winkel, Typ und Beschreibung, aber keine vollstaendige Abfolge von Laufbewegung, Ducken, Sprung oder Wurfstaerke. Das Menue spielt deshalb keine automatischen Beispielwuerfe ab. Bei **Ohne Typ** musst du die Granate selbst waehlen; den Typ kannst du im Dashboard nachtragen. MatchZys Flugbahnvorschau und Practice-Funktionen bleiben nutzbar.
 
@@ -61,7 +68,9 @@ dotnet test nades-plugin/MatchZyNades.Tests/MatchZyNades.Tests.csproj --configur
 docker build -f cs2/Dockerfile --target nades-tests .
 ```
 
-Die automatischen Tests pruefen das MatchZy-Dateiformat, Map- und Owner-Filter, doppelte Namen verschiedener Owner, Koordinaten, Granatentypen, Pagination, leere Kategorien und die sichere Textdarstellung. Darstellung und Spielereingaben brauchen zusaetzlich einen echten CS2-Client.
+Die automatischen Tests pruefen das MatchZy-Dateiformat, Map- und Owner-Filter, doppelte Namen verschiedener Owner, Koordinaten, Granatentypen, Pagination, leere Kategorien, die sichere Textdarstellung und Statusdateien. Die native Koerperrotation, Darstellung und Spielereingaben brauchen zusaetzlich einen echten CS2-Client; diese Tests belegen den Ingame-Fix nicht.
+
+Ab Plugin **1.0.2** ein Lineup mit steilem Blickwinkel nach oben oder unten nahe einer Wand ueber `.nades`, `.nades last` und MatchZys `.loadnade` laden. Auch `.last` und `.loadpos` pruefen. In Ego-Perspektive und mit einem zweiten Spieler kontrollieren, dass der Koerper aufrecht bleibt und die Zielrichtung stimmt. `.nades check` muss fuer die Neigung und seitliche Drehung des Koerpers null anzeigen, waehrend der Blickwinkel erhalten bleibt. Ein Lineup nach aktivem Noclip ueber `.nades` laden und normales Landen/Bewegen pruefen. Nach dem Update das CS2-Image neu bauen und im Dashboard die Plugin-Version kontrollieren.
 
 Fuer den Ingame-Test mindestens sechs Smokes auf derselben Map speichern, davon eine privat. `.nades` ueber normalen und Teamchat pruefen, mit W/S bis auf die zweite Seite navigieren und dort ein Lineup laden. Position, Blickwinkel, Granate und `.nades last` pruefen. Anschliessend das Menue mit E und Rechtsklick schliessen und nach Tod/Respawn sowie Mapwechsel erneut oeffnen. Waehrend ein Menue offen ist, im Dashboard ein Lineup aendern oder loeschen und die erneute Auswahl pruefen. Mit einem zweiten Spieler sicherstellen, dass private Eintraege unsichtbar bleiben. Falls Ziffernbinds verwendet werden, auch die Waffenslots nach dem Schliessen pruefen.
 

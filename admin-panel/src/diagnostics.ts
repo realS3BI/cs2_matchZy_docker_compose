@@ -62,7 +62,7 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
     typeof heartbeat?.practice === "boolean" && typeof heartbeat?.version === "string";
   const loadFailure = lastPluginLog(logs, "failed to load plugin|could not load plugin", "matchzynades");
   const loadSuccess = Math.max(lastPluginLog(logs, "finished loading plugin", "matchzynades"),
-    lastIndexOfAny(logs, ["nade training menu loaded", "matchzy nades 1.0.1 loaded"]));
+    lastIndexOfAny(logs, ["nade training menu loaded"]), lastPluginLog(logs, "matchzy nades \\S+", "loaded"));
   let state: string;
   let status: string;
   let detail: string;

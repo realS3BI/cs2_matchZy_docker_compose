@@ -142,6 +142,8 @@ test("framework rejection and plugin unload are visible", () => {
   assert.equal(report.nades.menu.state, "unloaded");
   const rejected = buildDiagnostics(input({ probe: { ok: true, stdout: healthyProbe }, logs: 'Failed to load plugin "MatchZyNades.dll"' }));
   assert.equal(rejected.nades.menu.state, "failed");
+  const recovered = buildDiagnostics(input({ probe: { ok: true, stdout: healthyProbe }, logs: 'Failed to load plugin "MatchZyNades.dll"\nMatchZy Nades 1.0.2 loaded: .nades' }));
+  assert.equal(recovered.nades.menu.state, "unconfirmed");
 });
 
 test("menu is not required in unrelated modes", () => {
