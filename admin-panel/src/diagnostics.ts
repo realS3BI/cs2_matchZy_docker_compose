@@ -91,9 +91,9 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     "cannot enable executable stack as shared object requires",
     "requires executable stack"
   ]);
-  const metamodInterfaceFailure = normalizedLogs.lastIndexOf(
-    "plugin uses old sourcehook metamod build"
-  );
+  const metamodTooOld = normalizedLogs.lastIndexOf("plugin requires newer metamod version");
+  const metamodTooNew = normalizedLogs.lastIndexOf("plugin uses old sourcehook metamod build");
+  const metamodInterfaceFailure = Math.max(metamodTooOld, metamodTooNew);
 
   const serviceRunning = service?.state === "running";
   const bootstrapStatus = bootstrapFailure > bootstrapSuccess
@@ -105,13 +105,15 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         : "fail";
   const metamodReady = Boolean(files.metamod && files.gameinfoMetamod) && metamodInterfaceFailure < 0;
   const cssFilesReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
-  const cssReady = cssFilesReady && cssExecutableStackFailure < 0;
+  const cssReady = cssFilesReady && cssExecutableStackFailure < 0 && metamodInterfaceFailure < 0;
   const coachInstalled = Boolean(files.matchZyCoach);
   const coachLoaded = lastIndexOfAny(normalizedLogs, ["matchzy coach loaded", "finished loading plugin matchzycoach"]);
   const coachFailed = lastIndexOfAny(normalizedLogs, ["failed to load plugin matchzycoach", "could not load plugin matchzycoach", "requires a newer version of counterstrikesharp"]);
-  const coachStatus = coachFailed > coachLoaded ? "fail" : coachLoaded >= 0 ? "pass" : coachInstalled ? "warn" : "fail";
+  const coachStatus = metamodInterfaceFailure >= 0 ? "fail" : coachFailed > coachLoaded ? "fail" : coachLoaded >= 0 ? "pass" : coachInstalled ? "warn" : "fail";
   const matchZyInstalled = Boolean(files.matchZy);
-  const matchZyRuntimeStatus = matchZyFailed > matchZyLoaded
+  const matchZyRuntimeStatus = metamodInterfaceFailure >= 0
+    ? "fail"
+    : matchZyFailed > matchZyLoaded
     ? "fail"
     : matchZyLoaded >= 0
       ? "pass"
@@ -127,7 +129,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       matchZyRuntimeStatus === "pass"
         ? "MatchZy reported a successful load."
         : matchZyRuntimeStatus === "fail"
-          ? matchZyInstalled ? "MatchZy reported a load failure." : "MatchZy.dll is missing."
+          ? metamodInterfaceFailure >= 0 ? "MatchZy cannot load because Metamod rejected CounterStrikeSharp." : matchZyInstalled ? "MatchZy reported a load failure." : "MatchZy.dll is missing."
           : "MatchZy.dll exists, but no load confirmation is present in retained logs."
     )
     : settings.serverMode === "warmup"
@@ -166,8 +168,10 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       metamodReady ? "pass" : "fail",
       metamodReady
         ? "Plugin file and gameinfo search path are present."
-        : metamodInterfaceFailure >= 0
-          ? "The installed Metamod build requires plugin interface 18, but CounterStrikeSharp currently provides interface 17."
+        : metamodTooOld >= 0 && metamodTooOld >= metamodTooNew
+          ? "CounterStrikeSharp requires Metamod plugin interface 18, but the installed build provides interface 17."
+          : metamodTooNew >= 0
+            ? "The installed Metamod build requires plugin interface 18, but CounterStrikeSharp provides interface 17."
           : "Plugin file or gameinfo search path is missing."
     ),
     check(
@@ -176,7 +180,9 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
       cssReady ? "pass" : "fail",
       cssReady
         ? "Native loader and API assembly are present."
-        : cssExecutableStackFailure >= 0
+        : metamodInterfaceFailure >= 0
+          ? "Metamod rejected the CounterStrikeSharp native plugin because their interfaces differ."
+          : cssExecutableStackFailure >= 0
           ? "The host rejected CounterStrikeSharp because its native module requested an executable stack. Rebuild the CS2 image to apply the compatibility patch."
           : "Native loader or API assembly is missing."
     ),
@@ -188,7 +194,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         ? "The coaching plugin reported a successful load."
         : coachStatus === "warn"
           ? "MatchZyCoach.dll exists, but no load confirmation is present in retained logs."
-          : coachInstalled ? "CounterStrikeSharp rejected MatchZy Coach during startup." : "MatchZyCoach.dll is missing. Rebuild the CS2 image."
+          : metamodInterfaceFailure >= 0 ? "CounterStrikeSharp did not start, so MatchZy Coach could not load." : coachInstalled ? "CounterStrikeSharp rejected MatchZy Coach during startup." : "MatchZyCoach.dll is missing. Rebuild the CS2 image."
     ),
     modeCheck
   ];
@@ -238,7 +244,9 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     findings.push({
       severity: "error",
       title: "Metamod and CounterStrikeSharp are incompatible",
-      detail: "Metamod builds 1459 and newer reject CounterStrikeSharp v1.0.374. Redeploy and restart to install the compatibility-pinned Metamod build 1411."
+      detail: metamodTooOld >= 0 && metamodTooOld >= metamodTooNew
+        ? "CounterStrikeSharp requires Metamod interface 18. Set the Metamod version to latest, then redeploy and restart to install build 1467 or newer."
+        : "This CounterStrikeSharp release uses interface 17. Pin Metamod to compatible (build 1411), or update CounterStrikeSharp and Metamod together."
     });
   }
   if (["matchzy", "nades"].includes(settings.serverMode) && matchZyRuntimeStatus === "fail" && matchZyInstalled) {

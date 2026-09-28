@@ -339,22 +339,15 @@ _matchzy_bootstrap_main() (
     local url=""
 
     case "$wanted" in
-      latest|compatible)
-        # Builds 1459+ switched Metamod's plugin interface from 17 to 18.
-        # CounterStrikeSharp v1.0.374 still implements interface 17 and is
-        # rejected by those snapshots. Keep "latest" on the last compatible
-        # 2.0 build until CounterStrikeSharp publishes interface-18 support.
+      compatible)
+        # Legacy CounterStrikeSharp releases require plugin interface 17.
         build="$compatible_build"
         ;;
-      2.0-dev|dev)
-        page="$(http_get_text 'https://www.metamodsource.net/downloads.php/?branch=2.0-dev')" \
-          || fail "Unable to resolve Metamod 2.0-dev downloads page"
-        url="$(printf '%s' "$page" \
-          | tr -d '\r\n' \
-          | grep -Eo 'https://github\.com/alliedmodders/metamod-source/releases/download/2\.0\.0\.[0-9]+/mmsource-2\.0\.0-git[0-9]+-linux\.tar\.gz' \
-          | head -n1)"
-        tag="$(printf '%s' "$url" \
-          | sed -E 's#.*/mmsource-(2\.0\.0-git[0-9]+)-linux\.tar\.gz#\1#')"
+      latest|2.0-dev|dev)
+        page="$(http_get_text 'https://api.github.com/repos/alliedmodders/metamod-source/releases?per_page=30')" \
+          || fail "Unable to resolve Metamod 2.0 releases"
+        build="$(printf '%s' "$page" | jq -r '[.[] | select(.tag_name | test("^2\\.0\\.0\\.[0-9]+$")) | select((.tag_name | split(".")[-1] | tonumber) >= 1467) | select(any(.assets[]; .name | test("^mmsource-2\\.0\\.0-git[0-9]+-linux\\.tar\\.gz$"))) | (.tag_name | split(".")[-1] | tonumber)] | max // empty')"
+        [[ -n "$build" ]] || fail "No Metamod 2.0 Linux release at build 1467 or newer was found"
         ;;
       *)
         if [[ "$wanted" =~ ^[0-9]+$ ]]; then
@@ -979,8 +972,8 @@ _matchzy_bootstrap_main() (
   unset _metamod_release
   [[ -n "${METAMOD_TAG:-}" && -n "${METAMOD_URL:-}" ]] || fail "Could not resolve Metamod linux asset"
   log "Metamod resolved to tag '$METAMOD_TAG'"
-  if [[ "$metamod_version" == "latest" || "$metamod_version" == "compatible" ]]; then
-    log "Using CounterStrikeSharp-compatible Metamod build (plugin interface 17)"
+  if [[ "$metamod_version" == "compatible" ]]; then
+    log "Using legacy Metamod build (plugin interface 17)"
   fi
 
   local MATCHZY_TAG=""

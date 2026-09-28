@@ -100,6 +100,18 @@ test("buildDiagnostics explains the Metamod interface-18 incompatibility", () =>
   assert.match(report.findings.find((item) => item.title.includes("incompatible")).detail, /build 1411/);
 });
 
+test("buildDiagnostics identifies CounterStrikeSharp requiring a newer Metamod interface", () => {
+  const report = buildDiagnostics(input({
+    logs: "[META] Failed to load plugin addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp: Plugin requires newer Metamod version (18 > 17)"
+  }));
+
+  assert.equal(report.overall, "critical");
+  assert.equal(report.checks.find((item) => item.id === "metamod").status, "fail");
+  assert.equal(report.checks.find((item) => item.id === "counterstrikesharp").status, "fail");
+  assert.equal(report.checks.find((item) => item.id === "matchzy").status, "fail");
+  assert.match(report.findings.find((item) => item.title.includes("incompatible")).detail, /1467 or newer/);
+});
+
 test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   const report = buildDiagnostics(input({
     desired: { serverMode: "executes" },

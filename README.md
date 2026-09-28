@@ -105,7 +105,7 @@ Es ist immer genau ein Modus aktiv:
 
 Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar sind Fake RCON, WeaponPaints, SimpleAdmin, Fortnite Emotes und Workshop-Maps. Notwendige Abhaengigkeiten werden automatisch installiert oder entfernt.
 
-`METAMOD=latest` wird derzeit bewusst auf Build `1411` aufgeloest. Metamod `1459+` hat am 8. September 2026 die Plugin-Schnittstelle 18 eingefuehrt, waehrend CounterStrikeSharp `v1.0.374` noch Schnittstelle 17 verwendet. `dev` kann weiterhin explizit gewaehlt werden, ist mit dieser CounterStrikeSharp-Version aber nicht kompatibel.
+`METAMOD=latest` waehlt den neuesten verfuegbaren 2.0-Linux-Build ab `1467`. Aktuelle CounterStrikeSharp-Versionen benoetigen Metamod-Plugin-Schnittstelle 18. Fuer aeltere CounterStrikeSharp-Versionen mit Schnittstelle 17 kann `METAMOD=compatible` (Build `1411`) gesetzt werden. Beide Komponenten muessen zur gleichen Schnittstelle passen.
 
 ## MatchZy Coach
 
