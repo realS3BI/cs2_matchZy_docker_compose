@@ -29,7 +29,7 @@ copy_file_atomic() { cp "$1" "$2"; }
 ${install.replace('"/opt/matchzy-nades/MatchZyNades.dll"', quote(bundle))}
 install_matchzy_nades "$1"
 `;
-  for (const mode of ["matchzy", "nades", "executes", "warmup", "vanilla"]) {
+  for (const mode of ["matchzy", "nades", "warmup", "vanilla"]) {
     await execFileAsync("bash", ["-c", script, "nades-install", mode]);
     if (["matchzy", "nades"].includes(mode))
       assert.equal(await readFile(join(plugin, "MatchZyNades.dll"), "utf8"), "bundled plugin");

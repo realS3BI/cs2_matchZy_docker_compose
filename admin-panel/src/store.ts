@@ -38,6 +38,11 @@ export class Store {
         { _id: "current", settings: normalizeSettings({}), createdAt: new Date() },
         { upsert: true }
       );
+    } else if (current.settings.serverMode === "executes" || Object.prototype.hasOwnProperty.call(current.settings, "executesVersion")) {
+      await this.settings.updateOne(
+        { _id: "current" },
+        { $set: { settings: normalizeSettings(current.settings), updatedAt: new Date() } }
+      );
     }
   }
 

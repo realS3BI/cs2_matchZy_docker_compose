@@ -40,7 +40,6 @@ probe_file counterStrikeSharpApi "$root/addons/counterstrikesharp/api/CounterStr
 probe_file matchZy "$root/addons/counterstrikesharp/plugins/MatchZy/MatchZy.dll"
 probe_file matchZyConfig "$root/cfg/MatchZy/config.cfg"
 probe_file matchZySavedNades "$root/cfg/MatchZy/savednades.json"
-probe_file executes "$root/addons/counterstrikesharp/plugins/ExecutesPlugin/ExecutesPlugin.dll"
 probe_file matchZyNades "$root/addons/counterstrikesharp/plugins/MatchZyNades/MatchZyNades.dll"
 probe_file matchZyNadesBundled "/opt/matchzy-nades/MatchZyNades.dll"
 status_file="$root/addons/counterstrikesharp/plugins/MatchZyNades/data/status.json"
@@ -85,7 +84,6 @@ SIMPLEADMIN	simpleAdminTag
 MULTIADDONMANAGER	multiAddonManagerTag
 RAYTRACE	rayTraceTag
 FORTNITE_EMOTES	fortniteEmotesTag
-EXECUTES	executesTag
 VERSION_KEYS
 fi
 `;

@@ -195,19 +195,6 @@ test("buildDiagnostics identifies CounterStrikeSharp requiring a newer Metamod i
   assert.match(report.findings.find((item) => item.title.includes("incompatible")).detail, /1467 or newer/);
 });
 
-test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
-  const report = buildDiagnostics(input({
-    desired: { serverMode: "executes" },
-    probe: { ok: true, stdout: `${healthyProbe.replace("FILE\tmatchZy\t1", "FILE\tmatchZy\t0")}\nFILE\texecutes\t1`, stderr: "" },
-    logs: "[pre.sh] Mod bootstrap complete"
-  }));
-
-  assert.equal(report.overall, "healthy");
-  assert.equal(report.mode.id, "executes");
-  assert.equal(report.checks.at(-1).id, "executes");
-  assert.equal(report.nades.relevant, false);
-});
-
 test("buildDiagnostics treats warmup as a dedicated Workshop map", () => {
   const report = buildDiagnostics(input({ desired: { serverMode: "warmup" } }));
 

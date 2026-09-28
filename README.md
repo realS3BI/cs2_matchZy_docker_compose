@@ -99,8 +99,9 @@ Es ist immer genau ein Modus aktiv:
 - `MatchZy`: Competitive Matches
 - `Nades`: startet MatchZy mit `matchzy_autostart_mode 2` direkt im Practice-Modus und stellt gespeicherte Lineups bereit
 - `Warmup / Aim Botz`: startet die Workshop-Map `Aim Botz - Aim Training (CS2)` (`3070244462`) fuer Solo-Aim-Training mit Bots
-- `Executes`: Executes-Szenarien ohne MatchZy
 - `Vanilla + framework`: Metamod und CounterStrikeSharp ohne Match-Plugin
+
+Bei bestehenden Installationen wird ein gespeicherter Executes-Modus beim Update auf MatchZy umgestellt. Der naechste CS2-Start entfernt die alten Executes-Plugin-Dateien aus dem persistenten Volume.
 
 Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar sind Fake RCON, WeaponPaints, SimpleAdmin, Fortnite Emotes und Workshop-Maps. Notwendige Abhaengigkeiten werden automatisch installiert oder entfernt.
 

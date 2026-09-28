@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildControlModel, normalizeSettings, SETTING_KEYS, validateRunnableSettings, validateSettings } from "../src/policy.js";
 
-test("normalizeSettings keeps one explicit server mode", () => {
-  const settings = normalizeSettings({ serverMode: "executes" });
-  assert.equal(settings.serverMode, "executes");
+test("normalizeSettings migrates the retired mode and drops its version field", () => {
+  const settings: any = normalizeSettings({ serverMode: "executes", executesVersion: "1.1.1" });
+  assert.equal(settings.serverMode, "matchzy");
+  assert.equal(settings.executesVersion, undefined);
+  assert.equal(buildControlModel(settings).modes.some((mode) => mode.id === "executes"), false);
 });
 
 test("warmup uses the dedicated Workshop map without a mode plugin", () => {
@@ -60,6 +62,7 @@ test("every plugin stack entry links to project documentation", () => {
 
 test("save validation rejects invalid mode and maintenance settings", () => {
   assert.throws(() => validateSettings({ serverMode: "both" }), /Server mode/);
+  assert.throws(() => validateSettings({ serverMode: "executes" }), /Server mode/);
   assert.throws(() => validateSettings({ restartTime: "25:00" }), /HH:mm/);
   assert.throws(() => validateSettings({ restartTimezone: "Vienna" }), /IANA/);
   assert.throws(() => validateSettings({ maxPlayers: 0 }), /between 1 and 64/);

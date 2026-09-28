@@ -12,8 +12,7 @@ const VERSION_FIELDS = [
   ["SIMPLEADMIN", "SimpleAdmin", "simpleAdminVersion"],
   ["MULTIADDONMANAGER", "MultiAddonManager", "multiAddonManagerVersion"],
   ["RAYTRACE", "Ray-Trace", "rayTraceVersion"],
-  ["FORTNITE_EMOTES", "Fortnite Emotes", "fortniteEmotesVersion"],
-  ["EXECUTES", "Executes", "executesVersion"]
+  ["FORTNITE_EMOTES", "Fortnite Emotes", "fortniteEmotesVersion"]
 ];
 
 const OPTIONAL_PLUGIN_FILES = [
@@ -123,7 +122,6 @@ function check(id, label, status, detail) {
 
 function isVersionRelevant(key, settings) {
   if (key === "MATCHZY") return ["matchzy", "nades"].includes(settings.serverMode);
-  if (key === "EXECUTES") return settings.serverMode === "executes";
   if (key === "FAKE_RCON") return settings.fakeRconEnabled;
   if (key === "WEAPONPAINTS") return settings.weaponPaintsEnabled;
   if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return settings.weaponPaintsEnabled || settings.simpleAdminEnabled;
@@ -193,13 +191,6 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     )
     : settings.serverMode === "warmup"
       ? check("warmup", "Warmup / Aim Botz", "pass", "CS2 starts Workshop map 3070244462 in Custom mode.")
-      : settings.serverMode === "executes"
-      ? check(
-        "executes",
-        "Executes",
-        files.executes ? "pass" : "fail",
-        files.executes ? "The selected Executes mode plugin is installed." : "ExecutesPlugin.dll is missing."
-      )
       : check("vanilla", "Vanilla mode", "pass", "No match mode plugin is selected.");
 
   const checks = [

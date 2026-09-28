@@ -25,7 +25,6 @@ export type ServerSettings = {
   workshopMapCatalog: string;
   workshopMapsEnabled: boolean;
   workshopForceDownload: boolean;
-  executesVersion: string;
   simpleAdminEnabled: boolean;
   simpleAdminVersion: string;
   playerSettingsVersion: string;
@@ -60,7 +59,6 @@ export const GAME_MODES = [
   { id: "matchzy", name: "MatchZy", description: "Competitive matches with MatchZy." },
   { id: "nades", name: "Nades", description: "Starts MatchZy in practice mode with the .nades in-game menu and saved lineups." },
   { id: "warmup", name: "Warmup / Aim Botz", description: "Solo aim training with bots on the Aim Botz Workshop map." },
-  { id: "executes", name: "Executes", description: "Executes scenarios. MatchZy is removed while this mode is active." },
   { id: "vanilla", name: "Vanilla + framework", description: "No match mode plugin; Metamod and CounterStrikeSharp remain available." }
 ];
 
@@ -83,7 +81,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     fields: [
       { key: "serverName", label: "Server name", type: "text" },
       { key: "maxPlayers", label: "Max players", type: "number" },
-      { key: "startMap", label: "Start map", type: "text", description: "Used by MatchZy, Executes and Vanilla. Warmup always starts Aim Botz." },
+      { key: "startMap", label: "Start map", type: "text", description: "Used by MatchZy, Nades and Vanilla. Warmup always starts Aim Botz." },
       { key: "joinPassword", label: "Join password", type: "password" },
       { key: "rconPassword", label: "RCON password", type: "password" }
     ]
@@ -116,7 +114,6 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { key: "metamodVersion", label: "Metamod", type: "text", placeholder: "latest" },
       { key: "counterStrikeSharpVersion", label: "CounterStrikeSharp", type: "text", placeholder: "latest" },
       { key: "matchZyVersion", label: "MatchZy", type: "text", placeholder: "latest" },
-      { key: "executesVersion", label: "Executes", type: "text", placeholder: "latest" },
       { key: "fakeRconVersion", label: "Fake RCON", type: "text", placeholder: "latest" },
       { key: "weaponPaintsVersion", label: "WeaponPaints", type: "text", placeholder: "latest" },
       { key: "simpleAdminVersion", label: "SimpleAdmin", type: "text", placeholder: "latest" },
@@ -155,7 +152,6 @@ const DEFAULTS: ServerSettings = {
   workshopMapCatalog: "[]",
   workshopMapsEnabled: false,
   workshopForceDownload: false,
-  executesVersion: "latest",
   simpleAdminEnabled: false,
   simpleAdminVersion: "latest",
   playerSettingsVersion: "latest",
@@ -200,7 +196,7 @@ export function validateSettings(input) {
     throw new Error("Unsupported settings schema version");
   }
   if (source.serverMode !== undefined && !GAME_MODES.some((mode) => mode.id === String(source.serverMode).toLowerCase())) {
-    throw new Error("Server mode must be matchzy, nades, warmup, executes, or vanilla");
+    throw new Error("Server mode must be matchzy, nades, warmup, or vanilla");
   }
   if (source.restartTime !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.restartTime))) {
     throw new Error("Restart time must use HH:mm in 24-hour format");
@@ -268,7 +264,7 @@ export function buildControlModel(input) {
   }))];
   return {
     mode, modes: GAME_MODES, plugins, settingsGroups: SETTINGS_GROUPS, adminRoles: ADMIN_ROLES,
-    rules: ["MatchZy-based modes and Executes are mutually exclusive.", "Nades starts MatchZy practice mode automatically.", "Warmup starts Aim Botz as a dedicated Workshop map.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
+    rules: ["Nades starts MatchZy practice mode automatically.", "Warmup starts Aim Botz as a dedicated Workshop map.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
   };
 }
 

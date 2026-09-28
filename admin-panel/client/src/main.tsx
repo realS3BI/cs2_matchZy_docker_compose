@@ -559,12 +559,6 @@ const usefulLinks = [
     category: "Game mode"
   },
   {
-    title: "CS2 Executes",
-    description: "Source code, releases and configuration for Executes scenarios.",
-    href: "https://github.com/zwolof/cs2-executes",
-    category: "Game mode"
-  },
-  {
     title: "Fortnite Emotes & Dances",
     description: "Source code, commands and releases for the optional emote plugin.",
     href: "https://github.com/Cruze03/FortniteEmotesNDances",
@@ -621,7 +615,7 @@ function Plugins({ settings, setSettings, policy }) {
     <>
       <PageHeader eyebrow="Compatibility policy" title="Game modes & plugins" description="Choose one game mode and control the optional components installed with it." />
       <Card className="mb-4">
-        <CardHeader><CardTitle>Server mode</CardTitle><CardDescription>MatchZy and Executes solve different game flows and cannot run together.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Server mode</CardTitle><CardDescription>Choose the game flow for the next server start.</CardDescription></CardHeader>
         <CardContent>
           <RadioGroup
             className="lg:grid-cols-3"
@@ -641,7 +635,7 @@ function Plugins({ settings, setSettings, policy }) {
       <Card>
         <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
-          {(policy?.plugins || []).filter((plugin) => !["matchzy", "nades", "executes"].includes(plugin.id)).map((plugin) => {
+          {(policy?.plugins || []).filter((plugin) => !["matchzy", "nades"].includes(plugin.id)).map((plugin) => {
             const enabled = plugin.locked || settings[plugin.settingKey] === true;
             return (
               <div key={plugin.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">

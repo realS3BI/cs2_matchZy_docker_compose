@@ -647,10 +647,11 @@ _matchzy_bootstrap_main() (
       "$GAME_DIR/cfg/multiaddonmanager"
   }
 
-  remove_executes_component() {
+  remove_retired_executes_files() {
     rm -rf \
       "$CSS_DIR/plugins/ExecutesPlugin" \
-      "$CSS_DIR/configs/plugins/ExecutesPlugin"
+      "$CSS_DIR/configs/plugins/ExecutesPlugin" \
+      "$GAME_DIR/cfg/cs2-executes"
   }
 
   remove_matchzy_component() {
@@ -841,8 +842,6 @@ _matchzy_bootstrap_main() (
   local workshop_maps_enabled="$(jq -r '.workshopMapsEnabled' "$SETTINGS_FILE")"
   local workshop_maps="$(jq -er '.workshopMaps' "$SETTINGS_FILE")"
   local workshop_force_download="$(jq -r '.workshopForceDownload' "$SETTINGS_FILE")"
-  local executes_enabled=0
-  local executes_version="$(jq -er '.executesVersion' "$SETTINGS_FILE")"
   local simple_admin_enabled="$(jq -r '.simpleAdminEnabled' "$SETTINGS_FILE")"
   local simple_admin_version="$(jq -er '.simpleAdminVersion' "$SETTINGS_FILE")"
   local player_settings_version="$(jq -er '.playerSettingsVersion' "$SETTINGS_FILE")"
@@ -859,30 +858,27 @@ _matchzy_bootstrap_main() (
     matchzy)
       matchzy_enabled=1
       matchzy_autostart_mode=1
-      executes_enabled=0
       ;;
     nades)
       matchzy_enabled=1
       matchzy_autostart_mode=2
-      executes_enabled=0
       ;;
     warmup)
       matchzy_enabled=0
-      executes_enabled=0
       ;;
     executes)
-      matchzy_enabled=0
-      executes_enabled=1
+      log "Retired Executes mode found in existing runtime settings; starting MatchZy"
+      server_mode="matchzy"
+      matchzy_enabled=1
       ;;
     vanilla)
       matchzy_enabled=0
-      executes_enabled=0
       ;;
     *)
-      fail "Server mode must be one of: matchzy, nades, warmup, executes, vanilla"
+      fail "Server mode must be one of: matchzy, nades, warmup, vanilla"
       ;;
   esac
-  log "Server mode '$server_mode' selected (MatchZy=$matchzy_enabled, Executes=$executes_enabled)"
+  log "Server mode '$server_mode' selected (MatchZy=$matchzy_enabled)"
 
   local NEED_MENU_STACK=0
   if is_enabled "$simple_admin_enabled" || is_enabled "$weapon_paints_enabled"; then
@@ -965,10 +961,8 @@ _matchzy_bootstrap_main() (
     remove_multiaddonmanager_component
   fi
 
-  if ! is_enabled "$executes_enabled"; then
-    log "cs2-executes disabled; removing installed files"
-    remove_executes_component
-  fi
+  # Existing CS2 volumes can still contain the retired plugin and its generated CFG.
+  remove_retired_executes_files
 
   log "Resolving Metamod release: $metamod_version"
   local METAMOD_TAG METAMOD_URL
@@ -992,7 +986,7 @@ _matchzy_bootstrap_main() (
     MATCHZY_TAG="$(extract_tag_name "$matchzy_json")"
     # CounterStrikeSharp is managed independently below. Using MatchZy's
     # with-cssharp bundle here can downgrade the framework whenever MatchZy is
-    # restored after Warmup/Executes and leave the plugin stack inconsistent.
+    # restored after Warmup and leave the plugin stack inconsistent.
     MATCHZY_URL="$(extract_asset_url_excluding "$matchzy_json" '\.(zip|tar\.gz)$' 'with-cssharp' || true)"
     if [[ -z "${MATCHZY_URL:-}" ]]; then
       MATCHZY_URL="$(extract_asset_url "$matchzy_json" 'with-cssharp.*linux.*\.(zip|tar\.gz)$' || true)"
@@ -1192,27 +1186,6 @@ _matchzy_bootstrap_main() (
     log "FortniteEmotesNDances installation disabled"
   fi
 
-  local EXECUTES_TAG=""
-  local EXECUTES_URL=""
-  if is_enabled "$executes_enabled"; then
-    log "Resolving cs2-executes release: $executes_version"
-    mapfile -t _executes_release < <(
-      resolve_github_release_asset \
-        "zwolof/cs2-executes" \
-        "$executes_version" \
-        'cs2-executes-[0-9][0-9.]*\.zip$' \
-        'cs2-executes'
-    )
-    EXECUTES_TAG="${_executes_release[0]:-}"
-    EXECUTES_URL="${_executes_release[1]:-}"
-    unset _executes_release
-    [[ -n "${EXECUTES_TAG:-}" && -n "${EXECUTES_URL:-}" ]] \
-      || fail "Could not resolve cs2-executes asset"
-    log "cs2-executes resolved to tag '$EXECUTES_TAG'"
-  else
-    log "cs2-executes installation disabled"
-  fi
-
   local INSTALLED_METAMOD_TAG
   local INSTALLED_MATCHZY_TAG
   local INSTALLED_COUNTERSTRIKESHARP_TAG
@@ -1225,7 +1198,6 @@ _matchzy_bootstrap_main() (
   local INSTALLED_MULTIADDONMANAGER_TAG
   local INSTALLED_RAYTRACE_TAG
   local INSTALLED_FORTNITE_EMOTES_TAG
-  local INSTALLED_EXECUTES_TAG
 
   INSTALLED_METAMOD_TAG="$(read_state_value metamodTag)"
   INSTALLED_MATCHZY_TAG="$(read_state_value matchZyTag)"
@@ -1239,7 +1211,6 @@ _matchzy_bootstrap_main() (
   INSTALLED_MULTIADDONMANAGER_TAG="$(read_state_value multiAddonManagerTag)"
   INSTALLED_RAYTRACE_TAG="$(read_state_value rayTraceTag)"
   INSTALLED_FORTNITE_EMOTES_TAG="$(read_state_value fortniteEmotesTag)"
-  INSTALLED_EXECUTES_TAG="$(read_state_value executesTag)"
 
   local metamod_marker="$GAME_DIR/addons/metamod"
   local matchzy_marker="$CSS_DIR/plugins/MatchZy/MatchZy.dll"
@@ -1258,8 +1229,6 @@ _matchzy_bootstrap_main() (
   local multiaddonmanager_cfg="$GAME_DIR/cfg/multiaddonmanager/multiaddonmanager.cfg"
   local raytrace_marker="$ADDONS_DIR/RayTrace/bin/linuxsteamrt64/RayTrace.so"
   local fortnite_emotes_marker="$CSS_DIR/plugins/FortniteEmotesNDances/FortniteEmotesNDances.dll"
-  local executes_marker="$CSS_DIR/plugins/ExecutesPlugin/ExecutesPlugin.dll"
-  local executes_map_config_marker="$CSS_DIR/plugins/ExecutesPlugin/map_config/de_mirage.json"
   local css_core_config="$CSS_DIR/configs/core.json"
   local matchzy_admins_file="$GAME_DIR/cfg/MatchZy/admins.json"
   local matchzy_config_file="$GAME_DIR/cfg/MatchZy/config.cfg"
@@ -1410,15 +1379,6 @@ _matchzy_bootstrap_main() (
     write_multiaddonmanager_config "$multiaddonmanager_cfg" "$workshop_force_download" "${MULTIADDONMANAGER_ADDON_IDS[@]}"
   fi
 
-  if is_enabled "$executes_enabled"; then
-    if [[ "$repair_mods" == "1" || "$INSTALLED_EXECUTES_TAG" != "$EXECUTES_TAG" || ! -f "$executes_marker" || ! -f "$executes_map_config_marker" ]]; then
-      log "Installing or updating cs2-executes"
-      install_archive_component "executes" "$EXECUTES_URL" "$CSS_DIR/plugins" "$executes_marker"
-    else
-      log "cs2-executes already current; skipping"
-    fi
-  fi
-
   local state_tmp
   state_tmp="$(mktemp "$STATE_DIR/.state.XXXXXX")"
   jq -n \
@@ -1435,7 +1395,6 @@ _matchzy_bootstrap_main() (
     --arg multiAddonManagerTag "$MULTIADDONMANAGER_TAG" \
     --arg rayTraceTag "$RAYTRACE_TAG" \
     --arg fortniteEmotesTag "$FORTNITE_EMOTES_TAG" \
-    --arg executesTag "$EXECUTES_TAG" \
     '{
       metamodTag: $metamodTag,
       serverMode: $serverMode,
@@ -1449,8 +1408,7 @@ _matchzy_bootstrap_main() (
       simpleAdminTag: $simpleAdminTag,
       multiAddonManagerTag: $multiAddonManagerTag,
       rayTraceTag: $rayTraceTag,
-      fortniteEmotesTag: $fortniteEmotesTag,
-      executesTag: $executesTag
+      fortniteEmotesTag: $fortniteEmotesTag
     }' > "$state_tmp"
   mv "$state_tmp" "$STATE_FILE"
   log "Stored install state in $STATE_FILE"
