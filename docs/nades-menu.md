@@ -5,10 +5,14 @@ Das eigene CounterStrikeSharp-Plugin `MatchZyNades` zeigt die gespeicherten Line
 ## Aktivieren
 
 1. Den aktualisierten Stack neu bauen und deployen: `docker compose up -d --build` (in Coolify: neu bauen/deployen).
-2. Im Dashboard unter `Plugins` den Servermodus **Nades** auswaehlen und `Apply & restart` ausfuehren.
+2. Im Dashboard unter `Plugins` den Servermodus **Nades** oder **MatchZy** auswaehlen und `Apply & restart` ausfuehren. Bei MatchZy im Spiel zuerst `.prac` starten.
 3. In CS2 einem Team beitreten und spawnen. `.nades` in den Chat schreiben.
 
-Das Image baut das Plugin gegen CounterStrikeSharp **1.0.373**, fuehrt dessen Unit-Tests aus und installiert es beim Bootstrap ausschliesslich im Nades-Modus. CounterStrikeSharp muss mindestens API 373 bereitstellen. Beim Wechsel in einen anderen Servermodus entfernt der Bootstrap die Plugin-DLL. Zusaetzlich verlangt das Plugin `sv_cheats`, das MatchZy im Practice-Modus aktiviert und beim Verlassen wieder deaktiviert.
+Das Image baut das Plugin gegen CounterStrikeSharp **1.0.373**, fuehrt dessen Unit-Tests aus und installiert es beim Bootstrap in den Modi **Nades und MatchZy**. So funktioniert auch ein spaeterer Wechsel mit `.prac`. CounterStrikeSharp muss mindestens API 373 bereitstellen. In den Modi Executes, Warmup und Vanilla entfernt der Bootstrap die Plugin-DLL. Zusaetzlich verlangt das Plugin `sv_cheats`, das MatchZy im Practice-Modus aktiviert und beim Verlassen wieder deaktiviert.
+
+Unter **Plugins** und **Nades** zeigt die Karte **MatchZy Nades · In-game menu** den Installations- und Laufzeitstatus. **Loaded** bedeutet, dass das Plugin innerhalb der letzten 30 Sekunden eine Rueckmeldung aus diesem Containerstart geschrieben hat; dazu erscheinen Plugin-Version und Practice-Zustand. Die Anzeige aktualisiert sich alle 30 Sekunden oder per **Refresh status**. **Installed · unconfirmed** bedeutet nur, dass die DLL vorhanden ist. **Not installed** erklaert, ob `Apply & restart` reicht oder das CS2-Image neu gebaut werden muss. Unter **Diagnostics** gibt es ausserdem einen eigenen Pruefschritt fuer das Menue.
+
+Nach diesem Update beide Images (Dashboard und CS2) neu bauen und deployen. Ein Neustart eines alten Images bringt die neue DLL und Anzeige nicht mit. Die Laufzeitrueckmeldung liegt in `addons/counterstrikesharp/plugins/MatchZyNades/data/status.json`, wird alle fuenf Sekunden atomar erneuert und beim Entladen auf `unloaded` gesetzt. Veraltete Rueckmeldungen aus einem vorherigen Containerstart gelten nicht als Ladebestaetigung.
 
 ## Bedienung ohne Installation am Client
 

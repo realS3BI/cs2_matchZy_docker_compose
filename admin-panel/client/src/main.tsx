@@ -82,6 +82,7 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
 import { Diagnostics } from "./diagnostics";
+import { NadesMenuStatus } from "./components/nades-menu-status";
 
 const routePaths = {
   login: "/login",
@@ -655,6 +656,7 @@ function Plugins({ settings, setSettings, policy }) {
           </RadioGroup>
         </CardContent>
       </Card>
+      <NadesMenuStatus selectedMode={mode} />
       <Card>
         <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
@@ -1774,6 +1776,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
         onAdd={(entry) => setNades((current) => [...current, entry])}
       />
       {localError ? <Message error={localError} /> : null}
+      <NadesMenuStatus selectedMode={settings.serverMode || "matchzy"} />
       <Card className="mb-4 overflow-hidden">
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="grid gap-1.5">

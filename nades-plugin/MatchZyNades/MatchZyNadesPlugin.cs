@@ -5,6 +5,7 @@ using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Menu;
+using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
@@ -16,7 +17,7 @@ namespace MatchZyNades;
 public sealed class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.0.0";
+    public override string ModuleVersion => "1.0.1";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -24,6 +25,8 @@ public sealed class MatchZyNadesPlugin : BasePlugin
     private readonly Dictionary<int, NadeLineup> _last = [];
     private string _libraryPath = "";
     private ConVar? _cheats;
+    private NadeRuntimeStatus? _runtimeStatus;
+    private bool _statusWriteFailed;
 
     private sealed class MenuSession(CCSPlayerController player, NadeMenu menu)
     {
@@ -52,10 +55,32 @@ public sealed class MatchZyNadesPlugin : BasePlugin
         RegisterEventHandler<EventPlayerDeath>((e, _) => { if (e.Userid is { } p) Close(p.Slot); return HookResult.Continue; }, HookMode.Pre);
         RegisterEventHandler<EventPlayerSpawn>((e, _) => { if (e.Userid is { } p) Close(p.Slot); return HookResult.Continue; });
         RegisterEventHandler<EventRoundStart>((_, _) => { CloseAll(); return HookResult.Continue; });
-        Logger.LogInformation("Nade training menu loaded: .nades / !nades / css_nades");
+        _runtimeStatus = new NadeRuntimeStatus(Path.Combine(ModuleDirectory, "data", "status.json"), ModuleVersion);
+        WriteRuntimeStatus(true);
+        AddTimer(5f, () => WriteRuntimeStatus(true), TimerFlags.REPEAT);
+        Logger.LogInformation("MatchZy Nades {Version} loaded: .nades / !nades / css_nades", ModuleVersion);
     }
 
-    public override void Unload(bool hotReload) => Reset();
+    public override void Unload(bool hotReload)
+    {
+        Reset();
+        WriteRuntimeStatus(false);
+        Logger.LogInformation("MatchZy Nades unloaded");
+    }
+
+    private void WriteRuntimeStatus(bool loaded)
+    {
+        try
+        {
+            _runtimeStatus?.Write(loaded, TrainingEnabled, Server.MapName);
+            _statusWriteFailed = false;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            if (!_statusWriteFailed) Logger.LogWarning(error, "Could not write MatchZy Nades runtime status");
+            _statusWriteFailed = true;
+        }
+    }
 
     private HookResult OnSay(CCSPlayerController? player, CommandInfo command)
     {
@@ -88,7 +113,7 @@ public sealed class MatchZyNadesPlugin : BasePlugin
     {
         if (player is not { IsValid: true, IsBot: false }) return;
         if (action.Equals("close", StringComparison.OrdinalIgnoreCase) || action == "9") { Close(player.Slot); return; }
-        if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Nur im Nades-Training mit aktivem Practice-Modus verfuegbar."); return; }
+        if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Nades-Menue geladen. Training ist noch aus: zuerst .prac starten, dann .nades."); return; }
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
         if (action.Equals("last", StringComparison.OrdinalIgnoreCase))
         {

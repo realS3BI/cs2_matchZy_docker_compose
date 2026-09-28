@@ -10,6 +10,8 @@ const healthyProbe = [
   "FILE\tcounterStrikeSharpNative\t1",
   "FILE\tcounterStrikeSharpApi\t1",
   "FILE\tmatchZyCoach\t1",
+  "FILE\tmatchZyNades\t1",
+  "FILE\tmatchZyNadesBundled\t1",
   "FILE\tmatchZy\t1",
   "FILE\tmatchZyConfig\t1",
   "FILE\tmatchZySavedNades\t1",
@@ -26,7 +28,7 @@ function input(patch = {}) {
       startedAt: "2026-09-02T12:00:00.000Z",
       restartCount: 2
     },
-    probe: { ok: true, stdout: healthyProbe, stderr: "" },
+    probe: { ok: true, stdout: `${healthyProbe}\n${heartbeat()}`, stderr: "" },
     logs: "[pre.sh] Mod bootstrap complete\nMatchZy Coach loaded\n[MatchZy 0.8.15 LOADED] MatchZy by WD-",
     desired: { matchZyVersion: "latest" },
     controlMode: "docker",
@@ -34,10 +36,19 @@ function input(patch = {}) {
   };
 }
 
-test("parseProbeOutput reads only file and version records", () => {
+function heartbeat(patch = {}) {
+  return `RUNTIME\tmatchZyNades\t${JSON.stringify({
+    state: "loaded", version: "1.0.1", practice: true,
+    loadedAt: new Date(Date.now() - 5000).toISOString(), updatedAt: new Date().toISOString(),
+    ...patch
+  })}`;
+}
+
+test("parseProbeOutput reads only supported diagnostic records", () => {
   assert.deepEqual(parseProbeOutput("FILE\tmatchZy\t1\nSECRET\tTOKEN\tvalue\nVERSION\tMATCHZY\t0.8.15"), {
     files: { matchZy: true },
-    versions: { MATCHZY: "0.8.15" }
+    versions: { MATCHZY: "0.8.15" },
+    runtime: {}
   });
 });
 
@@ -74,6 +85,77 @@ test("buildDiagnostics treats an active bootstrap as in progress", () => {
 
   assert.equal(report.checks.find((item) => item.id === "bootstrap").status, "warn");
   assert.equal(report.overall, "degraded");
+});
+
+test("Nades menu reports current runtime and practice state", () => {
+  const menu = buildDiagnostics(input()).nades.menu;
+  assert.equal(menu.state, "loaded");
+  assert.equal(menu.practice, true);
+  assert.equal(menu.version, "1.0.1");
+  const report = buildDiagnostics(input({ probe: { ok: true, stdout: `${healthyProbe}\n${heartbeat({ practice: false })}` } }));
+  assert.equal(report.nades.menu.state, "loaded");
+  assert.equal(report.nades.menu.practice, false);
+  assert.match(report.nades.menu.detail, /\.prac/);
+});
+
+test("missing menu distinguishes old image from installation needing restart", () => {
+  const missing = healthyProbe.replace("FILE\tmatchZyNades\t1", "FILE\tmatchZyNades\t0");
+  const report = buildDiagnostics(input({ probe: { ok: true, stdout: missing } }));
+  assert.equal(report.nades.menu.state, "missing");
+  assert.match(report.nades.menu.detail, /Apply & restart/);
+  const oldImage = buildDiagnostics(input({ probe: { ok: true, stdout: missing.replace("FILE\tmatchZyNadesBundled\t1", "FILE\tmatchZyNadesBundled\t0") } }));
+  assert.match(oldImage.nades.menu.detail, /Rebuild and redeploy/);
+  assert.equal(oldImage.checks.find(check => check.id === "matchzy-nades").status, "fail");
+});
+
+test("old logs and files alone never confirm a running menu", () => {
+  const report = buildDiagnostics(input({ probe: { ok: true, stdout: healthyProbe }, logs: "Finished loading plugin MatchZyNades" }));
+  assert.equal(report.nades.menu.state, "unconfirmed");
+  assert.equal(report.nades.menu.practice, null);
+  assert.equal(report.checks.at(-1).status, "warn");
+});
+
+test("stale, future, malformed and previous-start heartbeats cannot show Loaded", () => {
+  const samples = [
+    heartbeat({ updatedAt: new Date(Date.now() - 60000).toISOString() }),
+    heartbeat({ updatedAt: new Date(Date.now() + 60000).toISOString() }),
+    heartbeat({ loadedAt: "2020-01-01T00:00:00Z" }),
+    heartbeat({ updatedAt: "broken" }),
+    heartbeat({ practice: "true" }),
+    "RUNTIME\tmatchZyNades\t{broken",
+    "RUNTIME\tmatchZyNades\tnull"
+  ];
+  for (const sample of samples) {
+    const report = buildDiagnostics(input({ probe: { ok: true, stdout: `${healthyProbe}\n${sample}` } }));
+    assert.equal(report.nades.menu.state, "unconfirmed", sample);
+  }
+});
+
+test("a stopped server or failed probe overrides a fresh heartbeat", () => {
+  assert.equal(buildDiagnostics(input({ service: { state: "exited" } })).nades.menu.state, "stopped");
+  assert.equal(buildDiagnostics(input({ probe: { ok: false, stdout: `${healthyProbe}\n${heartbeat()}` } })).nades.menu.state, "unavailable");
+});
+
+test("framework rejection and plugin unload are visible", () => {
+  assert.equal(buildDiagnostics(input({ logs: "cannot enable executable stack as shared object requires" })).nades.menu.state, "blocked");
+  const report = buildDiagnostics(input({ probe: { ok: true, stdout: `${healthyProbe}\n${heartbeat({ state: "unloaded", practice: false })}` } }));
+  assert.equal(report.nades.menu.state, "unloaded");
+  const rejected = buildDiagnostics(input({ probe: { ok: true, stdout: healthyProbe }, logs: 'Failed to load plugin "MatchZyNades.dll"' }));
+  assert.equal(rejected.nades.menu.state, "failed");
+});
+
+test("menu is not required in unrelated modes", () => {
+  const report = buildDiagnostics(input({ desired: { serverMode: "vanilla" }, probe: { ok: true, stdout: healthyProbe.replace("FILE\tmatchZyNades\t1", "FILE\tmatchZyNades\t0") } }));
+  assert.equal(report.nades.menu.expected, false);
+  assert.equal(report.nades.menu.state, "inactive");
+  assert.equal(report.checks.some(check => check.id === "matchzy-nades"), false);
+});
+
+test("MatchZy status never matches sibling plugin names", () => {
+  const report = buildDiagnostics(input({ logs: "Finished loading plugin MatchZy\nFailed to load plugin MatchZyNades\nFailed to load plugin MatchZyCoach" }));
+  assert.equal(report.checks.at(-1).status, "pass");
+  const failed = buildDiagnostics(input({ logs: 'Finished loading plugin MatchZyNades\nFailed to load plugin "MatchZy.dll"' }));
+  assert.equal(failed.checks.at(-1).status, "fail");
 });
 
 test("buildDiagnostics explains an executable-stack rejection even when CSS files exist", () => {

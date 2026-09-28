@@ -157,7 +157,9 @@ MatchZys eigene Admin-Datei bleibt leer. MatchZy verwendet die Rechte aus Counte
 
 ## Nades und Bilder
 
-Im Servermodus **Nades** wird das eigene Plugin `MatchZyNades` automatisch installiert. `.nades` oeffnet direkt in CS2 eine Typauswahl und danach die Lineups der aktuellen Map mit Pagination. W/S markiert Eintraege, Linksklick bestaetigt, Rechtsklick geht zurueck und E schliesst. Die Auswahl laedt Position und Blickwinkel und stellt die passende Granate bereit; `.nades last` setzt dich fuer den naechsten Versuch zurueck. Angezeigt werden oeffentliche und eigene private Lineups.
+In den Servermodi **Nades und MatchZy** wird das eigene Plugin `MatchZyNades` automatisch installiert. Bei MatchZy zuerst `.prac` starten. `.nades` oeffnet direkt in CS2 eine Typauswahl und danach die Lineups der aktuellen Map mit Pagination. W/S markiert Eintraege, Linksklick bestaetigt, Rechtsklick geht zurueck und E schliesst. Die Auswahl laedt Position und Blickwinkel und stellt die passende Granate bereit; `.nades last` setzt dich fuer den naechsten Versuch zurueck. Angezeigt werden oeffentliche und eigene private Lineups.
+
+Unter **Plugins** und **Nades** zeigt eine Statuskarte, ob das Menue fehlt, nur installiert oder vom laufenden Plugin bestaetigt ist. **Loaded** basiert auf einer aktuellen Rueckmeldung aus diesem Containerstart und zeigt auch den Practice-Zustand. **Diagnostics** prueft das Menue separat. Nach dem Update muessen sowohl Dashboard als auch CS2 neu gebaut und deployed werden.
 
 Direkte Zifferntasten 1–9 sind mit einer optionalen Client-CFG moeglich; ohne Binds funktioniert auch `.nades 1` bis `.nades 9`. [Bedienung, Installation und Testablauf](docs/nades-menu.md) sowie [Zifferntasten-CFG](docs/nades-menu.cfg). Nach dem Repository-Update muss das CS2-Image neu gebaut werden.
 

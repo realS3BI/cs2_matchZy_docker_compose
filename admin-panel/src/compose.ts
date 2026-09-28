@@ -42,6 +42,15 @@ probe_file matchZyConfig "$root/cfg/MatchZy/config.cfg"
 probe_file matchZySavedNades "$root/cfg/MatchZy/savednades.json"
 probe_file executes "$root/addons/counterstrikesharp/plugins/ExecutesPlugin/ExecutesPlugin.dll"
 probe_file matchZyCoach "$root/addons/counterstrikesharp/plugins/MatchZyCoach/MatchZyCoach.dll"
+probe_file matchZyNades "$root/addons/counterstrikesharp/plugins/MatchZyNades/MatchZyNades.dll"
+probe_file matchZyNadesBundled "/opt/matchzy-nades/MatchZyNades.dll"
+status_file="$root/addons/counterstrikesharp/plugins/MatchZyNades/data/status.json"
+if [ -f "$status_file" ]; then
+  runtime="$(jq -ce '{state, version, loadedAt, updatedAt, practice, map}' "$status_file" 2>/dev/null)"
+  if [ -n "$runtime" ]; then
+    printf 'RUNTIME\tmatchZyNades\t%s\n' "$runtime"
+  fi
+fi
 probe_file fakeRcon "$root/addons/fake_rcon/bin/linuxsteamrt64/fake_rcon.so"
 probe_file weaponPaints "$root/addons/counterstrikesharp/plugins/WeaponPaints/WeaponPaints.dll"
 probe_file playerSettings "$root/addons/counterstrikesharp/plugins/PlayerSettings/PlayerSettings.dll"

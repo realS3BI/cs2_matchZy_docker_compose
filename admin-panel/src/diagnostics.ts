@@ -26,18 +26,85 @@ const OPTIONAL_PLUGIN_FILES = [
 function parseProbeOutput(output = "") {
   const files: Record<string, boolean> = {};
   const versions: Record<string, string> = {};
+  const runtime: Record<string, any> = {};
 
   for (const line of String(output).split(/\r?\n/)) {
     const [kind, key, value = ""] = line.split("\t");
     if (kind === "FILE" && key) files[key] = value === "1";
     if (kind === "VERSION" && key) versions[key] = value;
+    if (kind === "RUNTIME" && key === "matchZyNades") {
+      try {
+        const data = JSON.parse(value);
+        if (data && typeof data === "object" && !Array.isArray(data)) {
+          runtime[key] = {
+            state: data.state, version: data.version, loadedAt: data.loadedAt,
+            updatedAt: data.updatedAt, practice: data.practice, map: data.map
+          };
+        }
+      } catch { /* A missing or invalid heartbeat is unconfirmed, never healthy. */ }
+    }
   }
 
-  return { files, versions };
+  return { files, versions, runtime };
+}
+
+function nadesMenuStatus({ files, runtime, settings, service, container, probe, cssReady, logs }) {
+  const expected = ["matchzy", "nades"].includes(settings.serverMode);
+  const installed = Boolean(files.matchZyNades);
+  const bundled = Boolean(files.matchZyNadesBundled);
+  const heartbeat = runtime.matchZyNades;
+  const updated = Date.parse(heartbeat?.updatedAt);
+  const loaded = Date.parse(heartbeat?.loadedAt);
+  const started = Date.parse(container?.startedAt);
+  const age = Date.now() - updated;
+  const current = Number.isFinite(started) && loaded >= started && updated >= loaded;
+  const fresh = current && age >= -5000 && age <= 30000 &&
+    typeof heartbeat?.practice === "boolean" && typeof heartbeat?.version === "string";
+  const loadFailure = lastPluginLog(logs, "failed to load plugin|could not load plugin", "matchzynades");
+  const loadSuccess = Math.max(lastPluginLog(logs, "finished loading plugin", "matchzynades"),
+    lastIndexOfAny(logs, ["nade training menu loaded", "matchzy nades 1.0.1 loaded"]));
+  let state: string;
+  let status: string;
+  let detail: string;
+  if (service?.state !== "running") {
+    state = "stopped"; status = "warn"; detail = "The CS2 container is not running. Start it before checking the in-game menu.";
+  } else if (!probe?.ok) {
+    state = "unavailable"; status = "warn"; detail = "The container could not be inspected. Open Diagnostics to check Docker access.";
+  } else if (!installed) {
+    state = expected ? "missing" : "inactive"; status = expected ? "fail" : "pass";
+    detail = !expected ? "Automatically installed with MatchZy and Nades modes. Select one of these modes and Apply & restart."
+      : bundled ? "MatchZyNades.dll is missing from the plugin folder. Apply & restart to install the bundled menu."
+      : "This CS2 image does not contain the menu plugin. Rebuild and redeploy the stack; a container restart alone cannot add it.";
+  } else if (!cssReady) {
+    state = "blocked"; status = "fail"; detail = "The plugin is installed, but CounterStrikeSharp cannot start. Check the framework errors in Diagnostics.";
+  } else if (fresh && heartbeat?.state === "loaded") {
+    state = "loaded"; status = "pass";
+    detail = heartbeat.practice === true ? "The running plugin confirms practice is active. Join a team, spawn and type .nades."
+      : "The running plugin is loaded. Start practice with .prac, then open .nades.";
+  } else if (current && heartbeat?.state === "unloaded") {
+    state = "unloaded"; status = "fail"; detail = "The plugin reported that it was unloaded. Apply & restart, then check Diagnostics.";
+  } else if (loadFailure > loadSuccess) {
+    state = "failed"; status = "fail"; detail = "CounterStrikeSharp reported a MatchZyNades load failure. Check Docker logs for the plugin error and verify CounterStrikeSharp API 373 or newer is installed.";
+  } else {
+    state = "unconfirmed"; status = "warn";
+    detail = "The DLL is installed, but there is no recent confirmation from this server start. Check the load logs in Diagnostics; rebuild the stack if it still uses plugin 1.0.0.";
+  }
+  return {
+    expected, installed, bundled, state, status, detail,
+    version: current && typeof heartbeat?.version === "string" ? heartbeat.version : "",
+    updatedAt: Number.isFinite(updated) ? new Date(updated).toISOString() : "",
+    practice: state === "loaded" ? heartbeat.practice === true : null
+  };
 }
 
 function lastIndexOfAny(text, needles) {
   return Math.max(-1, ...needles.map((needle) => text.lastIndexOf(needle)));
+}
+
+function lastPluginLog(text, verbs, name) {
+  // A word boundary prevents MatchZyNades / MatchZyCoach from matching MatchZy.
+  const matches = [...text.matchAll(new RegExp(`(?:${verbs})\\s+["']?${name}\\b`, "gi"))];
+  return matches.at(-1)?.index ?? -1;
 }
 
 function findAssetFailures(logs) {
@@ -68,7 +135,7 @@ function isVersionRelevant(key, settings) {
 
 export function buildDiagnostics({ service, container, probe, logs = "", desired = {}, controlMode = "docker" }) {
   const settings = normalizeSettings(desired);
-  const { files, versions } = parseProbeOutput(probe?.stdout);
+  const { files, versions, runtime } = parseProbeOutput(probe?.stdout);
   const normalizedLogs = String(logs).toLowerCase();
   const bootstrapSuccess = normalizedLogs.lastIndexOf("[pre.sh] mod bootstrap complete");
   const bootstrapFailure = normalizedLogs.lastIndexOf("[pre.sh] hook failed");
@@ -77,16 +144,11 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     "[pre.sh] installing or updating ",
     "[pre.sh] downloading "
   ]);
-  const matchZyLoaded = lastIndexOfAny(normalizedLogs, [
-    "finished loading plugin matchzy",
+  const matchZyLoaded = Math.max(lastPluginLog(normalizedLogs, "finished loading plugin", "matchzy"), lastIndexOfAny(normalizedLogs, [
     "[matchzy 0.8.15 loaded]",
     "matchzy by wd-"
-  ]);
-  const matchZyFailed = lastIndexOfAny(normalizedLogs, [
-    "failed to load plugin matchzy",
-    "could not load plugin matchzy",
-    "failed to load plugin \"matchzy.dll\""
-  ]);
+  ]));
+  const matchZyFailed = lastPluginLog(normalizedLogs, "failed to load plugin|could not load plugin", "matchzy");
   const cssExecutableStackFailure = lastIndexOfAny(normalizedLogs, [
     "cannot enable executable stack as shared object requires",
     "requires executable stack"
@@ -107,6 +169,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
   const cssFilesReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
   const cssReady = cssFilesReady && cssExecutableStackFailure < 0 && metamodInterfaceFailure < 0;
   const coachInstalled = Boolean(files.matchZyCoach);
+  const nadeMenu = nadesMenuStatus({ files, runtime, settings, service, container, probe, cssReady, logs: normalizedLogs });
   const coachLoaded = lastIndexOfAny(normalizedLogs, ["matchzy coach loaded", "finished loading plugin matchzycoach"]);
   const coachFailed = lastIndexOfAny(normalizedLogs, ["failed to load plugin matchzycoach", "could not load plugin matchzycoach", "requires a newer version of counterstrikesharp"]);
   const coachStatus = metamodInterfaceFailure >= 0 ? "fail" : coachFailed > coachLoaded ? "fail" : coachLoaded >= 0 ? "pass" : coachInstalled ? "warn" : "fail";
@@ -196,6 +259,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
           ? "MatchZyCoach.dll exists, but no load confirmation is present in retained logs."
           : metamodInterfaceFailure >= 0 ? "CounterStrikeSharp did not start, so MatchZy Coach could not load." : coachInstalled ? "CounterStrikeSharp rejected MatchZy Coach during startup." : "MatchZyCoach.dll is missing. Rebuild the CS2 image."
     ),
+    ...(nadeMenu.expected ? [check("matchzy-nades", "MatchZy Nades menu", nadeMenu.status, nadeMenu.detail)] : []),
     modeCheck
   ];
 
@@ -296,6 +360,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
     })),
     repairAvailable: serviceRunning && overall !== "healthy",
     nades: {
+      menu: nadeMenu,
       relevant: ["matchzy", "nades"].includes(settings.serverMode),
       configPresent: Boolean(files.matchZyConfig),
       savedNadesPresent: Boolean(files.matchZySavedNades)

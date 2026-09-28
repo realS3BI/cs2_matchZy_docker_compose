@@ -672,7 +672,7 @@ _matchzy_bootstrap_main() (
     local mode="$1"
     local source_file="/opt/matchzy-nades/MatchZyNades.dll"
     local destination_dir="$CSS_DIR/plugins/MatchZyNades"
-    if [[ "$mode" != "nades" ]]; then
+    if [[ "$mode" != "nades" && "$mode" != "matchzy" ]]; then
       # Only remove our bundled assembly; preserve any local data or configuration.
       rm -f "$destination_dir/MatchZyNades.dll"
       return

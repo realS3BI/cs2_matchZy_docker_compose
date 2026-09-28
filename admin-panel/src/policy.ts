@@ -58,7 +58,7 @@ type SettingsGroup = {
 
 export const GAME_MODES = [
   { id: "matchzy", name: "MatchZy", description: "Competitive matches with MatchZy." },
-  { id: "nades", name: "Nades", description: "Starts MatchZy directly in practice mode with nade commands and saved lineups." },
+  { id: "nades", name: "Nades", description: "Starts MatchZy in practice mode with the .nades in-game menu and saved lineups." },
   { id: "warmup", name: "Warmup / Aim Botz", description: "Solo aim training with bots on the Aim Botz Workshop map." },
   { id: "executes", name: "Executes", description: "Executes scenarios. MatchZy is removed while this mode is active." },
   { id: "vanilla", name: "Vanilla + framework", description: "No match mode plugin; Metamod and CounterStrikeSharp remain available." }
