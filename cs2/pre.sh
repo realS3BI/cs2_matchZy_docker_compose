@@ -668,6 +668,21 @@ _matchzy_bootstrap_main() (
     log "Installed bundled MatchZy Coach plugin"
   }
 
+  install_matchzy_nades() {
+    local mode="$1"
+    local source_file="/opt/matchzy-nades/MatchZyNades.dll"
+    local destination_dir="$CSS_DIR/plugins/MatchZyNades"
+    if [[ "$mode" != "nades" ]]; then
+      # Only remove our bundled assembly; preserve any local data or configuration.
+      rm -f "$destination_dir/MatchZyNades.dll"
+      return
+    fi
+    [[ -f "$source_file" ]] || fail "Bundled MatchZy Nades plugin not found: $source_file"
+    mkdir -p "$destination_dir"
+    copy_file_atomic "$source_file" "$destination_dir/MatchZyNades.dll"
+    log "Installed bundled MatchZy Nades plugin (.nades menu)"
+  }
+
   patch_gameinfo_for_metamod() {
     local gameinfo="$1"
     local tmp_file=""
@@ -1292,6 +1307,7 @@ _matchzy_bootstrap_main() (
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
   install_matchzy_coach
+  install_matchzy_nades "$server_mode"
 
   write_admin_files_from_runtime \
     "$runtime_css_admins_file" \

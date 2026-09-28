@@ -3,3 +3,5 @@ node_modules/
 admin-panel/node_modules/
 admin-panel/build/
 admin-panel/dist/
+**/bin/
+**/obj/
