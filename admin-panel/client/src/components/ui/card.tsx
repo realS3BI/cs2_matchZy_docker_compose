@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/utils";
 
 export function Card({ className, ...props }: ComponentPropsWithoutRef<"section">) {
-  return <section className={cn("rounded-xl border border-border bg-card text-card-foreground shadow-xs", className)} {...props} />;
+  return <section className={cn("control-card rounded-xl border border-border bg-card text-card-foreground shadow-xs", className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: ComponentPropsWithoutRef<"div">) {
@@ -10,7 +10,7 @@ export function CardHeader({ className, ...props }: ComponentPropsWithoutRef<"di
 }
 
 export function CardTitle({ className, ...props }: ComponentPropsWithoutRef<"h2">) {
-  return <h2 className={cn("text-base font-semibold leading-none tracking-tight", className)} {...props} />;
+  return <h2 className={cn("text-base font-semibold leading-snug tracking-tight", className)} {...props} />;
 }
 
 export function CardDescription({ className, ...props }: ComponentPropsWithoutRef<"p">) {

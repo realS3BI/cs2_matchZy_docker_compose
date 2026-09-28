@@ -23,6 +23,7 @@ import {
   LockKeyhole,
   LogOut,
   MapPinned,
+  Menu,
   PackagePlus,
   Pause,
   Play,
@@ -55,7 +56,7 @@ import {
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "./components/ui/field";
-import { NativeSelect } from "./components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
@@ -97,15 +98,15 @@ const routePaths = {
 };
 
 const tabs = [
-  { id: "overview", path: routePaths.overview, label: "Overview", icon: LayoutDashboard, group: "Workspace" },
-  { id: "server", path: routePaths.server, label: "Server", icon: Server, group: "Workspace" },
-  { id: "plugins", path: routePaths.plugins, label: "Plugins", icon: Boxes, group: "Workspace" },
-  { id: "access", path: routePaths.access, label: "Access", icon: Shield, group: "Workspace" },
-  { id: "maintenance", path: routePaths.maintenance, label: "Maintenance", icon: CalendarClock, group: "Operations" },
-  { id: "maps", path: routePaths.maps, label: "Maps & Nades", icon: MapPinned, group: "Operations" },
-  { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnostics", icon: Activity, group: "Operations" },
-  { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Operations" },
-  { id: "links", path: routePaths.links, label: "Links", icon: Link2, group: "Resources" }
+  { id: "overview", path: routePaths.overview, label: "Overview", icon: LayoutDashboard, group: "Control" },
+  { id: "server", path: routePaths.server, label: "Server settings", icon: Server, group: "Control" },
+  { id: "plugins", path: routePaths.plugins, label: "Plugins", icon: Boxes, group: "Control" },
+  { id: "access", path: routePaths.access, label: "Access", icon: Shield, group: "Control" },
+  { id: "maps", path: routePaths.maps, label: "Maps & Nades", icon: MapPinned, group: "Content" },
+  { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnostics", icon: Activity, group: "Monitor" },
+  { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Monitor" },
+  { id: "maintenance", path: routePaths.maintenance, label: "Maintenance", icon: CalendarClock, group: "Monitor" },
+  { id: "links", path: routePaths.links, label: "Resources", icon: Link2, group: "Support" }
 ];
 
 const defaultRoute = routePaths.overview;
@@ -231,11 +232,13 @@ function Login({ error, onLogin }) {
         <div className="max-w-xl">
           <p className="mb-5 font-mono text-xs uppercase tracking-[0.14em] text-sidebar-foreground/45">Private operations</p>
           <h1 className="control-title text-5xl leading-[1.02] xl:text-6xl">One place to run your match server.</h1>
-          <p className="mt-6 max-w-lg text-base leading-7 text-sidebar-foreground/60">Configure game modes, manage access and follow the container from a focused desktop workspace.</p>
+          <p className="mt-6 max-w-lg text-base leading-7 text-sidebar-foreground/60">Configure game modes, manage access and follow the container from one focused workspace.</p>
         </div>
         <p className="font-mono text-xs text-sidebar-foreground/35">MATCHZY ADMIN PANEL</p>
       </section>
-      <section className="grid min-h-screen place-items-center p-4 sm:p-8">
+      <section className="flex min-h-screen flex-col items-center justify-center gap-10 p-4 sm:p-8">
+        <div className="flex items-center gap-3 lg:hidden"><span className="control-brand-mark"><Crosshair aria-hidden="true" /></span><div><p className="font-semibold text-foreground">MatchZy Control</p><p className="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">CS2 SERVER OPERATIONS</p></div></div>
+        <h1 className="sr-only lg:hidden">Sign in to MatchZy Control</h1>
         <Card className="w-full max-w-[430px] shadow-2xl">
           <CardHeader className="gap-4">
             <span className="metric-icon"><LockKeyhole aria-hidden="true" /></span>
@@ -268,82 +271,85 @@ function Login({ error, onLogin }) {
   );
 }
 
+const tabGroups = ["Control", "Content", "Monitor", "Support"];
+
+function Navigation({ onNavigate, onLogout, serviceState }) {
+  return (
+    <>
+      <nav className="control-nav" aria-label="Control room sections">
+        {tabGroups.map((group) => (
+          <div key={group} className="control-nav-group">
+            <p className="control-nav-label">{group}</p>
+            {tabs.filter((item) => item.group === group).map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink key={item.id} to={item.path} end className={({ isActive }) => cn("control-nav-item", isActive && "control-nav-item-active")} onClick={onNavigate}>
+                  <Icon aria-hidden="true" />
+                  <span>{item.label}</span>
+                  <ChevronRight className="control-nav-chevron" aria-hidden="true" />
+                </NavLink>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+      <footer className="control-sidebar-footer">
+        <div className="sidebar-session">
+          <span className={cn("server-status-dot", serviceState === "running" ? "text-success" : "text-muted-foreground")} />
+          <span>CS2 {serviceState || "status unknown"}</span>
+        </div>
+        <Button className="w-full justify-start" variant="sidebar" onClick={onLogout}><LogOut data-icon="inline-start" />Log out</Button>
+      </footer>
+    </>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="control-brand">
+      <span className="control-brand-mark"><Crosshair aria-hidden="true" /></span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-sidebar-accent-foreground">MatchZy Control</p>
+        <p className="font-mono text-[10px] tracking-[0.12em] text-sidebar-foreground/50">SERVER OPERATIONS</p>
+      </div>
+    </div>
+  );
+}
+
 function Shell({ children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
-  const tabGroups = ["Workspace", "Operations", "Resources"];
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigateFromMenu = () => { setMobileMenuOpen(false); onNavigate(); };
 
   return (
     <div className="control-shell">
-      <aside className="control-sidebar flex min-w-0 flex-col border-b border-sidebar-border lg:border-b-0 lg:border-r">
-        <header className="flex items-center justify-between gap-3 border-b border-sidebar-border p-4 lg:px-5 lg:py-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="control-brand-mark"><Crosshair aria-hidden="true" /></span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-sidebar-accent-foreground">MatchZy Control</p>
-              <p className="font-mono text-[10px] tracking-[0.12em] text-sidebar-foreground/40">CS2 / COOLIFY</p>
-            </div>
-          </div>
-          <Button className="lg:hidden" variant="sidebar" size="icon" title="Log out" onClick={onLogout}>
-            <LogOut aria-hidden="true" />
-          </Button>
-        </header>
-        <nav className="flex min-w-0 gap-1 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-1 lg:flex-col lg:gap-6 lg:overflow-y-auto lg:p-4" aria-label="Control room sections">
-          {tabGroups.map((group) => (
-            <div key={group} className="contents lg:flex lg:flex-col lg:gap-1">
-              <p className="control-nav-label mb-1 hidden lg:block">{group}</p>
-              {tabs.filter((item) => item.group === group).map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.id}
-                    to={item.path}
-                    end
-                    className={({ isActive }) => cn("control-nav-item", isActive && "control-nav-item-active")}
-                    onClick={(event) => {
-                      onNavigate();
-                      if (item.id === tab) event.preventDefault();
-                    }}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>{item.label}</span>
-                    <ChevronRight className="ml-auto hidden lg:block" aria-hidden="true" />
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-        <footer className="hidden border-t border-sidebar-border p-4 lg:block">
-          <div className="mb-3 flex items-center gap-2 px-2 text-xs text-sidebar-foreground/50">
-            <span className="server-status-dot text-success" />
-            Private admin session
-          </div>
-          <Button className="w-full justify-start" variant="sidebar" onClick={onLogout}>
-            <LogOut data-icon="inline-start" />
-            Log out
-          </Button>
-        </footer>
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <aside className="control-sidebar hidden min-w-0 flex-col lg:flex">
+        <header className="control-sidebar-header"><Brand /></header>
+        <Navigation onNavigate={onNavigate} onLogout={onLogout} serviceState={serviceState} />
       </aside>
       <div className="min-w-0">
         <header className="control-topbar sticky top-0 z-30">
-          <div className="control-content flex min-h-16 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
-            <div className="hidden items-center gap-2 text-sm sm:flex">
+          <div className="control-content topbar-inner">
+            <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <Button className="lg:hidden" variant="secondary" size="icon" aria-label="Open navigation" onClick={() => setMobileMenuOpen(true)}><Menu aria-hidden="true" /></Button>
+              <DialogContent className="mobile-nav-dialog lg:hidden" showCloseButton>
+                <DialogTitle className="sr-only">Navigation</DialogTitle>
+                <Brand />
+                <Navigation onNavigate={navigateFromMenu} onLogout={onLogout} serviceState={serviceState} />
+              </DialogContent>
+            </Dialog>
+            <div className="topbar-context">
               <span className="text-muted-foreground">Control room</span>
               <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-              <span className="font-medium">{activeTab.label}</span>
+              <span className="font-medium text-foreground">{activeTab.label}</span>
             </div>
-            <div className="flex items-center gap-2 sm:ml-auto">
-              <Badge variant={serviceState === "running" ? "success" : "outline"}>
-                <span className="server-status-dot" />
-                {serviceState || "unknown"}
-              </Badge>
-              <Badge className="hidden md:inline-flex" variant={dirty ? "warning" : "outline"}>{dirty ? "Unsaved changes" : "Draft saved"}</Badge>
+            <div className="topbar-status">
+              <Badge variant={serviceState === "running" ? "success" : "outline"}><span className="server-status-dot" />{serviceState || "unknown"}</Badge>
+              {dirty ? <Badge variant="warning">Unsaved changes</Badge> : null}
             </div>
-            <div className="ml-auto flex gap-2 sm:ml-0">
-              <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}>
-                <Save data-icon="inline-start" />
-                Save draft
-              </Button>
+            <div className="topbar-actions">
+              <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}><Save data-icon="inline-start" />Save draft</Button>
               <Button onClick={onApply} disabled={busy}>
                 {operation?.kind === "apply" ? <Spinner data-icon="inline-start" /> : <UploadCloud data-icon="inline-start" />}
                 {operation?.kind === "apply" ? "Applying..." : "Apply & restart"}
@@ -351,7 +357,7 @@ function Shell({ children, tab, onNavigate, message, error, onLogout, dirty, bus
             </div>
           </div>
         </header>
-        <main className="control-content min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 xl:px-10">
+        <main id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
           <Message message={message} error={error} />
           {children}
         </main>
@@ -371,7 +377,7 @@ function PageHeader({ eyebrow, title, description, actions = null }) {
     <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-8">
       <div className="max-w-3xl">
         <p className="control-kicker">{eyebrow}</p>
-        <h2 className="control-title mt-2 text-2xl sm:text-3xl">{title}</h2>
+        <h1 className="control-title mt-2 text-2xl sm:text-3xl">{title}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
       {actions}
@@ -408,15 +414,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
           <AlertDescription>Open Server, enter the Steam Game Server Login Token and an RCON password, then choose Apply &amp; restart. The CS2 process waits until both values exist.</AlertDescription>
         </Alert>
       ) : null}
-      <ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running={service?.state === "running"} onApply={onApply} />
-      <div className="mb-4 flex flex-wrap gap-2" aria-label="Quick links">
-        <Button variant="secondary" asChild><NavLink to={routePaths.maps}><MapPinned data-icon="inline-start" />Browse maps &amp; lineups</NavLink></Button>
-        <Button variant="secondary" asChild><NavLink to={`${routePaths.maps}?view=library`}><Crosshair data-icon="inline-start" />Manage nade library</NavLink></Button>
-        <Button variant="secondary" asChild><NavLink to={routePaths.access}><Shield data-icon="inline-start" />Manage access</NavLink></Button>
-        <Button variant="secondary" asChild><NavLink to={routePaths.diagnostics}><Activity data-icon="inline-start" />Check server health</NavLink></Button>
-        <Button variant="secondary" asChild><NavLink to={routePaths.logs}><Terminal data-icon="inline-start" />Server logs</NavLink></Button>
-      </div>
-      <section className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="overview-metrics mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Server at a glance">
         {metrics.map((metric) => {
           const Icon = metric.icon;
           return (
@@ -433,6 +431,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
           );
         })}
       </section>
+      <ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running={service?.state === "running"} onApply={onApply} />
       <section className="grid gap-4 xl:grid-cols-[1.55fr_0.75fr]">
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
@@ -474,10 +473,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
               <p className="text-xs text-muted-foreground">Next run</p>
               <p className="text-sm font-medium">{formatDate(maintenance?.nextRunAt)}</p>
             </div>
-            <Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}>
-              <RotateCcw data-icon="inline-start" />
-              Restart server
-            </Button>
+            <Button variant="secondary" asChild><NavLink to={routePaths.maintenance}><CalendarClock data-icon="inline-start" />View maintenance</NavLink></Button>
           </CardContent>
         </Card>
         <Card className="xl:col-span-2">
@@ -489,6 +485,15 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
           </CardContent>
         </Card>
       </section>
+      <nav className="quick-links mt-5" aria-label="Common destinations">
+        <p className="control-kicker">Explore workspace</p>
+        <div className="quick-links-grid">
+          <NavLink to={routePaths.maps}><MapPinned aria-hidden="true" /><span>Map atlas</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={`${routePaths.maps}?view=library`}><Crosshair aria-hidden="true" /><span>Nade library</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.diagnostics}><Activity aria-hidden="true" /><span>Diagnostics</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.logs}><Terminal aria-hidden="true" /><span>Server logs</span><ChevronRight aria-hidden="true" /></NavLink>
+        </div>
+      </nav>
       <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. The last saved settings will be applied; unsaved edits will not.</DialogDescription></DialogHeader>
@@ -526,7 +531,7 @@ function SettingField({ field, value, onChange }) {
     return (
       <Field className="flex min-h-16 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 px-4 py-3">
         <span><FieldLabel>{field.label}</FieldLabel>{field.description ? <FieldDescription className="mt-1 block">{field.description}</FieldDescription> : null}</span>
-        <Switch checked={value === true} onCheckedChange={onChange} />
+        <Switch aria-label={field.label} checked={value === true} onCheckedChange={onChange} />
       </Field>
     );
   }
@@ -674,12 +679,13 @@ function Admins({ admins, setAdmins, flagPresets, roles }) {
             <div key={index} className="grid gap-3 rounded-lg border border-border bg-muted/25 p-4 xl:grid-cols-[1fr_1.2fr_220px_44px]">
               <Field><FieldLabel>Name</FieldLabel><Input value={admin.name || ""} placeholder="Display name" onChange={(event) => updateAdmin(index, { name: event.target.value })} /></Field>
               <Field><FieldLabel>Steam64 ID</FieldLabel><Input value={admin.identitySteam64 || ""} placeholder="7656119…" onChange={(event) => updateAdmin(index, { identitySteam64: event.target.value })} /></Field>
-              <Field><FieldLabel>Role</FieldLabel><NativeSelect value={admin.role || "owner"} onChange={(event) => updateAdmin(index, { role: event.target.value })}>{(roles || []).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</NativeSelect></Field>
-              <Button className="self-end" variant="secondary" size="icon" title="Remove" onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
+              <Field><FieldLabel>Role</FieldLabel><Select value={admin.role || "owner"} onValueChange={(value) => updateAdmin(index, { role: value })}><SelectTrigger aria-label="Admin role"><SelectValue placeholder="Choose a role" /></SelectTrigger><SelectContent>{(roles || []).map((role) => <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>)}</SelectContent></Select></Field>
+              <Button className="self-end" variant="secondary" size="icon" aria-label={`Remove ${admin.name || "person"}`} onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
               {admin.role === "custom" ? <FieldGroup className="flex-row flex-wrap gap-3 rounded-md border border-border bg-card p-3 xl:col-span-4">
                 {flagPresets.map((flag) => (
                   <Field key={flag} className="flex grid-cols-[auto_1fr] items-center gap-2">
                     <Checkbox
+                      aria-label={`${flag} for ${admin.name || "person"}`}
                       checked={(admin.flags || []).includes(flag)}
                       onCheckedChange={(checked) => toggleFlag(index, flag, checked === true)}
                     />
@@ -705,7 +711,7 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
         <Card>
           <CardHeader><CardTitle>Daily server recycle</CardTitle><CardDescription>The panel claims one restart slot in MongoDB, so duplicate panel instances cannot restart the server twice.</CardDescription></CardHeader>
           <CardContent className="grid gap-5">
-            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, automaticRestartEnabled: next }))} /></Field>
+            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch aria-label="Automatic restart" checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, automaticRestartEnabled: next }))} /></Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field><FieldLabel>Local time</FieldLabel><Input type="time" value={settings.restartTime || "05:00"} disabled={!enabled} onChange={(event) => setSettings((current) => ({ ...current, restartTime: event.target.value }))} /></Field>
               <Field><FieldLabel>IANA timezone</FieldLabel><Input value={settings.restartTimezone || "Europe/Vienna"} disabled={!enabled} onChange={(event) => setSettings((current) => ({ ...current, restartTimezone: event.target.value }))} /><FieldDescription>Example: Europe/Vienna; daylight-saving changes are handled automatically.</FieldDescription></Field>
@@ -897,19 +903,20 @@ function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpe
             </Field>
             <Field>
               <FieldLabel>Map</FieldLabel>
-              <NativeSelect
-                value={draft.map || ""}
-                onChange={(event) => updateDraft({ map: event.target.value, radarFrom: null, radarTo: null })}
-              >
-                {!availableMaps.some((map) => mapMatchesNade(map, draft.map)) && draft.map ? <option value={draft.map}>{draft.map}</option> : null}
-                {availableMaps.map((map) => <option key={map.key} value={map.mapName}>{map.name}</option>)}
-              </NativeSelect>
+              <Select value={draft.map || undefined} onValueChange={(value) => updateDraft({ map: value, radarFrom: null, radarTo: null })}>
+                <SelectTrigger aria-label="Nade map"><SelectValue placeholder="Choose a map" /></SelectTrigger>
+                <SelectContent>
+                  {!availableMaps.some((map) => mapMatchesNade(map, draft.map)) && draft.map ? <SelectItem value={draft.map}>{draft.map}</SelectItem> : null}
+                  {availableMaps.map((map) => <SelectItem key={map.key} value={map.mapName}>{map.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel>Type</FieldLabel>
-              <NativeSelect value={draft.type || ""} onChange={(event) => updateDraft({ type: event.target.value })}>
-                {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
-              </NativeSelect>
+              <Select value={draft.type || "__none__"} onValueChange={(value) => updateDraft({ type: value === "__none__" ? "" : value })}>
+                <SelectTrigger aria-label="Nade type"><SelectValue /></SelectTrigger>
+                <SelectContent>{nadeTypes.map((type) => <SelectItem key={type || "empty"} value={type || "__none__"}>{type || "No type"}</SelectItem>)}</SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel>Owner</FieldLabel>
@@ -1229,19 +1236,21 @@ function AnnotationGuide({ map }: { map: MapDefinition }) {
 function MapsAndNades(props) {
   const [search, setSearch] = useSearchParams();
   const library = search.get("view") === "library";
+  const viewNav = (
+    <nav className="map-view-nav mb-5 flex flex-wrap gap-2" aria-label="Maps and nades views">
+      <Button variant={library ? "secondary" : "default"} aria-current={!library ? "page" : undefined} onClick={() => setSearch({})}><MapPinned data-icon="inline-start" />Map atlas</Button>
+      <Button variant={library ? "default" : "secondary"} aria-current={library ? "page" : undefined} onClick={() => setSearch({ view: "library" })}><Crosshair data-icon="inline-start" />All lineups</Button>
+      {props.nadesDirty ? <Badge variant="warning">Unsaved lineup edits</Badge> : null}
+    </nav>
+  );
   return (
     <>
-      <nav className="mb-5 flex flex-wrap gap-2" aria-label="Maps and nades views">
-        <Button variant={library ? "secondary" : "default"} aria-current={!library ? "page" : undefined} onClick={() => setSearch({})}><MapPinned data-icon="inline-start" />Map atlas</Button>
-        <Button variant={library ? "default" : "secondary"} aria-current={library ? "page" : undefined} onClick={() => setSearch({ view: "library" })}><Crosshair data-icon="inline-start" />All lineups</Button>
-        {props.nadesDirty ? <Badge variant="warning">Unsaved lineup edits</Badge> : null}
-      </nav>
-      {library ? <Nades {...props} /> : <Maps {...props} onSaveNades={props.onSave} />}
+      {library ? <Nades {...props} viewNav={viewNav} /> : <Maps {...props} viewNav={viewNav} onSaveNades={props.onSave} />}
     </>
   );
 }
 
-function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onApply }) {
+function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onApply, viewNav }) {
   const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
   const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
   const initialMap = allMaps.find((map) => mapMatchesNade(map, settings.startMap)) || ACTIVE_DUTY_MAPS[0];
@@ -1284,6 +1293,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
           </div>
         )}
       />
+      {viewNav}
       <NadeDialog
         settings={settings}
         initialMap={selectedMap.mapName}
@@ -1307,7 +1317,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
           <div className="grid gap-1.5">
             <CardTitle>Active Duty</CardTitle>
-            <CardDescription>Valve Season Five pool, updated 8 July 2026. Cache replaced Overpass.</CardDescription>
+            <CardDescription>Browse the configured competitive map collection and its saved lineups.</CardDescription>
           </div>
           <Badge variant="secondary">7 maps</Badge>
         </CardHeader>
@@ -1317,7 +1327,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
           </div>
         </CardContent>
         <CardFooter className="border-t border-border pt-5 text-xs text-muted-foreground sm:pt-6">
-          The current pool follows Valve. CSNADES still lists Overpass under Active Duty and Cache under Reserve.
+          Select a map to inspect its radar, routes and server options.
         </CardFooter>
       </Card>
 
@@ -1504,7 +1514,7 @@ function syncDirectionLabel(direction) {
   return "No transfer yet";
 }
 
-function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirty, onApply, onRefresh, onReload, onSave }) {
+function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirty, onApply, onRefresh, onReload, onSave, viewNav }) {
   const [mapFilter, setMapFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [query, setQuery] = useState("");
@@ -1654,6 +1664,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
           </div>
         )}
       />
+      {viewNav}
       <NadeDialog
         settings={settings}
         open={addOpen}
@@ -1781,17 +1792,17 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
             </Field>
             <Field>
               <FieldLabel className="sr-only">Map</FieldLabel>
-              <NativeSelect value={mapFilter} onChange={(event) => setMapFilter(event.target.value)}>
-                <option value="">All maps</option>
-                {maps.map((map) => <option key={map} value={map}>{map}</option>)}
-              </NativeSelect>
+              <Select value={mapFilter || "__all__"} onValueChange={(value) => setMapFilter(value === "__all__" ? "" : value)}>
+                <SelectTrigger aria-label="Filter by map"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="__all__">All maps</SelectItem>{maps.map((map) => <SelectItem key={map} value={map}>{map}</SelectItem>)}</SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel className="sr-only">Nade type</FieldLabel>
-              <NativeSelect value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                <option value="">All types</option>
-                {nadeTypes.filter(Boolean).map((type) => <option key={type} value={type}>{type}</option>)}
-              </NativeSelect>
+              <Select value={typeFilter || "__all__"} onValueChange={(value) => setTypeFilter(value === "__all__" ? "" : value)}>
+                <SelectTrigger aria-label="Filter by nade type"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="__all__">All types</SelectItem>{nadeTypes.filter(Boolean).map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+              </Select>
             </Field>
           </FieldGroup>
           {nades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No nades configured. Add the first lineup to this library.</div> : null}
@@ -1799,34 +1810,41 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
           {groupedNades.map(([map, mapNades]) => (
             <section key={map} className="grid gap-2">
               <h3 className="text-sm font-semibold text-muted-foreground">{map} <Badge>{mapNades.length}</Badge></h3>
-              {mapNades.map((nade) => (
-                <div key={nade.id} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 xl:grid-cols-[1fr_1fr_130px_1.2fr_1fr_1fr_90px_90px_44px]">
-                  <Input value={nade.name || ""} placeholder="Name" onChange={(event) => updateNade(nade.id, { name: event.target.value })} />
-                  <Input value={nade.map || ""} placeholder="Map" onChange={(event) => updateNade(nade.id, { map: event.target.value })} />
-                  <NativeSelect
-                    value={nade.type || ""}
-                    onChange={(event) => updateNade(nade.id, { type: event.target.value })}
-                  >
-                    {nadeTypes.map((type) => <option key={type || "empty"} value={type}>{type || "No type"}</option>)}
-                  </NativeSelect>
-                  <Input value={nade.desc || ""} placeholder="Description" onChange={(event) => updateNade(nade.id, { desc: event.target.value })} />
-                  <Input value={nade.lineupPos || ""} placeholder="LineupPos" onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} />
-                  <Input value={nade.lineupAng || ""} placeholder="LineupAng" onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} />
-                  {(nade.lineupImages || []).length > 0 ? (
-                    <a className="block h-9 w-[86px] overflow-hidden rounded-md border border-border bg-card" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer" title={`${nade.lineupImages.length} image(s)`}>
-                      <img className="h-full w-full object-cover" src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || "Lineup"} />
-                    </a>
-                  ) : (
-                    <span className="flex h-9 items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground">No image</span>
-                  )}
-                  <Badge className="w-fit self-center" variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={String(nade.owner || "default") === "default" ? "Available to every player" : `Private owner: ${nade.owner}`}>
-                    {String(nade.owner || "default") === "default" ? "Shared" : "Private"}
-                  </Badge>
-                  <Button variant="secondary" size="icon" title="Remove" onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}>
-                    <Trash2 />
-                  </Button>
-                </div>
-              ))}
+              <div className="lineup-editor-grid">
+                {mapNades.map((nade) => (
+                  <div key={nade.id} className="lineup-editor-card">
+                    <div className="lineup-editor-header">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground">{nade.name || "Untitled lineup"}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{nade.map || "No map"}</p>
+                      </div>
+                      <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={String(nade.owner || "default") === "default" ? "Available to every player" : `Private owner: ${nade.owner}`}>
+                        {String(nade.owner || "default") === "default" ? "Shared" : "Private"}
+                      </Badge>
+                    </div>
+                    <div className="lineup-editor-fields">
+                      <Field><FieldLabel>Name</FieldLabel><Input value={nade.name || ""} onChange={(event) => updateNade(nade.id, { name: event.target.value })} /></Field>
+                      <Field><FieldLabel>Map</FieldLabel><Input value={nade.map || ""} onChange={(event) => updateNade(nade.id, { map: event.target.value })} /></Field>
+                      <Field><FieldLabel>Type</FieldLabel><Select value={nade.type || "__none__"} onValueChange={(value) => updateNade(nade.id, { type: value === "__none__" ? "" : value })}>
+                        <SelectTrigger aria-label={`Type for ${nade.name || "lineup"}`}><SelectValue /></SelectTrigger>
+                        <SelectContent>{nadeTypes.map((type) => <SelectItem key={type || "empty"} value={type || "__none__"}>{type || "No type"}</SelectItem>)}</SelectContent>
+                      </Select></Field>
+                      <Field><FieldLabel>Description</FieldLabel><Input value={nade.desc || ""} onChange={(event) => updateNade(nade.id, { desc: event.target.value })} /></Field>
+                      <Field><FieldLabel>Lineup position</FieldLabel><Input value={nade.lineupPos || ""} onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} /></Field>
+                      <Field><FieldLabel>Lineup angle</FieldLabel><Input value={nade.lineupAng || ""} onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} /></Field>
+                    </div>
+                    <div className="lineup-editor-footer">
+                      {(nade.lineupImages || []).length > 0 ? (
+                        <a className="lineup-editor-image" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer" title={`${nade.lineupImages.length} image(s)`}>
+                          <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || "Lineup"} />
+                          <span>{nade.lineupImages.length} image{nade.lineupImages.length === 1 ? "" : "s"}</span>
+                        </a>
+                      ) : <span className="text-xs text-muted-foreground">No image attached</span>}
+                      <Button variant="secondary" size="sm" aria-label={`Remove ${nade.name || "lineup"}`} onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}><Trash2 data-icon="inline-start" />Remove</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </section>
           ))}
         </CardContent>
@@ -1885,12 +1903,10 @@ function DockerLogs({ active }) {
           </Button>
           <Field className="ml-auto flex grid-cols-[auto_100px] items-center gap-2">
             <FieldLabel className="text-muted-foreground">Lines</FieldLabel>
-            <NativeSelect value={tail} onChange={(event) => setTail(Number(event.target.value))}>
-              <option value={100}>100</option>
-              <option value={300}>300</option>
-              <option value={800}>800</option>
-              <option value={1500}>1500</option>
-            </NativeSelect>
+            <Select value={String(tail)} onValueChange={(value) => setTail(Number(value))}>
+              <SelectTrigger className="w-28" aria-label="Number of log lines"><SelectValue /></SelectTrigger>
+              <SelectContent>{[100, 300, 800, 1500].map((count) => <SelectItem key={count} value={String(count)}>{count}</SelectItem>)}</SelectContent>
+            </Select>
           </Field>
           <span className="text-xs text-muted-foreground">{updatedAt ? `Updated ${updatedAt}` : ""}</span>
         </CardContent>

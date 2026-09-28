@@ -7,7 +7,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Field, FieldDescription, FieldLabel } from "./ui/field";
-import { NativeSelect } from "./ui/native-select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
 import { Spinner } from "./ui/spinner";
 
 export function ServerControls({ settings, setSettings, policy, busy, running, onApply }) {
@@ -81,27 +81,31 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
           <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
             <Field>
               <FieldLabel>Server mode</FieldLabel>
-              <NativeSelect value={settings.serverMode || "matchzy"} disabled={disabled} onChange={(event) => setSettings((current) => ({ ...current, serverMode: event.target.value }))}>
-                {(policy?.modes || []).map((mode) => <option key={mode.id} value={mode.id}>{mode.name}</option>)}
-              </NativeSelect>
+              <Select value={settings.serverMode || "matchzy"} disabled={disabled} onValueChange={(value) => setSettings((current) => ({ ...current, serverMode: value }))}>
+                <SelectTrigger aria-label="Server mode"><SelectValue placeholder="Choose a mode" /></SelectTrigger>
+                <SelectContent>{(policy?.modes || []).map((mode) => <SelectItem key={mode.id} value={mode.id}>{mode.name}</SelectItem>)}</SelectContent>
+              </Select>
               <FieldDescription>{mode?.description}</FieldDescription>
             </Field>
             <p className="text-xs text-muted-foreground">Applied mode: {policy?.modes?.find((mode) => mode.id === game?.mode)?.name || "Unavailable"}. Applying saves all configuration edits and restarts CS2.</p>
-            <Button className="mt-auto self-start" onClick={onApply} disabled={disabled}><UploadCloud data-icon="inline-start" />Apply &amp; restart</Button>
+            <Button className="mt-auto self-start" variant="secondary" onClick={onApply} disabled={disabled}><UploadCloud data-icon="inline-start" />Apply &amp; restart</Button>
           </div>
           <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
             <Field>
               <FieldLabel>Play map</FieldLabel>
-              <NativeSelect value={selectedMap} disabled={disabled} onChange={(event) => setSelectedMap(event.target.value)}>
-                {!maps.some((map) => map.mapName === selectedMap) && !workshops.some((map) => map.key === selectedMap) ? <option value={selectedMap}>{selectedMap}</option> : null}
-                <optgroup label="Server maps">{maps.map((map) => <option key={map.key} value={map.mapName}>{map.name}</option>)}</optgroup>
-                {workshops.length > 0 ? <optgroup label="Workshop maps">{workshops.map((map) => <option key={map.key} value={map.key}>{map.name}</option>)}</optgroup> : null}
-              </NativeSelect>
+              <Select value={selectedMap} disabled={disabled} onValueChange={setSelectedMap}>
+                <SelectTrigger aria-label="Play map"><SelectValue placeholder="Choose a map" /></SelectTrigger>
+                <SelectContent>
+                  {!maps.some((map) => map.mapName === selectedMap) && !workshops.some((map) => map.key === selectedMap) ? <SelectItem value={selectedMap}>{selectedMap}</SelectItem> : null}
+                  <SelectGroup><SelectLabel>Server maps</SelectLabel>{maps.map((map) => <SelectItem key={map.key} value={map.mapName}>{map.name}</SelectItem>)}</SelectGroup>
+                  {workshops.length > 0 ? <SelectGroup><SelectLabel>Workshop maps</SelectLabel>{workshops.map((map) => <SelectItem key={map.key} value={map.key}>{map.name}</SelectItem>)}</SelectGroup> : null}
+                </SelectContent>
+              </Select>
               <FieldDescription>Switches the running game immediately. Players load the new map; the container stays running.</FieldDescription>
             </Field>
             <p className="text-xs text-muted-foreground">Start map: {settings.startMap}. Workshop maps must be applied first.</p>
             <div className="mt-auto flex flex-wrap gap-2">
-              <Button onClick={changeMap} disabled={disabled || loading || !running || liveMapSelected}>{switching ? <Spinner /> : <ArrowLeftRight data-icon="inline-start" />}{switching ? "Switching…" : "Switch map"}</Button>
+              <Button variant="secondary" onClick={changeMap} disabled={disabled || loading || !running || liveMapSelected}>{switching ? <Spinner /> : <ArrowLeftRight data-icon="inline-start" />}{switching ? "Switching…" : "Switch map"}</Button>
               <Button variant="secondary" disabled={disabled || selectedMap.startsWith("workshop-") || settings.startMap === selectedMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap }))}>Use as start map</Button>
             </div>
           </div>
