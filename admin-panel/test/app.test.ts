@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/app.js";
@@ -172,6 +172,58 @@ test("restart writes the saved server mode before restarting CS2", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(runtimeModeAtRestart, "matchzy");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(runtimeDir, { recursive: true, force: true });
+  }
+});
+
+
+test("live map controls use applied credentials, validate input and preserve saved settings", async () => {
+  const runtimeDir = await mkdtemp(join(tmpdir(), "matchzy-map-control-"));
+  const runtimeSettingsFile = join(runtimeDir, "settings.json");
+  const applied = { rconPassword: "applied-secret", startMap: "de_mirage", serverMode: "nades", workshopMaps: "123456" };
+  await writeFile(runtimeSettingsFile, JSON.stringify(applied));
+  const commands = [];
+  const actions = [];
+  let fail = false;
+  const app = createApp({
+    config: { password: "test-password", sessionSecret: "secret", runtimeSettingsFile, serviceName: "cs2" },
+    store: { logAction: async (...args) => actions.push(args) },
+    compose: {},
+    nadesSync: null,
+    rcon: async ({ host, password, command }) => {
+      assert.equal(host, "cs2");
+      assert.equal(password, "applied-secret");
+      commands.push(command);
+      if (fail) throw new Error("Cannot reach CS2 RCON");
+      return command === "status" ? "map : de_inferno" : "";
+    }
+  });
+  const server = createServer(app);
+  try {
+    const address: any = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const denied = await fetch(`${baseUrl}/api/server/map`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map: "de_dust2" }) });
+    assert.equal(denied.status, 401);
+    assert.equal(commands.length, 0);
+    const login = await fetch(`${baseUrl}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "test-password" }) });
+    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const headers = { Cookie: cookie, "Content-Type": "application/json" };
+    const status = await fetch(`${baseUrl}/api/server/game`, { headers });
+    assert.deepEqual(await status.json(), { map: "de_inferno", mode: "nades", startMap: "de_mirage" });
+    const change = (body) => fetch(`${baseUrl}/api/server/map`, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal((await change({ map: "de_dust2;quit" })).status, 400);
+    assert.equal((await change({ workshopId: "654321" })).status, 400);
+    assert.deepEqual(commands, ["status"]);
+    assert.equal((await change({ map: "de_dust2" })).status, 200);
+    assert.equal((await change({ workshopId: "123456" })).status, 200);
+    assert.deepEqual(commands, ["status", "changelevel de_dust2", "host_workshop_map 123456"]);
+    assert.deepEqual(JSON.parse(await readFile(runtimeSettingsFile, "utf8")), applied);
+    fail = true;
+    assert.equal((await change({ map: "de_nuke" })).status, 502);
+    assert.equal(actions.at(-1)[0], "map_change");
+    assert.equal(actions.at(-1)[1], "failed");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(runtimeDir, { recursive: true, force: true });

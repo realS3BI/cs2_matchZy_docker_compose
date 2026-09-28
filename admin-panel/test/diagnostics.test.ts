@@ -9,7 +9,6 @@ const healthyProbe = [
   "FILE\tgameinfoMetamod\t1",
   "FILE\tcounterStrikeSharpNative\t1",
   "FILE\tcounterStrikeSharpApi\t1",
-  "FILE\tmatchZyCoach\t1",
   "FILE\tmatchZyNades\t1",
   "FILE\tmatchZyNadesBundled\t1",
   "FILE\tmatchZy\t1",
@@ -29,7 +28,7 @@ function input(patch = {}) {
       restartCount: 2
     },
     probe: { ok: true, stdout: `${healthyProbe}\n${heartbeat()}`, stderr: "" },
-    logs: "[pre.sh] Mod bootstrap complete\nMatchZy Coach loaded\n[MatchZy 0.8.15 LOADED] MatchZy by WD-",
+    logs: "[pre.sh] Mod bootstrap complete\n[MatchZy 0.8.15 LOADED] MatchZy by WD-",
     desired: { matchZyVersion: "latest" },
     controlMode: "docker",
     ...patch
@@ -154,7 +153,7 @@ test("menu is not required in unrelated modes", () => {
 });
 
 test("MatchZy status never matches sibling plugin names", () => {
-  const report = buildDiagnostics(input({ logs: "Finished loading plugin MatchZy\nFailed to load plugin MatchZyNades\nFailed to load plugin MatchZyCoach" }));
+  const report = buildDiagnostics(input({ logs: "Finished loading plugin MatchZy\nFailed to load plugin MatchZyNades" }));
   assert.equal(report.checks.at(-1).status, "pass");
   const failed = buildDiagnostics(input({ logs: 'Finished loading plugin MatchZyNades\nFailed to load plugin "MatchZy.dll"' }));
   assert.equal(failed.checks.at(-1).status, "fail");
@@ -200,7 +199,7 @@ test("buildDiagnostics follows Executes instead of requiring MatchZy", () => {
   const report = buildDiagnostics(input({
     desired: { serverMode: "executes" },
     probe: { ok: true, stdout: `${healthyProbe.replace("FILE\tmatchZy\t1", "FILE\tmatchZy\t0")}\nFILE\texecutes\t1`, stderr: "" },
-    logs: "[pre.sh] Mod bootstrap complete\nMatchZy Coach loaded"
+    logs: "[pre.sh] Mod bootstrap complete"
   }));
 
   assert.equal(report.overall, "healthy");

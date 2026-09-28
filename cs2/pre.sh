@@ -659,15 +659,6 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/configs/plugins/MatchZy"
   }
 
-  install_matchzy_coach() {
-    local source_file="/opt/matchzy-coach/MatchZyCoach.dll"
-    local destination_dir="$CSS_DIR/plugins/MatchZyCoach"
-    [[ -f "$source_file" ]] || fail "Bundled MatchZy Coach plugin not found: $source_file"
-    mkdir -p "$destination_dir"
-    copy_file_atomic "$source_file" "$destination_dir/MatchZyCoach.dll"
-    log "Installed bundled MatchZy Coach plugin"
-  }
-
   install_matchzy_nades() {
     local mode="$1"
     local source_file="/opt/matchzy-nades/MatchZyNades.dll"
@@ -1306,7 +1297,7 @@ _matchzy_bootstrap_main() (
   clear_elf_execstack "$CSS_DIR/bin/linuxsteamrt64/counterstrikesharp.so"
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
-  install_matchzy_coach
+  rm -rf "$CSS_DIR/plugins/MatchZyCoach" "$CSS_DIR/configs/plugins/MatchZyCoach"
   install_matchzy_nades "$server_mode"
 
   write_admin_files_from_runtime \

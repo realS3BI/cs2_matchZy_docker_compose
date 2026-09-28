@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity,
   ArrowLeftRight,
@@ -32,10 +32,7 @@ import {
   Save,
   Server,
   Shield,
-  Sparkles,
-  Target,
   Terminal,
-  Timer,
   Trash2,
   UploadCloud,
   UsersRound
@@ -83,11 +80,11 @@ import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
 import { Diagnostics } from "./diagnostics";
 import { NadesMenuStatus } from "./components/nades-menu-status";
+import { ServerControls } from "./components/server-controls";
 
 const routePaths = {
   login: "/login",
   overview: "/overview",
-  training: "/training",
   server: "/server",
   plugins: "/plugins",
   access: "/access",
@@ -101,13 +98,11 @@ const routePaths = {
 
 const tabs = [
   { id: "overview", path: routePaths.overview, label: "Overview", icon: LayoutDashboard, group: "Workspace" },
-  { id: "training", path: routePaths.training, label: "Training", icon: Target, group: "Workspace" },
   { id: "server", path: routePaths.server, label: "Server", icon: Server, group: "Workspace" },
   { id: "plugins", path: routePaths.plugins, label: "Plugins", icon: Boxes, group: "Workspace" },
   { id: "access", path: routePaths.access, label: "Access", icon: Shield, group: "Workspace" },
   { id: "maintenance", path: routePaths.maintenance, label: "Maintenance", icon: CalendarClock, group: "Operations" },
-  { id: "maps", path: routePaths.maps, label: "Maps", icon: MapPinned, group: "Operations" },
-  { id: "nades", path: routePaths.nades, label: "Nades", icon: Crosshair, group: "Operations" },
+  { id: "maps", path: routePaths.maps, label: "Maps & Nades", icon: MapPinned, group: "Operations" },
   { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnostics", icon: Activity, group: "Operations" },
   { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Operations" },
   { id: "links", path: routePaths.links, label: "Links", icon: Link2, group: "Resources" }
@@ -117,35 +112,8 @@ const defaultRoute = routePaths.overview;
 
 function routeFromLoginSearch(search) {
   const requestedRoute = new URLSearchParams(search).get("redirect");
+  if (requestedRoute === routePaths.nades) return `${routePaths.maps}?view=library`;
   return tabs.some((item) => item.path === requestedRoute) ? requestedRoute : defaultRoute;
-}
-
-const trainingTracks = [
-  { id: "mechanics", name: "Mechanics", mode: "warmup", map: "de_mirage", duration: 20, promise: "Cleaner first bullets and faster corrections", steps: ["5 min: stationary taps. Reset the crosshair after every kill.", "10 min: strafe, stop, then fire. A moving shot does not count.", "5 min: short bursts only. Stop when the spray leaves the head line."], check: "Could you stop fully before the shot when the pace increased?" },
-  { id: "utility", name: "Utility", mode: "nades", map: "de_mirage", duration: 20, promise: "Lineups you can reproduce without guessing", steps: ["Pick one site and no more than three lineups.", "Land each lineup three times in a row from memory.", "Finish with one full route. Move between lineups as you would in a round."], check: "Which lineup still needed a visual hint?" },
-  { id: "decisions", name: "Decisions", mode: "executes", map: "de_mirage", duration: 25, promise: "Better positioning when the round gets messy", steps: ["Play the first five rounds for survival, not highlight kills.", "Before every peek, name the teammate who can trade you.", "After each death, write one cause: timing, position, aim or information."], check: "What caused most deaths today?" }
-];
-
-function coachMetrics(session, focus) {
-  if (!session) return [];
-  if (focus === "utility") return [
-    ["Grenades", String(session.grenadesThrown)],
-    ["Utility damage", String(session.utilityDamage)],
-    ["Enemy flash time", `${session.enemyFlashSeconds.toFixed(1)}s`],
-    ["Team flash time", `${session.teamFlashSeconds.toFixed(1)}s`]
-  ];
-  if (focus === "decisions") return [
-    ["Opening duels", `${session.openingKills}W / ${session.openingDeaths}L`],
-    ["Trade kills", String(session.tradeKills)],
-    ["Deaths traded", `${session.deathsTraded} / ${session.deaths}`],
-    ["Avg. TTK", session.averageTimeToKillMs == null ? "—" : `${session.averageTimeToKillMs} ms`]
-  ];
-  return [
-    ["Measured accuracy", `${Math.round(session.shotAccuracy * 100)}%`],
-    ["Moving shots", `${Math.round(session.movingShotRate * 100)}%`],
-    ["Headshot rate", `${Math.round(session.headshotRate * 100)}%`],
-    ["Average burst", `${session.averageBurstLength.toFixed(1)} shots`]
-  ];
 }
 
 function Message({ message = "", error = "" }: { message?: string; error?: string }) {
@@ -411,7 +379,7 @@ function PageHeader({ eyebrow, title, description, actions = null }) {
   );
 }
 
-function Overview({ settings, admins, nades, status, policy, onRefresh, onRestart, busy }) {
+function Overview({ settings, setSettings, admins, nades, status, policy, onRefresh, onRestart, onApply, busy }) {
   const service = status?.service;
   const last = status?.lastAction;
   const maintenance = status?.maintenance;
@@ -431,7 +399,7 @@ function Overview({ settings, admins, nades, status, policy, onRefresh, onRestar
       <PageHeader
         eyebrow="Live operations"
         title={settings.serverName || "CS2 server"}
-        description="The server's current lifecycle, selected game mode and next maintenance window."
+        description="Switch maps, choose a server mode and manage the next session from one place."
         actions={<div className="flex gap-2"><Button variant="secondary" onClick={onRefresh} disabled={busy}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} /> Refresh</Button><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
       />
       {setupRequired ? (
@@ -440,6 +408,14 @@ function Overview({ settings, admins, nades, status, policy, onRefresh, onRestar
           <AlertDescription>Open Server, enter the Steam Game Server Login Token and an RCON password, then choose Apply &amp; restart. The CS2 process waits until both values exist.</AlertDescription>
         </Alert>
       ) : null}
+      <ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running={service?.state === "running"} onApply={onApply} />
+      <div className="mb-4 flex flex-wrap gap-2" aria-label="Quick links">
+        <Button variant="secondary" asChild><NavLink to={routePaths.maps}><MapPinned data-icon="inline-start" />Browse maps &amp; lineups</NavLink></Button>
+        <Button variant="secondary" asChild><NavLink to={`${routePaths.maps}?view=library`}><Crosshair data-icon="inline-start" />Manage nade library</NavLink></Button>
+        <Button variant="secondary" asChild><NavLink to={routePaths.access}><Shield data-icon="inline-start" />Manage access</NavLink></Button>
+        <Button variant="secondary" asChild><NavLink to={routePaths.diagnostics}><Activity data-icon="inline-start" />Check server health</NavLink></Button>
+        <Button variant="secondary" asChild><NavLink to={routePaths.logs}><Terminal data-icon="inline-start" />Server logs</NavLink></Button>
+      </div>
       <section className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => {
           const Icon = metric.icon;
@@ -471,7 +447,7 @@ function Overview({ settings, admins, nades, status, policy, onRefresh, onRestar
           </CardHeader>
           <CardContent className="grid gap-6">
             <dl className="grid gap-4 rounded-lg border border-border bg-muted/35 p-4 sm:grid-cols-3">
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Game mode</dt><dd className="text-sm font-medium">{activeMode?.name || settings.serverMode || "Not set"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Selected mode</dt><dd className="text-sm font-medium">{activeMode?.name || settings.serverMode || "Not set"}</dd></div>
               <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Start map</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{settings.startMap || "Not set"}</dd></div>
               <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Container</dt><dd className="font-mono text-xs">{service?.containerName || "Not detected"}</dd></div>
             </dl>
@@ -671,118 +647,6 @@ function Plugins({ settings, setSettings, policy }) {
           })}
         </CardContent>
       </Card>
-    </>
-  );
-}
-
-function Training({ settings, sessions, busy, onStart, onRefresh }) {
-  const [trackId, setTrackId] = useState("mechanics");
-  const [secondsLeft, setSecondsLeft] = useState(trainingTracks[0].duration * 60);
-  const [running, setRunning] = useState(false);
-  const [completed, setCompleted] = useState([]);
-  const [steamId, setSteamId] = useState("");
-  const track = trainingTracks.find((item) => item.id === trackId) || trainingTracks[0];
-  const players: any[] = [...new Map<string, any>((sessions || []).map((session) => [session.steamId, { steamId: session.steamId, name: session.playerName }])).values()];
-  const visibleSessions = (sessions || []).filter((session) => !steamId || session.steamId === steamId);
-  const focusSessions = visibleSessions.filter((session) => session.focus === track.id);
-  const latest = focusSessions[0];
-  const previous = focusSessions[1];
-  const metrics = coachMetrics(latest, track.id);
-  const previousMetrics = coachMetrics(previous, track.id);
-
-  useEffect(() => {
-    setSecondsLeft(track.duration * 60);
-    setRunning(false);
-    setCompleted([]);
-  }, [track.id]);
-
-  useEffect(() => {
-    if (!running || secondsLeft <= 0) return undefined;
-    const timer = window.setInterval(() => setSecondsLeft((current) => Math.max(0, current - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [running, secondsLeft]);
-
-  useEffect(() => { if (secondsLeft === 0) setRunning(false); }, [secondsLeft]);
-
-  const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
-  const seconds = String(secondsLeft % 60).padStart(2, "0");
-  const prepared = settings.serverMode === track.mode && (track.mode === "warmup" || settings.startMap === track.map);
-
-  return (
-    <>
-      <PageHeader eyebrow="Deliberate practice" title="Training lab" description="Choose one weakness, run a short session and leave with one useful note." />
-      <div className="training-layout">
-        <Card className="training-board">
-          <CardHeader className="border-b border-border">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <Badge variant="outline"><Sparkles data-icon="inline-start" /> One focus per session</Badge>
-                <CardTitle className="control-title mt-3 text-2xl">What are you training today?</CardTitle>
-              </div>
-              <div className="training-clock" aria-live="polite"><Timer aria-hidden="true" /><span>{minutes}:{seconds}</span></div>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-6 pt-6">
-            <RadioGroup className="md:grid-cols-3" value={trackId} onValueChange={setTrackId}>
-              {trainingTracks.map((item) => (
-                <label key={item.id} className={cn("mode-choice", trackId === item.id && "mode-choice-active")}>
-                  <span className="flex items-center justify-between"><strong>{item.name}</strong><RadioGroupItem value={item.id} aria-label={item.name} /></span>
-                  <span className="text-sm leading-relaxed text-muted-foreground">{item.promise}</span>
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{item.duration} minutes</span>
-                </label>
-              ))}
-            </RadioGroup>
-            <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
-              <div className="grid gap-3">
-                {track.steps.map((step, index) => (
-                  <label key={step} className={cn("training-step", completed.includes(index) && "training-step-done")}>
-                    <Checkbox checked={completed.includes(index)} onCheckedChange={(checked) => setCompleted((current) => checked ? [...new Set([...current, index])] : current.filter((item) => item !== index))} />
-                    <span><span className="training-step-number">{String(index + 1).padStart(2, "0")}</span>{step}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="grid content-start gap-3 rounded-lg border border-border bg-muted/25 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Server setup</p>
-                <p className="text-sm"><strong>{track.mode === "warmup" ? "Aim Botz" : track.mode === "nades" ? "MatchZy practice" : "Executes"}</strong><br /><span className="text-muted-foreground">{track.mode === "warmup" ? "Workshop map" : track.map}</span></p>
-                <Button disabled={busy} onClick={() => onStart(track)}>{prepared ? <><RotateCcw data-icon="inline-start" /> Restart training</> : <><Play data-icon="inline-start" /> Prepare & restart</>}</Button>
-                <p className="text-xs leading-relaxed text-muted-foreground">Preparing disconnects current players and applies all saved panel settings.</p>
-              </div>
-            </div>
-            <Separator />
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="grid gap-2 rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">1 · Start tracking</p><CopyCommand value={`!coach start ${track.id}`} label="Copy command" /></div>
-              <div className="grid gap-2 rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">2 · Save a thought</p><CopyCommand value="!coach note " label="Copy command" /></div>
-              <div className="grid gap-2 rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">3 · Finish & report</p><CopyCommand value="!coach stop" label="Copy command" /></div>
-            </div>
-            <Alert><AlertTitle>{track.check}</AlertTitle><AlertDescription>Write the answer during the session with <span className="font-mono">!coach note &lt;text&gt;</span>. The plugin stores up to eight notes beside the measured report.</AlertDescription></Alert>
-          </CardContent>
-          <CardFooter className="flex-wrap justify-between gap-3 border-t border-border">
-            <Button variant="secondary" onClick={() => setRunning((current) => !current)}>{running ? <><Pause data-icon="inline-start" /> Pause timer</> : <><Timer data-icon="inline-start" /> {secondsLeft < track.duration * 60 ? "Continue timer" : "Start timer"}</>}</Button>
-            <Button variant="secondary" disabled={busy} onClick={onRefresh}><RefreshCw data-icon="inline-start" /> Refresh reports</Button>
-          </CardFooter>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Coach reports</CardTitle><CardDescription>Sessions recorded by the game server and stored in MongoDB.</CardDescription></CardHeader>
-          <CardContent className="grid gap-5">
-            {players.length > 1 ? <Field><FieldLabel>Player</FieldLabel><NativeSelect value={steamId} onChange={(event) => setSteamId(event.target.value)}><option value="">All players</option>{players.map((player) => <option key={player.steamId} value={player.steamId}>{player.name}</option>)}</NativeSelect></Field> : null}
-            {!latest ? <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No server report yet. Start a session in CS2, play, then run <span className="font-mono">!coach stop</span>.</p> : (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  {metrics.map(([label, value], index) => <div className="coach-metric" key={label}><span>{label}</span><strong>{value}</strong>{previousMetrics[index] ? <small>Previous: {previousMetrics[index][1]}</small> : null}</div>)}
-                </div>
-                <div className="grid gap-2">
-                  {(latest.feedback || []).map((item) => <Alert key={item.code} variant={item.code === "baseline" ? "default" : "warning"}><AlertTitle>{item.title}</AlertTitle><AlertDescription>{item.detail}</AlertDescription></Alert>)}
-                </div>
-                {(latest.notes || []).length ? <div><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your notes</p><ul className="grid gap-1 text-sm text-muted-foreground">{latest.notes.map((note, index) => <li key={`${note}-${index}`}>• {note}</li>)}</ul></div> : null}
-                <Separator />
-                <div className="grid gap-0">
-                  {visibleSessions.slice(0, 8).map((session) => <div key={session.id} className="grid gap-1 border-b border-border py-3 last:border-0"><div className="flex items-center justify-between gap-3"><strong className="capitalize text-sm">{session.focus}</strong><span className="font-mono text-[11px] text-muted-foreground">{new Date(session.endedAt).toLocaleDateString()}</span></div><p className="text-xs text-muted-foreground">{session.map} · {session.kills}K/{session.deaths}D · {Math.round(session.durationSeconds / 60)} min</p></div>)}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </>
   );
 }
@@ -1362,6 +1226,21 @@ function AnnotationGuide({ map }: { map: MapDefinition }) {
   );
 }
 
+function MapsAndNades(props) {
+  const [search, setSearch] = useSearchParams();
+  const library = search.get("view") === "library";
+  return (
+    <>
+      <nav className="mb-5 flex flex-wrap gap-2" aria-label="Maps and nades views">
+        <Button variant={library ? "secondary" : "default"} aria-current={!library ? "page" : undefined} onClick={() => setSearch({})}><MapPinned data-icon="inline-start" />Map atlas</Button>
+        <Button variant={library ? "default" : "secondary"} aria-current={library ? "page" : undefined} onClick={() => setSearch({ view: "library" })}><Crosshair data-icon="inline-start" />All lineups</Button>
+        {props.nadesDirty ? <Badge variant="warning">Unsaved lineup edits</Badge> : null}
+      </nav>
+      {library ? <Nades {...props} /> : <Maps {...props} onSaveNades={props.onSave} />}
+    </>
+  );
+}
+
 function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onApply }) {
   const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
   const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
@@ -1389,15 +1268,15 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
 
   function selectMap(key) {
     setSelectedKey(key);
-    window.requestAnimationFrame(() => document.getElementById("selected-map")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    window.requestAnimationFrame(() => document.getElementById("selected-map")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" }));
   }
 
   return (
     <>
       <PageHeader
         eyebrow="Tactical atlas"
-        title="Maps & map guides"
-        description="Pick a map to see every saved lineup, prepare the game server and build a Valve annotation guide for the same map."
+        title="Maps & Nades"
+        description="Pick a map to explore its radar and saved lineups. Open All lineups to search, import, export and manage the shared library."
         actions={(
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => { setEditingNade(null); setAddNadeOpen(true); }}><Plus data-icon="inline-start" />Add {selectedMap.name} nade</Button>
@@ -1442,19 +1321,19 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         </CardFooter>
       </Card>
 
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>More maps on CSNADES</CardTitle>
-          <CardDescription>Reserve and community maps from the CSNADES map index. They stay available here for older and custom lineup libraries.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <details className="disclosure-panel mb-4">
+        <summary><MapPinned className="size-4" aria-hidden="true" /><span>Reserve &amp; community maps</span><Badge variant="secondary">{CSNADES_REFERENCE_MAPS.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
+        <div className="p-4">
           <div className="map-choice-grid">
             {CSNADES_REFERENCE_MAPS.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
-      <Card className="mb-4">
+      <details className="disclosure-panel mb-4">
+        <summary><PackagePlus className="size-4" aria-hidden="true" /><span>Workshop maps</span><Badge variant="secondary">{workshopMaps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
+        <div className="p-3 sm:p-4">
+      <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="grid gap-1.5">
             <CardTitle>Workshop maps</CardTitle>
@@ -1500,6 +1379,9 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
           <span className="text-xs text-muted-foreground">A restart downloads and mounts newly added Workshop addons.</span>
         </CardFooter>
       </Card>
+
+        </div>
+      </details>
 
       <Card className="map-atlas-detail mb-4 scroll-mt-24" id="selected-map">
         <CardHeader className="border-b border-border">
@@ -1600,7 +1482,10 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         </CardContent>
       </Card>
 
-      <AnnotationGuide map={selectedMap} />
+      <details className="disclosure-panel">
+        <summary><BookOpen className="size-4" aria-hidden="true" /><span>Build map guide <span className="font-normal text-muted-foreground">· {selectedMap.name}</span></span><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
+        <div className="p-3 sm:p-4"><AnnotationGuide map={selectedMap} /></div>
+      </details>
     </>
   );
 }
@@ -1742,8 +1627,8 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
     <>
       <PageHeader
         eyebrow="Match library"
-        title="Nade lineups"
-        description="One library for every saved lineup. MatchZy and the dashboard keep the same savednades.json content."
+        title="Maps & Nades"
+        description="Search and edit every saved lineup, or import and export your library. Use Map atlas to place routes on the radar."
         actions={(
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Save or discard your local edits before refreshing" : "Load the latest library from MongoDB"}>
@@ -1776,66 +1661,71 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
         onAdd={(entry) => setNades((current) => [...current, entry])}
       />
       {localError ? <Message error={localError} /> : null}
-      <NadesMenuStatus selectedMode={settings.serverMode || "matchzy"} />
-      <Card className="mb-4 overflow-hidden">
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div className="grid gap-1.5">
-            <CardTitle>Shared MatchZy library</CardTitle>
-            <CardDescription>New in-game lineups can be stored under MatchZy's default owner so every player can list and load them.</CardDescription>
-          </div>
-          <Badge variant={desiredGlobalSaves && !sharingNeedsApply ? "success" : sharingNeedsApply ? "warning" : "outline"}>
-            <span className="server-status-dot" />
-            {sharingNeedsApply ? "Restart required" : desiredGlobalSaves ? "Shared saves applied" : "Private saves applied"}
-          </Badge>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <div className="grid items-center gap-3 rounded-lg border border-border bg-muted/25 p-4 sm:grid-cols-[1fr_auto_1fr]">
-            <div className="flex items-center gap-3">
-              <span className="metric-icon"><Database aria-hidden="true" /></span>
-              <span><strong className="block text-sm">Dashboard library</strong><span className="text-xs text-muted-foreground">{liveStatus.library?.count ?? nades.length} lineups in MongoDB</span></span>
-            </div>
-            <div className="flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
-              <ArrowLeftRight className="size-4" aria-hidden="true" />
-              {Math.round((liveStatus.sync?.intervalMs || 2000) / 1000)}s
-            </div>
-            <div className="flex items-center gap-3 sm:justify-end">
-              <span className="metric-icon"><FileJson aria-hidden="true" /></span>
-              <span><strong className="block text-sm">MatchZy savednades.json</strong><span className="text-xs text-muted-foreground">{liveStatus.sync?.liveFilePresent ? "File reachable" : "File not found"}</span></span>
-            </div>
-          </div>
+      <details className="disclosure-panel mb-4">
+        <summary><ArrowLeftRight className="size-4" aria-hidden="true" /><span>Sharing &amp; synchronization</span><Badge variant={syncPresentation.variant}>{syncPresentation.label}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
+        <div className="p-3 sm:p-4">
+          <NadesMenuStatus selectedMode={settings.serverMode || "matchzy"} />
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div className="grid gap-1.5">
+                <CardTitle>Shared MatchZy library</CardTitle>
+                <CardDescription>New in-game lineups can be stored under MatchZy's default owner so every player can list and load them.</CardDescription>
+              </div>
+              <Badge variant={desiredGlobalSaves && !sharingNeedsApply ? "success" : sharingNeedsApply ? "warning" : "outline"}>
+                <span className="server-status-dot" />
+                {sharingNeedsApply ? "Restart required" : desiredGlobalSaves ? "Shared saves applied" : "Private saves applied"}
+              </Badge>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <div className="grid items-center gap-3 rounded-lg border border-border bg-muted/25 p-4 sm:grid-cols-[1fr_auto_1fr]">
+                <div className="flex items-center gap-3">
+                  <span className="metric-icon"><Database aria-hidden="true" /></span>
+                  <span><strong className="block text-sm">Dashboard library</strong><span className="text-xs text-muted-foreground">{liveStatus.library?.count ?? nades.length} lineups in MongoDB</span></span>
+                </div>
+                <div className="flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
+                  <ArrowLeftRight className="size-4" aria-hidden="true" />
+                  {Math.round((liveStatus.sync?.intervalMs || 2000) / 1000)}s
+                </div>
+                <div className="flex items-center gap-3 sm:justify-end">
+                  <span className="metric-icon"><FileJson aria-hidden="true" /></span>
+                  <span><strong className="block text-sm">MatchZy savednades.json</strong><span className="text-xs text-muted-foreground">{liveStatus.sync?.liveFilePresent ? "File reachable" : "File not found"}</span></span>
+                </div>
+              </div>
 
-          <Field className="flex min-h-20 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-background px-4 py-3">
-            <span>
-              <FieldLabel className="flex items-center gap-2"><Globe2 className="size-4 text-primary" aria-hidden="true" /> Save new in-game lineups for everyone</FieldLabel>
-              <FieldDescription className="mt-1 block">When enabled, MatchZy writes every player's .savenade entry to the shared default library.</FieldDescription>
-            </span>
-            <Switch
-              aria-label="Save new in-game lineups for everyone"
-              checked={desiredGlobalSaves}
-              onCheckedChange={(checked) => setSettings((current) => ({ ...current, matchZySaveNadesGlobally: checked }))}
-            />
-          </Field>
+              <Field className="flex min-h-20 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-background px-4 py-3">
+                <span>
+                  <FieldLabel className="flex items-center gap-2"><Globe2 className="size-4 text-primary" aria-hidden="true" /> Save new in-game lineups for everyone</FieldLabel>
+                  <FieldDescription className="mt-1 block">When enabled, MatchZy writes every player's .savenade entry to the shared default library.</FieldDescription>
+                </span>
+                <Switch
+                  aria-label="Save new in-game lineups for everyone"
+                  checked={desiredGlobalSaves}
+                  onCheckedChange={(checked) => setSettings((current) => ({ ...current, matchZySaveNadesGlobally: checked }))}
+                />
+              </Field>
 
-          <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Sync status</dt><dd><Badge variant={syncPresentation.variant}><span className="server-status-dot" />{syncPresentation.label}</Badge></dd></div>
-            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last confirmed</dt><dd className="text-sm font-medium">{formatDate(liveStatus.sync?.lastConfirmedAt)}</dd></div>
-            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last transfer</dt><dd className="text-sm font-medium">{syncDirectionLabel(liveStatus.sync?.lastDirection)}</dd></div>
-            <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Visibility</dt><dd className="flex flex-wrap gap-2"><Badge variant="success">{sharedNades} shared</Badge>{privateNades > 0 ? <Badge variant="warning">{privateNades} private</Badge> : null}</dd></div>
-          </dl>
+              <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Sync status</dt><dd><Badge variant={syncPresentation.variant}><span className="server-status-dot" />{syncPresentation.label}</Badge></dd></div>
+                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last confirmed</dt><dd className="text-sm font-medium">{formatDate(liveStatus.sync?.lastConfirmedAt)}</dd></div>
+                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last transfer</dt><dd className="text-sm font-medium">{syncDirectionLabel(liveStatus.sync?.lastDirection)}</dd></div>
+                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Visibility</dt><dd className="flex flex-wrap gap-2"><Badge variant="success">{sharedNades} shared</Badge>{privateNades > 0 ? <Badge variant="warning">{privateNades} private</Badge> : null}</dd></div>
+              </dl>
 
-          {statusError || liveStatus.sync?.lastError ? <Alert variant="destructive"><AlertTitle>Nade sync cannot confirm the connection</AlertTitle><AlertDescription>{statusError || liveStatus.sync.lastError}</AlertDescription></Alert> : null}
-          {!matchZyModeActive ? <Alert variant="warning"><AlertTitle>MatchZy is not the active server mode</AlertTitle><AlertDescription>The files can stay synchronized, but players cannot use MatchZy's nade commands until MatchZy or Nades mode is active.</AlertDescription></Alert> : null}
-          {libraryChanged ? <Alert variant="warning"><AlertTitle>The shared library changed</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>MatchZy imported a newer library at {formatDate(observedLibraryVersion)}.</span><Button variant="secondary" onClick={onRefresh}>{nadesDirty ? "Discard edits & load latest" : "Load latest"}</Button></AlertDescription></Alert> : null}
+              {statusError || liveStatus.sync?.lastError ? <Alert variant="destructive"><AlertTitle>Nade sync cannot confirm the connection</AlertTitle><AlertDescription>{statusError || liveStatus.sync.lastError}</AlertDescription></Alert> : null}
+              {!matchZyModeActive ? <Alert variant="warning"><AlertTitle>MatchZy is not the active server mode</AlertTitle><AlertDescription>The files can stay synchronized, but players cannot use MatchZy's nade commands until MatchZy or Nades mode is active.</AlertDescription></Alert> : null}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={onApply} disabled={busy || !sharingNeedsApply}>
-              <UploadCloud data-icon="inline-start" />
-              Apply sharing & restart
-            </Button>
-            <span className="text-xs text-muted-foreground">Players save with .savenade and browse with .listnades.</span>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={onApply} disabled={busy || !sharingNeedsApply}>
+                  <UploadCloud data-icon="inline-start" />
+                  Apply sharing & restart
+                </Button>
+                <span className="text-xs text-muted-foreground">Players save with .savenade and browse with .listnades.</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </details>
+      {libraryChanged ? <Alert className="mb-4" variant="warning"><AlertTitle>The shared library changed</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>New lineups are available from MatchZy.</span><Button variant="secondary" disabled={busy} onClick={onRefresh}>{nadesDirty ? "Discard edits & load latest" : "Load latest"}</Button></AlertDescription></Alert> : null}
       {importOpen ? (
         <Card className="mb-4">
           <CardHeader>
@@ -2030,7 +1920,6 @@ function App() {
   const [settings, setSettings] = useState({});
   const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
-  const [coachSessions, setCoachSessions] = useState([]);
   const [flagPresets, setFlagPresets] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
@@ -2042,12 +1931,11 @@ function App() {
   const [operation, setOperation] = useState(null);
 
   async function loadAll() {
-    const [control, coach] = await Promise.all([api("/api/control"), api("/api/coach/sessions")]);
+    const control = await api("/api/control");
     setAuthenticated(true);
     setSettings(control.settings || {});
     setAdmins(control.admins || []);
     setNades(control.nades || []);
-    setCoachSessions(coach.sessions || []);
     setFlagPresets(control.flagPresets || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
@@ -2081,7 +1969,7 @@ function App() {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
 
-  const activeTab = tabs.find((item) => item.path === location.pathname) || tabs[0];
+  const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs[0];
 
   useEffect(() => {
     document.title = authenticated === false
@@ -2122,7 +2010,7 @@ function App() {
 
   if (!authenticated) {
     if (location.pathname !== routePaths.login) {
-      const requestedRoute = tabs.some((item) => item.path === location.pathname) ? location.pathname : defaultRoute;
+      const requestedRoute = (location.pathname === routePaths.nades || tabs.some((item) => item.path === location.pathname)) ? location.pathname : defaultRoute;
       return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
     }
 
@@ -2174,6 +2062,8 @@ function App() {
           element={(
             <Overview
               settings={settings}
+              setSettings={setSettings}
+              onApply={applyControl}
               admins={admins}
               nades={nades}
               status={status}
@@ -2184,22 +2074,6 @@ function App() {
                 return { message: "Refreshed." };
               })}
               onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
-            />
-          )}
-        />
-        <Route
-          path={routePaths.training}
-          element={(
-            <Training
-              settings={settings}
-              sessions={coachSessions}
-              busy={busy}
-              onStart={(track) => {
-                const nextSettings = { ...settings, serverMode: track.mode, ...(track.mode === "warmup" ? {} : { startMap: track.map }) };
-                setSettings(nextSettings);
-                return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings: nextSettings, admins }) }), "apply");
-              }}
-              onRefresh={() => runAction(async () => ({ message: "Coach reports refreshed." }))}
             />
           )}
         />
@@ -2225,26 +2099,7 @@ function App() {
         <Route
           path={routePaths.maps}
           element={(
-            <Maps
-              settings={settings}
-              setSettings={setSettings}
-              nades={nades}
-              setNades={setNades}
-              nadesDirty={nadesDirty}
-              busy={busy}
-              onApply={applyControl}
-              onSaveNades={() => runAction(async () => {
-                const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
-                setNades(result.entries);
-                return { message: "Nades saved." };
-              })}
-            />
-          )}
-        />
-        <Route
-          path={routePaths.nades}
-          element={(
-            <Nades
+            <MapsAndNades
               settings={settings}
               setSettings={setSettings}
               nades={nades}
@@ -2263,6 +2118,7 @@ function App() {
             />
           )}
         />
+        <Route path={routePaths.nades} element={<Navigate to={`${routePaths.maps}?view=library`} replace />} />
         <Route path={routePaths.logs} element={<DockerLogs active />} />
         <Route path={routePaths.links} element={<Links />} />
         <Route path={routePaths.login} element={<Navigate to={routeFromLoginSearch(location.search)} replace />} />

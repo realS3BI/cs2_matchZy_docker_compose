@@ -79,7 +79,6 @@ Coolify / Compose
 Das Desktop-Dashboard umfasst:
 
 - `Overview`: Containerzustand, Modus, Spielerplaetze und letzte Aktion
-- `Training`: fokussierte Uebungen, Ingame-Coach-Berichte und Vergleich mit der vorherigen Session
 - `Server`: Steam-Token, RCON, Name, Startmap, Slots, Workshop und Versions-Pins
 - `Plugins`: genau ein Servermodus und optionale Komponenten
 - `Access`: CounterStrikeSharp-Rollen und Steam64-IDs
@@ -107,41 +106,6 @@ Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar 
 
 `METAMOD=latest` waehlt den neuesten verfuegbaren 2.0-Linux-Build ab `1467`. Aktuelle CounterStrikeSharp-Versionen benoetigen Metamod-Plugin-Schnittstelle 18. Fuer aeltere CounterStrikeSharp-Versionen mit Schnittstelle 17 kann `METAMOD=compatible` (Build `1411`) gesetzt werden. Beide Komponenten muessen zur gleichen Schnittstelle passen.
 
-## MatchZy Coach
-
-`MatchZyCoach.dll` ist ein eigenes CounterStrikeSharp-Plugin aus diesem Repository. Das CS2-Image baut es gegen CounterStrikeSharp `1.0.373` und installiert es bei jedem Bootstrap. Es laeuft als opt-in Coach ueber allen Servermodi. Dadurch kann Mechanik in Aim Botz, Utility im Nades-Modus und Entscheidungsverhalten in Executes mit derselben Metrikdefinition verglichen werden.
-
-Eine Session beginnt und endet im CS2-Chat:
-
-```text
-!coach start mechanics
-!coach start utility
-!coach start decisions
-!coach start match
-!coach note wide swing without flash
-!coach status
-!coach stop
-!coach cancel
-```
-
-Pro Spieler und Session misst das Plugin nur serverseitig beobachtbare Werte:
-
-- Schuesse und Schuesse mit Schaden, Kopf- und Moving-Shots oberhalb von 50 Units pro Sekunde
-- Burst-Laenge, Kills, Deaths, Damage und Zeit vom ersten Schaden bis zum Kill
-- Opening-Duelle, Trade-Kills und innerhalb von fuenf Sekunden getradete Deaths
-- geworfene Granaten, Utility-Damage sowie gegnerische und eigene Team-Flash-Zeit
-- bis zu acht kurze Spielernotizen
-
-Der Coach bewertet erst nach einer Mindestmenge. Zum Beispiel entstehen Aim-Hinweise erst ab 20 Schuessen und Headshot-Hinweise ab fuenf Firearm-Kills. Er behauptet keine Reaktionszeit oder Crosshair-Position zu kennen, weil der Server dafuer keine belastbare Sicht auf den Client hat.
-
-Beim Abschluss schreibt das Plugin eine atomare JSON-Datei nach:
-
-```text
-game/csgo/addons/counterstrikesharp/plugins/MatchZyCoach/data/outbox
-```
-
-Das Panel validiert neue Dateien, importiert sie idempotent in die MongoDB-Collection `coach_sessions` und zeigt den aktuellen Bericht neben der vorherigen Session desselben Fokus. Die Rohdateien bleiben im persistenten `cs2_data`-Volume erhalten.
-
 WeaponPaints benoetigt eine eigene Datenbankkonfiguration im erzeugten Plugin-Config-File und kann wegen der Server-Guideline-Einstellung ein Risiko fuer den Steam-Token darstellen. Das Dashboard zeigt deshalb eine Warnung an.
 
 ## Admins
@@ -157,7 +121,7 @@ MatchZys eigene Admin-Datei bleibt leer. MatchZy verwendet die Rechte aus Counte
 
 ## Nades und Bilder
 
-In den Servermodi **Nades und MatchZy** wird das eigene Plugin `MatchZyNades` automatisch installiert. Bei MatchZy zuerst `.prac` starten. `.nades` oeffnet direkt in CS2 eine Typauswahl und danach die Lineups der aktuellen Map mit Pagination. W/S markiert Eintraege, Linksklick bestaetigt, Rechtsklick geht zurueck und E schliesst. Die Auswahl laedt Position und Blickwinkel und stellt die passende Granate bereit; `.nades last` setzt dich fuer den naechsten Versuch zurueck. Angezeigt werden oeffentliche und eigene private Lineups.
+In den Servermodi **Nades und MatchZy** wird das eigene Plugin `MatchZyNades` automatisch installiert. Ab Version **1.1.0** oeffnet `.nades` eine Trainingszentrale mit Granaten-Bibliothek, Lineup-Details, Wurf-/Positionsaktionen und Trainingswerkzeugen. W/S markiert Eintraege, **E/Use bestaetigt**, **Inspect (bei deiner Belegung G) geht zurueck**, A/D blaettert. Mit `bind "F6" "css_training"` laesst sich das Menue ohne Chat oeffnen und schliessen. Training kann mit bestehenden MatchZy-Berechtigungen im Menue gestartet werden. Ein Lineup laedt Position/Blickwinkel und stellt die passende Granate bereit. Angezeigt werden oeffentliche und eigene private Lineups; weitere Funktionen verwenden dieselbe erweiterbare Menuestruktur.
 
 Unter **Plugins** und **Nades** zeigt eine Statuskarte, ob das Menue fehlt, nur installiert oder vom laufenden Plugin bestaetigt ist. **Loaded** basiert auf einer aktuellen Rueckmeldung aus diesem Containerstart und zeigt auch den Practice-Zustand. **Diagnostics** prueft das Menue separat. Nach dem Update muessen sowohl Dashboard als auch CS2 neu gebaut und deployed werden.
 

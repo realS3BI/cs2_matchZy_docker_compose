@@ -102,7 +102,7 @@ function lastIndexOfAny(text, needles) {
 }
 
 function lastPluginLog(text, verbs, name) {
-  // A word boundary prevents MatchZyNades / MatchZyCoach from matching MatchZy.
+  // A word boundary prevents MatchZyNades from matching MatchZy.
   const matches = [...text.matchAll(new RegExp(`(?:${verbs})\\s+["']?${name}\\b`, "gi"))];
   return matches.at(-1)?.index ?? -1;
 }
@@ -168,11 +168,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
   const metamodReady = Boolean(files.metamod && files.gameinfoMetamod) && metamodInterfaceFailure < 0;
   const cssFilesReady = Boolean(files.counterStrikeSharpNative && files.counterStrikeSharpApi);
   const cssReady = cssFilesReady && cssExecutableStackFailure < 0 && metamodInterfaceFailure < 0;
-  const coachInstalled = Boolean(files.matchZyCoach);
   const nadeMenu = nadesMenuStatus({ files, runtime, settings, service, container, probe, cssReady, logs: normalizedLogs });
-  const coachLoaded = lastIndexOfAny(normalizedLogs, ["matchzy coach loaded", "finished loading plugin matchzycoach"]);
-  const coachFailed = lastIndexOfAny(normalizedLogs, ["failed to load plugin matchzycoach", "could not load plugin matchzycoach", "requires a newer version of counterstrikesharp"]);
-  const coachStatus = metamodInterfaceFailure >= 0 ? "fail" : coachFailed > coachLoaded ? "fail" : coachLoaded >= 0 ? "pass" : coachInstalled ? "warn" : "fail";
   const matchZyInstalled = Boolean(files.matchZy);
   const matchZyRuntimeStatus = metamodInterfaceFailure >= 0
     ? "fail"
@@ -248,16 +244,6 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
           : cssExecutableStackFailure >= 0
           ? "The host rejected CounterStrikeSharp because its native module requested an executable stack. Rebuild the CS2 image to apply the compatibility patch."
           : "Native loader or API assembly is missing."
-    ),
-    check(
-      "matchzy-coach",
-      "MatchZy Coach",
-      coachStatus,
-      coachStatus === "pass"
-        ? "The coaching plugin reported a successful load."
-        : coachStatus === "warn"
-          ? "MatchZyCoach.dll exists, but no load confirmation is present in retained logs."
-          : metamodInterfaceFailure >= 0 ? "CounterStrikeSharp did not start, so MatchZy Coach could not load." : coachInstalled ? "CounterStrikeSharp rejected MatchZy Coach during startup." : "MatchZyCoach.dll is missing. Rebuild the CS2 image."
     ),
     ...(nadeMenu.expected ? [check("matchzy-nades", "MatchZy Nades menu", nadeMenu.status, nadeMenu.detail)] : []),
     modeCheck

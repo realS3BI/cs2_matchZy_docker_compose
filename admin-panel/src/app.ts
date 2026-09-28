@@ -16,7 +16,7 @@ import {
 import { buildDiagnostics } from "./diagnostics.js";
 import { buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
 import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
-import { syncCoachOutbox } from "./coach-sync.js";
+import { currentMapFromStatus, executeRcon, mapChangeCommand } from "./rcon.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -82,7 +82,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
   );
 }
 
-export function createApp({ config, store, compose, nadesSync, restartScheduler = null }) {
+export function createApp({ config, store, compose, nadesSync, restartScheduler = null, rcon = executeRcon }) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -201,14 +201,6 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     });
   });
 
-  app.get("/api/coach/sessions", async (req, res) => {
-    const steamId = String(req.query.steamId || "").trim();
-    if (steamId && !/^[0-9]{17}$/.test(steamId)) return res.status(400).json({ error: "Steam64 ID is invalid" });
-    const sync = await syncCoachOutbox({ directory: config.liveCoachOutboxDir, store });
-    const sessions = await store.getCoachSessions({ steamId, limit: req.query.limit });
-    res.json({ sessions, sync });
-  });
-
   app.get("/api/nades/status", async (req, res) => {
     const document = await store.getNadesDocument();
     res.json({
@@ -223,7 +215,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       store.getAdmins(),
       store.getNadesDocument(),
       compose.serviceStatus(),
-      store.getLastAction(["apply", "restart", "scheduled_restart", "repair", "save", "nades_sync", "login_fail"]),
+      store.getLastAction(["apply", "restart", "scheduled_restart", "map_change", "repair", "save", "nades_sync", "login_fail"]),
       restartScheduler?.status() || Promise.resolve({ enabled: false })
     ]);
     const nades = nadesDocument?.entries || [];
@@ -296,6 +288,58 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result) });
   });
 
+  async function runtimeSettings() {
+    try {
+      return JSON.parse(await readFile(config.runtimeSettingsFile, "utf8"));
+    } catch {
+      throw new Error("Apply the server settings first so live controls can connect to CS2.");
+    }
+  }
+
+  function liveCommand(settings, command) {
+    if (!settings.rconPassword) throw new Error("Apply an RCON password before using live controls.");
+    return rcon({ host: config.serviceName || "cs2", password: settings.rconPassword, command });
+  }
+
+  app.get("/api/server/game", async (req, res, next) => {
+    try {
+      const settings = await runtimeSettings();
+      const output = await liveCommand(settings, "status");
+      res.json({ map: currentMapFromStatus(output), mode: settings.serverMode, startMap: settings.startMap });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/server/map", async (req, res, next) => {
+    let command;
+    let settings;
+    try {
+      command = mapChangeCommand(req.body);
+      settings = await runtimeSettings();
+      if (req.body.workshopId && !String(settings.workshopMaps || "").split(/[\s,]+/).includes(req.body.workshopId)) {
+        throw new Error("Add and apply this Workshop map before switching to it.");
+      }
+    } catch (error) {
+      return next(error);
+    }
+    try {
+      const output = await liveCommand(settings, command);
+      if (/unknown command|not found|no such map|couldn.t|failed|invalid|unable to|can.t change/i.test(output)) throw new Error(output);
+      const target = req.body.workshopId ? `Workshop ${req.body.workshopId}` : req.body.map;
+      const message = `Map change requested: ${target}. Refresh the live map after CS2 finishes loading.`;
+      await store.logAction("map_change", "success", message);
+      res.json({ ok: true, message });
+    } catch (error) {
+      try {
+        await store.logAction("map_change", "failed", error.message);
+        res.status(502).json({ error: error.message });
+      } catch (logError) {
+        next(logError);
+      }
+    }
+  });
+
   app.post("/api/control/apply", async (req, res) => {
     const nextSettings = normalizeSettings(validateRunnableSettings(sanitizeSettings(req.body?.settings)));
     const admins = sanitizeAdmins(req.body?.admins);
@@ -343,7 +387,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       service: await compose.serviceStatus(),
       nadesSync: nadesSync?.status() || { enabled: false },
       maintenance: restartScheduler ? await restartScheduler.status() : { enabled: false },
-      lastAction: await store.getLastAction(["apply", "restart", "scheduled_restart", "repair", "save", "nades_sync", "login_fail"])
+      lastAction: await store.getLastAction(["apply", "restart", "scheduled_restart", "map_change", "repair", "save", "nades_sync", "login_fail"])
     });
   });
 
@@ -369,7 +413,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     });
   });
 
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, { redirect: false }));
   app.get("*", (req, res) => res.sendFile(join(publicDir, "index.html")));
 
   app.use((error, req, res, next) => {
