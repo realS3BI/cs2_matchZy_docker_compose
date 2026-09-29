@@ -17,7 +17,7 @@ public static class PanelSettingsMenu
         };
         var keys = PlayerPanelSettings.Labels.Select(action => new MenuItem(
             $"{action.Value}: {PlayerPanelSettings.DefaultKeys[action.Key]}", hints[action.Key])).ToList();
-        keys.Add(new("Bind-Befehle in Konsole anzeigen", "Einmal lokal ausführen oder in eine CFG übernehmen. Vorher eigene Belegungen sichern: CS2-Binds gelten auch auf anderen Servern.", Request: new(TrainingAction.ExportBindings)));
+        keys.Insert(0, new("Alle Keybinds in Konsole ausgeben", "Öffne danach die Konsole: erste Befehlszeile für alle Panel-Tasten, zweite optional für Noclip (N frei wählbar). Vorher bisherige Binds sichern; sie werden überschrieben und nicht automatisch wiederhergestellt.", Request: new(TrainingAction.ExportBindings)));
         return new("Keybinds", "Feste Tasten für alle Spieler. Der Server kann deine lokalen Binds weder setzen noch prüfen. Mausbedienung funktioniert ohne diese Binds.", keys, Key: "settings");
     }
 }

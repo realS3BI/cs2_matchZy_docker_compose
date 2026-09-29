@@ -28,8 +28,13 @@ public sealed partial class MatchZyNadesPlugin
                 { session.Menu.Enter(PanelSettingsMenu.Create(settings)); session.NextDraw = 0; }
                 return true;
             case TrainingAction.ExportBindings:
-                player.PrintToConsole("// MatchZy Training: vorher eigene Binds sichern; in lokale CFG übernehmen.\n" + settings.Export());
-                Tell(player, "Deine Bind-Befehle stehen in der Client-Konsole. Alte, nicht mehr verwendete Binds dort selbst wiederherstellen.");
+                player.PrintToConsole("// MatchZy Training – Keybinds zum Kopieren");
+                player.PrintToConsole("// VORHER: bisherige Belegungen mit bind \"TASTE\" abfragen und in einer eigenen Wiederherstellungs-CFG sichern.");
+                player.PrintToConsole("// Zeile 1: alle neun Panel-Binds. Zeile 2: optional Noclip; n darf durch deine gewünschte Taste ersetzt werden (benötigt sv_cheats 1).");
+                player.PrintToConsole("// Jede Befehlszeile einzeln kopieren und ausführen. Alternativ lokale matchzy_training.cfg mit exec matchzy_training laden.");
+                player.PrintToConsole("// Binds gelten auf allen Servern. Rückkehr zu bisherigen Belegungen nur mit deiner gesicherten CFG; kein automatisches Wiederherstellen.");
+                foreach (var line in settings.ConsoleExport().Split('\n')) player.PrintToConsole(line);
+                Tell(player, "Zwei kopierbare Befehlszeilen mit Erklärung stehen in deiner Konsole. Vor dem Ausführen bisherige Binds sichern!");
                 return true;
             default: return false;
         }

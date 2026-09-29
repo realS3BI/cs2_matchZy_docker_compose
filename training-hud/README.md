@@ -78,7 +78,11 @@ Unter **Keybinds** stehen die unveränderlichen Tasten. Alte persönliche Belegu
 | Vorherige / nächste Seite | LEFTARROW / RIGHTARROW |
 | Weitere Beschreibungsseite | PGDN |
 
-`css_training_binds` schreibt die festen Bind-Zeilen in die Client-Konsole. Alternativ [matchzy_training.cfg](matchzy_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec matchzy_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen.
+Der erste Eintrag unter **Keybinds**, **Alle Keybinds in Konsole ausgeben**, schreibt eine Erklärung und zwei kopierbare Befehlszeilen in die Client-Konsole. Das geht auch direkt mit `css_training_binds`. Die erste Zeile enthält alle neun Panel-Binds, mit Semikolon getrennt. Die zweite lautet `bind "n" "noclip"` und ist optional: `n` darf durch eine selbst gewählte, freie Taste ersetzt werden. Noclip benötigt `sv_cheats 1`. Jede gewünschte Zeile einzeln kopieren und ausführen.
+
+Alternativ [matchzy_training.cfg](matchzy_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec matchzy_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen; auch das Server-Plugin lädt keine lokale Spieler-CFG. Die optionale Noclip-Zeile ist in der Datei auskommentiert.
+
+**Bisherige Belegungen wiederherstellen:** Vor dem Ausführen für jede betroffene Taste beispielsweise `bind "KP_0"` beziehungsweise `bind "n"` in der Konsole eingeben. Die angezeigten bisherigen Befehle als `bind "TASTE" "BISHERIGER BEFEHL"` in einer eigenen Datei `training_restore.cfg` unter `game/csgo/cfg` sichern. Für zuvor unbelegte Tasten dort `unbind "TASTE"` eintragen. Nach dem Training `exec training_restore` ausführen. Ohne vorherige Sicherung kennt das Plugin die überschriebenen Belegungen nicht; `unbind` allein stellt sie nicht wieder her.
 
 Der Server kann Client-Binds weder setzen noch auslesen und auch keine nur auf diesen Server begrenzten Binds erzwingen. Vorher eigene Belegungen sichern. Binds gelten clientweit; nach dem Training die eigene gesicherte CFG manuell laden. Das Plugin verarbeitet seine Aktionen nur in Practice, aber dadurch werden die alten Client-Belegungen nicht automatisch wiederhergestellt. Alte F6/F7/F8-Binds bei Bedarf selbst zurücksetzen. `css_training_bind` ändert keine Belegungen mehr; `css_training` und `css_training_visible` bleiben als Zugang ohne CFG erhalten.
 

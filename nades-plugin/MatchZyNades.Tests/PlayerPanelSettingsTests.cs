@@ -69,7 +69,17 @@ public sealed class PlayerPanelSettingsTests : IDisposable
         var page = PanelSettingsMenu.Create(new());
         Assert.Equal("Keybinds", page.Title);
         Assert.Equal(10, page.Items.Count);
-        Assert.All(page.Items.Take(9), item => { Assert.Null(item.Page); Assert.Null(item.Request); });
-        Assert.Equal(TrainingAction.ExportBindings, page.Items.Last().Request!.Action);
+        Assert.All(page.Items.Skip(1), item => { Assert.Null(item.Page); Assert.Null(item.Request); });
+        Assert.Equal(TrainingAction.ExportBindings, page.Items.First().Request!.Action);
+    }
+
+    [Fact]
+    public void ConsoleExportHasOnePanelCommandLineAndSeparateOptionalNoclip()
+    {
+        var settings = new PlayerPanelSettings();
+        var lines = settings.ConsoleExport().Split('\n');
+        Assert.Equal(2, lines.Length);
+        Assert.Equal(settings.Export().Split('\n'), lines[0].Split("; "));
+        Assert.Equal("bind \"n\" \"noclip\"", lines[1]);
     }
 }

@@ -40,6 +40,7 @@ public sealed record PlayerPanelSettings
     }
     public string BindingLine(string action) => $"bind \"{DefaultKeys[action]}\" \"css_training_key {DefaultKeys[action]}\"";
     public string Export() => string.Join('\n', DefaultKeys.Keys.Select(BindingLine));
+    public string ConsoleExport() => string.Join("; ", DefaultKeys.Keys.Select(BindingLine)) + "\nbind \"n\" \"noclip\"";
     public string? ActionForKey(string key) => DefaultKeys.FirstOrDefault(p => p.Value.Equals(key, StringComparison.OrdinalIgnoreCase)).Key;
 }
 
