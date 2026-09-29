@@ -1,10 +1,10 @@
 # Festes Trainings-HUD
 
-Das Layout ist ein einziges Panorama-Panel, rechts und vertikal mittig am Bildschirm. Es wird vom Client gerendert und hat keine Verbindung zu Weltposition oder Kamerabewegung. `ScreenPanel` überträgt ausschließlich Inhalte, Auswahl und Fokus. Navigation ist per Maus sowie persönlichen Console-Binds möglich.
+Das Layout ist ein einziges Panorama-Panel, rechts und vertikal mittig am Bildschirm. Es wird vom Client gerendert und hat keine Verbindung zu Weltposition oder Kamerabewegung. `ScreenPanel` überträgt ausschließlich Inhalte, Auswahl und Fokus. Navigation ist per Maus sowie festen Console-Binds möglich.
 
-## Aufbau ab Plugin 1.7.0
+## Aufbau ab Plugin 1.8.0
 
-Mittige Überschrift, Breadcrumb und neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home, drei Beschreibungszeilen und zwei Hotkey-Hinweise mit grünem Frei-/rotem HUD-Indikator. Die Bibliothek wird alle zwei Sekunden aktualisiert, sobald der Dashboard-Sync die Daten geschrieben hat. Die ausgewählte Granate bleibt bei Änderungen möglichst erhalten. Die Tasteneinrichtung bleibt unverändert.
+Mittige Überschrift, engere Breadcrumb und neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home sowie drei Beschreibungszeilen. Footer-Hinweise und Modusindikator sind entfernt. Die Bibliothek und Zustände werden alle zwei Sekunden aktualisiert. Die ausgewählte Granate bleibt bei Änderungen möglichst erhalten. Das Panel ist ausschließlich im tatsächlichen MatchZy-Practice-Modus verfügbar.
 
 Die neuen Assets sind kompiliert. Plugin und Workshop-Addon gemeinsam aktualisieren und CS2 danach ganz neu starten. Ein erneuter Ingame-Test dieses Layouts steht noch aus.
 
@@ -64,32 +64,37 @@ Das ist ein **PowerShell-Befehl, kein CS2-Konsolenbefehl**. Das Plugin bestimmt 
 
 Damit lassen sich Layout und Styles ohne Workshop-Veröffentlichung und ohne Serveränderung entwickeln, solange Panel-IDs und Variablen zur installierten Plugin-Version passen. Menüpunkte, Favoriten, Spawns und andere C#-Funktionen kommen weiterhin vom Server-Plugin. Zum Testen neuer Funktionen ist eine aktualisierte Plugin-Version auf einem Entwicklungsserver nötig.
 
-## Persönliche Hotkeys
+## Feste Keybinds
 
-Im Panel **Einstellungen** öffnen, Aktion und Taste wählen. Verwendete Tasten sind gesperrt, damit sich Panelaktionen nicht gegenseitig überschreiben. Standardmäßig ist die alte W/S/Use-Steuerung aus; optional in den Einstellungen einschalten.
+Unter **Keybinds** stehen die unveränderlichen Tasten. Alte persönliche Belegungen und Spielaktions-Navigation werden beim Laden ignoriert; Favoriten bleiben erhalten.
 
-Jede Auswahl wird atomar unter `addons/counterstrikesharp/plugins/MatchZyNades/data/players/<Steam64>.json` gespeichert. Reconnects, Mapwechsel, Neustarts und Image-Updates behalten die Dateien im CS2-Volume. Favoriten und Tastenhinweise werden für jeden Spieler separat geladen. Die Panelgröße ist für alle kompakt; alte Größen-Einstellungen werden ignoriert.
+| Aktion | Taste |
+| --- | --- |
+| HUD bedienen / frei spielen | KP_0 |
+| HUD anzeigen / verstecken | KP_DEL |
+| Auswahl hoch / runter | UPARROW / DOWNARROW |
+| Bestätigen | ENTER |
+| Zurück | BACKSPACE |
+| Vorherige / nächste Seite | LEFTARROW / RIGHTARROW |
+| Weitere Beschreibungsseite | PGDN |
 
-**CS2-Binds bleiben Client-Einstellungen:** Der Server kann weder beliebige physische Tasten abfragen noch `bind` auf dem Client ausführen. Nach einer neuen Taste einmal den angezeigten Bind lokal setzen. Mit `css_training_binds` alle persönlichen Bind-Zeilen in der Client-Konsole anzeigen und in die eigene CFG übernehmen. Vorhandene Spielbelegungen vorher sichern; alte Binds werden nicht automatisch entfernt.
+`css_training_binds` schreibt die festen Bind-Zeilen in die Client-Konsole. Alternativ [matchzy_training.cfg](matchzy_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec matchzy_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen.
 
-Auch ohne geladenes HUD funktioniert beispielsweise:
+Der Server kann Client-Binds weder setzen noch auslesen und auch keine nur auf diesen Server begrenzten Binds erzwingen. Vorher eigene Belegungen sichern. Binds gelten clientweit; nach dem Training die eigene gesicherte CFG manuell laden. Das Plugin verarbeitet seine Aktionen nur in Practice, aber dadurch werden die alten Client-Belegungen nicht automatisch wiederhergestellt. Alte F6/F7/F8-Binds bei Bedarf selbst zurücksetzen. `css_training_bind` ändert keine Belegungen mehr; `css_training` und `css_training_visible` bleiben als Zugang ohne CFG erhalten.
 
-```cfg
-css_training_bind focus K
-css_training_bind visible L
-bind "K" "css_training_key K"
-bind "L" "css_training_key L"
-```
+## Bibliothek, Review und Map-Abstimmung
 
-`css_training_key` sucht die Aktion anhand der gespeicherten Taste. Nach einer Neubelegung reagieren alte, nicht mehr zugewiesene Tasten nicht mehr auf Panelaktionen. Die direkten Befehle `css_training` und `css_training_visible` bleiben als unabhängiger Zugang verfügbar. Navigationstasten wirken nur bei sichtbarem, aktiv bedientem Panel. Konfigurations- und Sichtbarkeitstasten funktionieren auch außerhalb dieses Modus.
+Siehe [Bedienung der Trainingszentrale](../docs/nades-menu.md). Alle Aufnahmen sind für alle Spieler sichtbar. Nur der Ersteller kann seine noch nicht offiziellen Aufnahmen bearbeiten, löschen oder zum Review einreichen. Offizielle Freigaben und Must Know werden von Plattform-Admins in der Webübersicht gespeichert.
 
 ## Abnahme im Spiel
 
 1. Compilerlauf ohne Fehler; Layout mit 16:9 und 4:3 prüfen, auch lange Titel und Beschreibungen.
 2. Schnell drehen, laufen, springen und zoomen: Rahmen bleibt am Bildschirmrand.
-3. Maus: alle neun Einträge, Zurück, Seitenwechsel und Home testen. F6/F7 sowie den grünen/roten Indikator prüfen. Nach Verlassen darf kein Cursor/Sperrzustand bleiben.
-4. Zwei Spieler mit verschiedenen Tasten und Favoriten; jeder sieht nur seine Inhalte. Reconnect mit wiederverwendetem Slot und Serverneustart prüfen.
-5. Neue Taste speichern, Bind ausführen, alte Taste prüfen; doppelte Taste ablehnen. Navigation im passiven/versteckten Zustand darf keine Aktion auslösen.
-6. Aufnahme, Speichern, Laden, Noclip, Tod, Respawn, Runden-/Mapwechsel und Plugin-Unload testen.
+3. Maus: alle neun Einträge, Zurück, Seitenwechsel und Home testen. KP_0/KP_DEL sowie PGDN prüfen. Nach Verlassen darf kein Cursor/Sperrzustand bleiben.
+4. Zwei Spieler mit eigenen Favoriten; alle Aufnahmen sind sichtbar, Bearbeitung bleibt dem Ersteller vorbehalten. Reconnect mit wiederverwendetem Slot und Serverneustart prüfen.
+5. Alte Tastenprofile laden: feste Belegung verwenden, Favoriten erhalten. Navigation im passiven/versteckten Zustand darf keine Aktion auslösen.
+6. Aufnahme, Name/Beschreibung per Chat, Review, Admin-Freigabe, Löschen und Sync-Konflikte testen.
+7. .prac und .exitprac sowie Competitive-Start testen: außerhalb Practice darf keine Panelaktion funktionieren.
+8. Map-Abstimmung mit Ja/Nein, Enthaltungen, Disconnect und Zuschauern testen; bei Practice-Ende abbrechen.
 
 Technische Referenzen: [CounterStrikeSharp HUD-API](https://github.com/roflmuffin/CounterStrikeSharp/blob/main/managed/CounterStrikeSharp.API/Modules/Extensions/CCSCustomHudLayoutExtensions.cs), [CS2UIKit Erkenntnisse zu Panorama](https://github.com/nvmxre/cs2-ui-kit/blob/master/docs/GOTCHAS.md). Dieses Projekt bindet CS2UIKit nicht als Laufzeitabhängigkeit ein.

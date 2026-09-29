@@ -1,62 +1,48 @@
-# Trainingszentrale im Spiel
+# Trainingszentrale im Spiel (1.8.0)
 
-Ab **1.5.0** verwendet MatchZyNades ein festes **Panorama-HUD** mit einer zusammenhängenden Fläche am rechten Bildschirmrand. Die alte World-Text-Anzeige und ihre Kameranachführung sind entfernt. Sichtbarkeit und Bedienung bleiben getrennt. Im Bedienmodus gibt es einen Mauszeiger und anklickbare Einträge; alternativ funktionieren persönliche Hotkeys.
+Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und drei Beschreibungszeilen. Lange Texte lassen sich mit PGDN weiterlesen. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
 
-**Layout 1.7.0 noch nicht im Spiel abgenommen:** Die HUD-Quellen und das Build-Skript liegen unter [training-hud](../training-hud/README.md). Die Assets sind mit Valves Workshop-Compiler gebaut; ein Test im CS2-Client steht noch aus. Die Anzeige bleibt bis zur Installation abgeschaltet; es gibt keinen automatischen Rückfall auf das nachziehende Panel.
+## Aktivieren und Practice prüfen
 
-## Aktivieren
+CS2- und Dashboard-Image gemeinsam aktualisieren; CounterStrikeSharp API 374+ verwenden. Im Dashboard unter **Server → Trainings-HUD** aktivieren und mit **Apply & restart** übernehmen. Für lokale Entwicklung die Workshop-Auslieferung ausschalten und [lokale Assets bauen/installieren](../training-hud/README.md). Für Mitspieler das Workshop-Addon aktualisieren und ausliefern. Nach Layoutänderungen CS2 vollständig neu starten.
 
-1. [HUD bauen und an Clients ausliefern](../training-hud/README.md). Für mehrere Spieler wird ein eigenes Workshop-Addon benötigt.
-2. Passendes Metamod, CounterStrikeSharp **API 374+** und MultiAddonManager verwenden. Das Plugin baut gegen **1.0.374**.
-3. CS2- und Dashboard-Image neu bauen. Im Dashboard **Nades** oder **MatchZy** aktivieren; die Statuskarte muss Version **1.7.0** als **Loaded** melden.
-4. Im Webpanel unter **Server → Trainings-HUD** das HUD aktivieren. Für veröffentlichte Assets **HUD über Workshop ausliefern** einschalten und die Workshop-ID eintragen; für lokal installierte Testdateien die Auslieferung ausschalten. Mit **Apply & restart** übernehmen. Das gilt für alle Spieler; ohne lokale Dateien und ohne Workshop-Auslieferung erscheint kein HUD. Die bisherigen Deploymentvariablen dienen nur noch als Fallback für ältere Runtime-Konfigurationen.
-5. Einem Team beitreten, spawnen und `css_training` in der Konsole ausführen oder einen eigenen Hotkey binden.
+Das Panel funktioniert nur, wenn die geladene MatchZy-Instanz `isPractice == true` und `matchStarted == false` meldet. `.prac` oder der automatische Start im Nades-Modus aktiviert Practice; bloßes `sv_cheats 1` reicht nicht. Bei `.exitprac`, Competitive-Start oder MatchZy-Unload werden Panel, Aufnahme und Map-Abstimmung geschlossen. Der Zugriff liest die öffentlichen MatchZy-Zustandsfelder über die Plugin-Verwaltung von CounterStrikeSharp. Ist diese Schnittstelle nicht verfügbar, bleibt das Panel gesperrt. Nach Updates von MatchZy/CSS ist dieser Übergang im Spiel zu prüfen.
 
-Das HUD muss vor dem ersten Öffnen auf dem Client vorhanden sein. Die Plugin-Statuskarte bestätigt nur das Laden des Plugins, nicht die Verfügbarkeit der Client-Dateien. Bis dahin funktionieren die Konfigurationsbefehle bereits, aber das Panel sperrt keine Eingaben.
+Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. Ohne installierte HUD-Dateien kann das Plugin keine sichtbare Oberfläche garantieren. Einmalige Bind-Einrichtung: [Feste Keybinds](../training-hud/README.md#feste-keybinds). Freie Tastenzuweisungen und Navigation über W/S/Use sind entfernt. Bestehende Favoriten werden beim Laden alter Profile erhalten.
 
-## Aufbau ab 1.7.0
+## Hauptmenü
 
-Oben steht mittig **Trainingszentrale**. Eine kleine Breadcrumb zeigt den aktuellen Menüpfad. Es gibt ausschließlich die kompakte Panelgröße. Darunter bleiben immer neun schmale Zeilen reserviert, auch auf leeren oder teilweise gefüllten Seiten. Die Navigation lautet **Zurück · <- Seite · 1/2 · Seite -> · Home**. Es folgen drei Beschreibungszeilen und nur die Hinweise **F6 Hud/Crosshair** und **F7 Hud anzeigen/verstecken** (bei eigener Belegung mit den eigenen Tasten). Der Indikator zeigt grün **Frei** oder rot **HUD**. Es gibt keinen Beschreibungs-Weiter-Button und keine Footer-Buttons. Der bestehende Bild-ab-Hotkey bleibt für lange Beschreibungen nutzbar.
+1. **Granaten-Bibliothek:** Typ auswählen, dann Favoriten, Offiziell, Must Know oder Alle. „Alle“ enthält sämtliche Spieleraufnahmen auf dieser Map, auch ungeprüfte.
+2. **Must Know:** direkter Einstieg in die vom Plattform-Admin ausgewählten Grundlagen dieser Map.
+3. **Trainingswerkzeuge:** letzten Wurf wiederholen, zum letzten Abwurfpunkt, Position merken/laden, Granaten entfernen, Bots, Trainingshilfen und Positionsdiagnose.
+4. **Neue Nade aufnehmen:** Aufnahme starten, innerhalb von drei Minuten werfen, Wirkung abwarten, mit KP_0 zurück ins HUD und speichern. Ein automatischer Name wird vergeben; der Ersteller bleibt als Steam-ID erhalten.
+5. **Favoriten:** persönlich gemerkte Granaten auf dieser Map. Die Identität ist Owner + Map + interner Name; Umbenennen des Anzeigenamens verliert keine Favoriten.
+6. **Competitive-Spawns:** CT- oder T-Startposition wählen und dorthin teleportieren.
+7. **Map wechseln:** eine Map vorschlagen oder in einer laufenden Abstimmung Ja/Nein wählen.
+8. **Keybinds:** die festen neun Tasten und die Bind-Befehle anzeigen.
+9. **Panel ausblenden:** mit KP_DEL wieder anzeigen. KP_0 wechselt zwischen Bedienung und freiem Spielen.
 
-Plugin und Workshop-Assets müssen gemeinsam aktualisiert werden. Nach einem Asset-Update CS2 vollständig neu starten, weil Panorama Layouts zwischenspeichert. Die Version 1.7.0 ist kompiliert; die Darstellung und Eingaben im laufenden Spiel müssen noch geprüft werden.
+**Bots** enthält stehenden Bot, duckenden Bot und Bots entfernen. **Trainingshilfen** enthält Flugbahnvorschau, Einschläge, Flashschutz und God Mode. Die Beschriftung zeigt „einschalten“ oder „ausschalten“ entsprechend dem tatsächlichen Zustand. MatchZys God Mode wird anhand seiner Lebenspunkte-Logik erkannt. Gemeinsame Trainingsaktionen werden sofort ausgeführt; die Beschreibung kennzeichnet ihre Wirkung auf alle Spieler. MatchZy behält seine Berechtigungsprüfung und meldet das Ergebnis im Chat.
 
-## Persönliche Bedienung und Hotkeys
+## Aufnahme bearbeiten, löschen und prüfen lassen
 
-Unter **Deine Einstellungen** oder über den Einstellungen-Hotkey lassen sich für jede Panelaktion Tasten auswählen. Belegung, Favoriten und optionale Spielaktions-Navigation werden pro **Steam-ID** gespeichert: `addons/counterstrikesharp/plugins/MatchZyNades/data/players/<Steam64>.json`. Die Dateien bleiben im CS2-Volume bei Reconnect, Mapwechsel und Neustart erhalten. Eine bereits verwendete Taste wird nicht einer zweiten Aktion zugeordnet.
+Alle Aufnahmen sind sofort für alle sichtbar. Nur der Ersteller einer noch nicht offiziellen Aufnahme sieht **Name bearbeiten**, **Beschreibung bearbeiten**, **Zum Review freigeben** und **Eigene Aufnahme löschen**. Beim Bearbeiten den Text im Chat eingeben (Name maximal 120, Beschreibung maximal 300 Zeichen); `abbrechen` beendet die Eingabe. Texteingabe läuft nach zwei Minuten ab. Löschen verlangt eine zusätzliche Bestätigung.
 
-**Ein Client-Bind ist einmal pro neuer Taste erforderlich.** Der Server darf ihn nicht automatisch setzen. Nach der Auswahl zeigt das Panel den genauen Befehl. `css_training_binds` schreibt alle persönlichen Binds in die Client-Konsole; diese lassen sich in die eigene CFG übernehmen. Bestehende Belegungen vorher sichern. Ein normaler CS2-Bind ersetzt die alte Belegung und gilt clientweit, auch auf anderen Servern; die pro Spieler gespeicherten Panel-Einstellungen alleine ändern keine Client-Binds. Das Custom-HUD unterstützt keine freien Tastatur-Listener oder eigene Skripte. Die Tasteneinrichtung bleibt vorerst unverändert. Ein Beispiel ohne F-Tasten:
+„Zum Review freigeben“ markiert die Aufnahme als **[Review]**. Plattform-Admins finden diese über **All lineups → Review-Status → Review angefragt** und können sie freigeben oder ablehnen. Änderungen mit **Save nades** speichern. **Offiziell** kennzeichnet geprüfte Lineups; **Must Know** ist die besonders wichtige Auswahl und schaltet zugleich Offiziell ein. Nach Freigabe kann der Ersteller die Granate nicht mehr verändern oder löschen. Änderungen an Name/Beschreibung vor einer Freigabe setzen einen alten Review-Antrag zurück; danach erneut einreichen.
 
-```cfg
-css_training_bind focus K
-css_training_bind visible L
-bind "K" "css_training_key K"
-bind "L" "css_training_key L"
-```
+Spieleranfragen werden mit authentifizierter Steam-ID und Versionsstand über `savednades.requests` an den Dashboard-Sync übergeben. Der Sync prüft Besitzer, Freigabe und Version erneut. Eine veraltete Anfrage überschreibt keine neuere Admin-Änderung. Ohne laufenden Sync bleiben Anfragen ausstehend. Erfolg oder Ablehnung wird nach Verarbeitung im Spiel gemeldet. Zielerfassung beim erneuten Werfen verändert keine fremden oder offiziellen Lineups.
 
-Die Standardbelegung steht in [training-menu.cfg](training-menu.cfg). Die Navigation über Spielaktionen W/S, Use, Inspect und Reload ist standardmäßig aus und kann optional aktiviert werden. Individuelle Console-Binds und Mausklicks sind davon unabhängig.
+## Map-Abstimmung
 
-| Aktion | Standardtaste nach Installation der CFG |
-| --- | --- |
-| Bedienung / Spielen | F6 |
-| Anzeigen / Verstecken | F7 |
-| Einstellungen | F8 |
-| Auswahl nach oben / unten | Pfeil hoch / runter |
-| Bestätigen | Enter oder Mausklick |
-| Zurück | Backspace oder Button |
-| Vorherige / nächste Seite | Pfeil links / rechts |
-| Weitere Beschreibung (bestehender Hotkey) | Bild ab |
+Jeder lebende Spieler in Practice darf eine Abstimmung starten. Zur Auswahl stehen lokal vorhandene Standard-Map-VPKs und im angewendeten Dashboard konfigurierte Workshop-Maps. Mapnamen und Workshop-IDs werden geprüft; freie Befehle sind nicht zulässig.
 
-Nur im Bedienmodus werden Bewegung und neue Angriffe gesperrt und der Mauszeiger aktiviert. Beim Spielen bleibt das Panel sichtbar, reagiert aber nicht auf Navigation. Ausblenden beendet immer auch die Bedienung. Nach 90 Sekunden ohne Eingabe wird die Bedienung beendet. Tod, Respawn, Runden-/Mapwechsel und Plugin-Unload entfernen die Anzeige und geben Eingaben frei. Ein Practice-Wechsel baut die Inhalte neu auf. Persönliche Einstellungen bleiben erhalten, die offene Auswahl bleibt beim bloßen Aus-/Einblenden erhalten.
+Die Abstimmung dauert 30 Sekunden. Der Vorschlag zählt als Ja-Stimme des Initiators. Es gilt `floor(Anzahl / 2) + 1`: bei vier Spielern sind drei Ja-Stimmen nötig. Gezählt werden alle beim Start verbundenen menschlichen Spieler inklusive Zuschauer, ohne Bots oder HLTV. Jeder hat eine Stimme. Spätere Beitritte stimmen nicht mit; Disconnects verkleinern den Nenner nicht, Enthaltungen sind keine Ja-Stimmen.
 
-## Trainingsaktionen ohne Chat-Eingabe
+Abstimmen im Panel unter **Map wechseln**, im Chat mit `.mapja` / `.mapnein` oder in der Konsole mit `css_training_vote yes` / `css_training_vote no`. Bei erreichter Mehrheit wird gewechselt; ohne Mehrheit bleibt die Map. Zwischen Vorschlägen liegen mindestens 60 Sekunden. Practice-Ende, Map-Ende und Plugin-Unload verwerfen die Abstimmung.
 
-**Granaten-Bibliothek** zeigt öffentliche und eigene private Lineups der aktuellen Map, nach Typ sortiert, mit neun Einträgen pro Seite. Details enthalten Beschreibung und **Lineup laden & trainieren**. Zurück stellt die vorige Auswahl wieder her. Lange Beschreibungen lassen sich weiterblättern.
+## Abnahmestand
 
-**Wurf & Position** bietet Wiederholen, letzten Abwurfpunkt, Position merken/laden, Noclip, Granaten entfernen, Team-Spawns und Granaten ausrüsten. **Trainingswerkzeuge** bietet Bots, Vorschau, Einschläge, Flashschutz, Unverwundbarkeit und Positionsdiagnose. Gemeinsame Aktionen verlangen eine Bestätigung. Die Ausführung gibt die Steuerung frei; das Panel bleibt sichtbar. Eigene Rückmeldungen erscheinen darin. MatchZys eigene Erfolgs-/Berechtigungsnachrichten bleiben vorerst im Chat; das Panel behauptet keinen ungeprüften Erfolg.
-
-**Neue Nade aufnehmen:** Aufnahme starten, werfen, Explosion abwarten, Bedienung aktivieren und **Aufnahme speichern** wählen. Der Name wird aus Typ, Map, UTC-Zeit und Kennung erzeugt. **Aufnahme verwerfen** bricht ab. Nach dem Dashboard-Sync erscheint das neue Lineup automatisch. Freie Namen lassen sich im Dashboard oder optional per Chat vergeben. Karten, Fotos und freie Textfelder sind hier noch nicht eingebaut.
-
-Training kann aus dem Panel gestartet werden, mit MatchZys bestehenden Spielerberechtigungen. Trainingsaktionen verlangen `sv_cheats`. Die Bibliothek muss für die Werkzeuge nicht gefüllt sein. Die bestehenden `.nades`-/`css_nades`-Befehle bleiben als alternativer Zugang erhalten.
+Version 1.8.0 wird mit Unit-/Integrationstests, Web-Build und Valves Panorama-Compiler geprüft. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
 
 ## Architektur
 
@@ -82,20 +68,20 @@ Beim erfolgreichen Laden wird normale Laufbewegung aktiviert und Noclip beendet.
 
 Fehlt die passende Granate im Inventar, gibt das Plugin sie dem Spieler und wählt den Granaten-Slot aus. Bei Molly-Lineups verwendet es für CTs eine Incendiary und für Ts einen Molotov. Die gespeicherte Beschreibung erscheint im Chat, etwa als Hinweis auf einen Jumpthrow. `.nades last` setzt dich erneut an den Abwurfpunkt.
 
-Solange `sv_cheats` aktiv ist, prüft das Plugin in jedem Tick die Körperneigung lebender Spieler beider Teams. Dadurch greift die Korrektur auch nach MatchZys `.loadnade`, `.last` und `.loadpos`, ohne dessen DLL zu verändern. Spieler mit einer übergeordneten Scene-Node werden ausgelassen. Bei bereits aufrechten Spielern wird kein Zustand geschrieben. `.nades check` zeigt Position, beide Bewegungsmodi sowie Blick- und Körperwinkel für die Fehlersuche. Das vorhandene MatchZy-Format speichert den Duckzustand nicht; bei Duck-Lineups muss weiterhin selbst geduckt werden.
+Solange MatchZy Practice aktiv ist, prüft das Plugin in jedem Tick die Körperneigung lebender Spieler beider Teams. Dadurch greift die Korrektur auch nach MatchZys `.loadnade`, `.last` und `.loadpos`, ohne dessen DLL zu verändern. Spieler mit einer übergeordneten Scene-Node werden ausgelassen. Bei bereits aufrechten Spielern wird kein Zustand geschrieben. `.nades check` zeigt Position, beide Bewegungsmodi sowie Blick- und Körperwinkel für die Fehlersuche. Das vorhandene MatchZy-Format speichert den Duckzustand nicht; bei Duck-Lineups muss weiterhin selbst geduckt werden.
 
 Der eigentliche Wurf wird von dir ausgeführt. Die vorhandenen MatchZy-Daten enthalten Position, Winkel, Typ und Beschreibung, aber keine vollständige Abfolge von Laufbewegung, Ducken, Sprung oder Wurfstärke. Das Menü spielt deshalb keine automatischen Beispielwürfe ab. Bei **Ohne Typ** musst du die Granate selbst wählen; den Typ kannst du im Dashboard nachtragen. MatchZys Flugbahnvorschau und Practice-Funktionen bleiben nutzbar.
 
-Sichtbar sind globale Einträge mit Owner `default` und deine eigenen privaten Einträge mit deiner Steam64-ID. Private Lineups anderer Spieler werden nicht angezeigt. Gleichnamige globale und private Einträge sind einzeln auswählbar; private Einträge tragen `[privat]`. Für gemeinsame Lineups im Dashboard `Save new in-game lineups for everyone` aktivieren.
+Sichtbar sind alle gültigen Aufnahmen der aktuellen Map, unabhängig vom Owner. Der Owner bleibt für Bearbeitungsrechte und Favoriten erhalten. Eine Aufnahme mit Review-Antrag trägt [Review]; Offiziell und Must Know werden zusätzlich in eigenen Sammlungen angeboten.
 
-Bei jedem Öffnen, unmittelbar vor dem Laden und alle zwei Sekunden bei offenen Sitzungen liest das Plugin die Bibliothek. Änderungen im Dashboard erscheinen nach dem bestehenden Live-Sync automatisch. Das Menü behält seine ausgewählte Granate anhand von Owner, Map und internem Namen, auch nach Umbenennung oder Umsortierung. Verschwindet ein geöffnetes Lineup, geht es zur zugehörigen Kategorie zurück; leere Seiten werden abgefangen. Einstellungen werden während der Bearbeitung nicht neu aufgebaut. Bei vorübergehend unlesbaren Dateien bleibt das letzte gültige Menü erhalten. Gelöschte, auf andere Maps verschobene oder nicht mehr freigegebene Einträge werden beim Laden abgewiesen. Defekte Einzelzeilen werden übersprungen; bei einer unlesbaren Datei erscheint eine Fehlermeldung. Das Plugin schreibt die Bibliothek nicht um.
+Bei jedem Öffnen, unmittelbar vor dem Laden und alle zwei Sekunden bei offenen Sitzungen liest das Plugin die Bibliothek. Änderungen im Dashboard erscheinen nach dem bestehenden Live-Sync automatisch. Das Menü behält seine ausgewählte Granate anhand von Owner, Map und internem Namen, auch nach Umbenennung oder Umsortierung. Verschwindet ein geöffnetes Lineup, geht es zur zugehörigen Kategorie zurück; leere Seiten werden abgefangen. Die Keybind-Hilfeseite wird nicht neu aufgebaut. Bei vorübergehend unlesbaren Dateien bleibt das letzte gültige Menü erhalten. Gelöschte, auf andere Maps verschobene Einträge werden beim Laden abgewiesen. Defekte Einzelzeilen werden übersprungen; bei einer unlesbaren Datei erscheint eine Fehlermeldung. Bearbeitungen laufen über die geprüfte Anfragewarteschlange des Dashboard-Syncs.
 
 ## Anzeigenamen und automatische Zielerfassung (1.2.0)
 
 Im Dashboard lässt sich **Display name** frei vergeben, beispielsweise `Fenster-Smoke vom T-Spawn`. Website, Karten-Tooltip, Kategorien, Detailseite und Ladebestätigung im eigenen `.nades`-Plugin verwenden diesen Titel. Die interne `id` und der MatchZy-Schlüssel `name` bleiben unverändert; `.loadnade window_smoke` funktioniert weiter. Ohne Anzeigenamen erscheint der bisherige technische Name. MatchZys eigenes `.listnades` bleibt bei seinen technischen Namen.
 
-1. Im Practice-Modus an die gewünschte Position stellen, die Granate auswählen und `.savenade window_smoke Beschreibung` eingeben. Für ein vorhandenes Lineup **Lineup laden & trainieren** im `.nades`-Menü benutzen. Auch `.nades last` und ein exaktes `.loadnade window_smoke` aktivieren die Erfassung.
-2. Auf die Chat-Bestätigung der Zielerfassung achten. Innerhalb von zwei Minuten die Granate selbst werfen. Der nächste Wurf muss denselben Granatentyp haben; ein anderer Typ verwirft die vorgemerkte Erfassung. Bei gleichnamigen privaten/globalen Lineups im Zweifel die eindeutige Auswahl im `.nades`-Menü verwenden.
+1. Im Practice-Modus an die gewünschte Position stellen, die Granate auswählen und `.savenade window_smoke Beschreibung` eingeben. Für eine eigene, noch nicht offizielle Aufnahme **Lineup laden & trainieren** im `.nades`-Menü benutzen. Auch `.nades last` und ein exaktes `.loadnade window_smoke` aktivieren die Erfassung.
+2. Auf die Chat-Bestätigung der Zielerfassung achten. Innerhalb von zwei Minuten die Granate selbst werfen. Der nächste Wurf muss denselben Granatentyp haben; ein anderer Typ verwirft die vorgemerkte Erfassung. Bei gleichnamigen Aufnahmen verschiedener Ersteller im Zweifel die eindeutige Auswahl im `.nades`-Menü verwenden.
 3. Das Plugin ordnet den echten Wurf einem Projektil zu und speichert beim Smoke-Effekt beziehungsweise der Flash-/HE-Explosion die Weltkoordinaten. Decoys werden beim Aktivieren erfasst. Eine Flash darf dabei in der Luft explodieren: Die Höhe bleibt gespeichert. Molly/Incendiary-Ziele sind vorerst manuell, da Flugende und entstehende Feuerfläche unterschiedliche Ereignisse sind.
 4. Nach der Bestätigung wenige Sekunden auf den Dateisync warten und im Dashboard **Refresh lineups** wählen. Vorhandene lokale Änderungen vorher speichern. Zum erneuten Erfassen das Lineup erneut laden und werfen.
 
@@ -136,7 +122,7 @@ dotnet test nades-plugin/MatchZyNades.Tests/MatchZyNades.Tests.csproj --configur
 docker build -f cs2/Dockerfile --target nades-tests .
 ```
 
-Die automatischen Tests prüfen das MatchZy-Dateiformat, Map- und Owner-Filter, doppelte Namen verschiedener Owner, Koordinaten, Granatentypen, Pagination, Navigationshistorie, leere Kategorien, Practice-Sperren, Bestätigungsseiten, Befehlszuordnung, gehaltene Tasten, Use/Inspect-Priorität, sichere Textdarstellung und Statusdateien. Die native Körperrotation, Panorama-Darstellung und deren private Übertragung, MatchZy-Berechtigungen und echten Spielereingaben brauchen zusätzlich einen CS2-Client; diese Tests belegen den Ingame-Fix nicht.
+Die automatischen Tests prüfen das MatchZy-Dateiformat, Map-Filter und Besitzerrechte, doppelte Namen verschiedener Owner, Koordinaten, Granatentypen, Pagination, Navigationshistorie, leere Kategorien, Practice-Sperren, Löschbestätigung, feste Keybinds, Practice-Zustand, Review-Versionierung, Mehrheiten und Befehlszuordnung, sichere Textdarstellung und Statusdateien. Die native Körperrotation, Panorama-Darstellung und deren private Übertragung, MatchZy-Berechtigungen und echten Spielereingaben brauchen zusätzlich einen CS2-Client; diese Tests belegen den Ingame-Fix nicht.
 
 Ab Plugin **1.0.2** ein Lineup mit steilem Blickwinkel nach oben oder unten nahe einer Wand über `.nades`, `.nades last` und MatchZys `.loadnade` laden. Auch `.last` und `.loadpos` prüfen. In Ego-Perspektive und mit einem zweiten Spieler kontrollieren, dass der Körper aufrecht bleibt und die Zielrichtung stimmt. `.nades check` muss für die Neigung und seitliche Drehung des Körpers null anzeigen, während der Blickwinkel erhalten bleibt. Ein Lineup nach aktivem Noclip über `.nades` laden und normales Landen/Bewegen prüfen. Nach dem Update das CS2-Image neu bauen und im Dashboard die Plugin-Version kontrollieren.
 
@@ -146,17 +132,10 @@ Die verwendeten API-Einstiegspunkte sind in den offiziellen CounterStrikeSharp-Q
 
 ## Lineups im Dashboard löschen
 
-In der Map-Galerie und unter **All lineups** entfernt **Delete** nach Bestätigung einen Eintrag aus dem Entwurf. Erst **Save lineups** bzw. **Save nades** schreibt die Aenderung auf den Server. Das offene Ingame-Menü übernimmt sie automatisch. Bereits verarbeitete Aufnahme-IDs werden in `savednades.capture-receipts.json` neben der Bibliothek gespeichert, damit alte `savednades.captures.json`-Dateien gelöschte Einträge auch nach einem Neustart nicht wieder anlegen. Eine neue Aufnahme mit neuer ID bleibt möglich. Speichern und Sync-Polling laufen im Dashboard nacheinander, damit sie sich nicht gegenseitig überschreiben.
+In der Map-Galerie und unter **All lineups** entfernt **Delete** nach Bestätigung einen Eintrag aus dem Entwurf. Erst **Save lineups** bzw. **Save nades** schreibt die Änderung auf den Server. Das offene Ingame-Menü übernimmt sie automatisch. Bereits verarbeitete Aufnahme-IDs werden in `savednades.capture-receipts.json` neben der Bibliothek gespeichert, damit alte `savednades.captures.json`-Dateien gelöschte Einträge auch nach einem Neustart nicht wieder anlegen. Eine neue Aufnahme mit neuer ID bleibt möglich. Speichern und Sync-Polling laufen im Dashboard nacheinander, damit sie sich nicht gegenseitig überschreiben.
 
-## Favoriten und Must Know (1.7.0)
 
-Jeder Granatentyp öffnet zunächst **Favoriten**, **Privat**, **Must Know** und **Alle**, jeweils mit der Anzahl passender Lineups. **Privat** enthält ausschließlich die eigenen privaten Lineups. **Alle** enthält öffentliche und eigene private Lineups der aktuellen Map.
-
-In den Lineup-Details schaltet **Zu Favoriten hinzufügen** bzw. **Aus Favoriten entfernen** die persönliche Markierung um. Favoriten tragen einen Stern und sind zusätzlich über **Favoriten** im Hauptmenü erreichbar. Sie werden pro Steam-ID in der vorhandenen Einstellungsdatei gespeichert und bleiben nach Reconnect, Mapwechsel und Neustart erhalten. Als Identität dienen Owner, Map und interner Name, sodass eine Änderung des Anzeigenamens keine Favoriten verliert. Gelöschte oder nicht mehr sichtbare Lineups werden nicht angezeigt; ihre gespeicherte Referenz gibt keinen Zugriff auf fremde private Daten.
-
-**Must Know** wird im Dashboard im Lineup-Dialog oder unter **All lineups** markiert und mit **Save lineups** bzw. **Save nades** gespeichert. Die Markierung gilt für alle Spieler, die das Lineup sehen dürfen. Sie wird als Boolean exportiert und zusätzlich in `savednades.metadata.json` veröffentlicht; MatchZy-Schreibvorgänge ohne dieses Feld entfernen sie nicht. Das Abschalten der Markierung wird ebenfalls synchronisiert.
-
-## Competitive-Spawns (1.7.0)
+## Competitive-Spawns (1.8.0)
 
 Im Hauptmenü **Competitive-Spawns → CT-Spawns / T-Spawns → Spawn** wählen. Das Plugin liest die `info_player_counterterrorist`- und `info_player_terrorist`-Entities direkt aus der geladenen Map. Es verwendet pro Seite die aktivierten Punkte mit dem kleinsten numerischen Prioritätswert, entsprechend dem Grundprinzip in [MatchZys Spawn-Erfassung](https://github.com/shobhit-pathak/MatchZy/blob/main/PracticeMode.cs). Die beiden Teams werden getrennt ausgewertet, damit auch unterschiedliche Prioritäten auf Custom-Maps funktionieren. Es wird keine feste Anzahl von fünf Spawns vorausgesetzt.
 

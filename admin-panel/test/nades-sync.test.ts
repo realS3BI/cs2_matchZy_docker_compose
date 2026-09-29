@@ -5,6 +5,42 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as wait } from "node:timers/promises";
 import { mergeNadeCaptures, NadesSyncService } from "../src/nades-sync.js";
+import { sanitizeNades } from "../src/validators.js";
+
+test("game requests round-trip through sync and cannot undo a newer admin approval", async (t) => {
+  const owner = "76561198000000001";
+  const [entry] = sanitizeNades([sampleEntry({ owner, updatedAt: "2026-09-01T00:00:00.000Z" })]);
+  const { service, store } = await createHarness(t, [entry]);
+  await service.writeFromMongo([entry]);
+  const directory = join(dirname(service.liveFile), "savednades.requests");
+  const request = { id: "b".repeat(32), owner, actor: owner, map: entry.map, name: entry.name, revision: entry.updatedAt, action: "review" };
+  await writeJson(join(directory, request.id + ".json"), request);
+  await service.poll();
+  assert.equal(store.entries[0].reviewStatus, "pending");
+  const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].reviewStatus, "pending");
+  assert.equal(metadata[0].updatedAt, store.entries[0].updatedAt);
+  const previousRevision = store.entries[0].updatedAt;
+  await service.saveFromPanel([{ ...store.entries[0], desc: "Vom Admin korrigiert" }]);
+  assert.notEqual(store.entries[0].updatedAt, previousRevision);
+  const oldEdit = { ...request, id: "d".repeat(32), revision: previousRevision, action: "desc", value: "Veraltete Eingabe" };
+  await writeJson(join(directory, oldEdit.id + ".json"), oldEdit);
+  await service.poll();
+  assert.equal(store.entries[0].desc, "Vom Admin korrigiert");
+  const stale = { ...request, id: "c".repeat(32), revision: store.entries[0].updatedAt, action: "delete" };
+  await service.saveFromPanel([{ ...store.entries[0], official: true, reviewStatus: "approved" }]);
+  await writeJson(join(directory, stale.id + ".json"), stale);
+  await service.poll();
+  assert.equal(store.entries.length, 1);
+  assert.equal(store.entries[0].official, true);
+  const result = JSON.parse(await readFile(join(directory, "results", stale.id + ".json"), "utf8"));
+  assert.equal(result.ok, false);
+  // MatchZy may strip custom fields when rewriting its JSON; curator metadata survives.
+  await writeJson(service.liveFile, sampleConfig({ owner }));
+  await service.poll();
+  assert.equal(store.entries[0].official, true);
+  assert.equal(store.entries[0].reviewStatus, "approved");
+});
 
 function sampleEntry(patch: Record<string, any> = {}): any {
   return {

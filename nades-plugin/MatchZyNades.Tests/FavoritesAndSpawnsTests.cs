@@ -25,8 +25,8 @@ public sealed class FavoritesAndSpawnsTests
     {
         var json = JsonSerializer.Serialize(new { Compact = false, GameButtons = true, Keys = PlayerPanelSettings.DefaultKeys });
         var settings = PlayerPanelSettings.Validate(JsonSerializer.Deserialize<PlayerPanelSettings>(json)!);
-        Assert.True(settings.GameButtons);
-        Assert.Equal("F6", settings.Keys["focus"]);
+        Assert.False(settings.GameButtons);
+        Assert.Equal("KP_0", settings.Keys["focus"]);
         Assert.Empty(settings.Favorites);
         Assert.DoesNotContain("Compact", JsonSerializer.Serialize(settings));
         Assert.DoesNotContain(PanelSettingsMenu.Create(settings).Items, item => item.Label.Contains("Kompakt"));
@@ -43,12 +43,12 @@ public sealed class FavoritesAndSpawnsTests
         Assert.Equal("Home", menu.Breadcrumb);
         menu.Select(1);
         menu.Select(1);
-        Assert.Equal(new[] { "Favoriten (1)", "Privat (1)", "Must Know (1)", "Alle (2)" }, menu.Visible.Select(i => i.Label));
+        Assert.Equal(new[] { "Favoriten (1)", "Offiziell (0)", "Must Know (1)", "Alle (2)" }, menu.Visible.Select(i => i.Label));
+        menu.Select(4);
         menu.Select(2);
-        menu.Select(1);
         Assert.Equal(own, menu.Select(1)!.Lineup);
         menu.Home();
-        menu.Select(6);
+        menu.Select(5);
         Assert.Equal("Home › Favoriten", menu.Breadcrumb);
         menu.Select(1);
         Assert.Equal(favorite, menu.Select(1)!.Lineup);
@@ -60,7 +60,7 @@ public sealed class FavoritesAndSpawnsTests
     }
 
     [Fact]
-    public void MustKnowMetadataDoesNotExposeAnotherPlayersPrivateLineups()
+    public void AllShowsOtherPlayersRecordingsWithoutChangingTheirOwner()
     {
         var data = new { Map = "de_mirage", Type = "Smoke", LineupPos = "1 2 3", LineupAng = "0 90 0" };
         var json = JsonSerializer.Serialize(new Dictionary<string, object> {
@@ -71,10 +71,10 @@ public sealed class FavoritesAndSpawnsTests
             new { owner = "9999", map = "de_mirage", name = "secret", mustKnow = true }
         });
         var nades = NadeCatalog.Parse(json, "de_mirage", "7656", metadata);
-        Assert.Equal(2, nades.Count);
+        Assert.Equal(3, nades.Count);
         Assert.True(nades.Single(n => n.Owner == "default").MustKnow);
         Assert.False(nades.Single(n => n.Owner == "7656").MustKnow);
-        Assert.DoesNotContain(nades, n => n.Owner == "9999");
+        Assert.Contains(nades, n => n.Owner == "9999");
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class FavoritesAndSpawnsTests
         ]);
         Assert.Equal(new uint[] { 7, 8, 2, 4 }, points.Select(p => p.EntityIndex));
         var menu = TrainingMenu.Create([], "de_mirage", true, null, spawns: points);
-        menu.Select(7);
+        menu.Select(6);
         menu.Select(1); // CT
         Assert.Equal(new[] { "CT-Spawn 01", "CT-Spawn 02" }, menu.Visible.Select(i => i.Label));
         var request = menu.Select(2)!;
@@ -104,7 +104,7 @@ public sealed class FavoritesAndSpawnsTests
         var points = Enumerable.Range(1, 13).Select(i => new CompetitiveSpawn("de_mirage", (uint)i, 2, 0, true,
             new(i, 0, 0), new(0, 0, 0))).ToArray();
         var menu = TrainingMenu.Create([], "de_mirage", true, null, spawns: points);
-        menu.Select(7);
+        menu.Select(6);
         menu.Select(2);
         menu.ChangePage(1);
         Assert.Equal((uint)13, menu.Select(4)!.Spawn!.EntityIndex);

@@ -42,8 +42,6 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
         var pages = PanelText.DetailPages(detail ?? "", maxLines: 3);
         var page = Math.Clamp(detailPage, 0, pages.Count - 1);
         Text("training_detail", pages[page]);
-        Text("training_indicator", focused ? "● HUD" : "● Frei");
-        Text("training_keys", $"{settings.Keys["focus"]}  Hud/Crosshair\n{settings.Keys["visible"]}  Hud anzeigen/verstecken");
         Class("training_panel", "editing", focused);
         Class("training_panel", "shown", true);
         Capture(focused);

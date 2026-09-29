@@ -18,24 +18,6 @@ public sealed partial class MatchZyNadesPlugin
         }
     }
 
-    private bool SaveSettings(CCSPlayerController player, PlayerPanelSettings settings)
-    {
-        try { _settingsStore.Save(player.SteamID, settings); }
-        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
-        { Tell(player, "Einstellungen nicht gespeichert: " + error.Message); return false; }
-        if (_menus.TryGetValue(player.Slot, out var session))
-        {
-            session.Settings = settings;
-            session.Input = new(player.Buttons);
-            session.Menu = BuildMenu(player);
-            session.Menu.Enter(PanelSettingsMenu.Create(settings));
-            session.DetailPage = 0;
-            session.NextDraw = 0;
-        }
-        Tell(player, "Deine Einstellungen wurden für deine Steam-ID gespeichert.");
-        return true;
-    }
-
     private bool HandleSettingsAction(CCSPlayerController player, MenuRequest request)
     {
         var settings = _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player);
@@ -45,22 +27,6 @@ public sealed partial class MatchZyNadesPlugin
                 if (session != null)
                 { session.Menu.Enter(PanelSettingsMenu.Create(settings)); session.NextDraw = 0; }
                 return true;
-            case TrainingAction.ToggleGameButtons:
-                SaveSettings(player, settings with { GameButtons = !settings.GameButtons });
-                return true;
-            case TrainingAction.BindKey:
-                try
-                {
-                    var changed = settings.Bind(request.Setting, request.Value);
-                    if (SaveSettings(player, changed))
-                    {
-                        var line = changed.BindingLine(request.Setting);
-                        player.PrintToConsole(line);
-                        Tell(player, "Gespeichert. Einmal in deiner CS2-Konsole setzen: " + line + ". Der Server kann Client-Binds nicht selbst ändern.");
-                    }
-                }
-                catch (InvalidDataException error) { Tell(player, error.Message); }
-                return true;
             case TrainingAction.ExportBindings:
                 player.PrintToConsole("// MatchZy Training: vorher eigene Binds sichern; in lokale CFG übernehmen.\n" + settings.Export());
                 Tell(player, "Deine Bind-Befehle stehen in der Client-Konsole. Alte, nicht mehr verwendete Binds dort selbst wiederherstellen.");
@@ -69,26 +35,24 @@ public sealed partial class MatchZyNadesPlugin
         }
     }
 
-    [ConsoleCommand("css_training_bind", "Save your panel hotkey: css_training_bind focus K")]
+    [ConsoleCommand("css_training_bind", "Legacy command: custom panel keys have been removed")]
     public void OnBindPanelKey(CCSPlayerController? player, CommandInfo command)
     {
         if (player is not { IsValid: true, IsBot: false } || player.SteamID == 0) return;
-        if (command.ArgCount != 3)
-        { command.ReplyToCommand("css_training_bind <" + string.Join('|', PlayerPanelSettings.DefaultKeys.Keys) + "> <key>"); return; }
-        HandleSettingsAction(player, new(TrainingAction.BindKey, Setting: command.GetArg(1).ToLowerInvariant(), Value: command.GetArg(2)));
+        command.ReplyToCommand("Freie Tastenzuweisungen wurden entfernt. Feste Belegung: css_training_binds.");
     }
 
-    [ConsoleCommand("css_training_binds", "Print your saved panel binds for a local CFG")]
+    [ConsoleCommand("css_training_binds", "Print the fixed panel binds for a local CFG")]
     public void OnExportPanelKeys(CCSPlayerController? player, CommandInfo command)
     {
         if (player is { IsValid: true, IsBot: false } && player.SteamID != 0)
             HandleSettingsAction(player, new(TrainingAction.ExportBindings));
     }
 
-    [ConsoleCommand("css_training_key", "Dispatch a locally bound key using your saved panel settings")]
+    [ConsoleCommand("css_training_key", "Dispatch a fixed panel key")]
     public void OnPanelKey(CCSPlayerController? player, CommandInfo command)
     {
-        if (!Alive(player) || command.ArgCount != 2 || player!.SteamID == 0) return;
+        if (!TrainingEnabled || !Alive(player) || command.ArgCount != 2 || player!.SteamID == 0) return;
         var settings = _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player);
         if (settings.ActionForKey(command.GetArg(1)) is { } action) RunPanelAction(player, action);
     }
@@ -113,6 +77,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private void RunPanelAction(CCSPlayerController player, string action)
     {
+        if (!TrainingEnabled) { Close(player.Slot); return; }
         if (action == "focus") { TogglePanelControl(player); return; }
         if (action == "visible") { TogglePanelVisible(player); return; }
         if (action == "settings")

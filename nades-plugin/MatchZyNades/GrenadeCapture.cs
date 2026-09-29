@@ -39,8 +39,7 @@ public sealed partial class MatchZyNadesPlugin
                     var samples = _saveSamples.GetValueOrDefault(player.Slot) ?? [];
                     AddSample(samples, player, pawn);
                     var trace = ThrowTechnique.Serialize(samples);
-                    var owner = _saveNadesGlobally?.GetPrimitiveValue<bool>() == true
-                        ? "default" : player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var owner = player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     _capture.Forget(player.Slot);
                     var draft = new NadeLineup(owner, $"capture_{Guid.NewGuid():N}", Server.MapName,
                         kind, "", start, angles, "", trace);
@@ -123,7 +122,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private bool TrySaveNameFromChat(CCSPlayerController? player, string rawText)
     {
-        if (player is not { IsValid: true } || !_draftNameRequests.TryGetValue(player.Slot, out var request)) return false;
+        if (!TrainingEnabled || player is not { IsValid: true } || !_draftNameRequests.TryGetValue(player.Slot, out var request)) return false;
         var displayName = rawText.Trim().Trim('"').Trim();
         if (displayName.Equals("cancel", StringComparison.OrdinalIgnoreCase) || displayName.Equals("abbrechen", StringComparison.OrdinalIgnoreCase) ||
             displayName.Equals(".cancel", StringComparison.OrdinalIgnoreCase))
@@ -132,6 +131,7 @@ public sealed partial class MatchZyNadesPlugin
             Tell(player, "Nade-Aufnahme verworfen.");
             return true;
         }
+        if (displayName.StartsWith('.') || displayName.StartsWith('!')) return false;
         displayName = new string(displayName.Where(c => !char.IsControl(c)).Take(120).ToArray()).Trim();
         var name = System.Text.RegularExpressions.Regex.Replace(displayName.ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-', '_');
         if (displayName.Length == 0 || name.Length == 0)
@@ -176,7 +176,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private void ArmCapture(CCSPlayerController player, NadeLineup lineup)
     {
-        if (!TrainingEnabled || lineup.Kind is NadeKind.Fire or NadeKind.Other) { _capture.Forget(player.Slot); return; }
+        if (!TrainingEnabled || lineup.Owner != player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture) || lineup.Official || lineup.Kind is NadeKind.Fire or NadeKind.Other) { _capture.Forget(player.Slot); return; }
         _capture.Arm(player.Slot, player.SteamID, lineup, Server.CurrentTime);
         Tell(player, "Der nächste Wurf erfasst das Ziel automatisch (gleicher Typ, innerhalb 2 Minuten). Danach Dashboard aktualisieren.");
     }

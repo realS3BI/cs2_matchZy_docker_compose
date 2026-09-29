@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $installRoot = (Resolve-Path -LiteralPath $Cs2).Path
 $compiler = Join-Path $installRoot 'game/bin/win64/resourcecompiler.exe'
 if (-not (Test-Path -LiteralPath $compiler)) {
-    throw 'CS2 Workshop Tools fehlen: resourcecompiler.exe nicht gefunden. In CS2 installieren und Steam den Download abschliessen lassen.'
+    throw 'CS2 Workshop Tools fehlen: resourcecompiler.exe nicht gefunden. In CS2 installieren und Steam den Download abschließen lassen.'
 }
 $sourceRoot = $PSScriptRoot
 $addonName = 'matchzy_training_hud'
@@ -24,4 +24,4 @@ foreach ($part in @(@('styles', 'css', 'vcss_c'), @('layout', 'xml', 'vxml_c')))
     Copy-Item -LiteralPath $compiled -Destination $output -Force
 }
 Write-Output "HUD kompiliert: $dist"
-Write-Output "HUD-Dateien in Workshop-Addon '$addonName' abgelegt. Noch nicht veroeffentlicht."
+Write-Output "HUD-Dateien in Workshop-Addon '$addonName' abgelegt. Noch nicht veröffentlicht."

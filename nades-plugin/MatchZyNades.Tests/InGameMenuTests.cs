@@ -51,7 +51,7 @@ public sealed class InGameMenuTests
         menu.ChangePage(100);
         menu.Move(1);
         Assert.Null(menu.Select(1));
-        Assert.Contains("Noch keine Lineups", MenuRenderer.Render(menu, true));
+        Assert.Contains("Noch keine Granaten", MenuRenderer.Render(menu, true));
         Assert.True(menu.Back());
         Assert.True(menu.Back());
         Assert.True(menu.Back());
@@ -60,27 +60,28 @@ public sealed class InGameMenuTests
     }
 
     [Fact]
-    public void PracticeOffGatesTrainingAndStartRemainsAccessible()
+    public void PracticeOffGatesTrainingAndCannotStartPracticeFromPanel()
     {
         var menu = TrainingMenu.Create([Lineup("window")], "de_mirage", false, null);
-        Assert.Equal(TrainingAction.StartPractice, menu.Select(1)!.Action);
-        Assert.Null(menu.Select(2));
+        Assert.Null(menu.Select(1));
         Assert.True(menu.IsRoot);
-        Assert.Contains("Zuerst Training", menu.Notice);
-        Assert.Equal("css_prac", TrainingMenu.Command(TrainingAction.StartPractice));
+        Assert.DoesNotContain(menu.Current.Items, item => item.Request?.Action == TrainingAction.StartPractice);
+        Assert.All(menu.Current.Items.Take(7), item => Assert.False(item.Enabled));
     }
 
     [Fact]
-    public void SharedActionRequiresExplicitConfirmationAndCancelReturns()
+    public void ToolsGroupBotsAndTogglesAndExecuteImmediately()
     {
-        var menu = TrainingMenu.Create([], "de_mirage", true, null);
+        var menu = TrainingMenu.Create([], "de_mirage", true, null, toggles: new(true, false, true, false));
         menu.Select(3);
-        Assert.Null(menu.Select(6)); // Clear grenades confirmation
-        Assert.Equal(TrainingAction.Back, menu.Select(1)!.Action);
-        Assert.Equal(TrainingAction.ClearGrenades, menu.Select(2)!.Action);
-        Assert.True(menu.Back());
-        Assert.Equal(0, menu.Page);
-        Assert.Equal(5, menu.Cursor);
+        Assert.Equal(TrainingAction.ClearGrenades, menu.Select(5)!.Action);
+        menu.Select(6);
+        Assert.Equal(TrainingAction.RemoveBots, menu.Select(3)!.Action);
+        menu.Back(); menu.Select(7);
+        Assert.Equal("Flugbahnvorschau ausschalten", menu.Current.Items[0].Label);
+        Assert.Equal("God Mode einschalten", menu.Current.Items[3].Label);
+        Assert.Equal(TrainingAction.Trajectory, menu.Select(1)!.Action);
+        Assert.Equal(TrainingAction.Impacts, menu.Select(2)!.Action);
     }
 
     [Fact]
@@ -93,7 +94,7 @@ public sealed class InGameMenuTests
         var html = MenuRenderer.Render(menu, true);
         Assert.Contains("&lt;b&gt;Window&lt;/b&gt;", html);
         Assert.Contains("&lt;map&gt;", html);
-        Assert.Contains("[privat]", html);
+        Assert.DoesNotContain("[privat]", html);
         Assert.DoesNotContain("\u0001", html, StringComparison.Ordinal);
         Assert.DoesNotContain("\n", html);
         Assert.Equal("abc", MenuRenderer.Plain("a\nb\u0001cdef", 3));
@@ -106,7 +107,7 @@ public sealed class InGameMenuTests
             TrainingAction.RepeatLineup, TrainingAction.CheckPosition, TrainingAction.StartCapture,
             TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.ToggleFavorite, TrainingAction.TeleportSpawn,
             TrainingAction.GiveGrenade, TrainingAction.Settings, TrainingAction.BindKey,
-            TrainingAction.ToggleGameButtons, TrainingAction.ExportBindings };
+            TrainingAction.ToggleGameButtons, TrainingAction.ExportBindings, TrainingAction.EditName, TrainingAction.EditDescription, TrainingAction.RequestReview, TrainingAction.DeleteLineup, TrainingAction.StartMapVote, TrainingAction.VoteYes, TrainingAction.VoteNo };
         foreach (var action in Enum.GetValues<TrainingAction>().Except(local))
             Assert.Matches("^(css_[a-z]+|noclip)$", TrainingMenu.Command(action)!);
         foreach (var action in local) Assert.Null(TrainingMenu.Command(action));
@@ -140,7 +141,7 @@ public sealed class InGameMenuTests
     public void CaptureIsReachableWithoutChatAndRequiresPractice()
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null);
-        menu.Select(5);
+        menu.Select(4);
         Assert.Equal(TrainingAction.StartCapture, menu.Select(1)!.Action);
         Assert.Equal(TrainingAction.SaveCapture, menu.Select(2)!.Action);
         Assert.Equal(TrainingAction.CancelCapture, menu.Select(3)!.Action);
@@ -166,19 +167,12 @@ public sealed class InGameMenuTests
     }
 
     [Fact]
-    public void EquipmentMenuUsesTypedActionsForEveryGrenade()
+    public void RemovedActionsAreNotOfferedInTools()
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null);
         menu.Select(3);
-        menu.Select(9);
-        foreach (var (kind, index) in Enum.GetValues<NadeKind>().Where(k => k != NadeKind.Other).Select((k, i) => (k, i)))
-        {
-            var request = menu.Select(index + 1)!;
-            Assert.Equal(TrainingAction.GiveGrenade, request.Action);
-            Assert.Equal(kind, request.Kind);
-            Assert.NotNull(NadeCatalog.Equipment(kind, counterTerrorist: true));
-            Assert.NotNull(NadeCatalog.Equipment(kind, counterTerrorist: false));
-        }
+        Assert.DoesNotContain(menu.Current.Items, item => item.Request?.Action is TrainingAction.Noclip or TrainingAction.BestSpawn or TrainingAction.WorstSpawn or TrainingAction.GiveGrenade);
+        Assert.Equal(8, menu.Current.Items.Count);
     }
 
     [Fact]

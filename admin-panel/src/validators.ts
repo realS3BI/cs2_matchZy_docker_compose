@@ -154,6 +154,8 @@ export function sanitizeNades(entries) {
     const name = String(entry.name ?? "").trim();
     const map = String(entry.map ?? "").trim();
     const displayName = String(entry.displayName ?? "").trim();
+    if (entry.official !== undefined && typeof entry.official !== "boolean") throw new Error("Official must be a boolean");
+    if (entry.reviewStatus !== undefined && !["", "pending", "approved", "rejected"].includes(entry.reviewStatus)) throw new Error("Invalid review status");
     if (entry.mustKnow !== undefined && typeof entry.mustKnow !== "boolean") {
       throw new Error("Must Know must be a boolean");
     }
@@ -212,6 +214,10 @@ export function sanitizeNades(entries) {
     if (landingPos) cleanEntry.landingPos = landingPos;
     if (displayName) cleanEntry.displayName = displayName;
     if (entry.mustKnow !== undefined) cleanEntry.mustKnow = entry.mustKnow;
+    if (entry.official !== undefined) cleanEntry.official = entry.official;
+    if (entry.reviewStatus !== undefined) cleanEntry.reviewStatus = entry.reviewStatus;
+    if (entry.mustKnow === true) cleanEntry.official = true;
+    if (cleanEntry.official === true) cleanEntry.reviewStatus = "approved";
     if (entry.captureId) cleanEntry.captureId = String(entry.captureId);
     if (throwFromTitle) cleanEntry.throwFromTitle = throwFromTitle;
     if (throwToTitle) cleanEntry.throwToTitle = throwToTitle;
@@ -235,6 +241,8 @@ export function nadesToMatchZySavedNadesConfig(entries) {
     };
     if (entry.displayName) config[entry.owner][entry.name].DisplayName = entry.displayName;
     if (entry.mustKnow !== undefined) config[entry.owner][entry.name].MustKnow = entry.mustKnow;
+    if (entry.official !== undefined) config[entry.owner][entry.name].Official = entry.official;
+    if (entry.reviewStatus !== undefined) config[entry.owner][entry.name].ReviewStatus = entry.reviewStatus;
     if (entry.landingPos) config[entry.owner][entry.name].LandingPos = entry.landingPos;
   }
   return config;
@@ -253,6 +261,8 @@ export function matchZySavedNadesConfigToNades(config) {
         name,
         displayName: nade.DisplayName,
         mustKnow: nade.MustKnow,
+        official: nade.Official,
+        reviewStatus: nade.ReviewStatus,
         landingPos: nade.LandingPos,
         map: nade.Map,
         type: nade.Type || "",

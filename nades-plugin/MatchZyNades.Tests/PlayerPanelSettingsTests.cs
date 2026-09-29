@@ -12,14 +12,14 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     public void SettingsSurviveNewStoreAndStayIsolatedBySteamId()
     {
         var store = new PlayerPanelSettingsStore(_directory);
-        var first = new PlayerPanelSettings().Bind("focus", "k") with { Favorites = [new("default", "de_mirage", "window")] };
+        var first = new PlayerPanelSettings() with { Favorites = [new("default", "de_mirage", "window")] };
         store.Save(76561198000000001, first);
-        store.Save(76561198000000002, new PlayerPanelSettings().Bind("visible", "l") with { GameButtons = true });
+        store.Save(76561198000000002, new PlayerPanelSettings() with { GameButtons = true, Keys = new() { ["focus"] = "K" } });
         var restarted = new PlayerPanelSettingsStore(_directory);
-        Assert.Equal("K", restarted.Load(76561198000000001).Keys["focus"]);
+        Assert.Equal("KP_0", restarted.Load(76561198000000001).Keys["focus"]);
         Assert.Equal(new NadeReference("default", "de_mirage", "window"), Assert.Single(restarted.Load(76561198000000001).Favorites));
-        Assert.Equal("F6", restarted.Load(76561198000000002).Keys["focus"]);
-        Assert.True(restarted.Load(76561198000000002).GameButtons);
+        Assert.Equal("KP_0", restarted.Load(76561198000000002).Keys["focus"]);
+        Assert.False(restarted.Load(76561198000000002).GameButtons);
         Assert.Empty(restarted.Load(76561198000000002).Favorites);
         Assert.Empty(restarted.Load(76561198000000003).Favorites);
     }
@@ -35,19 +35,21 @@ public sealed class PlayerPanelSettingsTests : IDisposable
         var settings = new PlayerPanelSettings();
         store.Save(1, settings);
         Assert.Throws<InvalidDataException>(() => settings.Bind("focus", key));
-        Assert.Equal("F6", store.Load(1).Keys["focus"]);
+        Assert.Equal("KP_0", store.Load(1).Keys["focus"]);
     }
 
     [Fact]
-    public void RebindingMakesOldKeyInactiveAndExportsOnlyValidatedCommands()
+    public void FixedKeysIgnoreLegacyOverridesAndExportOnlyNineCommands()
     {
-        var settings = new PlayerPanelSettings().Bind("focus", "k");
+        var settings = PlayerPanelSettings.Validate(new() { Keys = new() { ["focus"] = "K;quit" }, GameButtons = true });
         Assert.Null(settings.ActionForKey("F6"));
-        Assert.Equal("focus", settings.ActionForKey("k"));
-        Assert.Contains("bind \"K\" \"css_training_key K\"", settings.Export());
-        Assert.DoesNotContain("F6", settings.Export());
-        Assert.Equal(10, settings.Export().Split('\n').Length);
-        Assert.Equal("F6", new PlayerPanelSettings().Keys["focus"]);
+        Assert.Null(settings.ActionForKey("K"));
+        Assert.Equal("focus", settings.ActionForKey("kp_0"));
+        Assert.Equal("visible", settings.ActionForKey("KP_DEL"));
+        Assert.Contains("bind \"KP_0\" \"css_training_key KP_0\"", settings.Export());
+        Assert.DoesNotContain("quit", settings.Export());
+        Assert.Equal(9, settings.Export().Split('\n').Length);
+        Assert.False(settings.GameButtons);
     }
 
     [Fact]
@@ -62,14 +64,12 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     }
 
     [Fact]
-    public void MenuOffersAllActionsAndDisablesConflicts()
+    public void KeybindMenuIsReadOnlyExceptForExport()
     {
         var page = PanelSettingsMenu.Create(new());
-        Assert.Equal(PlayerPanelSettings.DefaultKeys.Count + 2, page.Items.Count);
-        var focusKeys = page.Items[0].Page!;
-        Assert.False(focusKeys.Items.Single(i => i.Label == "F7").Enabled);
-        var key = focusKeys.Items.Single(i => i.Label == "K");
-        Assert.True(key.Enabled);
-        Assert.Equal(new MenuRequest(TrainingAction.BindKey, Setting: "focus", Value: "K"), key.Request);
+        Assert.Equal("Keybinds", page.Title);
+        Assert.Equal(10, page.Items.Count);
+        Assert.All(page.Items.Take(9), item => { Assert.Null(item.Page); Assert.Null(item.Request); });
+        Assert.Equal(TrainingAction.ExportBindings, page.Items.Last().Request!.Action);
     }
 }

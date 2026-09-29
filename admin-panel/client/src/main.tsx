@@ -798,6 +798,18 @@ function createNade(settings, initialMap = "") {
   };
 }
 
+function NadeReviewFields({ nade, onChange }) {
+  return <div className="col-span-full grid gap-3 rounded-lg border border-border p-3">
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge variant={nade.official ? "success" : nade.reviewStatus === "pending" ? "warning" : "secondary"}>{nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review angefragt" : nade.reviewStatus === "rejected" ? "Review abgelehnt" : "Ungeprüfte Aufnahme"}</Badge>
+      <span className="text-xs text-muted-foreground">Für alle unter „Alle“ sichtbar. Freigaben werden mit Save nades gespeichert.</span>
+    </div>
+    <Field><FieldLabel>Offiziell freigeben</FieldLabel><Switch aria-label={`Offiziell: ${nade.displayName || nade.name || "Neue Granate"}`} checked={nade.official === true} onCheckedChange={(official) => onChange({ official, reviewStatus: official ? "approved" : "", ...(!official ? { mustKnow: false } : {}) })} /><FieldDescription>Nur als Plattform-Admin nach Prüfung von Abwurfpunkt, Beschreibung und Wirkung freigeben. Der Ersteller kann offizielle Granaten nicht mehr ändern.</FieldDescription></Field>
+    <Field><FieldLabel>Must Know</FieldLabel><Switch aria-label={`Must Know: ${nade.displayName || nade.name || "Neue Granate"}`} checked={nade.mustKnow === true} onCheckedChange={(mustKnow) => onChange({ mustKnow, ...(mustKnow ? { official: true, reviewStatus: "approved" } : {}) })} /><FieldDescription>Markiert ein geprüftes Grundlagen-Lineup und zeigt es im Must-Know-Shortcut auf Home. Aktivieren gibt die Granate zugleich offiziell frei.</FieldDescription></Field>
+    {nade.reviewStatus === "pending" && !nade.official ? <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => onChange({ official: true, reviewStatus: "approved" })}>Review freigeben</Button><Button variant="outline" onClick={() => onChange({ official: false, mustKnow: false, reviewStatus: "rejected" })}>Review ablehnen</Button></div> : null}
+  </div>;
+}
+
 function NadeDialog({ settings, nades = [], initialMap = "", initialNade = null, open, onOpenChange, onAdd }) {
   const [draft, setDraft] = useState(() => ({ ...createNade(settings, initialMap), ...(initialNade || {}) }));
   const [setposText, setSetposText] = useState("");
@@ -920,13 +932,9 @@ function NadeDialog({ settings, nades = [], initialMap = "", initialNade = null,
             <Field>
               <FieldLabel>Owner</FieldLabel>
               <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
-              <FieldDescription>Use default to share it with every player.</FieldDescription>
+              <FieldDescription>Ersteller-ID bleibt für Bearbeitungsrechte erhalten. Alle Aufnahmen sind im Panel sichtbar.</FieldDescription>
             </Field>
-            <Field htmlFor="nade-must-know">
-              <FieldLabel>Must Know</FieldLabel>
-              <Switch id="nade-must-know" aria-label="Must Know" checked={draft.mustKnow === true} onCheckedChange={(mustKnow) => updateDraft({ mustKnow })} />
-              <FieldDescription>Im Ingame-Filter „Must Know“ hervorheben. Private Lineups bleiben privat.</FieldDescription>
-            </Field>
+            <NadeReviewFields nade={draft} onChange={updateDraft} />
             <Field className="md:col-span-2">
               <FieldLabel>Description</FieldLabel>
               <Input value={draft.desc || ""} placeholder="Jumpthrow from T spawn" onChange={(event) => updateDraft({ desc: event.target.value })} />
@@ -1515,7 +1523,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                     {nade.throwTrace ? <details className="mt-1 rounded-md border border-border p-2"><summary className="cursor-pointer text-xs font-medium">Show recorded throw inputs and movement</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed text-muted-foreground">{formatThrowTrace(nade.throwTrace)}</pre></details> : null}
                   </CardContent>
                   <CardFooter className="justify-between border-t border-border pt-4">
-                    <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"}>{String(nade.owner || "default") === "default" ? "Shared" : "Private"}</Badge>
+                    <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"}>{nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review" : "Aufnahme"}</Badge>
                     <div className="flex flex-1 flex-wrap justify-end gap-2">
                       <Button variant="secondary" size="sm" onClick={() => setEditingNade(nade)}><MapPinned data-icon="inline-start" />Edit route</Button>
                       <CopyCommand value={`.loadnade ${nade.name}`} label="Copy load" />
@@ -1559,6 +1567,7 @@ function syncDirectionLabel(direction) {
 function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirty, onApply, onRefresh, onReload, onSave, viewNav }) {
   const [mapFilter, setMapFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [reviewFilter, setReviewFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -1599,12 +1608,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
   }, []);
 
   const maps = useMemo<string[]>(() => [...new Set<string>(nades.map((nade) => String(nade.map || "")).filter(Boolean))].sort(), [nades]);
-  const sharedNades = nades.filter((nade) => String(nade.owner || "default") === "default").length;
-  const privateNades = nades.length - sharedNades;
   const syncPresentation = nadesSyncPresentation(statusError ? { state: "error" } : liveStatus.sync);
-  const desiredGlobalSaves = settings.matchZySaveNadesGlobally === true;
-  const appliedGlobalSaves = liveStatus.sync?.globalSavesEnabled;
-  const sharingNeedsApply = appliedGlobalSaves === null || appliedGlobalSaves === undefined || appliedGlobalSaves !== desiredGlobalSaves;
   const matchZyModeActive = ["matchzy", "nades"].includes(settings.serverMode);
   const loadedLibraryVersion = status?.nadesLibrary?.updatedAt || null;
   const observedLibraryVersion = liveStatus.library?.updatedAt || null;
@@ -1614,10 +1618,13 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
     return nades.filter((nade) => {
       if (mapFilter && nade.map !== mapFilter) return false;
       if (typeFilter && nade.type !== typeFilter) return false;
+      if (reviewFilter === "pending" && nade.reviewStatus !== "pending") return false;
+      if (reviewFilter === "official" && !nade.official) return false;
+      if (reviewFilter === "mustKnow" && !nade.mustKnow) return false;
       if (!normalizedQuery) return true;
       return `${nade.displayName || ""} ${nade.name} ${nade.desc}`.toLowerCase().includes(normalizedQuery);
     });
-  }, [nades, mapFilter, typeFilter, query]);
+  }, [nades, mapFilter, typeFilter, query, reviewFilter]);
   const groupedNades = useMemo(() => {
     const groups = new Map();
     for (const nade of filteredNades) {
@@ -1722,13 +1729,10 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
           <Card className="overflow-hidden">
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div className="grid gap-1.5">
-                <CardTitle>Shared MatchZy library</CardTitle>
-                <CardDescription>New in-game lineups can be stored under MatchZy's default owner so every player can list and load them.</CardDescription>
+                <CardTitle>Aufnahmen und Review</CardTitle>
+                <CardDescription>Alle Aufnahmen sind für alle Spieler sichtbar. Der Ersteller bearbeitet seine ungeprüften Aufnahmen; Plattform-Admins vergeben Offiziell und Must Know.</CardDescription>
               </div>
-              <Badge variant={desiredGlobalSaves && !sharingNeedsApply ? "success" : sharingNeedsApply ? "warning" : "outline"}>
-                <span className="server-status-dot" />
-                {sharingNeedsApply ? "Restart required" : desiredGlobalSaves ? "Shared saves applied" : "Private saves applied"}
-              </Badge>
+
             </CardHeader>
             <CardContent className="grid gap-5">
               <div className="grid items-center gap-3 rounded-lg border border-border bg-muted/25 p-4 sm:grid-cols-[1fr_auto_1fr]">
@@ -1746,35 +1750,17 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                 </div>
               </div>
 
-              <Field className="flex min-h-20 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-background px-4 py-3">
-                <span>
-                  <FieldLabel className="flex items-center gap-2"><Globe2 className="size-4 text-primary" aria-hidden="true" /> Save new in-game lineups for everyone</FieldLabel>
-                  <FieldDescription className="mt-1 block">When enabled, MatchZy writes every player's .savenade entry to the shared default library.</FieldDescription>
-                </span>
-                <Switch
-                  aria-label="Save new in-game lineups for everyone"
-                  checked={desiredGlobalSaves}
-                  onCheckedChange={(checked) => setSettings((current) => ({ ...current, matchZySaveNadesGlobally: checked }))}
-                />
-              </Field>
-
               <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Sync status</dt><dd><Badge variant={syncPresentation.variant}><span className="server-status-dot" />{syncPresentation.label}</Badge></dd></div>
                 <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last confirmed</dt><dd className="text-sm font-medium">{formatDate(liveStatus.sync?.lastConfirmedAt)}</dd></div>
                 <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last transfer</dt><dd className="text-sm font-medium">{syncDirectionLabel(liveStatus.sync?.lastDirection)}</dd></div>
-                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Visibility</dt><dd className="flex flex-wrap gap-2"><Badge variant="success">{sharedNades} shared</Badge>{privateNades > 0 ? <Badge variant="warning">{privateNades} private</Badge> : null}</dd></div>
+                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Visibility</dt><dd className="flex flex-wrap gap-2"><Badge variant="success">{nades.length} für alle sichtbar</Badge></dd></div>
               </dl>
 
               {statusError || liveStatus.sync?.lastError ? <Alert variant="destructive"><AlertTitle>Nade sync cannot confirm the connection</AlertTitle><AlertDescription>{statusError || liveStatus.sync.lastError}</AlertDescription></Alert> : null}
               {!matchZyModeActive ? <Alert variant="warning"><AlertTitle>MatchZy is not the active server mode</AlertTitle><AlertDescription>The files can stay synchronized, but players cannot use MatchZy's nade commands until MatchZy or Nades mode is active.</AlertDescription></Alert> : null}
 
-              <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={onApply} disabled={busy || !sharingNeedsApply}>
-                  <UploadCloud data-icon="inline-start" />
-                  Apply sharing & restart
-                </Button>
-                <span className="text-xs text-muted-foreground">Players save with .savenade and browse with .listnades.</span>
-              </div>
+
             </CardContent>
           </Card>
         </div>
@@ -1828,7 +1814,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <FieldGroup className="grid gap-2 rounded-lg border border-border bg-muted/25 p-3 md:grid-cols-[1fr_180px_180px]">
+          <FieldGroup className="grid gap-2 rounded-lg border border-border bg-muted/25 p-3 md:grid-cols-[1fr_180px_180px_180px]">
             <Field>
               <FieldLabel className="sr-only">Search lineups</FieldLabel>
               <Input value={query} placeholder="Search name or description" onChange={(event) => setQuery(event.target.value)} />
@@ -1847,6 +1833,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                 <SelectContent><SelectItem value="__all__">All types</SelectItem>{nadeTypes.filter(Boolean).map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
+            <Field><FieldLabel className="sr-only">Review-Status</FieldLabel><Select value={reviewFilter} onValueChange={setReviewFilter}><SelectTrigger aria-label="Review-Status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Alle Aufnahmen</SelectItem><SelectItem value="pending">Review angefragt</SelectItem><SelectItem value="official">Offiziell</SelectItem><SelectItem value="mustKnow">Must Know</SelectItem></SelectContent></Select></Field>
           </FieldGroup>
           {nades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No nades configured. Add the first lineup to this library.</div> : null}
           {nades.length > 0 && filteredNades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No lineups match the current filters.</div> : null}
@@ -1861,8 +1848,8 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                         <p className="font-semibold text-foreground">{nade.displayName || nade.name || "Untitled lineup"}</p>
                         <p className="font-mono text-xs text-muted-foreground">{nade.map || "No map"}</p>
                       </div>
-                      <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={String(nade.owner || "default") === "default" ? "Available to every player" : `Private owner: ${nade.owner}`}>
-                        {String(nade.owner || "default") === "default" ? "Shared" : "Private"}
+                      <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={`Ersteller: ${nade.owner}`}>
+                        {nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review" : "Aufnahme"}
                       </Badge>
                     </div>
                     <div className="lineup-editor-fields">
@@ -1873,7 +1860,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                         <SelectContent>{nadeTypes.map((type) => <SelectItem key={type || "empty"} value={type || "__none__"}>{type || "No type"}</SelectItem>)}</SelectContent>
                       </Select></Field>
                       <Field><FieldLabel>Description</FieldLabel><Input value={nade.desc || ""} onChange={(event) => updateNade(nade.id, { desc: event.target.value })} /></Field>
-                      <Field htmlFor={`must-know-${nade.id}`}><FieldLabel>Must Know</FieldLabel><Switch id={`must-know-${nade.id}`} aria-label={`Must Know: ${nade.displayName || nade.name}`} checked={nade.mustKnow === true} onCheckedChange={(mustKnow) => updateNade(nade.id, { mustKnow })} /><FieldDescription>Im Ingame-Filter hervorheben; private Lineups bleiben privat.</FieldDescription></Field>
+                      <NadeReviewFields nade={nade} onChange={(patch) => updateNade(nade.id, patch)} />
                       <Field><FieldLabel>Lineup position</FieldLabel><Input value={nade.lineupPos || ""} onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} /></Field>
                       <Field><FieldLabel>Lineup angle</FieldLabel><Input value={nade.lineupAng || ""} onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} /></Field>
                     </div>

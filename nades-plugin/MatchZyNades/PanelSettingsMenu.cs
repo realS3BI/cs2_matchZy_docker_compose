@@ -4,16 +4,20 @@ public static class PanelSettingsMenu
 {
     public static MenuPage Create(PlayerPanelSettings settings)
     {
+        var hints = new Dictionary<string, string> {
+            ["focus"] = "Wechselt zwischen Mausbedienung im HUD und freiem Zielen. Öffnet das Panel, wenn es geschlossen ist.",
+            ["visible"] = "Blendet das Panel aus oder wieder ein. Deine Menüposition bleibt erhalten.",
+            ["up"] = "Wählt den vorherigen Eintrag auf der aktuellen Seite.",
+            ["down"] = "Wählt den nächsten Eintrag auf der aktuellen Seite.",
+            ["select"] = "Öffnet den ausgewählten Eintrag oder führt seine Aktion aus.",
+            ["back"] = "Geht eine Menüebene zurück. Auf Home wird die Spielsteuerung freigegeben.",
+            ["previous"] = "Zeigt die vorherigen neun Einträge dieser Liste.",
+            ["next"] = "Zeigt die nächsten neun Einträge dieser Liste.",
+            ["details"] = "Blättert lange Beschreibungen weiter; nach der letzten Textseite beginnt die erste."
+        };
         var keys = PlayerPanelSettings.Labels.Select(action => new MenuItem(
-            $"{action.Value}: {settings.Keys[action.Key]}", "Taste wählen. CS2-Bind danach einmal lokal setzen.",
-            Page: new(action.Value, "Bereits verwendete Tasten sind gesperrt. Bestehende CS2-Binds vorher sichern.",
-                PlayerPanelSettings.AllowedKeys.Select(key => new MenuItem(key,
-                    settings.Keys.Any(p => p.Key != action.Key && p.Value == key) ? "Diese Taste wird bereits für eine andere Panelaktion verwendet." :
-                        $"Speichert {key} für diese Aktion. Anschließend bind \"{key}\" \"css_training_key {key}\" in der CS2-Konsole setzen.",
-                    Request: new(TrainingAction.BindKey, Setting: action.Key, Value: key),
-                    Enabled: !settings.Keys.Any(p => p.Key != action.Key && p.Value == key))).ToArray()))).ToList();
-        keys.Add(new("Alle Bind-Befehle anzeigen", "Schreibt deine persönliche Belegung in die Client-Konsole. In eine lokale CFG übernehmen.", Request: new(TrainingAction.ExportBindings)));
-        keys.Add(new($"Spielaktionen W/S/Use: {(settings.GameButtons ? "an" : "aus")}", "Optionale alte Navigation über Spielaktionen; freie Hotkeys und Maus funktionieren unabhängig davon.", Request: new(TrainingAction.ToggleGameButtons)));
-        return new("Deine Einstellungen", "Pro Steam-ID gespeichert. Tastenzuweisung im Spiel erfordert einen lokalen Bind; der Server darf ihn nicht automatisch setzen.", keys, Key: "settings");
+            $"{action.Value}: {PlayerPanelSettings.DefaultKeys[action.Key]}", hints[action.Key])).ToList();
+        keys.Add(new("Bind-Befehle in Konsole anzeigen", "Einmal lokal ausführen oder in eine CFG übernehmen. Vorher eigene Belegungen sichern: CS2-Binds gelten auch auf anderen Servern.", Request: new(TrainingAction.ExportBindings)));
+        return new("Keybinds", "Feste Tasten für alle Spieler. Der Server kann deine lokalen Binds weder setzen noch prüfen. Mausbedienung funktioniert ohne diese Binds.", keys, Key: "settings");
     }
 }

@@ -21,7 +21,8 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 }
 
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
-    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "", bool MustKnow = false)
+    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "", bool MustKnow = false,
+    bool Official = false, string ReviewStatus = "", string Revision = "")
 {
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }
@@ -33,7 +34,7 @@ public sealed record NadeReference(string Owner, string Map, string Name)
 
 public static class NadeCatalog
 {
-    // MatchZy's owner -> name -> fields format. Never expose another player's private library.
+    // All recordings are visible; ownership still gates edit/delete/review actions.
     public static IReadOnlyList<NadeLineup> Parse(string json, string map, string steamId, string? metadata = null)
     {
         using var document = JsonDocument.Parse(json);
@@ -42,7 +43,6 @@ public static class NadeCatalog
         var result = new List<NadeLineup>();
         foreach (var owner in document.RootElement.EnumerateObject())
         {
-            if (owner.Name != "default" && owner.Name != steamId) continue;
             if (owner.Value.ValueKind != JsonValueKind.Object) continue;
             foreach (var entry in owner.Value.EnumerateObject())
             {
@@ -53,7 +53,8 @@ public static class NadeCatalog
                     !Coordinates.TryParse(Field(data, "LineupPos"), out var position) ||
                     !Coordinates.TryParse(Field(data, "LineupAng"), out var angles)) continue;
                 result.Add(new(owner.Name, entry.Name, entryMap, Kind(Field(data, "Type")),
-                    Field(data, "Desc"), position, angles, Field(data, "DisplayName"), MustKnow: Flag(data, "MustKnow")));
+                    Field(data, "Desc"), position, angles, Field(data, "DisplayName"), MustKnow: Flag(data, "MustKnow"),
+                    Official: Flag(data, "Official"), ReviewStatus: Field(data, "ReviewStatus")));
             }
         }
         if (metadata != null)
@@ -65,7 +66,8 @@ public static class NadeCatalog
                     var index = result.FindIndex(n => n.Owner == Field(title, "owner") && n.Map == Field(title, "map") && n.Name == Field(title, "name"));
                     if (index >= 0) result[index] = result[index] with {
                         DisplayName = Field(title, "displayName"),
-                        MustKnow = title.TryGetProperty("mustKnow", out _) ? Flag(title, "mustKnow") : result[index].MustKnow
+                        MustKnow = title.TryGetProperty("mustKnow", out _) ? Flag(title, "mustKnow") : result[index].MustKnow,
+                        Official = Flag(title, "official"), ReviewStatus = Field(title, "reviewStatus"), Revision = Field(title, "updatedAt")
                     };
                 }
         }

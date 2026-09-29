@@ -28,10 +28,7 @@
                 <Label class="eyebrow" text="BESCHREIBUNG" />
                 <Label id="training_detail" class="description" text="{s:text}" />
             </Panel>
-            <Panel class="footer">
-                <Label id="training_indicator" class="mode-indicator" text="{s:text}" />
-                <Label id="training_keys" class="key-hints" text="{s:text}" />
-            </Panel>
+
         </Panel>
     </Panel>
 </root>

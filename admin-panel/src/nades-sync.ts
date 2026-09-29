@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
-import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
+import { applyPlayerNadeRequest } from "./nade-review.js";
 import {
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
@@ -18,6 +19,8 @@ function stableNades(entries) {
     name: entry.name,
     displayName: entry.displayName,
     mustKnow: entry.mustKnow === true,
+    official: entry.official === true,
+    reviewStatus: entry.reviewStatus || "",
     landingPos: entry.landingPos,
     captureId: entry.captureId,
     throwTechnique: entry.throwTechnique,
@@ -45,7 +48,7 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
-    for (const key of ["displayName", "mustKnow", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+    for (const key of ["displayName", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
       if (current[key] !== undefined) merged[key] = current[key];
     }
     if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
@@ -73,7 +76,7 @@ export function mergeNadeCaptures(entries, captures) {
   const byKey = new Map(captures.filter(c => c && typeof c === "object").map(c => [nadeKey(c), c]));
   const mergedEntries = entries.map(entry => {
     const capture = byKey.get(nadeKey(entry));
-    if (!capture?.captureId || capture.captureId === entry.captureId ||
+    if (entry.official || !capture?.captureId || capture.captureId === entry.captureId ||
         !sameVector(entry.lineupPos, capture.lineupPos) || !sameVector(entry.lineupAng, capture.lineupAng) ||
         !sameVector(capture.landingPos, capture.landingPos)) return entry;
     try {
@@ -160,7 +163,14 @@ export class NadesSyncService {
       const next = mode === "merge"
         ? [...new Map([...current, ...entries].map(entry => [nadeKey(entry), entry])).values()]
         : entries;
-      const saved = await this.store.saveNades(next);
+      const revised = next.map(entry => {
+        const previous = current.find(n => nadeKey(n) === nadeKey(entry));
+        const content = value => JSON.stringify({ ...value, updatedAt: undefined });
+        return previous && content(previous) === content(entry) ? entry : {
+          ...entry, updatedAt: new Date(Math.max(Date.now(), Date.parse(previous?.updatedAt) + 1 || 0)).toISOString()
+        };
+      });
+      const saved = await this.store.saveNades(revised);
       await this.writeFromMongoUnlocked(saved);
       return saved;
     });
@@ -370,10 +380,11 @@ export class NadesSyncService {
   }
 
   async writeMetadata(entries) {
-    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName, mustKnow }) => ({ owner, map, name, displayName: displayName || "", mustKnow: mustKnow === true })));
+    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName, mustKnow, official, reviewStatus, updatedAt }) => ({ owner, map, name, displayName: displayName || "", mustKnow: mustKnow === true, official: official === true, reviewStatus: reviewStatus || "", updatedAt })));
   }
 
   async importCaptures() {
+    await this.importRequests();
     let captures;
     try { captures = (await readJsonFile(`${dirname(this.liveFile)}/savednades.captures.json`)).value; }
     catch (error) { if (error?.code === "ENOENT") return; throw error; }
@@ -390,6 +401,30 @@ export class NadesSyncService {
       this.lastDirection = "matchzy-to-panel";
     }
     await this.rememberCaptures(entries, receipts);
+  }
+
+  async importRequests() {
+    const directory = `${dirname(this.liveFile)}/savednades.requests`;
+    let files: string[];
+    try { files = await readdir(directory); }
+    catch (error) { if (error?.code === "ENOENT") return; throw error; }
+    for (const file of files.filter(name => /^[0-9a-f]{32}\.json$/.test(name)).sort()) {
+      const path = `${directory}/${file}`;
+      const { value: request } = await readJsonFile(path);
+      const current = await this.store.getNades();
+      let next;
+      try { next = applyPlayerNadeRequest(current, request); }
+      catch (error) {
+        await writeJsonFileAtomic(`${directory}/results/${file}`, { ok: false, message: error.message });
+        await unlink(path);
+        continue;
+      }
+      await this.rememberCaptures(current);
+      const saved = await this.store.saveNades(next);
+      await this.writeFromMongoUnlocked(saved);
+      await writeJsonFileAtomic(`${directory}/results/${file}`, { ok: true, message: "Änderung übernommen." });
+      await unlink(path);
+    }
   }
 
   async refreshFileState() {

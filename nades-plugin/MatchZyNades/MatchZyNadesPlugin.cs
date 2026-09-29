@@ -17,7 +17,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.7.0";
+    public override string ModuleVersion => "1.8.0";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -103,6 +103,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private HookResult OnSay(CCSPlayerController? player, CommandInfo command)
     {
+        if (TryEditFromChat(player, command.ArgString)) return HookResult.Stop;
+        if (TryMapVoteFromChat(player, command.ArgString)) return HookResult.Stop;
         if (TrySaveNameFromChat(player, command.ArgString)) return HookResult.Stop;
         var words = command.ArgString.Trim().Trim('"').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length > 1 && words[0].ToLowerInvariant() is ".savenade" or ".sn" or ".loadnade" or ".ln")
@@ -122,6 +124,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void TogglePanelControl(CCSPlayerController? player)
     {
         if (!Alive(player)) return;
+        if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar (.prac)."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
             session.Visible = true;
@@ -136,6 +139,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void TogglePanelVisible(CCSPlayerController? player)
     {
         if (!Alive(player)) return;
+        if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar (.prac)."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
             if (session.Visible) Hide(session);
@@ -167,7 +171,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     }
     private static bool Alive(CCSPlayerController? player) => player is { IsValid: true, IsBot: false, PawnIsAlive: true }
         && player.TeamNum is 2 or 3 && player.PlayerPawn.Value is { IsValid: true, MovementServices: not null, WeaponServices: not null };
-    private bool TrainingEnabled => _cheats?.GetPrimitiveValue<bool>() == true;
+    private bool TrainingEnabled => MatchZyState.IsPractice(MatchZyState.LoadedInstance());
 
     private void Handle(CCSPlayerController? player, string action)
     {
@@ -177,7 +181,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
         if (action.Length == 0) { Open(player); return; }
         if (int.TryParse(action, out var key)) { Select(player, key); return; }
-        if (!TrainingEnabled) { Tell(player, "Training zuerst über die Trainingszentrale starten."); return; }
+        if (!TrainingEnabled) { Tell(player, "Das Panel ist nur in MatchZy Practice verfügbar. Mit .prac aktivieren."); return; }
         if (action.Equals("save", StringComparison.OrdinalIgnoreCase)) { ArmNewLineupCapture(player); return; }
         if (action.Equals("check", StringComparison.OrdinalIgnoreCase))
         {
@@ -227,14 +231,15 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var library = ReadLibrary(player, quiet: true);
         return TrainingMenu.Create(library ?? [], Server.MapName, TrainingEnabled,
             _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfügbar; im Dashboard prüfen." : "",
-            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns());
+            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns(), MatchZyState.Toggles(player), MapMenu(), player.SteamID.ToString(CultureInfo.InvariantCulture));
     }
 
     private void Open(CCSPlayerController player, bool focus = true)
     {
+        if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar. Mit .prac aktivieren, sofern du dazu berechtigt bist."); return; }
         if (Environment.GetEnvironmentVariable("MATCHZY_TRAINING_HUD_READY") != "1")
         {
-            Tell(player, "Trainings-HUD in den Servereinstellungen des Webpanels aktivieren und übernehmen. HUD-Dateien lokal installieren oder über Workshop ausliefern. Hotkeys: css_training_bind / css_training_binds.");
+            Tell(player, "Trainings-HUD in den Servereinstellungen des Webpanels aktivieren und übernehmen. HUD-Dateien lokal installieren oder über Workshop ausliefern. Keybinds: css_training_binds.");
             return;
         }
         Close(player.Slot);
@@ -257,7 +262,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void ExecuteAction(CCSPlayerController player, MenuRequest request)
     {
-        if (!Alive(player)) return;
+        if (!TrainingEnabled || !Alive(player)) return;
+        if (HandleLineupAction(player, request) || HandleMapAction(player, request)) return;
         if (request.Action == TrainingAction.Close)
         { if (_menus.TryGetValue(player.Slot, out var panel)) Hide(panel); return; }
         if (request.Action == TrainingAction.ToggleFavorite) { ToggleFavorite(player, request.Lineup); return; }
@@ -268,7 +274,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             return;
         }
         ReleaseControl(player.Slot);
-        if (request.Action != TrainingAction.StartPractice && !TrainingEnabled)
+        if (!TrainingEnabled)
         { Tell(player, "Training ist inzwischen beendet. Menü erneut öffnen."); return; }
         switch (request.Action)
         {
@@ -359,7 +365,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void OnTick()
     {
-        if (!TrainingEnabled) ResetCapture();
+        if (!TrainingEnabled) { ResetCapture(); CloseAll(); _edits.Clear(); CancelMapVote(); return; }
         RecordSaveInputs();
         // MatchZy's own .loadnade/.last/.loadpos bypass our loader. Repair the same
         // scene-node tilt for living practice players (including practice bots).
@@ -386,28 +392,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 SetFocus(session, false);
             if (!session.Visible) continue;
             if (session.Focused) LockAttacks(session);
-            var input = session.Focused && session.Settings.GameButtons ? session.Input.Read(player.Buttons) : MenuInputAction.None;
-            if (input != MenuInputAction.None) session.LastInput = Server.CurrentTime;
-            switch (input)
-            {
-                case MenuInputAction.Back: RunPanelAction(player, "back"); break;
-                case MenuInputAction.Select: Select(player, session.Menu.Cursor + 1); break;
-                case MenuInputAction.PreviousPage: RunPanelAction(player, "previous"); break;
-                case MenuInputAction.NextPage: RunPanelAction(player, "next"); break;
-                case MenuInputAction.Up: session.Menu.Move(-1); break;
-                case MenuInputAction.Down: session.Menu.Move(1); break;
-                case MenuInputAction.Details:
-                    var detail = session.Menu.Notice.Length > 0 ? session.Menu.Notice : session.Menu.Selected?.Hint;
-                    if (string.IsNullOrWhiteSpace(detail)) detail = session.Menu.Current.Description;
-                    var pages = PanelText.DetailPages(detail ?? "", maxLines: 3).Count;
-                    session.DetailPage = (session.DetailPage + 1) % pages;
-                    break;
-            }
-            if (input != MenuInputAction.None)
-            {
-                if (input != MenuInputAction.Details) session.DetailPage = 0;
-                session.NextDraw = 0;
-            }
             if (_menus.ContainsKey(slot) && session.Visible)
             {
                 try
@@ -491,8 +475,9 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         Close(player.Slot);
         _last.Remove(player.Slot);
         ClearCapture(player.Slot);
+        _edits.Remove(player.Slot);
     }
 
     private void CloseAll() { foreach (var slot in _menus.Keys.ToArray()) Close(slot); }
-    private void Reset() { CloseAll(); _last.Clear(); ResetCapture(); }
+    private void Reset() { CloseAll(); _last.Clear(); ResetCapture(); _edits.Clear(); CancelMapVote(); _nextMapVote = 0; }
 }

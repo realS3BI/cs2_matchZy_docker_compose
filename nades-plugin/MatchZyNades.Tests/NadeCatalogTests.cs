@@ -15,17 +15,17 @@ public sealed class NadeCatalogTests
             new { owner = "default", map = "de_mirage", name = "window", displayName = "Fenster vom T-Spawn" },
             new { owner = "private", map = "de_mirage", name = "window", displayName = "Privates Fenster" }
         });
-        var entry = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7656", metadata));
+        var entry = NadeCatalog.Parse(json, "de_mirage", "7656", metadata).Single(n => n.Owner == "default");
         Assert.Equal("window", entry.Name);
         Assert.Equal("Fenster vom T-Spawn", entry.Title);
-        Assert.Equal("window", Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7656")).Title);
+        Assert.All(NadeCatalog.Parse(json, "de_mirage", "7656"), nade => Assert.Equal("window", nade.Title));
     }
 
     private static object Entry(string map = "de_mirage", string type = "Smoke", string position = "1.5 -2 3") =>
         new { Map = map, Type = type, LineupPos = position, LineupAng = "-12.5 90 0", Desc = "Jumpthrow" };
 
     [Fact]
-    public void UsesPanelFormatAndOnlyCurrentMapGlobalAndOwnLibrary()
+    public void UsesPanelFormatAndAllOwnersOnCurrentMap()
     {
         var json = JsonSerializer.Serialize(new Dictionary<string, object>
         {
@@ -34,8 +34,8 @@ public sealed class NadeCatalogTests
             ["76561198000000002"] = new { secret = Entry() }
         });
         var nades = NadeCatalog.Parse(json, "de_mirage", "76561198000000001");
-        Assert.Equal(2, nades.Count);
-        Assert.All(nades, n => Assert.Equal("window", n.Name));
+        Assert.Equal(3, nades.Count);
+        Assert.Contains(nades, n => n.Owner == "76561198000000002" && n.Name == "secret");
         Assert.Contains(nades, n => n.Owner == "default" && n.Kind == NadeKind.Smoke);
         Assert.Contains(nades, n => n.Owner == "76561198000000001" && n.Kind == NadeKind.Flash);
         Assert.All(nades, n => Assert.Equal("Jumpthrow", n.Description));

@@ -6,7 +6,7 @@ public enum TrainingAction
     Rethrow, LastThrow, ClearGrenades, SavePosition, LoadPosition, Noclip,
     Bot, CrouchBot, RemoveBots, Trajectory, Impacts, NoFlash, God,
     BestSpawn, WorstSpawn, StartCapture, SaveCapture, CancelCapture, RefreshLibrary, GiveGrenade,
-    Settings, BindKey, ToggleGameButtons, ExportBindings, ToggleFavorite, TeleportSpawn
+    Settings, BindKey, ToggleGameButtons, ExportBindings, ToggleFavorite, TeleportSpawn, EditName, EditDescription, RequestReview, DeleteLineup, StartMapVote, VoteYes, VoteNo
 }
 
 public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null, NadeKind Kind = NadeKind.Other,
