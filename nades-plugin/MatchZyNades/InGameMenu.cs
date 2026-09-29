@@ -5,10 +5,12 @@ public enum TrainingAction
     Close, Back, StartPractice, LoadLineup, RepeatLineup, CheckPosition,
     Rethrow, LastThrow, ClearGrenades, SavePosition, LoadPosition, Noclip,
     Bot, CrouchBot, RemoveBots, Trajectory, Impacts, NoFlash, God,
-    BestSpawn, WorstSpawn, StartCapture, SaveCapture, CancelCapture, RefreshLibrary, PanelAspect, GiveGrenade
+    BestSpawn, WorstSpawn, StartCapture, SaveCapture, CancelCapture, RefreshLibrary, PanelSize, GiveGrenade,
+    Settings, BindKey, ToggleGameButtons, ExportBindings
 }
 
-public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null, NadeKind Kind = NadeKind.Other);
+public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null, NadeKind Kind = NadeKind.Other,
+    string Setting = "", string Value = "");
 public sealed record MenuItem(string Label, string Hint = "", MenuPage? Page = null,
     MenuRequest? Request = null, bool Enabled = true);
 public sealed record MenuPage(string Title, string Description, IReadOnlyList<MenuItem> Items);
@@ -28,6 +30,14 @@ public sealed class InGameMenu(MenuPage root, string map)
     public string Notice { get; set; } = "";
     public IEnumerable<MenuItem> Visible => Current.Items.Skip(Page * PageSize).Take(PageSize);
     public MenuItem? Selected => Current.Items.ElementAtOrDefault(Index);
+
+    public void Enter(MenuPage page)
+    {
+        _history.Push((Current, Index));
+        Current = page;
+        Index = 0;
+        Notice = "";
+    }
 
     public void Move(int direction)
     {
@@ -50,9 +60,7 @@ public sealed class InGameMenu(MenuPage root, string map)
         if (!item.Enabled) { Notice = item.Hint; return null; }
         if (item.Page is { } page)
         {
-            _history.Push((Current, Index));
-            Current = page;
-            Index = 0;
+            Enter(page);
             return null;
         }
         return item.Request;

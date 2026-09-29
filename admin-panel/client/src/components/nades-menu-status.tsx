@@ -76,8 +76,8 @@ export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
         </div>
         <div className="grid gap-1 text-sm">
           <p><code>.prac</code> starts practice in MatchZy; Nades mode starts it automatically.</p>
-          <p><code>.nades</code> opens the panel. W/S selects, E confirms, Inspect goes back, R pages long descriptions.</p>
-          <p>With plugin 1.4+: bind F6 to <code>css_training</code> for panel control and F7 to <code>css_training_visible</code> to show/hide it. The experimental side panel follows the camera; test it in-game after rebuilding.</p>
+          <p>Plugin 1.5 uses a fixed HUD with mouse controls and per-player hotkeys. Install the compiled HUD addon before enabling it; plugin status alone does not confirm client assets.</p>
+          <p><code>css_training</code> opens the panel. Choose your keys in Settings, then apply the displayed client binds. <code>css_training_binds</code> prints your saved configuration.</p>
           <p><code>.nades last</code> reloads your last lineup. Type <code>.nades 1</code>–<code>.nades 9</code> for numbered selection.</p>
         </div>
         {menu?.state === "missing" && !menu.bundled ? <Alert variant="warning"><AlertDescription>Rebuild and redeploy the CS2 image in Coolify or Docker Compose. Apply & restart uses the existing image and cannot add missing bundled code.</AlertDescription></Alert> : null}

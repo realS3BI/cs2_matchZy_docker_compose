@@ -83,7 +83,7 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
   } else if (current && heartbeat?.state === "unloaded") {
     state = "unloaded"; status = "fail"; detail = "The plugin reported that it was unloaded. Apply & restart, then check Diagnostics.";
   } else if (loadFailure > loadSuccess) {
-    state = "failed"; status = "fail"; detail = "CounterStrikeSharp reported a MatchZyNades load failure. Check Docker logs for the plugin error and verify CounterStrikeSharp API 373 or newer is installed.";
+    state = "failed"; status = "fail"; detail = "CounterStrikeSharp reported a MatchZyNades load failure. Check Docker logs for the plugin error and verify CounterStrikeSharp API 374 or newer is installed.";
   } else {
     state = "unconfirmed"; status = "warn";
     detail = "The DLL is installed, but there is no recent confirmation from this server start. Check the load logs in Diagnostics; rebuild the stack if it still uses plugin 1.0.0.";

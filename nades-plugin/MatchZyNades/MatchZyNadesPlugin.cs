@@ -13,11 +13,11 @@ using System.Text.Json;
 
 namespace MatchZyNades;
 
-[MinimumApiVersion(373)]
+[MinimumApiVersion(374)]
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.4.0";
+    public override string ModuleVersion => "1.5.0";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -28,6 +28,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private ConVar? _saveNadesGlobally;
     private NadeRuntimeStatus? _runtimeStatus;
     private bool _statusWriteFailed;
+    private PlayerPanelSettingsStore _settingsStore = null!;
 
     private sealed class MenuSession(CCSPlayerController player, InGameMenu menu, bool practice)
     {
@@ -44,20 +45,22 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         public float AttackLock { get; set; }
         public bool Visible { get; set; } = true;
         public bool Focused { get; set; }
-        public bool Wide { get; set; } = true;
+        public PlayerPanelSettings Settings { get; set; } = new();
         public int DetailPage { get; set; }
-        public ScreenPanel Panel { get; } = new(player.PlayerPawn.Value!);
+        public ScreenPanel Panel { get; } = new(player);
     }
 
     public override void Load(bool hotReload)
     {
         _libraryPath = Path.Combine(Server.GameDirectory, "csgo", "cfg", "MatchZy", "savednades.json");
+        _settingsStore = new(Path.Combine(ModuleDirectory, "data", "players"));
         _cheats = ConVar.Find("sv_cheats");
         _saveNadesGlobally = ConVar.Find("matchzy_save_nades_as_global_enabled");
         RegisterCapture();
         AddCommandListener("say", OnSay, HookMode.Pre);
         AddCommandListener("say_team", OnSay, HookMode.Pre);
         RegisterListener<Listeners.OnTick>(OnTick);
+        RegisterListener<Listeners.OnCustomHudClicked>(OnPanelClicked);
         RegisterListener<Listeners.CheckTransmit>(infoList =>
         {
             foreach (var (info, recipient) in infoList)
@@ -111,8 +114,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     public void OnNades(CCSPlayerController? player, CommandInfo command) =>
         Handle(player, command.ArgCount > 1 ? command.GetArg(1) : "");
 
-    [ConsoleCommand("css_training", "Toggle panel control (bind to F6)")]
-    public void OnTraining(CCSPlayerController? player, CommandInfo command)
+    [ConsoleCommand("css_training", "Toggle panel control (bind to any key)")]
+    public void OnTraining(CCSPlayerController? player, CommandInfo command) => TogglePanelControl(player);
+
+    private void TogglePanelControl(CCSPlayerController? player)
     {
         if (!Alive(player)) return;
         if (_menus.TryGetValue(player!.Slot, out var session))
@@ -123,8 +128,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         else Open(player);
     }
 
-    [ConsoleCommand("css_training_visible", "Show/hide panel without losing selection (bind to F7)")]
-    public void OnPanelVisible(CCSPlayerController? player, CommandInfo command)
+    [ConsoleCommand("css_training_visible", "Show/hide panel without losing selection")]
+    public void OnPanelVisible(CCSPlayerController? player, CommandInfo command) => TogglePanelVisible(player);
+
+    private void TogglePanelVisible(CCSPlayerController? player)
     {
         if (!Alive(player)) return;
         if (_menus.TryGetValue(player!.Slot, out var session))
@@ -222,9 +229,14 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void Open(CCSPlayerController player, bool focus = true)
     {
+        if (Environment.GetEnvironmentVariable("MATCHZY_TRAINING_HUD_READY") != "1")
+        {
+            Tell(player, "Das feste HUD muss zuerst installiert werden. Server: MATCHZY_TRAINING_HUD_READY=1 erst nach Addon-Installation setzen. Hotkeys: css_training_bind / css_training_binds.");
+            return;
+        }
         Close(player.Slot);
         MenuManager.CloseActiveMenu(player);
-        var session = new MenuSession(player, BuildMenu(player), TrainingEnabled);
+        var session = new MenuSession(player, BuildMenu(player), TrainingEnabled) { Settings = ReadSettings(player) };
         _menus[player.Slot] = session;
         SetFocus(session, focus);
     }
@@ -256,12 +268,13 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (!Alive(player)) return;
         if (request.Action == TrainingAction.Close)
         { if (_menus.TryGetValue(player.Slot, out var panel)) Hide(panel); return; }
-        if (request.Action == TrainingAction.PanelAspect)
+        if (request.Action == TrainingAction.PanelSize)
         {
             if (_menus.TryGetValue(player.Slot, out var panel))
-            { panel.Wide = !panel.Wide; Tell(player, panel.Wide ? "Panelposition: 16:9" : "Panelposition: 4:3 / 16:10"); }
+                SaveSettings(player, panel.Settings with { Compact = !panel.Settings.Compact });
             return;
         }
+        if (HandleSettingsAction(player, request)) return;
         if (request.Action == TrainingAction.RefreshLibrary)
         {
             if (_menus.TryGetValue(player.Slot, out var panel)) { panel.Menu = BuildMenu(player); panel.NextDraw = 0; }
@@ -384,7 +397,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 SetFocus(session, false);
             if (!session.Visible) continue;
             if (session.Focused) LockAttacks(session);
-            var input = session.Focused ? session.Input.Read(player.Buttons) : MenuInputAction.None;
+            var input = session.Focused && session.Settings.GameButtons ? session.Input.Read(player.Buttons) : MenuInputAction.None;
             if (input != MenuInputAction.None) session.LastInput = Server.CurrentTime;
             switch (input)
             {
@@ -412,10 +425,9 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 {
                     if (Server.CurrentTime >= session.NextDraw)
                     {
-                        session.Panel.Draw(PanelText.Render(session.Menu, session.Focused, session.Practice, session.DetailPage), session.Wide);
+                        session.Panel.Draw(session.Menu, session.Focused, session.Practice, session.DetailPage, session.Settings);
                         session.NextDraw = Server.CurrentTime + 0.1f;
                     }
-                    session.Panel.FollowCamera();
                 }
                 catch (Exception error)
                 {
@@ -450,6 +462,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         if (session.Focused == focus) return;
         session.Focused = focus;
+        session.Panel.Capture(focus);
         session.NextDraw = 0;
         session.Input = new(session.Player.IsValid ? session.Player.Buttons : 0);
         session.LastInput = Server.CurrentTime;

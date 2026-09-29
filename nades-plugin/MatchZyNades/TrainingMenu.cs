@@ -57,13 +57,13 @@ public static class TrainingMenu
         home.Add(new("Wurf & Position", practice ? "Wiederholen, Position merken und frei bewegen." : "Zuerst Training starten.", Page: training, Enabled: practice));
         home.Add(new("Trainingswerkzeuge", practice ? "Bots, Vorschau und persoenliche Einstellungen." : "Zuerst Training starten.", Page: tools, Enabled: practice));
         home.Add(new("Neue Nade aufnehmen", "Aufnahme starten, werfen und danach speichern. Ohne Chat; der Name wird automatisch vergeben.",
-            Page: new("Nade aufnehmen", "Nach dem Wurf F6 druecken und Aufnahme speichern waehlen.", [
+            Page: new("Nade aufnehmen", "Nach dem Wurf die Panelbedienung aktivieren und Aufnahme speichern waehlen.", [
                 Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von 3 Minuten eine Granate. Position, Blickwinkel, Wurf und Ziel werden erfasst."),
                 Action("Aufnahme speichern", TrainingAction.SaveCapture, "Nach der Explosion speichern. Automatischer Name aus Granatentyp, Map und Zeit; spaeter im Dashboard umbenennbar."),
                 Action("Aufnahme verwerfen", TrainingAction.CancelCapture, "Verwirft die laufende oder noch ungespeicherte Aufnahme.")]), Enabled: practice));
         home.Add(Action("Bibliothek aktualisieren", TrainingAction.RefreshLibrary, "Laedt die Bibliothek nach der Dashboard-Synchronisierung neu."));
-        home.Add(Action("Panelposition 16:9 / 4:3", TrainingAction.PanelAspect, "Wechselt zwischen breitem Bildschirm und 4:3 / 16:10. Auswahl gilt fuer dieses Panel."));
-        home.Add(Action("Panel ausblenden", TrainingAction.Close, "F7 blendet das Panel mit derselben Auswahl wieder ein."));
+        home.Add(Action("Deine Einstellungen", TrainingAction.Settings, "Hotkeys und Panelgroesse pro Spieler speichern."));
+        home.Add(Action("Panel ausblenden", TrainingAction.Close, "Dein Hotkey fuer Sichtbarkeit blendet das Panel wieder ein."));
         return new(new("Trainingszentrale", "Alle Trainingsaktionen an einem Ort.", home), map);
     }
 
@@ -85,6 +85,6 @@ public static class TrainingMenu
     public static string ActionHint(TrainingAction action) => action switch
     {
         TrainingAction.StartPractice => "Training wird nach erfolgreicher Aktivierung hier freigeschaltet.",
-        _ => "Du kannst weiterspielen. F6 gibt dir wieder die Menuebedienung. MatchZy meldet Details weiterhin im Chat."
+        _ => "Du kannst weiterspielen. Dein Bedien-Hotkey aktiviert das Panel wieder. MatchZy meldet Details weiterhin im Chat."
     };
 }

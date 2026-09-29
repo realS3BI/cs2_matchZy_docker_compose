@@ -1,69 +1,62 @@
 # Trainingszentrale im Spiel
 
-Das eigene CounterStrikeSharp-Plugin `MatchZyNades` bietet ab **1.4.0** eine Trainingszentrale als **experimentelles Seitenpanel rechts**. Sichtbarkeit und Bedienung sind getrennt: Beim Spielen bleiben Auswahl, Beschreibungen und eigene Rueckmeldungen sichtbar. Granaten-Bibliothek, Aufnahme neuer Nades, Wurf-/Positionsaktionen und Trainingswerkzeuge lassen sich ueber das Panel aufrufen. Es verwendet die bestehende MatchZy-Datei `game/csgo/cfg/MatchZy/savednades.json`; Dashboard, `.savenade` und das Menue arbeiten damit auf derselben Bibliothek.
+Ab **1.5.0** verwendet MatchZyNades ein festes **Panorama-HUD** mit einer zusammenhaengenden Flaeche am rechten Bildschirmrand. Die alte World-Text-Anzeige und ihre Kameranachfuehrung sind entfernt. Sichtbarkeit und Bedienung bleiben getrennt. Im Bedienmodus gibt es einen Mauszeiger und anklickbare Eintraege; alternativ funktionieren persoenliche Hotkeys.
 
-**Darstellungsgrenze:** Das Panel besteht aus privaten `point_worldtext`-Entities, deren Position jeden Server-Tick der Blickrichtung folgt. CS2 hat die frueher verwendeten Viewmodel-Entities entfernt. Deshalb ist dieses Panel kein festes, clientseitig gerendertes HUD: Bei schnellen Kamerabewegungen, Latenz, Zoom oder nahe an Geometrie sind Versatz, Abschneiden oder Verdeckung moeglich. Die Darstellung ist noch nicht im Spiel abgenommen. Fuer ein festes Panorama-HUD mit Kartenansicht und Fotos ist eine eigene Ausbaustufe mit Workshop-Layout und Addon-Auslieferung vorgesehen; diese Assets werden hier noch nicht mitgeliefert. Hintergrund: [entfernte Viewmodels](https://github.com/M-archand/CenterSpeed), [Panorama-HUD und Workshop-Voraussetzungen](https://github.com/nvmxre/cs2-ui-kit).
+**Noch nicht im Spiel abgenommen:** Die HUD-Quellen und das Build-Skript liegen unter [training-hud](../training-hud/README.md). Valves Workshop-Compiler und ein Test im CS2-Client sind fuer das fertige Asset erforderlich. Die neue Anzeige bleibt bis zur Installation abgeschaltet; es gibt keinen automatischen Rueckfall auf das nachziehende Panel.
 
 ## Aktivieren
 
-1. Den aktualisierten Stack neu bauen und deployen: `docker compose up -d --build` (in Coolify: neu bauen/deployen).
-2. Im Dashboard unter `Plugins` den Servermodus **Nades** oder **MatchZy** auswaehlen und `Apply & restart` ausfuehren. Die Statuskarte muss Version **1.4.0** als **Loaded** anzeigen.
-3. Einmal die unten beschriebenen F6-/F7-Binds setzen. In CS2 einem Team beitreten, spawnen und F6 druecken. Alternativ funktioniert weiterhin `.nades`.
+1. [HUD bauen und an Clients ausliefern](../training-hud/README.md). Fuer mehrere Spieler wird ein eigenes Workshop-Addon benoetigt.
+2. Passendes Metamod, CounterStrikeSharp **API 374+** und MultiAddonManager verwenden. Das Plugin baut gegen **1.0.374**.
+3. CS2- und Dashboard-Image neu bauen. Im Dashboard **Nades** oder **MatchZy** aktivieren; die Statuskarte muss Version **1.5.0** als **Loaded** melden.
+4. `MATCHZY_TRAINING_HUD_ADDON_ID` auf die veroeffentlichte Workshop-ID setzen. Erst nach erfolgreicher Asset-Installation `MATCHZY_TRAINING_HUD_READY=1` setzen und den CS2-Container neu erstellen. Fuer lokale Asset-Tests kann die Addon-ID leer bleiben.
+5. Einem Team beitreten, spawnen und `css_training` in der Konsole ausfuehren oder einen eigenen Hotkey binden.
 
-Das Image baut das Plugin gegen CounterStrikeSharp **1.0.373**, fuehrt dessen Unit-Tests aus und installiert es beim Bootstrap in den Modi **Nades und MatchZy**. CounterStrikeSharp muss mindestens API 373 bereitstellen. In den Modi Warmup und Vanilla entfernt der Bootstrap die Plugin-DLL. Das Hauptmenue ist auch vor dem Practice-Modus erreichbar und bietet dann **Training starten** an. MatchZy prueft dabei die bestehenden Spielerberechtigungen. Trainingsaktionen verlangen `sv_cheats`, das MatchZy im Practice-Modus aktiviert und beim Verlassen deaktiviert.
+Das HUD muss vor dem ersten Oeffnen auf dem Client vorhanden sein. Die Plugin-Statuskarte bestaetigt nur das Laden des Plugins, nicht die Verfuegbarkeit der Client-Dateien. Bis dahin funktionieren die Konfigurationsbefehle bereits, aber das Panel sperrt keine Eingaben.
 
-Unter **Plugins** und **Nades** zeigt die Karte **MatchZy Nades · In-game menu** den Installations- und Laufzeitstatus. **Loaded** bedeutet, dass das Plugin innerhalb der letzten 30 Sekunden eine Rueckmeldung aus diesem Containerstart geschrieben hat; dazu erscheinen Plugin-Version und Practice-Zustand. Die Anzeige aktualisiert sich alle 30 Sekunden oder per **Refresh status**. **Installed · unconfirmed** bedeutet nur, dass die DLL vorhanden ist. **Not installed** erklaert, ob `Apply & restart` reicht oder das CS2-Image neu gebaut werden muss. Unter **Diagnostics** gibt es ausserdem einen eigenen Pruefschritt fuer das Menue.
+## Persoenliche Bedienung und Hotkeys
 
-Nach diesem Update beide Images (Dashboard und CS2) neu bauen und deployen. Ein Neustart eines alten Images bringt die neue DLL und Anzeige nicht mit. Die Laufzeitrueckmeldung liegt in `addons/counterstrikesharp/plugins/MatchZyNades/data/status.json`, wird alle fuenf Sekunden atomar erneuert und beim Entladen auf `unloaded` gesetzt. Veraltete Rueckmeldungen aus einem vorherigen Containerstart gelten nicht als Ladebestaetigung.
+Unter **Deine Einstellungen** oder ueber den Button **Einstellungen** lassen sich fuer jede Panelaktion Tasten auswaehlen. Belegung, Panelgroesse und optionale Spielaktions-Navigation werden pro **Steam-ID** gespeichert: `addons/counterstrikesharp/plugins/MatchZyNades/data/players/<Steam64>.json`. Die Dateien bleiben im CS2-Volume bei Reconnect, Mapwechsel und Neustart erhalten. Eine bereits verwendete Taste wird nicht einer zweiten Aktion zugeordnet.
 
-## Bedienung ohne Installation am Client
-
-Unter **Granaten-Bibliothek** stehen **Smoke, HE, Flash, Molotov / Incendiary und Decoy** zur Auswahl. Falls alte Eintraege ohne bekannten Typ existieren, erscheint zusaetzlich **Ohne Typ**. Jede Kategorie zeigt ihre Anzahl auf dieser Map. Nach Auswahl eines Typs folgt eine alphabetische Liste mit fuenf Eintraegen pro Seite. Ein Lineup oeffnet eine Detailseite mit Beschreibung und **Lineup laden & trainieren**. Zurueck stellt die vorherige Seite und Markierung wieder her.
-
-| Eingabe | Aktion |
-| --- | --- |
-| F6 (einmal binden) | Panel oeffnen / Bedienung einschalten oder zurueck ins Spiel; Anzeige bleibt sichtbar |
-| F7 (einmal binden) | Panel verstecken / passiv wieder anzeigen; Auswahl bleibt erhalten |
-| W / S kurz druecken und loslassen | Vorherigen / naechsten Eintrag markieren; blaettert an Seitengrenzen automatisch |
-| E / Use loslassen | Markierten Eintrag bestaetigen |
-| G / Inspect loslassen | Eine Ebene zurueck; im Hauptmenue nur die Bedienung beenden |
-| A / D loslassen | Vorherige / naechste Seite |
-| R / Reload loslassen | Naechste Seite einer langen Beschreibung; nur im Bedienmodus |
-| `.nades 1` bis `.nades 5` | Eintrag auf der sichtbaren Seite auswaehlen |
-| `.nades 6` | Eine Ebene zurueck; im Hauptmenue die Bedienung beenden |
-| `.nades 7` / `.nades 8` | Vorherige / naechste Seite |
-| `.nades 9` oder `.nades close` | Panel ausblenden |
-| `.nades last` | Zuletzt ausgewaehltes Lineup erneut laden |
-| `.nades check` | Aktuelle Position, Bewegungsmodus, Blickwinkel und Koerperwinkel im Chat und Serverlog anzeigen |
-
-Die Buchstaben entsprechen Spielaktionen: Vorwaerts/Rueckwaerts, Seitwaerts, Use, Inspect und Reload. **G funktioniert als Zurueck, wenn G auf Inspect gebunden ist**. Eigene Binds gelten entsprechend. Mausangriffe waehlen nichts aus. Bereits beim Aktivieren des Bedienmodus gehaltene Tasten muessen erst losgelassen und erneut gedrueckt werden. Das Panel hat keinen Mauszeiger. Nur im **Bedienmodus** werden Bewegung und neue Angriffe gesperrt; Use und Reload koennen weiterhin Spielaktionen ausloesen. Im passiven oder versteckten Zustand konsumiert das Panel keine Navigation. Nach 90 Sekunden ohne Menueeingabe wird nur die Bedienung beendet. F7 gibt ebenfalls sofort die Spielsteuerung frei. Beim erneuten Aktivieren wird der aktuelle Bewegungs-/Angriffszustand gesichert, sodass zwischenzeitliches Noclip erhalten bleibt. Bei Tod, Respawn, Rundenbeginn, Mapwechsel oder Plugin-Unload werden Anzeige und Sperren entfernt; danach F6/F7 erneut verwenden. Ein Practice-Wechsel baut die Inhalte neu auf und gibt die Steuerung frei.
-
-Unter **Panelposition 16:9 / 4:3** auf der zweiten Hauptmenue-Seite laesst sich der rechte Abstand fuer schmale Bildformate aendern. Die Einstellung gilt bis zum Neuaufbau des Panels. Lange Beschreibungen werden in sechszeilige Seiten aufgeteilt; **R** blaettert im Bedienmodus weiter. Jedes Textfeld bleibt unter dem nativen 512-Byte-Limit, auch bei mehrbyteigen Zeichen.
-
-Alternativ funktionieren `!nades` im Chat und `css_nades` in der Client-Konsole. Zum Beispiel entspricht `css_nades last` dem Chatbefehl `.nades last`.
-
-## Ohne Chat bedienen
-
-Einmal auf dem Gaming-PC in der CS2-Konsole setzen, oder die optionale [training-menu.cfg](training-menu.cfg) installieren und `exec training-menu` ausfuehren. Vorher eigene F6-/F7-Binds sichern:
+**Ein Client-Bind ist einmal pro neuer Taste erforderlich.** Der Server darf ihn nicht automatisch setzen. Nach der Auswahl zeigt das Panel den genauen Befehl. `css_training_binds` schreibt alle persoenlichen Binds in die Client-Konsole; diese lassen sich in die eigene CFG uebernehmen. Bestehende Belegungen vorher sichern. Ein Beispiel ohne F-Tasten:
 
 ```cfg
-bind "F6" "css_training"
-bind "F7" "css_training_visible"
+css_training_bind focus K
+css_training_bind visible L
+bind "K" "css_training_key K"
+bind "L" "css_training_key L"
 ```
 
-F6 wechselt zwischen Bedienung und Spielen, F7 zwischen sichtbar und versteckt. E, Inspect und Reload brauchen keine zusaetzlichen Binds. Der Server kann Client-Tasten nicht automatisch umbelegen.
+Die Standardbelegung steht in [training-menu.cfg](training-menu.cfg). Die Navigation ueber Spielaktionen W/S, Use, Inspect und Reload ist standardmaessig aus und kann optional aktiviert werden. Individuelle Console-Binds und Mausklicks sind davon unabhaengig.
 
-**Wurf & Position** bietet letzten Wurf wiederholen, zum letzten Abwurfpunkt, Position merken/laden, Noclip, aktive Granaten entfernen, naechsten/entferntesten Team-Spawn und **Granate ausruesten** fuer alle fuenf Granatentypen. **Trainingswerkzeuge** bietet stehende/duckende Bots, Bots entfernen, Flugbahnvorschau, Einschlaege, Flashschutz, Unverwundbarkeit und Positionsdiagnose. Aktionen, die den Server gemeinsam betreffen, haben eine Bestaetigungsseite mit Abbrechen als Standardauswahl. Trainingsaktionen geben die Bewegung frei; das Panel bleibt stehen. Eigene Rueckmeldungen erscheinen im Panel und zusaetzlich im Chat. MatchZys eigene Erfolgs-/Berechtigungsnachrichten bleiben vorerst im Chat; das Panel bestaetigt nur die Weitergabe des Befehls und behauptet keinen ungeprueften Erfolg.
+| Aktion | Standardtaste nach Installation der CFG |
+| --- | --- |
+| Bedienung / Spielen | F6 |
+| Anzeigen / Verstecken | F7 |
+| Einstellungen | F8 |
+| Auswahl nach oben / unten | Pfeil hoch / runter |
+| Bestaetigen | Enter oder Mausklick |
+| Zurueck | Backspace oder Button |
+| Vorherige / naechste Seite | Pfeil links / rechts |
+| Weitere Beschreibung | Bild ab oder Button |
 
-**Neue Nade aufnehmen:** Aufnahme starten, Granate werfen, Explosion abwarten, F6 und **Aufnahme speichern** waehlen. Das erzeugt einen eindeutigen Namen aus Typ, Map, UTC-Zeit und Kennung. **Aufnahme verwerfen** bricht ab. Eine ungespeicherte fertige Aufnahme wird durch erneutes Starten nicht ueberschrieben. Nach dem bestehenden Dashboard-Sync **Bibliothek aktualisieren** auf der zweiten Hauptmenue-Seite waehlen und das Lineup laden. Der Sync bleibt Voraussetzung fuer die Aufnahme in MatchZys Bibliothek. Eigene Titel lassen sich spaeter im Dashboard vergeben; die bisherige optionale Chat-Namenseingabe funktioniert weiterhin.
+Nur im Bedienmodus werden Bewegung und neue Angriffe gesperrt und der Mauszeiger aktiviert. Beim Spielen bleibt das Panel sichtbar, reagiert aber nicht auf Navigation. Ausblenden beendet immer auch die Bedienung. Nach 90 Sekunden ohne Eingabe wird die Bedienung beendet. Tod, Respawn, Runden-/Mapwechsel und Plugin-Unload entfernen die Anzeige und geben Eingaben frei. Ein Practice-Wechsel baut die Inhalte neu auf. Persoenliche Einstellungen bleiben erhalten, die offene Auswahl bleibt beim blossen Aus-/Einblenden erhalten.
 
-Die Bibliothek muss nicht gefuellt sein, um Trainingswerkzeuge oder Aufnahme zu verwenden. Ein freier Texteditor, Kartenansicht, Fotos und die vollstaendige Uebernahme fremder Plugin-Rueckmeldungen sind weitere Ausbaustufen. Fuer die beschriebenen Panel-Aktionen ist keine Chat-Eingabe erforderlich.
+## Trainingsaktionen ohne Chat-Eingabe
 
-## Architektur und Erweiterungen
+**Granaten-Bibliothek** zeigt oeffentliche und eigene private Lineups der aktuellen Map, nach Typ sortiert, mit fuenf Eintraegen pro Seite. Details enthalten Beschreibung und **Lineup laden & trainieren**. Zurueck stellt die vorige Auswahl wieder her. Lange Beschreibungen lassen sich weiterblaettern.
 
-`InGameMenu` verwaltet Seiten, Auswahl, History und Pagination ohne Spiel-API. `MenuInput` uebersetzt Use/Inspect/Reload und Bewegungstasten in einmalige Aktionen beim Loslassen. `PanelText` erzeugt begrenzte Textfelder und Detailseiten. `ScreenPanel` erstellt fuenf World-Text-Entities pro sichtbarem Panel, aktualisiert Texte bei Aenderungen und fuehrt die Position pro Tick nach. `CheckTransmit` entfernt die Entities aus den Updates aller anderen Spieler. Verstecken und Lifecycle-Cleanup entfernen die Entities. `TrainingMenu` definiert Inhalte und feste Befehle. Der Plugin-Adapter besitzt Sichtbarkeit, Fokus und Spielerzustand; nur Fokus aktiviert Bewegungssperre und Eingabeauswertung. `MenuRenderer` bleibt als bisheriger HTML-Renderer und Text-Hilfsfunktion erhalten, wird fuer die neue Anzeige nicht aufgerufen.
+**Wurf & Position** bietet Wiederholen, letzten Abwurfpunkt, Position merken/laden, Noclip, Granaten entfernen, Team-Spawns und Granaten ausruesten. **Trainingswerkzeuge** bietet Bots, Vorschau, Einschlaege, Flashschutz, Unverwundbarkeit und Positionsdiagnose. Gemeinsame Aktionen verlangen eine Bestaetigung. Die Ausfuehrung gibt die Steuerung frei; das Panel bleibt sichtbar. Eigene Rueckmeldungen erscheinen darin. MatchZys eigene Erfolgs-/Berechtigungsnachrichten bleiben vorerst im Chat; das Panel behauptet keinen ungeprueften Erfolg.
 
-Neue Funktionen erhalten eine `TrainingAction`, einen Menueeintrag und einen expliziten Handler bzw. Allowlist-Befehl. Bibliotheksnamen und Beschreibungen werden niemals als Befehle ausgefuehrt. MatchZy-Befehle laufen ueber `ExecuteClientCommandFromServer` im Spieler-Kontext, niemals als privilegierter Serverkonsolenaufruf. Dadurch bleiben MatchZys eigene Berechtigungspruefungen wirksam. Es wird kein eigener MatchZy-Zustand fuer persoenliche Toggles gespiegelt; die Eintraege heissen bewusst "umschalten" und behaupten keinen unbekannten An/Aus-Status.
+**Neue Nade aufnehmen:** Aufnahme starten, werfen, Explosion abwarten, Bedienung aktivieren und **Aufnahme speichern** waehlen. Der Name wird aus Typ, Map, UTC-Zeit und Kennung erzeugt. **Aufnahme verwerfen** bricht ab. Nach dem Dashboard-Sync **Bibliothek aktualisieren** waehlen, um das neue Lineup zu laden. Freie Namen lassen sich im Dashboard oder optional per Chat vergeben. Karten, Fotos und freie Textfelder sind hier noch nicht eingebaut.
+
+Training kann aus dem Panel gestartet werden, mit MatchZys bestehenden Spielerberechtigungen. Trainingsaktionen verlangen `sv_cheats`. Die Bibliothek muss fuer die Werkzeuge nicht gefuellt sein. Die bestehenden `.nades`-/`css_nades`-Befehle bleiben als alternativer Zugang erhalten.
+
+## Architektur
+
+`InGameMenu` verwaltet Seiten und History. `ScreenPanel` erstellt eine private `custom_hud_layout`-Entity pro offener Sitzung und setzt Texte, CSS-Klassen und Cursorzustand. `CheckTransmit` haelt die Entity von anderen Spielern fern. Es gibt keine World-Text-Entities oder Kameratransformationen mehr. Eine neue Entity pro Sitzung verhindert das Wiederverwenden alter Slot-Texte in API 374. Die pro Spieler gespeicherten Werte liegen getrennt davon in `PlayerPanelSettingsStore`.
+
+`TrainingMenu` und `PanelSettingsMenu` definieren die Inhalte; `PanelControls` prueft die Tasten und routet Maus-/Tastaturaktionen. Texte werden niemals als beliebige Serverbefehle ausgefuehrt. MatchZy-Befehle laufen weiterhin im Spieler-Kontext. Native Eingaben, Layout-Compiler und Darstellung muessen im Spiel geprueft werden; die Unit-Tests pruefen Daten, Navigation und Persistenz.
 
 ## Direkte Zifferntasten 1–9
 
@@ -137,10 +130,10 @@ dotnet test nades-plugin/MatchZyNades.Tests/MatchZyNades.Tests.csproj --configur
 docker build -f cs2/Dockerfile --target nades-tests .
 ```
 
-Die automatischen Tests pruefen das MatchZy-Dateiformat, Map- und Owner-Filter, doppelte Namen verschiedener Owner, Koordinaten, Granatentypen, Pagination, Navigationshistorie, leere Kategorien, Practice-Sperren, Bestaetigungsseiten, Befehlszuordnung, gehaltene Tasten, Use/Inspect-Prioritaet, sichere Textdarstellung und Statusdateien. Die native Koerperrotation, World-Text-Darstellung und deren private Uebertragung, MatchZy-Berechtigungen und echten Spielereingaben brauchen zusaetzlich einen CS2-Client; diese Tests belegen den Ingame-Fix nicht.
+Die automatischen Tests pruefen das MatchZy-Dateiformat, Map- und Owner-Filter, doppelte Namen verschiedener Owner, Koordinaten, Granatentypen, Pagination, Navigationshistorie, leere Kategorien, Practice-Sperren, Bestaetigungsseiten, Befehlszuordnung, gehaltene Tasten, Use/Inspect-Prioritaet, sichere Textdarstellung und Statusdateien. Die native Koerperrotation, Panorama-Darstellung und deren private Uebertragung, MatchZy-Berechtigungen und echten Spielereingaben brauchen zusaetzlich einen CS2-Client; diese Tests belegen den Ingame-Fix nicht.
 
 Ab Plugin **1.0.2** ein Lineup mit steilem Blickwinkel nach oben oder unten nahe einer Wand ueber `.nades`, `.nades last` und MatchZys `.loadnade` laden. Auch `.last` und `.loadpos` pruefen. In Ego-Perspektive und mit einem zweiten Spieler kontrollieren, dass der Koerper aufrecht bleibt und die Zielrichtung stimmt. `.nades check` muss fuer die Neigung und seitliche Drehung des Koerpers null anzeigen, waehrend der Blickwinkel erhalten bleibt. Ein Lineup nach aktivem Noclip ueber `.nades` laden und normales Landen/Bewegen pruefen. Nach dem Update das CS2-Image neu bauen und im Dashboard die Plugin-Version kontrollieren.
 
-Fuer den Ingame-Test mindestens sechs Smokes auf derselben Map speichern, davon eine privat. `.nades` ueber normalen und Teamchat sowie F6 pruefen, mit W/S und A/D bis auf die zweite Listenseite navigieren, Details mit E oeffnen und mit G/Inspect zur selben Auswahl zurueckkehren. Lineup mit E laden und Position, Blickwinkel und Granate pruefen. Die Hauptmenue-Aktion zum erneuten Laden testen. Mit Inspect im Hauptmenue und F6 die Bedienung beenden, dann mit F7 verstecken und wieder anzeigen; nach Tod/Respawn sowie Mapwechsel erneut oeffnen. Waehrend ein Menue offen ist, im Dashboard ein Lineup aendern oder loeschen und die erneute Auswahl pruefen. Mit einem zweiten Spieler private Eintraege und die Bestaetigung gemeinsamer Aktionen kontrollieren. Training einmal als berechtigter und einmal als unberechtigter Spieler ueber das Menue starten. Leere Bibliothek, lange Namen, gehaltenes E beim Oeffnen, Inspect mit anderem Bind, Practice-Ende, normale Bewegung/Angriffe nach Schliessen und Ziffernbinds pruefen. Das echte HUD bei 16:9 und 4:3 auf Abschneiden/Lesbarkeit kontrollieren.
+Fuer die neue HUD-Abnahme die [Ingame-Pruefliste](../training-hud/README.md#abnahme-im-spiel) verwenden. Zusaetzlich Lineups mit privaten Eintraegen, MatchZy-Berechtigungen, leere Bibliothek und Practice-Wechsel pruefen.
 
 Die verwendeten API-Einstiegspunkte sind in den offiziellen CounterStrikeSharp-Quellen dokumentiert: [Spieleraktionen und HTML-Ausgabe](https://github.com/roflmuffin/CounterStrikeSharp/blob/main/managed/CounterStrikeSharp.API/Core/Model/CCSPlayerController.cs). Dateiformat und Slot-Auswahl entsprechen [MatchZys PracticeMode](https://github.com/shobhit-pathak/MatchZy/blob/main/PracticeMode.cs).

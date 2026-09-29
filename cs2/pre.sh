@@ -500,11 +500,14 @@ _matchzy_bootstrap_main() (
       addon_count=$((addon_count + 1))
     done
 
-    [[ -n "$addons_value" ]] || fail "Cannot write MultiAddonManager config without addon IDs"
+    local hud_addon_id="${MATCHZY_TRAINING_HUD_ADDON_ID:-}"
+    [[ -z "$hud_addon_id" || "$hud_addon_id" =~ ^[0-9]+$ ]] || fail "Invalid training HUD workshop ID"
+    [[ -n "$addons_value" || -n "$hud_addon_id" ]] || fail "Cannot write MultiAddonManager config without addon IDs"
 
     tmp_file="$(mktemp)"
     {
       printf 'mm_extra_addons "%s"\n' "$addons_value"
+      printf 'mm_client_extra_addons "%s"\n' "$hud_addon_id"
       printf 'mm_addon_mount_download "%s"\n' "$force_download_value"
     } > "$tmp_file"
 
@@ -916,6 +919,12 @@ _matchzy_bootstrap_main() (
   if is_enabled "$fortnite_emotes_enabled"; then
     NEED_MULTIADDONMANAGER=1
     MULTIADDONMANAGER_ADDON_IDS+=("$fortnite_emotes_workshop_addon_id")
+  fi
+
+  if [[ -n "${MATCHZY_TRAINING_HUD_ADDON_ID:-}" ]]; then
+    [[ "$MATCHZY_TRAINING_HUD_ADDON_ID" =~ ^[0-9]+$ ]] || fail "Invalid training HUD workshop ID"
+    NEED_MULTIADDONMANAGER=1
+    log "Configured training HUD client addon: $MATCHZY_TRAINING_HUD_ADDON_ID"
   fi
 
   if ((${#WORKSHOP_ADDON_IDS[@]} > 0)); then

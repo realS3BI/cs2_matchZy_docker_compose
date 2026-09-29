@@ -1,0 +1,42 @@
+<root>
+    <styles><include src="s2r://panorama/styles/custom_game/matchzy_training.vcss_c" /></styles>
+    <Panel class="training-screen" hittest="false">
+        <Panel id="training_panel" class="training-panel" hittest="true">
+            <Panel class="heading">
+                <Label class="eyebrow" text="MATCHZY / TRAINING" />
+                <Label id="training_map" class="map" text="{s:text}" />
+                <Label id="training_title" class="title" text="{s:text}" />
+                <Panel class="status-line">
+                    <Label id="training_state" class="state" text="{s:text}" />
+                    <Label id="training_page" class="muted" text="{s:text}" />
+                </Panel>
+            </Panel>
+            <Panel class="rows">
+                <Button id="row_0" class="row"><Label id="row_0_text" text="{s:text}" /></Button>
+                <Button id="row_1" class="row"><Label id="row_1_text" text="{s:text}" /></Button>
+                <Button id="row_2" class="row"><Label id="row_2_text" text="{s:text}" /></Button>
+                <Button id="row_3" class="row"><Label id="row_3_text" text="{s:text}" /></Button>
+                <Button id="row_4" class="row"><Label id="row_4_text" text="{s:text}" /></Button>
+            </Panel>
+            <Panel class="navigation">
+                <Button id="training_back" class="small-button"><Label text="Zurueck" /></Button>
+                <Button id="training_previous" class="small-button"><Label text="Seite -" /></Button>
+                <Button id="training_next" class="small-button"><Label text="Seite +" /></Button>
+            </Panel>
+            <Panel class="details">
+                <Label class="eyebrow" text="BESCHREIBUNG" />
+                <Label id="training_detail" class="description" text="{s:text}" />
+                <Label id="training_detail_page" class="muted" text="{s:text}" />
+                <Button id="training_more" class="small-button"><Label text="Beschreibung weiter" /></Button>
+            </Panel>
+            <Panel class="footer">
+                <Label id="training_keys" class="muted" text="{s:text}" />
+                <Panel class="navigation">
+                    <Button id="training_settings" class="small-button"><Label text="Einstellungen" /></Button>
+                    <Button id="training_play" class="small-button"><Label text="Spielen" /></Button>
+                    <Button id="training_hide" class="small-button"><Label text="Verstecken" /></Button>
+                </Panel>
+            </Panel>
+        </Panel>
+    </Panel>
+</root>

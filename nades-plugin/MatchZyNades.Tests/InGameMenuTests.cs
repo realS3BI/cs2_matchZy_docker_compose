@@ -100,8 +100,9 @@ public sealed class InGameMenuTests
     {
         var local = new[] { TrainingAction.Close, TrainingAction.Back, TrainingAction.LoadLineup,
             TrainingAction.RepeatLineup, TrainingAction.CheckPosition, TrainingAction.StartCapture,
-            TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.PanelAspect,
-            TrainingAction.GiveGrenade };
+            TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.PanelSize,
+            TrainingAction.GiveGrenade, TrainingAction.Settings, TrainingAction.BindKey,
+            TrainingAction.ToggleGameButtons, TrainingAction.ExportBindings };
         foreach (var action in Enum.GetValues<TrainingAction>().Except(local))
             Assert.Matches("^(css_[a-z]+|noclip)$", TrainingMenu.Command(action)!);
         foreach (var action in local) Assert.Null(TrainingMenu.Command(action));
@@ -142,7 +143,7 @@ public sealed class InGameMenuTests
         Assert.True(menu.Back());
         menu.ChangePage(1);
         Assert.Equal(TrainingAction.RefreshLibrary, menu.Select(1)!.Action);
-        Assert.Equal(TrainingAction.PanelAspect, menu.Select(2)!.Action);
+        Assert.Equal(TrainingAction.Settings, menu.Select(2)!.Action);
         Assert.Equal(TrainingAction.Close, menu.Select(3)!.Action);
         var inactive = TrainingMenu.Create([], "de_mirage", false, null);
         inactive.ChangePage(1);

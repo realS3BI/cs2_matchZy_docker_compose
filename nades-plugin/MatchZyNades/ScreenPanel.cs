@@ -1,94 +1,82 @@
-using System.Drawing;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API.Modules.Extensions;
 
 namespace MatchZyNades;
 
-// A private world-text display, following the server's view of the camera each tick.
-// Current CS2 no longer exposes predicted_viewmodel; this cannot be client-predicted.
-internal sealed class ScreenPanel(CCSPlayerPawn pawn) : IDisposable
+// Client-rendered HUD. No camera transforms, world text, or per-tick teleports.
+// A fresh private entity per session avoids stale slot text state in CSS 374.
+internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
 {
-    private readonly List<CPointWorldText> _text = [];
-    private PanelContent? _content;
-    private bool _wide;
+    public const string Layout = "panorama/layout/custom_game/matchzy_training.xml";
+    private CCSCustomHudLayout? _entity;
+    private readonly Dictionary<string, string> _texts = [];
+    private readonly Dictionary<string, bool> _classes = [];
+    private bool _capturing;
+    public bool Owns(CCSCustomHudLayout layout) => _entity is { IsValid: true } && _entity.Handle == layout.Handle;
 
-    public void Draw(PanelContent content, bool wide)
+    public void Draw(InGameMenu menu, bool focused, bool practice, int detailPage, PlayerPanelSettings settings)
     {
-        if (_text.Count != 5 || _text.Any(t => !t.IsValid))
+        if (_entity is not { IsValid: true })
         {
-            Dispose();
-            Create(wide);
+            _texts.Clear(); _classes.Clear(); _capturing = false;
+            _entity = Utilities.CreateEntityByName<CCSCustomHudLayout>("custom_hud_layout")
+                ?? throw new InvalidOperationException("custom_hud_layout unavailable.");
+            _entity.StrLayout = Layout;
+            _entity.DispatchSpawn();
         }
-        if (_wide != wide) { Place(wide); _wide = wide; }
-        if (_content == content) return;
-        var parts = new[] { content.Heading, content.Options, content.Selection, content.Details, content.Controls };
-        for (var i = 0; i < parts.Length; i++)
+        Text("training_map", menu.Map);
+        Text("training_title", menu.Current.Title);
+        Text("training_state", focused ? "BEDIENUNG AKTIV" : "SPIELEN");
+        Text("training_page", $"{(practice ? "Training bereit" : "Training inaktiv")}  /  {menu.Page + 1} von {menu.PageCount}");
+        var rows = menu.Visible.ToArray();
+        for (var i = 0; i < InGameMenu.PageSize; i++)
         {
-            _text[i].MessageText = parts[i];
-            Utilities.SetStateChanged(_text[i], "CPointWorldText", "m_messageText");
+            Text($"row_{i}_text", i < rows.Length ? rows[i].Label : "");
+            Class($"row_{i}", "empty", i >= rows.Length);
+            Class($"row_{i}", "selected", i == menu.Cursor && i < rows.Length);
+            Class($"row_{i}", "disabled", i < rows.Length && !rows[i].Enabled);
         }
-        _content = content;
+        var detail = menu.Notice.Length > 0 ? menu.Notice : menu.Selected?.Hint;
+        if (string.IsNullOrWhiteSpace(detail)) detail = menu.Current.Description;
+        var pages = PanelText.DetailPages(detail ?? "");
+        var page = Math.Clamp(detailPage, 0, pages.Count - 1);
+        Text("training_detail", pages[page]);
+        Text("training_detail_page", pages.Count > 1 ? $"Beschreibung {page + 1}/{pages.Count}  |  {settings.Keys["details"]}" : "");
+        Text("training_keys", $"{settings.Keys["focus"]}  Bedienen / Spielen    {settings.Keys["visible"]}  Anzeigen / Verstecken");
+        Class("training_panel", "compact", settings.Compact);
+        Class("training_panel", "editing", focused);
+        Class("training_panel", "shown", true);
+        Capture(focused);
     }
-
-    private void Create(bool wide)
+    private void Text(string id, string value)
     {
-        foreach (var color in new[] { Color.LightSkyBlue, Color.WhiteSmoke, Color.Khaki, Color.WhiteSmoke, Color.LightSkyBlue })
-        {
-            var entity = Utilities.CreateEntityByName<CPointWorldText>("point_worldtext")
-                ?? throw new InvalidOperationException("Could not create panel text.");
-            _text.Add(entity);
-            entity.MessageText = " ";
-            entity.Enabled = true;
-            entity.Fullbright = true;
-            entity.FontName = "Consolas";
-            entity.FontSize = 32;
-            entity.WorldUnitsPerPx = 0.006f;
-            entity.Color = color;
-            entity.JustifyHorizontal = PointWorldTextJustifyHorizontal_t.POINT_WORLD_TEXT_JUSTIFY_HORIZONTAL_LEFT;
-            entity.JustifyVertical = PointWorldTextJustifyVertical_t.POINT_WORLD_TEXT_JUSTIFY_VERTICAL_TOP;
-            entity.ReorientMode = PointWorldTextReorientMode_t.POINT_WORLD_TEXT_REORIENT_NONE;
-            entity.DrawBackground = _text.Count != 3;
-            entity.BackgroundBorderWidth = 0.12f;
-            entity.BackgroundBorderHeight = 0.08f;
-            entity.BackgroundWorldToUV = 0.05f;
-            entity.DepthOffset = _text.Count == 3 ? 0.01f : 0;
-            entity.DispatchSpawn();
-        }
-        Place(wide);
-        _wide = wide;
+        if (_texts.GetValueOrDefault(id) == value) return;
+        _entity!.SetDialogVariableStringForPlayer(player, id, "text", value);
+        _texts[id] = value;
     }
-
-    private void Place(bool wide)
+    private void Class(string id, string name, bool value)
     {
-        var eye = pawn.EyeAngles;
-        Vector forward = new(), right = new(), up = new();
-        NativeAPI.AngleVectors(eye.Handle, forward.Handle, right.Handle, up.Handle);
-        var origin = pawn.AbsOrigin ?? throw new InvalidOperationException("Player origin unavailable.");
-        var camera = origin + new Vector(pawn.ViewOffset.X, pawn.ViewOffset.Y, pawn.ViewOffset.Z);
-        var heights = new[] { 2.55f, 1.72f, 1.72f, 0.30f, -1.65f };
-        for (var i = 0; i < _text.Count; i++)
-        {
-            _text[i].Teleport(camera + forward * 7 + right * (wide ? 4.65f : 2.30f) + up * heights[i],
-                new QAngle(0, eye.Y + 270, 90 - eye.X), null);
-        }
+        var key = id + ":" + name;
+        if (_classes.TryGetValue(key, out var old) && old == value) return;
+        _entity!.SetHasClassForPlayer(player, id, name, value);
+        _classes[key] = value;
     }
-
-    public void FollowCamera()
+    public void Capture(bool enabled)
     {
-        if (_text.Count == 5 && _text.All(t => t.IsValid)) Place(_wide);
+        if (_entity is not { IsValid: true } || !player.IsValid || _capturing == enabled) return;
+        _entity.SetInputCaptureEnabled(player, enabled);
+        _capturing = enabled;
     }
-
     public void ExcludeFrom(CCheckTransmitInfo info)
     {
-        foreach (var entity in _text)
-            if (entity.IsValid) info.TransmitEntities.Remove(entity);
+        if (_entity is { IsValid: true }) info.TransmitEntities.Remove(_entity);
     }
-
     public void Dispose()
     {
-        foreach (var entity in _text) if (entity.IsValid) entity.Remove();
-        _text.Clear();
-        _content = null;
+        Capture(false);
+        if (_entity is { IsValid: true }) _entity.Remove();
+        _entity = null;
+        _texts.Clear(); _classes.Clear();
     }
 }

@@ -38,3 +38,29 @@ install_matchzy_nades "$1"
     assert.equal(await readFile(join(plugin, "data", "keep.json"), "utf8"), "keep");
   }
 });
+
+test("training HUD mounts as client addon and preserves the server addon list", async (t) => {
+  const fixture = await mkdtemp(join(tmpdir(), "matchzy-hud-install-"));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  const config = join(fixture, "multiaddonmanager.cfg");
+  const pre = await readFile(resolve("../cs2/pre.sh"), "utf8");
+  const writer = pre.match(/  write_multiaddonmanager_config\(\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(writer);
+  const script = `set -eu
+log() { :; }
+fail() { exit 1; }
+is_enabled() { [[ "$1" == "1" ]]; }
+${writer}
+MATCHZY_TRAINING_HUD_ADDON_ID="$1"
+shift
+write_multiaddonmanager_config ${quote(config)} 1 "$@"
+`;
+  await execFileAsync("bash", ["-c", script, "hud-config", "123456", "111", "222", "111"]);
+  assert.equal(await readFile(config, "utf8"), 'mm_extra_addons "111,222"\nmm_client_extra_addons "123456"\nmm_addon_mount_download "1"\n');
+  await execFileAsync("bash", ["-c", script, "hud-config", "123456"]);
+  assert.match(await readFile(config, "utf8"), /mm_extra_addons ""\nmm_client_extra_addons "123456"/);
+  await assert.rejects(execFileAsync("bash", ["-c", script, "hud-config", '123";quit']));
+  assert.match(await readFile(config, "utf8"), /mm_client_extra_addons "123456"/);
+  await execFileAsync("bash", ["-c", script, "hud-config", "", "111"]);
+  assert.match(await readFile(config, "utf8"), /mm_client_extra_addons ""/);
+});

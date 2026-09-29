@@ -5,3 +5,4 @@ admin-panel/build/
 admin-panel/dist/
 **/bin/
 **/obj/
+training-hud/dist/

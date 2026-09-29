@@ -235,7 +235,7 @@ public sealed partial class MatchZyNadesPlugin
             var technique = ThrowTechnique.Summarize(samples);
             _draftNameRequests[player.Slot] = new(lineup.Owner, lineup.Kind, lineup.Map,
                 lineup.Position, lineup.Angles, target, technique, lineup.ThrowTrace);
-            Tell(player, $"Ziel erfasst: {technique}. F6 > Neue Nade aufnehmen > Aufnahme speichern oder verwerfen. Falls diese Seite schon offen ist, direkt Aufnahme speichern waehlen. Optional einen eigenen Namen im Chat eingeben.");
+            Tell(player, $"Ziel erfasst: {technique}. Panelbedienung aktivieren und unter Neue Nade aufnehmen die Aufnahme speichern oder verwerfen. Optional einen eigenen Namen im Chat eingeben.");
             return HookResult.Continue;
         }
         try
