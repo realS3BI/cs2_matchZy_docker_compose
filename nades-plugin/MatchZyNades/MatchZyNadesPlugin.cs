@@ -14,10 +14,10 @@ using System.Text.Json;
 namespace MatchZyNades;
 
 [MinimumApiVersion(373)]
-public sealed class MatchZyNadesPlugin : BasePlugin
+public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.1.0";
+    public override string ModuleVersion => "1.2.0";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -48,6 +48,7 @@ public sealed class MatchZyNadesPlugin : BasePlugin
     {
         _libraryPath = Path.Combine(Server.GameDirectory, "csgo", "cfg", "MatchZy", "savednades.json");
         _cheats = ConVar.Find("sv_cheats");
+        RegisterCapture();
         AddCommandListener("say", OnSay, HookMode.Pre);
         AddCommandListener("say_team", OnSay, HookMode.Pre);
         RegisterListener<Listeners.OnTick>(OnTick);
@@ -86,6 +87,8 @@ public sealed class MatchZyNadesPlugin : BasePlugin
     private HookResult OnSay(CCSPlayerController? player, CommandInfo command)
     {
         var words = command.ArgString.Trim().Trim('"').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 1 && words[0].ToLowerInvariant() is ".savenade" or ".sn" or ".loadnade" or ".ln")
+            ArmAfterCommand(player, words[1]);
         if (words.Length == 0 || !words[0].Equals(".nades", StringComparison.OrdinalIgnoreCase)) return HookResult.Continue;
         Handle(player, words.Length > 1 ? words[1] : "");
         return HookResult.Stop;
@@ -144,7 +147,19 @@ public sealed class MatchZyNadesPlugin : BasePlugin
     {
         try
         {
-            return NadeCatalog.Parse(File.ReadAllText(_libraryPath), Server.MapName, player.SteamID.ToString(CultureInfo.InvariantCulture));
+            var metadataPath = Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.metadata.json");
+            string? metadata = null;
+            try
+            {
+                if (File.Exists(metadataPath))
+                {
+                    metadata = File.ReadAllText(metadataPath);
+                    using var check = JsonDocument.Parse(metadata);
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+            { metadata = null; /* Optional panel titles must not block the MatchZy library. */ }
+            return NadeCatalog.Parse(File.ReadAllText(_libraryPath), Server.MapName, player.SteamID.ToString(CultureInfo.InvariantCulture), metadata);
         }
         catch (FileNotFoundException) { if (!quiet) Tell(player, "Noch keine Bibliothek. Lineups im Dashboard oder mit .savenade speichern."); }
         catch (DirectoryNotFoundException) { if (!quiet) Tell(player, "Noch keine Bibliothek. Lineups im Dashboard oder mit .savenade speichern."); }
@@ -242,7 +257,8 @@ public sealed class MatchZyNadesPlugin : BasePlugin
             new QAngle(lineup.Angles.X, lineup.Angles.Y, lineup.Angles.Z), new Vector(0, 0, 0));
         PlayerBodyRotation.Repair(pawn);
         _last[player.Slot] = lineup;
-        Tell(player, $"Geladen: {MenuRenderer.Plain(lineup.Name, 90)}. Bereit zum Trainieren.");
+        ArmCapture(player, lineup);
+        Tell(player, $"Geladen: {MenuRenderer.Plain(lineup.Title, 90)}. Bereit zum Trainieren.");
         if (!string.IsNullOrWhiteSpace(lineup.Description)) Tell(player, MenuRenderer.Plain(lineup.Description, 180));
         if (lineup.Kind == NadeKind.Other) Tell(player, "Dieses Lineup hat keinen Granatentyp. Passende Granate selbst waehlen.");
     }
@@ -272,6 +288,7 @@ public sealed class MatchZyNadesPlugin : BasePlugin
 
     private void OnTick()
     {
+        if (!TrainingEnabled) ResetCapture();
         // MatchZy's own .loadnade/.last/.loadpos bypass our loader. Repair the same
         // scene-node tilt for living practice players (including practice bots).
         // No changes in live matches or to parented/spectator/dead pawns.
@@ -341,8 +358,9 @@ public sealed class MatchZyNadesPlugin : BasePlugin
         if (player is not { IsValid: true }) return;
         Close(player.Slot);
         _last.Remove(player.Slot);
+        ClearCapture(player.Slot);
     }
 
     private void CloseAll() { foreach (var slot in _menus.Keys.ToArray()) Close(slot); }
-    private void Reset() { CloseAll(); _last.Clear(); }
+    private void Reset() { CloseAll(); _last.Clear(); ResetCapture(); }
 }

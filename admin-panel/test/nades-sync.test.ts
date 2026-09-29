@@ -4,9 +4,9 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as wait } from "node:timers/promises";
-import { NadesSyncService } from "../src/nades-sync.js";
+import { mergeNadeCaptures, NadesSyncService } from "../src/nades-sync.js";
 
-function sampleEntry(patch = {}) {
+function sampleEntry(patch: Record<string, any> = {}): any {
   return {
     name: "window_smoke",
     map: "de_mirage",
@@ -217,4 +217,59 @@ test("invalid live JSON is logged and does not overwrite Mongo entries", async (
   assert.equal(store.actions.at(-1).type, "nades_sync");
   assert.equal(store.actions.at(-1).status, "failed");
   assert.equal(service.status().state, "error");
+});
+
+function sampleCapture(patch = {}) {
+  return { ...sampleEntry(), captureId: "throw-1", landingPos: "700 -800 900", capturedAt: "2026-09-29T16:00:00Z", ...patch };
+}
+
+test("capture polling works even when MatchZy's library file is unchanged", async (t) => {
+  const existing = sampleEntry({ id: "stable-id", displayName: "Fenster vom Spawn", radarTo: { x: 0.1, y: 0.2 } });
+  const { store, service } = await createHarness(t, [existing]);
+  await service.writeFromMongo([existing]);
+  const originalLive = await readFile(service.liveFile, "utf8");
+  await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [sampleCapture()]);
+  await service.poll();
+  assert.equal(store.entries[0].landingPos, "700 -800 900");
+  assert.equal(store.entries[0].radarTo, undefined);
+  assert.equal(store.entries[0].displayName, existing.displayName);
+  assert.equal(store.entries[0].id, existing.id);
+  assert.equal(await readFile(service.liveFile, "utf8"), originalLive);
+  const actionCount = store.actions.length;
+  await service.poll();
+  assert.equal(store.actions.length, actionCount);
+});
+
+test("sync keeps titles and publishes metadata when MatchZy omits extended fields", async (t) => {
+  const existing = sampleEntry({ id: "stable-id", displayName: "Fenster – T-Spawn" });
+  const { store, service } = await createHarness(t, [existing]);
+  await writeJson(service.liveFile, sampleConfig({ desc: "new instructions" }));
+  await service.importLiveFile("test");
+  assert.equal(store.entries[0].displayName, existing.displayName);
+  assert.equal(store.entries[0].id, existing.id);
+  const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].displayName, existing.displayName);
+});
+
+test("captures respect owner, map, technical key, position and angle", () => {
+  const entry = sampleEntry();
+  for (const patch of [{ owner: "someone-else" }, { map: "de_dust2" }, { name: "other" },
+    { lineupPos: "2 2 3" }, { lineupAng: "4 6 6" }, { landingPos: "NaN 0 0" }, { landingPos: "" }]) {
+    assert.deepEqual(mergeNadeCaptures([entry], [sampleCapture(patch)]), [entry]);
+  }
+  const edited = sampleEntry({ captureId: "throw-1", landingPos: "9 8 7" });
+  assert.deepEqual(mergeNadeCaptures([edited], [sampleCapture()]), [edited]);
+  const next = mergeNadeCaptures([edited], [sampleCapture({ captureId: "throw-2" })]);
+  assert.equal(next[0].landingPos, "700 -800 900");
+});
+
+test("moving a saved lineup invalidates captured targets and old manual references", async (t) => {
+  const existing = sampleEntry({ landingPos: "7 8 9", captureId: "throw-1", radarFrom: { x: 0.1, y: 0.2 }, radarTo: { x: 0.4, y: 0.5 } });
+  const { store, service } = await createHarness(t, [existing]);
+  await writeJson(service.liveFile, sampleConfig({ lineupPos: "20 30 40" }));
+  await service.importLiveFile("test");
+  assert.equal(store.entries[0].landingPos, undefined);
+  assert.equal(store.entries[0].radarFrom, undefined);
+  assert.equal(store.entries[0].radarTo, undefined);
+  assert.equal(store.entries[0].captureId, undefined);
 });

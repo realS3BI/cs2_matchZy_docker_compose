@@ -179,7 +179,7 @@ test("nadesToMatchZySavedNadesConfig omits lineup images", () => {
   });
 });
 
-test("panel radar metadata is validated and omitted from MatchZy output", () => {
+test("effect coordinates export as strings while panel radar metadata is omitted", () => {
   const config: any = nadesToMatchZySavedNadesConfig([{
     name: "window_smoke",
     map: "de_mirage",
@@ -199,7 +199,8 @@ test("panel radar metadata is validated and omitted from MatchZy output", () => 
     LineupAng: "4 5 6",
     Desc: "from T roof",
     Map: "de_mirage",
-    Type: "Smoke"
+    Type: "Smoke",
+    LandingPos: "7 8 9"
   });
   assert.throws(() => nadesToMatchZySavedNadesConfig([{
     name: "bad",
@@ -208,4 +209,16 @@ test("panel radar metadata is validated and omitted from MatchZy output", () => 
     lineupAng: "4 5 6",
     radarFrom: { x: 1.2, y: 0.4 }
   }]), /between 0 and 1/);
+});
+test("display names change presentation without changing IDs or MatchZy keys", () => {
+  const original = { id: "stable-id", owner: "default", name: "window_smoke", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6" };
+  const [entry] = sanitizeNades([{ ...original, displayName: "  Fenster / T-Spawn – schön  " }]);
+  assert.equal(entry.id, original.id);
+  assert.equal(entry.name, original.name);
+  assert.equal(entry.displayName, "Fenster / T-Spawn – schön");
+  const config: any = nadesToMatchZySavedNadesConfig([entry]);
+  assert.deepEqual(Object.keys(config.default), ["window_smoke"]);
+  assert.equal(matchZySavedNadesConfigToNades(config)[0].displayName, entry.displayName);
+  assert.throws(() => sanitizeNades([{ ...original, displayName: "bad\nname" }]), /Display name/);
+  assert.throws(() => sanitizeNades([{ ...original, displayName: "x".repeat(121) }]), /Display name/);
 });

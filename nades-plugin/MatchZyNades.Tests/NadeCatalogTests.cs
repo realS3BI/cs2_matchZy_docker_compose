@@ -7,6 +7,20 @@ namespace MatchZyNades.Tests;
 
 public sealed class NadeCatalogTests
 {
+    [Fact]
+    public void DisplayNamesPreserveKeysAndAreScopedByOwnerAndMap()
+    {
+        var json = JsonSerializer.Serialize(new { @default = new { window = Entry() }, @private = new { window = Entry() } });
+        var metadata = JsonSerializer.Serialize(new[] {
+            new { owner = "default", map = "de_mirage", name = "window", displayName = "Fenster vom T-Spawn" },
+            new { owner = "private", map = "de_mirage", name = "window", displayName = "Privates Fenster" }
+        });
+        var entry = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7656", metadata));
+        Assert.Equal("window", entry.Name);
+        Assert.Equal("Fenster vom T-Spawn", entry.Title);
+        Assert.Equal("window", Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7656")).Title);
+    }
+
     private static object Entry(string map = "de_mirage", string type = "Smoke", string position = "1.5 -2 3") =>
         new { Map = map, Type = type, LineupPos = position, LineupAng = "-12.5 90 0", Desc = "Jumpthrow" };
 

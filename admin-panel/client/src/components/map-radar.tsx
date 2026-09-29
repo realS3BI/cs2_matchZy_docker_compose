@@ -4,10 +4,14 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { isRadarPoint, type MapDefinition, type RadarPoint } from "../lib/maps";
 import { cn } from "../lib/utils";
+import { resolveRadarPoints, type RadarCalibration } from "../lib/nade-radar";
 
 type RadarNade = {
   id?: string;
   name?: string;
+  displayName?: string;
+  lineupPos?: string;
+  landingPos?: string;
   type?: string;
   throwFromTitle?: string;
   throwToTitle?: string;
@@ -23,6 +27,7 @@ type NadeFlightMapProps = {
   emptyMessage?: string;
   onMapClick?: (point: RadarPoint) => void;
   onSelectNade?: (nade: RadarNade) => void;
+  calibration?: RadarCalibration | null;
 };
 
 const TYPE_COLORS = {
@@ -60,13 +65,14 @@ export function NadeFlightMap({
   className,
   emptyMessage,
   onMapClick,
-  onSelectNade
+  onSelectNade,
+  calibration = null
 }: NadeFlightMapProps) {
   const markerPrefix = useId().replace(/:/g, "");
   const width = map.radarWidth || 1024;
   const height = map.radarHeight || 1024;
   const markerRadius = Math.max(width, height) * (compact ? 0.009 : 0.011);
-  const placedCount = nades.filter((nade) => isRadarPoint(nade.radarFrom) && isRadarPoint(nade.radarTo)).length;
+  const placedCount = nades.filter((nade) => { const p = resolveRadarPoints(nade, calibration); return p.radarFrom && p.radarTo; }).length;
 
   function handleMapClick(event: React.MouseEvent<SVGSVGElement>) {
     if (!onMapClick) return;
@@ -117,11 +123,12 @@ export function NadeFlightMap({
         </defs>
         <g className="radar-routes">
           {nades.map((nade, index) => {
-            const from = isRadarPoint(nade.radarFrom) ? pixelPoint(nade.radarFrom, width, height) : null;
-            const to = isRadarPoint(nade.radarTo) ? pixelPoint(nade.radarTo, width, height) : null;
+            const points = resolveRadarPoints(nade, calibration);
+            const from = points.radarFrom ? pixelPoint(points.radarFrom, width, height) : null;
+            const to = points.radarTo ? pixelPoint(points.radarTo, width, height) : null;
             const color = colorForType(nade.type);
             const markerId = TYPE_COLORS[nade.type || ""] ? `${markerPrefix}-${String(nade.type).toLowerCase()}` : `${markerPrefix}-other`;
-            const title = `${nade.name || `Nade ${index + 1}`}: ${nade.throwFromTitle || "start"} → ${nade.throwToTitle || "target"}`;
+            const title = `${nade.displayName || nade.name || `Nade ${index + 1}`}: ${nade.throwFromTitle || "start"} → ${nade.throwToTitle || "target"}`;
             return (
               <g
                 key={nade.id || `${nade.name}-${index}`}
@@ -135,8 +142,8 @@ export function NadeFlightMap({
                 <title>{title}</title>
                 {from && to ? (
                   <>
-                    <path className="radar-route-halo" d={flightPath(nade.radarFrom!, nade.radarTo!, width, height)} />
-                    <path className="radar-route-line" d={flightPath(nade.radarFrom!, nade.radarTo!, width, height)} markerEnd={`url(#${markerId})`} />
+                    <path className="radar-route-halo" d={flightPath(points.radarFrom!, points.radarTo!, width, height)} />
+                    <path className="radar-route-line" d={flightPath(points.radarFrom!, points.radarTo!, width, height)} markerEnd={`url(#${markerId})`} />
                   </>
                 ) : null}
                 {from ? (
@@ -164,9 +171,13 @@ export function NadeFlightMap({
 
 type NadePlacementEditorProps = {
   map?: MapDefinition;
+  calibration?: RadarCalibration | null;
   value: {
     id?: string;
     name?: string;
+    displayName?: string;
+    lineupPos?: string;
+    landingPos?: string;
     type?: string;
     throwFromTitle?: string;
     throwToTitle?: string;
@@ -176,8 +187,9 @@ type NadePlacementEditorProps = {
   onChange: (patch: { radarFrom?: RadarPoint | null; radarTo?: RadarPoint | null }) => void;
 };
 
-export function NadePlacementEditor({ map, value, onChange }: NadePlacementEditorProps) {
+export function NadePlacementEditor({ map, value, onChange, calibration = null }: NadePlacementEditorProps) {
   const [mode, setMode] = useState<"from" | "to">("from");
+  const points = resolveRadarPoints(value, calibration);
 
   function place(point: RadarPoint) {
     const rounded = { x: Number(point.x.toFixed(6)), y: Number(point.y.toFixed(6)) };
@@ -205,13 +217,13 @@ export function NadePlacementEditor({ map, value, onChange }: NadePlacementEdito
           </Button>
         </div>
         <Button type="button" size="sm" variant="ghost" onClick={() => onChange({ radarFrom: null, radarTo: null })}>
-          <RotateCcw data-icon="inline-start" />Clear
+          <RotateCcw data-icon="inline-start" />{calibration ? "Use automatic positions" : "Clear markers"}
         </Button>
       </div>
-      <NadeFlightMap map={map} nades={[value]} onMapClick={place} />
+      <NadeFlightMap map={map} nades={[value]} calibration={calibration} onMapClick={place} />
       <div className="radar-placement-status">
-        <span><i className={cn("radar-status-dot", isRadarPoint(value.radarFrom) && "radar-status-dot-ready")} />Start {isRadarPoint(value.radarFrom) ? "placed" : "missing"}</span>
-        <span><i className={cn("radar-status-diamond", isRadarPoint(value.radarTo) && "radar-status-dot-ready")} />Target {isRadarPoint(value.radarTo) ? "placed" : "missing"}</span>
+        <span><i className={cn("radar-status-dot", points.radarFrom && "radar-status-dot-ready")} />Start {value.radarFrom ? "manual" : points.radarFrom ? "automatic" : "missing"}</span>
+        <span><i className={cn("radar-status-diamond", points.radarTo && "radar-status-dot-ready")} />Target {value.radarTo ? "manual" : points.radarTo ? "automatic" : "missing"}</span>
         <Badge variant="outline">Click map to set {mode === "from" ? "start" : "target"}</Badge>
       </div>
     </div>

@@ -21,12 +21,15 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 }
 
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
-    string Description, Coordinates Position, Coordinates Angles);
+    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "")
+{
+    public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
+}
 
 public static class NadeCatalog
 {
     // MatchZy's owner -> name -> fields format. Never expose another player's private library.
-    public static IReadOnlyList<NadeLineup> Parse(string json, string map, string steamId)
+    public static IReadOnlyList<NadeLineup> Parse(string json, string map, string steamId, string? metadata = null)
     {
         using var document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind != JsonValueKind.Object)
@@ -45,15 +48,25 @@ public static class NadeCatalog
                     !Coordinates.TryParse(Field(data, "LineupPos"), out var position) ||
                     !Coordinates.TryParse(Field(data, "LineupAng"), out var angles)) continue;
                 result.Add(new(owner.Name, entry.Name, entryMap, Kind(Field(data, "Type")),
-                    Field(data, "Desc"), position, angles));
+                    Field(data, "Desc"), position, angles, Field(data, "DisplayName")));
             }
         }
-        return result.OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase)
+        if (metadata != null)
+        {
+            using var titles = JsonDocument.Parse(metadata);
+            if (titles.RootElement.ValueKind == JsonValueKind.Array)
+                foreach (var title in titles.RootElement.EnumerateArray())
+                {
+                    var index = result.FindIndex(n => n.Owner == Field(title, "owner") && n.Map == Field(title, "map") && n.Name == Field(title, "name"));
+                    if (index >= 0) result[index] = result[index] with { DisplayName = Field(title, "displayName") };
+                }
+        }
+        return result.OrderBy(n => n.Title, StringComparer.OrdinalIgnoreCase)
             .ThenBy(n => n.Owner, StringComparer.Ordinal).ToArray();
     }
 
     private static string Field(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String
+        data.ValueKind == JsonValueKind.Object && data.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String
             ? field.GetString() ?? "" : "";
 
     public static NadeKind Kind(string type) => type.Trim().ToLowerInvariant() switch

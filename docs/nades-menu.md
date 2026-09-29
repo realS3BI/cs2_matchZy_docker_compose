@@ -5,7 +5,7 @@ Das eigene CounterStrikeSharp-Plugin `MatchZyNades` bietet ab **1.1.0** eine Tra
 ## Aktivieren
 
 1. Den aktualisierten Stack neu bauen und deployen: `docker compose up -d --build` (in Coolify: neu bauen/deployen).
-2. Im Dashboard unter `Plugins` den Servermodus **Nades** oder **MatchZy** auswaehlen und `Apply & restart` ausfuehren. Die Statuskarte muss Version **1.1.0** als **Loaded** anzeigen.
+2. Im Dashboard unter `Plugins` den Servermodus **Nades** oder **MatchZy** auswaehlen und `Apply & restart` ausfuehren. Die Statuskarte muss Version **1.2.0** als **Loaded** anzeigen.
 3. In CS2 einem Team beitreten und spawnen. `.nades` in den Chat schreiben.
 
 Das Image baut das Plugin gegen CounterStrikeSharp **1.0.373**, fuehrt dessen Unit-Tests aus und installiert es beim Bootstrap in den Modi **Nades und MatchZy**. CounterStrikeSharp muss mindestens API 373 bereitstellen. In den Modi Warmup und Vanilla entfernt der Bootstrap die Plugin-DLL. Das Hauptmenue ist auch vor dem Practice-Modus erreichbar und bietet dann **Training starten** an. MatchZy prueft dabei die bestehenden Spielerberechtigungen. Trainingsaktionen verlangen `sv_cheats`, das MatchZy im Practice-Modus aktiviert und beim Verlassen deaktiviert.
@@ -74,6 +74,33 @@ Der eigentliche Wurf wird von dir ausgefuehrt. Die vorhandenen MatchZy-Daten ent
 Sichtbar sind globale Eintraege mit Owner `default` und deine eigenen privaten Eintraege mit deiner Steam64-ID. Private Lineups anderer Spieler werden nicht angezeigt. Gleichnamige globale und private Eintraege sind einzeln auswaehlbar; private Eintraege tragen `[privat]`. Fuer gemeinsame Lineups im Dashboard `Save new in-game lineups for everyone` aktivieren.
 
 Bei jedem Oeffnen und unmittelbar vor dem Laden liest das Plugin die Datei neu. Aenderungen im Dashboard erscheinen nach dem bestehenden Live-Sync beim naechsten Oeffnen. Ein bereits geoeffnetes Menue behaelt seine Reihenfolge, damit sich die Auswahl nicht unter dem Cursor verschiebt. Geloeschte, auf andere Maps verschobene oder nicht mehr freigegebene Eintraege werden beim Laden abgewiesen. Defekte Einzelzeilen werden uebersprungen; bei einer unlesbaren Datei erscheint eine Fehlermeldung. Das Plugin schreibt die Bibliothek nicht um.
+
+## Anzeigenamen und automatische Zielerfassung (1.2.0)
+
+Im Dashboard laesst sich **Display name** frei vergeben, beispielsweise `Fenster-Smoke vom T-Spawn`. Website, Karten-Tooltip, Kategorien, Detailseite und Ladebestaetigung im eigenen `.nades`-Plugin verwenden diesen Titel. Die interne `id` und der MatchZy-Schluessel `name` bleiben unveraendert; `.loadnade window_smoke` funktioniert weiter. Ohne Anzeigenamen erscheint der bisherige technische Name. MatchZys eigenes `.listnades` bleibt bei seinen technischen Namen.
+
+1. Im Practice-Modus an die gewuenschte Position stellen, die Granate auswaehlen und `.savenade window_smoke Beschreibung` eingeben. Fuer ein vorhandenes Lineup **Lineup laden & trainieren** im `.nades`-Menue benutzen. Auch `.nades last` und ein exaktes `.loadnade window_smoke` aktivieren die Erfassung.
+2. Auf die Chat-Bestaetigung der Zielerfassung achten. Innerhalb von zwei Minuten die Granate selbst werfen. Der naechste Wurf muss denselben Granatentyp haben; ein anderer Typ verwirft die vorgemerkte Erfassung. Bei gleichnamigen privaten/globalen Lineups im Zweifel die eindeutige Auswahl im `.nades`-Menue verwenden.
+3. Das Plugin ordnet den echten Wurf einem Projektil zu und speichert beim Smoke-Effekt beziehungsweise der Flash-/HE-Explosion die Weltkoordinaten. Decoys werden beim Aktivieren erfasst. Eine Flash darf dabei in der Luft explodieren: Die Hoehe bleibt gespeichert. Molly/Incendiary-Ziele sind vorerst manuell, da Flugende und entstehende Feuerflaeche unterschiedliche Ereignisse sind.
+4. Nach der Bestaetigung wenige Sekunden auf den Dateisync warten und im Dashboard **Refresh lineups** waehlen. Vorhandene lokale Aenderungen vorher speichern. Zum erneuten Erfassen das Lineup erneut laden und werfen.
+
+Die Startposition kommt weiterhin aus `.savenade` beziehungsweise dem gespeicherten Lineup; sie ist der Aufstellpunkt vor einem Jump-/Runthrow, nicht die Position der Granate in der Luft. Vorhandene Lineups ohne gemessenes Ziel muessen einmal geworfen werden. Ziele lassen sich aus Position und Blickwinkel allein nicht zuverlaessig rekonstruieren. Tod, Disconnect, Runden-/Mapwechsel oder Practice-Ende verwerfen offene Erfassungen. Synthetische Rethrows ohne echtes `grenade_thrown` aktivieren keine Erfassung.
+
+### Automatische Kartenmarker
+
+Die mitgelieferten CSNADES-Bilder sind unterschiedlich zugeschnitten. Deshalb verwendet das Dashboard die gespeicherten manuellen Marker mit zugehoerigen Weltkoordinaten als Kartenreferenzen. Fuer jede Karte werden mindestens zwei genaue Referenzpunkte benoetigt, die **in beiden Achsen** auseinanderliegen (mindestens 256 Welt-Units und 10 % der Bildbreite/-hoehe). Am besten zwei weit auseinanderliegende **Startpositionen** von gespeicherten Lineups auf der Karte markieren. Alternativ kann eine Route mit bekanntem Start und gemessenem Ziel als Referenz dienen. Anschliessend Lineups speichern.
+
+Aus diesen Referenzen werden neue Start- und Zielmarker automatisch abgeleitet. Bereits vorhandene manuelle Marker haben Vorrang. **Use automatic positions** entfernt die manuellen Marker des bearbeiteten Lineups; die Referenz-Lineups sollten ihre Marker behalten. Bei widerspruechlichen Referenzen, fehlenden Koordinaten oder Punkten ausserhalb des Bildes wird kein automatischer Marker erfunden. Die vorhandenen gebogenen Verbindungslinien zeigen nur die Richtung, keine aufgezeichnete Flugbahn. Start-/Zielbezeichnungen wie `T Spawn` bleiben optionale Texte.
+
+**Nuke:** Das vorhandene Radar stellt mehrere Stockwerke nebeneinander dar. Hier ist die automatische XY-Projektion deaktiviert; Weltkoordinaten werden trotzdem erfasst, Marker muessen auf der richtigen Ebene gesetzt werden. Andere Kartenbilder muessen nordorientiert sein und einen einheitlichen Massstab pro Achse haben. Nach Austausch eines Kartenbildes die Referenzen neu setzen.
+
+### Daten und Kompatibilitaet
+
+`savednades.json` behaelt MatchZys Owner-/Namensstruktur. `DisplayName` und `LandingPos` werden als optionale Strings exportiert; Kartenmarker und Bilder bleiben im Panel. Zusaetzlich schreibt das Dashboard `cfg/MatchZy/savednades.metadata.json`, damit Anzeigenamen auch nach MatchZy-Schreibvorgaengen erhalten bleiben. Das Plugin schreibt ausschliesslich seine atomare `savednades.captures.json` mit den zuletzt gemessenen Zielen (bis zu 2000 Lineups), niemals MatchZys Bibliothek. Der Panel-Sync liest diese Datei auch dann, wenn `savednades.json` unveraendert ist.
+
+Jede Messung enthaelt Owner, Map, technischen Namen, gespeicherte Startposition und Winkel. Nur ein passendes Lineup wird aktualisiert. Eine bereits importierte Messung ueberschreibt spaetere manuelle Korrekturen nicht; ein neuer Wurf ersetzt ein altes Ziel und dessen manuellen Zielmarker. Aendert MatchZy Startposition oder Blickwinkel, verwirft der Sync die alte Zielmessung. Anzeigenamen, IDs und Bilder bleiben erhalten.
+
+Dashboard- und CS2-Image neu bauen und deployen. Ein Ingame-Test mit mindestens zwei Spielern, mehreren gleichzeitig fliegenden Granaten und einer in der Luft explodierenden Flash bleibt erforderlich; Unit-Tests ersetzen die nativen CS2-Ereignisse nicht. API-Referenzen: [Smoke-Effekt](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventSmokegrenadeDetonate.html), [Flash-Explosion](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventFlashbangDetonate.html), [echter Spielerwurf](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventGrenadeThrown.html).
 
 ## Pruefen
 

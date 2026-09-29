@@ -153,6 +153,10 @@ export function sanitizeNades(entries) {
   return entries.map((entry) => {
     const name = String(entry.name ?? "").trim();
     const map = String(entry.map ?? "").trim();
+    const displayName = String(entry.displayName ?? "").trim();
+    if (displayName.length > 120 || /[\u0000-\u001f\u007f]/.test(displayName)) {
+      throw new Error("Display name must be at most 120 characters without control characters");
+    }
     const type = String(entry.type ?? "").trim();
     const desc = String(entry.desc ?? "");
     const owner = String(entry.owner ?? "default").trim() || "default";
@@ -196,6 +200,8 @@ export function sanitizeNades(entries) {
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
     if (landingPos) cleanEntry.landingPos = landingPos;
+    if (displayName) cleanEntry.displayName = displayName;
+    if (entry.captureId) cleanEntry.captureId = String(entry.captureId);
     if (throwFromTitle) cleanEntry.throwFromTitle = throwFromTitle;
     if (throwToTitle) cleanEntry.throwToTitle = throwToTitle;
     if (radarFrom) cleanEntry.radarFrom = radarFrom;
@@ -216,6 +222,8 @@ export function nadesToMatchZySavedNadesConfig(entries) {
       Map: entry.map,
       Type: entry.type
     };
+    if (entry.displayName) config[entry.owner][entry.name].DisplayName = entry.displayName;
+    if (entry.landingPos) config[entry.owner][entry.name].LandingPos = entry.landingPos;
   }
   return config;
 }
@@ -231,6 +239,8 @@ export function matchZySavedNadesConfigToNades(config) {
       if (!nade || typeof nade !== "object" || Array.isArray(nade)) continue;
       const entry = {
         name,
+        displayName: nade.DisplayName,
+        landingPos: nade.LandingPos,
         map: nade.Map,
         type: nade.Type || "",
         desc: nade.Desc || "",

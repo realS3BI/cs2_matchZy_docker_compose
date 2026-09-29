@@ -16,6 +16,9 @@ function stableNades(entries) {
   return JSON.stringify(sanitizeNades(entries).map((entry) => ({
     id: entry.id,
     name: entry.name,
+    displayName: entry.displayName,
+    landingPos: entry.landingPos,
+    captureId: entry.captureId,
     map: entry.map,
     type: entry.type,
     desc: entry.desc,
@@ -39,10 +42,38 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
-    for (const key of ["landingPos", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+    for (const key of ["displayName", "landingPos", "captureId", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
       if (current[key] !== undefined) merged[key] = current[key];
     }
+    if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
+      delete merged.landingPos;
+      delete merged.captureId;
+      delete merged.radarTo;
+      if (!sameVector(current.lineupPos, entry.lineupPos)) delete merged.radarFrom;
+    }
     return merged;
+  });
+}
+
+function sameVector(left, right) {
+  const a = String(left || "").trim().split(/\s+/).map(Number);
+  const b = String(right || "").trim().split(/\s+/).map(Number);
+  return a.length === 3 && b.length === 3 && a.every((n, i) => Number.isFinite(n) && Number.isFinite(b[i]) && Math.abs(n - b[i]) < 0.001);
+}
+
+export function mergeNadeCaptures(entries, captures) {
+  if (!Array.isArray(captures)) throw new Error("Grenade captures must be an array");
+  const byKey = new Map(captures.filter(c => c && typeof c === "object").map(c => [nadeKey(c), c]));
+  return entries.map(entry => {
+    const capture = byKey.get(nadeKey(entry));
+    if (!capture?.captureId || capture.captureId === entry.captureId ||
+        !sameVector(entry.lineupPos, capture.lineupPos) || !sameVector(entry.lineupAng, capture.lineupAng) ||
+        !sameVector(capture.landingPos, capture.landingPos)) return entry;
+    try {
+      // A new measured target supersedes an old manual target marker. Start overrides remain intact.
+      return sanitizeNades([{ ...entry, landingPos: capture.landingPos, radarTo: null,
+        captureId: capture.captureId, updatedAt: capture.capturedAt }])[0];
+    } catch { return entry; }
   });
 }
 
@@ -175,6 +206,7 @@ export class NadesSyncService {
       await this.refreshFileState();
       if (this.liveFilePresent) {
         await this.importLiveFile("startup");
+        await this.importCaptures();
         return;
       }
 
@@ -210,13 +242,14 @@ export class NadesSyncService {
       this.lastReadAt = this.lastCheckAt;
       this.lastConfirmedAt = this.lastCheckAt;
       this.lastError = "";
-      if (fileStat.mtimeMs === this.lastSeenMtimeMs && hash === this.lastSeenHash) return;
+      if (fileStat.mtimeMs === this.lastSeenMtimeMs && hash === this.lastSeenHash) { await this.importCaptures(); return; }
       this.lastSeenMtimeMs = fileStat.mtimeMs;
       this.lastSeenHash = hash;
 
-      if (hash === this.lastSelfWrittenHash) return;
+      if (hash === this.lastSelfWrittenHash) { await this.importCaptures(); return; }
 
       await this.importParsedConfig(value, hash, content.length, "poll");
+      await this.importCaptures();
     } catch (error) {
       await this.handleError(error, "poll");
     } finally {
@@ -236,11 +269,12 @@ export class NadesSyncService {
   async importParsedConfig(config, hash, bytes, source) {
     const importedEntries = matchZySavedNadesConfigToNades(config);
     const current = await this.store.getNades();
-    if (stableNades(importedEntries) !== stableNades(current)) {
-      const entries = preservePanelMetadata(importedEntries, current);
+    const entries = preservePanelMetadata(importedEntries, current);
+    if (stableNades(entries) !== stableNades(current)) {
       await this.store.replaceNadesFromSync(entries, { source, hash, bytes });
       this.lastDirection = "matchzy-to-panel";
     }
+    await this.writeMetadata(entries);
     this.lastReadAt = new Date().toISOString();
     this.lastConfirmedAt = this.lastReadAt;
     this.lastError = "";
@@ -258,11 +292,28 @@ export class NadesSyncService {
     this.lastSeenMtimeMs = fileStat?.mtimeMs || 0;
 
     await writeJsonFileAtomic(this.runtimeFile, config);
+    await this.writeMetadata(cleanEntries);
     this.lastWriteAt = new Date().toISOString();
     this.lastConfirmedAt = this.lastWriteAt;
     this.lastDirection = "panel-to-matchzy";
     await this.refreshFileState();
     this.lastError = "";
+  }
+
+  async writeMetadata(entries) {
+    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName }) => ({ owner, map, name, displayName: displayName || "" })));
+  }
+
+  async importCaptures() {
+    let captures;
+    try { captures = (await readJsonFile(`${dirname(this.liveFile)}/savednades.captures.json`)).value; }
+    catch (error) { if (error?.code === "ENOENT") return; throw error; }
+    const current = await this.store.getNades();
+    const entries = mergeNadeCaptures(current, captures);
+    if (stableNades(entries) !== stableNades(current)) {
+      await this.store.replaceNadesFromSync(entries, { source: "grenade-capture" });
+      this.lastDirection = "matchzy-to-panel";
+    }
   }
 
   async refreshFileState() {

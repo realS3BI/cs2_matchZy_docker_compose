@@ -63,12 +63,12 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "./components/ui/switch";
 import { parseSetpos, parseSetposSetang } from "./lib/nades";
+import { inferRadarCalibration, resolveRadarPoints } from "./lib/nade-radar";
 import {
   ACTIVE_DUTY_MAPS,
   BUILT_IN_MAPS,
   CSNADES_REFERENCE_MAPS,
   addWorkshopMap,
-  isRadarPoint,
   mapMatchesNade,
   removeWorkshopMap,
   workshopMapsFromSettings,
@@ -781,6 +781,7 @@ function createNade(settings, initialMap = "") {
   return {
     id: window.crypto?.randomUUID?.() || String(Date.now()),
     name: "",
+    displayName: "",
     map: initialMap || settings.startMap || "",
     type: "Smoke",
     desc: "",
@@ -796,13 +797,14 @@ function createNade(settings, initialMap = "") {
   };
 }
 
-function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpenChange, onAdd }) {
+function NadeDialog({ settings, nades = [], initialMap = "", initialNade = null, open, onOpenChange, onAdd }) {
   const [draft, setDraft] = useState(() => ({ ...createNade(settings, initialMap), ...(initialNade || {}) }));
   const [setposText, setSetposText] = useState("");
   const [landingSetposText, setLandingSetposText] = useState("");
   const [dialogError, setDialogError] = useState("");
   const availableMaps = useMemo(() => [...BUILT_IN_MAPS, ...workshopMapsFromSettings(settings)], [settings.workshopMaps, settings.workshopMapCatalog]);
   const draftMap = availableMaps.find((map) => mapMatchesNade(map, draft.map));
+  const calibration = draftMap ? inferRadarCalibration(draftMap, nades) : null;
 
   useEffect(() => {
     if (!open) return;
@@ -869,10 +871,6 @@ function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpe
       setDialogError("Map is required.");
       return;
     }
-    if (draftMap?.radarUrl && (!isRadarPoint(draft.radarFrom) || !isRadarPoint(draft.radarTo))) {
-      setDialogError("Place both the start and target on the radar.");
-      return;
-    }
     onAdd({
       ...draft,
       id: draft.id || window.crypto?.randomUUID?.() || String(Date.now()),
@@ -886,14 +884,20 @@ function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpe
       <DialogContent className="w-[min(1120px,calc(100vw-24px))]">
         <DialogHeader>
           <DialogTitle>{initialNade ? "Edit nade route" : "Add nade"}</DialogTitle>
-          <DialogDescription>Import the in-game positions, then mark where the nade starts and lands on the radar.</DialogDescription>
+          <DialogDescription>Set a readable title. Save with .savenade or load through .nades, then throw to capture the target automatically.</DialogDescription>
         </DialogHeader>
         {dialogError ? <Message error={dialogError} /> : null}
         <div className="nade-dialog-layout">
           <FieldGroup className="grid content-start gap-4 md:grid-cols-2">
             <Field>
-              <FieldLabel>Name</FieldLabel>
-              <Input value={draft.name || ""} placeholder="Window smoke" onChange={(event) => updateDraft({ name: event.target.value })} />
+              <FieldLabel>Display name</FieldLabel>
+              <Input id="nade-display-name" maxLength={120} value={draft.displayName || ""} placeholder="Window smoke from T spawn" onChange={(event) => updateDraft({ displayName: event.target.value })} />
+              <FieldDescription>Shown on the website and in the .nades menu. Empty uses the technical name.</FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel>Technical name</FieldLabel>
+              <Input id="nade-technical-name" readOnly={Boolean(initialNade)} value={draft.name || ""} placeholder="window_smoke" onChange={(event) => updateDraft({ name: event.target.value })} />
+              <FieldDescription>Stable key for .loadnade; changing the display name keeps this and the ID intact.</FieldDescription>
             </Field>
             <Field>
               <FieldLabel>Map</FieldLabel>
@@ -925,7 +929,7 @@ function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpe
             <div className="nade-position-section md:col-span-2">
               <div className="nade-position-heading">
                 <span className="nade-position-number">01</span>
-                <div><strong>Throw position</strong><span>Stand at the lineup, enter <code>getpos</code>, then paste the output.</span></div>
+                <div><strong>Throw position</strong><span>Captured by <code>.savenade</code>. You can also paste <code>getpos</code> manually.</span></div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <Field>
@@ -951,7 +955,7 @@ function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpe
             <div className="nade-position-section md:col-span-2">
               <div className="nade-position-heading">
                 <span className="nade-position-number">02</span>
-                <div><strong>Landing position</strong><span>Move to the landing spot with noclip and copy <code>getpos</code> again.</span></div>
+                <div><strong>Effect position</strong><span>Smoke, flash, HE and decoy targets are captured on the next throw after saving or loading a lineup. Refresh the library afterwards.</span></div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <Field>
@@ -975,9 +979,13 @@ function NadeDialog({ settings, initialMap = "", initialNade = null, open, onOpe
             <div>
               <p className="control-kicker">Route placement</p>
               <h3 className="mt-1 font-semibold">{draftMap?.name || "Unknown map"}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">The radar frame is the fixed map boundary. Place the start circle and landing diamond directly on it.</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{calibration
+                ? "Automatic placement uses saved reference points on this map. Manual markers override it. Points outside the image stay unplaced."
+                : draftMap?.mapName === "de_nuke"
+                  ? "This radar combines multiple floors. World positions are captured, but markers need manual placement on the correct floor."
+                  : "One-time map calibration: save at least two accurate manual markers with world positions, separated across both map axes. Future lineups are placed automatically. Inconsistent references must be corrected."}</p>
             </div>
-            <NadePlacementEditor map={draftMap} value={draft} onChange={updateDraft} />
+            <NadePlacementEditor map={draftMap} value={draft} calibration={calibration} onChange={updateDraft} />
           </div>
         </div>
         <div className="grid gap-3">
@@ -1244,7 +1252,7 @@ function MapsAndNades(props) {
   );
 }
 
-function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onApply, viewNav }) {
+function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onRefresh, onApply, viewNav }) {
   const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
   const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
   const initialMap = allMaps.find((map) => mapMatchesNade(map, settings.startMap)) || ACTIVE_DUTY_MAPS[0];
@@ -1260,7 +1268,8 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
   const selectedMap = allMaps.find((map) => map.key === selectedKey) || ACTIVE_DUTY_MAPS[0];
   const nadesForMap = useCallback((map) => nades.filter((nade) => mapMatchesNade(map, nade.map)), [nades]);
   const selectedNades = nadesForMap(selectedMap);
-  const placedNades = selectedNades.filter((nade) => isRadarPoint(nade.radarFrom) && isRadarPoint(nade.radarTo));
+  const calibration = inferRadarCalibration(selectedMap, nades);
+  const placedNades = selectedNades.filter((nade) => { const p = resolveRadarPoints(nade, calibration); return p.radarFrom && p.radarTo; });
   const typeCounts = selectedNades.reduce((counts, nade) => {
     const type = nade.type || "Other";
     counts[type] = (counts[type] || 0) + 1;
@@ -1282,6 +1291,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         description="Pick a map to explore its radar and saved lineups. Open All lineups to search, import, export and manage the shared library."
         actions={(
           <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Save edits before refreshing" : "Load captured positions from the server"}><RefreshCw data-icon="inline-start" />Refresh lineups</Button>
             <Button variant="secondary" onClick={() => { setEditingNade(null); setAddNadeOpen(true); }}><Plus data-icon="inline-start" />Add {selectedMap.name} nade</Button>
             <Button onClick={onSaveNades} disabled={busy || !nadesDirty}><Save data-icon="inline-start" />Save lineups</Button>
           </div>
@@ -1290,6 +1300,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
       {viewNav}
       <NadeDialog
         settings={settings}
+        nades={nades}
         initialMap={selectedMap.mapName}
         initialNade={editingNade}
         open={addNadeOpen || Boolean(editingNade)}
@@ -1412,7 +1423,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         </CardHeader>
         <CardContent className="map-atlas-layout grid gap-6 pt-5 sm:pt-6">
           <div className="map-stage">
-            <NadeFlightMap map={selectedMap} nades={selectedNades} emptyMessage="No start-to-target routes placed yet" onSelectNade={setEditingNade} />
+            <NadeFlightMap map={selectedMap} nades={selectedNades} calibration={calibration} emptyMessage="No start-to-target routes placed yet" onSelectNade={setEditingNade} />
             <div className="map-stage-legend">
               <span><i className="radar-status-dot radar-status-dot-ready" />Start position</span>
               <span><i className="radar-status-diamond radar-status-dot-ready" />Landing position</span>
@@ -1451,13 +1462,13 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                 <Card key={nade.id} className="lineup-gallery-card overflow-hidden">
                   {(nade.lineupImages || []).length > 0 ? (
                     <a className="lineup-gallery-image" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer">
-                      <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || nade.name} />
+                      <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || nade.displayName || nade.name} />
                       {nade.lineupImages.length > 1 ? <Badge variant="secondary">+{nade.lineupImages.length - 1} images</Badge> : null}
                     </a>
-                  ) : <div className="lineup-gallery-sketch"><NadeFlightMap map={selectedMap} nades={[nade]} compact /></div>}
+                  ) : <div className="lineup-gallery-sketch"><NadeFlightMap map={selectedMap} nades={[nade]} calibration={calibration} compact /></div>}
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0"><CardTitle className="truncate">{nade.name}</CardTitle><CardDescription className="mt-1 line-clamp-2">{nade.desc || "No description"}</CardDescription></div>
+                      <div className="min-w-0"><CardTitle className="break-words">{nade.displayName || nade.name}</CardTitle><CardDescription className="mt-1 line-clamp-2">{nade.desc || "No description"}</CardDescription></div>
                       <Badge variant="outline">{nade.type || "Nade"}</Badge>
                     </div>
                   </CardHeader>
@@ -1567,7 +1578,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
       if (mapFilter && nade.map !== mapFilter) return false;
       if (typeFilter && nade.type !== typeFilter) return false;
       if (!normalizedQuery) return true;
-      return `${nade.name} ${nade.desc}`.toLowerCase().includes(normalizedQuery);
+      return `${nade.displayName || ""} ${nade.name} ${nade.desc}`.toLowerCase().includes(normalizedQuery);
     });
   }, [nades, mapFilter, typeFilter, query]);
   const groupedNades = useMemo(() => {
@@ -1662,6 +1673,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
       <NadeDialog
         settings={settings}
         open={addOpen}
+        nades={nades}
         onOpenChange={setAddOpen}
         onAdd={(entry) => setNades((current) => [...current, entry])}
       />
@@ -1809,7 +1821,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                   <div key={nade.id} className="lineup-editor-card">
                     <div className="lineup-editor-header">
                       <div className="min-w-0">
-                        <p className="font-semibold text-foreground">{nade.name || "Untitled lineup"}</p>
+                        <p className="font-semibold text-foreground">{nade.displayName || nade.name || "Untitled lineup"}</p>
                         <p className="font-mono text-xs text-muted-foreground">{nade.map || "No map"}</p>
                       </div>
                       <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={String(nade.owner || "default") === "default" ? "Available to every player" : `Private owner: ${nade.owner}`}>
@@ -1817,7 +1829,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                       </Badge>
                     </div>
                     <div className="lineup-editor-fields">
-                      <Field><FieldLabel>Name</FieldLabel><Input value={nade.name || ""} onChange={(event) => updateNade(nade.id, { name: event.target.value })} /></Field>
+                      <Field><FieldLabel>Display name</FieldLabel><Input id={`display-${nade.id}`} maxLength={120} value={nade.displayName || ""} placeholder={nade.name} onChange={(event) => updateNade(nade.id, { displayName: event.target.value })} /><FieldDescription>Technical name: <code>{nade.name}</code></FieldDescription></Field>
                       <Field><FieldLabel>Map</FieldLabel><Input value={nade.map || ""} onChange={(event) => updateNade(nade.id, { map: event.target.value })} /></Field>
                       <Field><FieldLabel>Type</FieldLabel><Select value={nade.type || "__none__"} onValueChange={(value) => updateNade(nade.id, { type: value === "__none__" ? "" : value })}>
                         <SelectTrigger aria-label={`Type for ${nade.name || "lineup"}`}><SelectValue /></SelectTrigger>

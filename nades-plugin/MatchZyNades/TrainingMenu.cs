@@ -20,9 +20,9 @@ public static class TrainingMenu
                 "Lineup waehlen, Beschreibung lesen und zum Abwurfpunkt gehen.",
                 Page: new(NadeCatalog.Label(kind), libraryError.Length == 0 ? "Lineups im Dashboard anlegen oder synchronisieren." : libraryError,
                     library.Where(n => n.Kind == kind).Select(n => new MenuItem(
-                        n.Name + (n.Owner == "default" ? "" : " [privat]"),
+                        n.Title + (n.Owner == "default" ? "" : " [privat]"),
                         n.Description.Length == 0 ? "Details und Abwurfpunkt oeffnen." : n.Description,
-                        Page: new(n.Name, n.Description, [new("Lineup laden & trainieren",
+                        Page: new(n.Title, n.Description, [new("Lineup laden & trainieren",
                             n.Description.Length == 0 ? "Teleportiert dich und ruestet die passende Granate aus." : n.Description,
                             Request: new(TrainingAction.LoadLineup, n))]))).ToArray()))).ToArray();
         var training = new MenuPage("Wurf & Position", "Aktionen geben die Spielsteuerung wieder frei.", [
@@ -47,7 +47,7 @@ public static class TrainingMenu
         if (!practice) home.Add(Action("Training starten", TrainingAction.StartPractice, "Startet MatchZy Practice mit deinen bestehenden Berechtigungen."));
         home.Add(new("Granaten-Bibliothek", practice ? $"{library.Count} Lineups auf dieser Map. {libraryError}" : "Zuerst Training starten.",
             Page: new("Granaten-Bibliothek", "Granatentyp auswaehlen.", categories), Enabled: practice));
-        home.Add(new("Letztes Lineup erneut laden", last == null ? "Noch kein Lineup ausgewaehlt." : last.Name,
+        home.Add(new("Letztes Lineup erneut laden", last == null ? "Noch kein Lineup ausgewaehlt." : last.Title,
             Request: new(TrainingAction.RepeatLineup), Enabled: practice && last != null));
         home.Add(new("Wurf & Position", practice ? "Wiederholen, Position merken und frei bewegen." : "Zuerst Training starten.", Page: training, Enabled: practice));
         home.Add(new("Trainingswerkzeuge", practice ? "Bots, Vorschau und persoenliche Einstellungen." : "Zuerst Training starten.", Page: tools, Enabled: practice));
