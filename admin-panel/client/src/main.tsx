@@ -782,6 +782,7 @@ function createNade(settings, initialMap = "") {
     id: window.crypto?.randomUUID?.() || String(Date.now()),
     name: "",
     displayName: "",
+    mustKnow: false,
     map: initialMap || settings.startMap || "",
     type: "Smoke",
     desc: "",
@@ -920,6 +921,11 @@ function NadeDialog({ settings, nades = [], initialMap = "", initialNade = null,
               <FieldLabel>Owner</FieldLabel>
               <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
               <FieldDescription>Use default to share it with every player.</FieldDescription>
+            </Field>
+            <Field htmlFor="nade-must-know">
+              <FieldLabel>Must Know</FieldLabel>
+              <Switch id="nade-must-know" aria-label="Must Know" checked={draft.mustKnow === true} onCheckedChange={(mustKnow) => updateDraft({ mustKnow })} />
+              <FieldDescription>Im Ingame-Filter „Must Know“ hervorheben. Private Lineups bleiben privat.</FieldDescription>
             </Field>
             <Field className="md:col-span-2">
               <FieldLabel>Description</FieldLabel>
@@ -1260,6 +1266,23 @@ function formatThrowTrace(value) {
   } catch { return ""; }
 }
 
+function DeleteNadeButton({ nade, onDelete, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const name = nade.displayName || nade.name || "Untitled lineup";
+  return <>
+    <Button variant="secondary" size="sm" disabled={disabled} aria-label={`Delete ${name}`} onClick={() => setOpen(true)}><Trash2 data-icon="inline-start" />Delete</Button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Delete lineup?</DialogTitle><DialogDescription>Remove “{name}” from {nade.map}? The deletion takes effect on the server when you save your lineups.</DialogDescription></DialogHeader>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="destructive" disabled={disabled} onClick={() => { onDelete(); setOpen(false); }}>Delete lineup</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
 function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onRefresh, onApply, viewNav }) {
   const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
   const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
@@ -1477,7 +1500,10 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0"><CardTitle className="break-words">{nade.displayName || nade.name}</CardTitle><CardDescription className="mt-1 line-clamp-2">{nade.desc || "No description"}</CardDescription></div>
-                      <Badge variant="outline">{nade.type || "Nade"}</Badge>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Badge variant="outline">{nade.type || "Nade"}</Badge>
+                        {nade.mustKnow ? <Badge variant="success">Must Know</Badge> : null}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="grid gap-2 text-xs">
@@ -1493,6 +1519,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                     <div className="flex flex-1 flex-wrap justify-end gap-2">
                       <Button variant="secondary" size="sm" onClick={() => setEditingNade(nade)}><MapPinned data-icon="inline-start" />Edit route</Button>
                       <CopyCommand value={`.loadnade ${nade.name}`} label="Copy load" />
+                      <DeleteNadeButton nade={nade} disabled={busy} onDelete={() => setNades((current) => current.filter((item) => item.id !== nade.id))} />
                     </div>
                   </CardFooter>
                 </Card>
@@ -1846,6 +1873,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                         <SelectContent>{nadeTypes.map((type) => <SelectItem key={type || "empty"} value={type || "__none__"}>{type || "No type"}</SelectItem>)}</SelectContent>
                       </Select></Field>
                       <Field><FieldLabel>Description</FieldLabel><Input value={nade.desc || ""} onChange={(event) => updateNade(nade.id, { desc: event.target.value })} /></Field>
+                      <Field htmlFor={`must-know-${nade.id}`}><FieldLabel>Must Know</FieldLabel><Switch id={`must-know-${nade.id}`} aria-label={`Must Know: ${nade.displayName || nade.name}`} checked={nade.mustKnow === true} onCheckedChange={(mustKnow) => updateNade(nade.id, { mustKnow })} /><FieldDescription>Im Ingame-Filter hervorheben; private Lineups bleiben privat.</FieldDescription></Field>
                       <Field><FieldLabel>Lineup position</FieldLabel><Input value={nade.lineupPos || ""} onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} /></Field>
                       <Field><FieldLabel>Lineup angle</FieldLabel><Input value={nade.lineupAng || ""} onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} /></Field>
                     </div>
@@ -1856,7 +1884,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                           <span>{nade.lineupImages.length} image{nade.lineupImages.length === 1 ? "" : "s"}</span>
                         </a>
                       ) : <span className="text-xs text-muted-foreground">No image attached</span>}
-                      <Button variant="secondary" size="sm" aria-label={`Remove ${nade.name || "lineup"}`} onClick={() => setNades((current) => current.filter((item) => item.id !== nade.id))}><Trash2 data-icon="inline-start" />Remove</Button>
+                      <DeleteNadeButton nade={nade} disabled={busy} onDelete={() => setNades((current) => current.filter((item) => item.id !== nade.id))} />
                     </div>
                   </div>
                 ))}

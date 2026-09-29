@@ -17,7 +17,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.5.0";
+    public override string ModuleVersion => "1.7.0";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -47,6 +47,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         public bool Focused { get; set; }
         public PlayerPanelSettings Settings { get; set; } = new();
         public int DetailPage { get; set; }
+        public IReadOnlyList<NadeLineup>? Library { get; set; }
         public ScreenPanel Panel { get; } = new(player);
     }
 
@@ -75,6 +76,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         _runtimeStatus = new NadeRuntimeStatus(Path.Combine(ModuleDirectory, "data", "status.json"), ModuleVersion);
         WriteRuntimeStatus(true);
         AddTimer(5f, () => WriteRuntimeStatus(true), TimerFlags.REPEAT);
+        AddTimer(2f, SyncOpenLibraries, TimerFlags.REPEAT);
         Logger.LogInformation("MatchZy Nades {Version} loaded: .nades / !nades / css_nades", ModuleVersion);
     }
 
@@ -170,12 +172,12 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void Handle(CCSPlayerController? player, string action)
     {
         if (player is not { IsValid: true, IsBot: false }) return;
-        if (action.Equals("close", StringComparison.OrdinalIgnoreCase) || action == "9")
+        if (action.Equals("close", StringComparison.OrdinalIgnoreCase))
         { if (_menus.TryGetValue(player.Slot, out var open)) Hide(open); return; }
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
         if (action.Length == 0) { Open(player); return; }
         if (int.TryParse(action, out var key)) { Select(player, key); return; }
-        if (!TrainingEnabled) { Tell(player, "Training zuerst ueber die Trainingszentrale starten."); return; }
+        if (!TrainingEnabled) { Tell(player, "Training zuerst über die Trainingszentrale starten."); return; }
         if (action.Equals("save", StringComparison.OrdinalIgnoreCase)) { ArmNewLineupCapture(player); return; }
         if (action.Equals("check", StringComparison.OrdinalIgnoreCase))
         {
@@ -186,7 +188,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (action.Equals("last", StringComparison.OrdinalIgnoreCase))
         {
             if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
-            else Tell(player, "Zuerst mit .nades ein Lineup auswaehlen.");
+            else Tell(player, "Zuerst mit .nades ein Lineup auswählen.");
             return;
         }
         Tell(player, ".nades | .nades 1-9 | .nades last | .nades save | .nades check | .nades close");
@@ -215,7 +217,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
             Logger.LogWarning(error, "Could not read saved grenade library");
-            if (!quiet) Tell(player, "Bibliothek gerade nicht lesbar. Bitte Menue erneut oeffnen.");
+            if (!quiet) Tell(player, "Bibliothek gerade nicht lesbar. Bitte Menü erneut öffnen.");
         }
         return null;
     }
@@ -224,14 +226,15 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         var library = ReadLibrary(player, quiet: true);
         return TrainingMenu.Create(library ?? [], Server.MapName, TrainingEnabled,
-            _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfuegbar; im Dashboard pruefen." : "");
+            _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfügbar; im Dashboard prüfen." : "",
+            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns());
     }
 
     private void Open(CCSPlayerController player, bool focus = true)
     {
         if (Environment.GetEnvironmentVariable("MATCHZY_TRAINING_HUD_READY") != "1")
         {
-            Tell(player, "Das feste HUD muss zuerst installiert werden. Server: MATCHZY_TRAINING_HUD_READY=1 erst nach Addon-Installation setzen. Hotkeys: css_training_bind / css_training_binds.");
+            Tell(player, "Trainings-HUD in den Servereinstellungen des Webpanels aktivieren und übernehmen. HUD-Dateien lokal installieren oder über Workshop ausliefern. Hotkeys: css_training_bind / css_training_binds.");
             return;
         }
         Close(player.Slot);
@@ -246,20 +249,9 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (!_menus.TryGetValue(player.Slot, out var session) || !session.Visible || !session.Focused) return;
         session.LastInput = Server.CurrentTime;
         session.DetailPage = 0;
-        switch (key)
-        {
-            case 6:
-                if (!session.Menu.Back()) { SetFocus(session, false); return; }
-                break;
-            case 7: session.Menu.ChangePage(-1); break;
-            case 8: session.Menu.ChangePage(1); break;
-            case 9: Hide(session); return;
-            default:
-                var request = session.Menu.Select(key);
-                if (request?.Action == TrainingAction.Back) session.Menu.Back();
-                else if (request != null) { ExecuteAction(player, request); return; }
-                break;
-        }
+        var request = session.Menu.Select(key);
+        if (request?.Action == TrainingAction.Back) session.Menu.Back();
+        else if (request != null) { ExecuteAction(player, request); return; }
         session.NextDraw = 0;
     }
 
@@ -268,12 +260,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (!Alive(player)) return;
         if (request.Action == TrainingAction.Close)
         { if (_menus.TryGetValue(player.Slot, out var panel)) Hide(panel); return; }
-        if (request.Action == TrainingAction.PanelSize)
-        {
-            if (_menus.TryGetValue(player.Slot, out var panel))
-                SaveSettings(player, panel.Settings with { Compact = !panel.Settings.Compact });
-            return;
-        }
+        if (request.Action == TrainingAction.ToggleFavorite) { ToggleFavorite(player, request.Lineup); return; }
         if (HandleSettingsAction(player, request)) return;
         if (request.Action == TrainingAction.RefreshLibrary)
         {
@@ -282,9 +269,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         }
         ReleaseControl(player.Slot);
         if (request.Action != TrainingAction.StartPractice && !TrainingEnabled)
-        { Tell(player, "Training ist inzwischen beendet. Menue erneut oeffnen."); return; }
+        { Tell(player, "Training ist inzwischen beendet. Menü erneut öffnen."); return; }
         switch (request.Action)
         {
+            case TrainingAction.TeleportSpawn: TeleportToSpawn(player, request.Spawn); return;
             case TrainingAction.LoadLineup when request.Lineup is { } lineup: LoadLineup(player, lineup); return;
             case TrainingAction.RepeatLineup:
                 if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
@@ -294,7 +282,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             case TrainingAction.SaveCapture: SavePanelCapture(player); return;
             case TrainingAction.CancelCapture: ClearCapture(player.Slot); Tell(player, "Nade-Aufnahme verworfen."); return;
             case TrainingAction.GiveGrenade:
-                if (EquipGrenade(player, request.Kind)) Tell(player, $"Ausgeruestet: {NadeCatalog.Label(request.Kind)}. Bereit zum Werfen.");
+                if (EquipGrenade(player, request.Kind)) Tell(player, $"Ausgerüstet: {NadeCatalog.Label(request.Kind)}. Bereit zum Werfen.");
                 return;
         }
         if (TrainingMenu.Command(request.Action) is { } command)
@@ -312,7 +300,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var library = ReadLibrary(player);
         if (library == null) return;
         var lineup = library.FirstOrDefault(n => n.Owner == selected.Owner && n.Name == selected.Name && n.Map == selected.Map);
-        if (lineup == null) { Tell(player, "Lineup nicht mehr vorhanden oder auf einer anderen Map. .nades erneut oeffnen."); return; }
+        if (lineup == null) { Tell(player, "Lineup nicht mehr vorhanden oder auf einer anderen Map. .nades erneut öffnen."); return; }
         var pawn = player.PlayerPawn.Value!;
         if (!EquipGrenade(player, lineup.Kind)) return;
         // Loading is a training action: leave noclip / ladder mode so normal gravity can
@@ -324,9 +312,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             new QAngle(lineup.Angles.X, lineup.Angles.Y, lineup.Angles.Z), new Vector(0, 0, 0));
         PlayerBodyRotation.Repair(pawn);
         _last[player.Slot] = lineup;
+        if (_menus.TryGetValue(player.Slot, out var session)) session.Library = null;
         ArmCapture(player, lineup);
         Tell(player, $"Geladen: {lineup.Title}. {lineup.Description}" +
-            (lineup.Kind == NadeKind.Other ? " Passende Granate selbst waehlen." : " Bereit zum Trainieren."));
+            (lineup.Kind == NadeKind.Other ? " Passende Granate selbst wählen." : " Bereit zum Trainieren."));
     }
 
     private bool EquipGrenade(CCSPlayerController player, NadeKind kind)
@@ -356,7 +345,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var eye = pawn.EyeAngles;
         var body = scene.AbsRotation;
         var message = FormattableString.Invariant($"Position {position.X:0.###} {position.Y:0.###} {position.Z:0.###}; Bewegung {pawn.MoveType}/{pawn.ActualMoveType}.");
-        var angles = FormattableString.Invariant($"Blick (Pitch/Yaw/Roll): {eye.X:0.###}/{eye.Y:0.###}/{eye.Z:0.###}; Koerper: {body.X:0.###}/{body.Y:0.###}/{body.Z:0.###}.");
+        var angles = FormattableString.Invariant($"Blick (Pitch/Yaw/Roll): {eye.X:0.###}/{eye.Y:0.###}/{eye.Z:0.###}; Körper: {body.X:0.###}/{body.Y:0.###}/{body.Z:0.###}.");
         Tell(player, message + " " + angles);
         Logger.LogInformation("Nades position check: {Details} {Angles}", message, angles);
     }
@@ -401,16 +390,16 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             if (input != MenuInputAction.None) session.LastInput = Server.CurrentTime;
             switch (input)
             {
-                case MenuInputAction.Back: Select(player, 6); break;
+                case MenuInputAction.Back: RunPanelAction(player, "back"); break;
                 case MenuInputAction.Select: Select(player, session.Menu.Cursor + 1); break;
-                case MenuInputAction.PreviousPage: Select(player, 7); break;
-                case MenuInputAction.NextPage: Select(player, 8); break;
+                case MenuInputAction.PreviousPage: RunPanelAction(player, "previous"); break;
+                case MenuInputAction.NextPage: RunPanelAction(player, "next"); break;
                 case MenuInputAction.Up: session.Menu.Move(-1); break;
                 case MenuInputAction.Down: session.Menu.Move(1); break;
                 case MenuInputAction.Details:
                     var detail = session.Menu.Notice.Length > 0 ? session.Menu.Notice : session.Menu.Selected?.Hint;
                     if (string.IsNullOrWhiteSpace(detail)) detail = session.Menu.Current.Description;
-                    var pages = PanelText.DetailPages(detail ?? "").Count;
+                    var pages = PanelText.DetailPages(detail ?? "", maxLines: 3).Count;
                     session.DetailPage = (session.DetailPage + 1) % pages;
                     break;
             }
@@ -433,7 +422,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 {
                     Logger.LogError(error, "Could not draw training panel for slot {Slot}", slot);
                     Close(slot);
-                    Tell(player, "Seitenpanel konnte nicht erstellt werden. Serverlog pruefen.");
+                    Tell(player, "Seitenpanel konnte nicht erstellt werden. Serverlog prüfen.");
                 }
             }
         }

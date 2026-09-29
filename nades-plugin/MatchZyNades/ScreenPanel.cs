@@ -25,10 +25,10 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
             _entity.StrLayout = Layout;
             _entity.DispatchSpawn();
         }
-        Text("training_map", menu.Map);
-        Text("training_title", menu.Current.Title);
-        Text("training_state", focused ? "BEDIENUNG AKTIV" : "SPIELEN");
-        Text("training_page", $"{(practice ? "Training bereit" : "Training inaktiv")}  /  {menu.Page + 1} von {menu.PageCount}");
+        Text("training_page", $"{menu.Page + 1}/{menu.PageCount}");
+        Text("training_breadcrumb", menu.Breadcrumb);
+        Class("training_previous", "unavailable", menu.Page == 0);
+        Class("training_next", "unavailable", menu.Page == menu.PageCount - 1);
         var rows = menu.Visible.ToArray();
         for (var i = 0; i < InGameMenu.PageSize; i++)
         {
@@ -39,12 +39,11 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
         }
         var detail = menu.Notice.Length > 0 ? menu.Notice : menu.Selected?.Hint;
         if (string.IsNullOrWhiteSpace(detail)) detail = menu.Current.Description;
-        var pages = PanelText.DetailPages(detail ?? "");
+        var pages = PanelText.DetailPages(detail ?? "", maxLines: 3);
         var page = Math.Clamp(detailPage, 0, pages.Count - 1);
         Text("training_detail", pages[page]);
-        Text("training_detail_page", pages.Count > 1 ? $"Beschreibung {page + 1}/{pages.Count}  |  {settings.Keys["details"]}" : "");
-        Text("training_keys", $"{settings.Keys["focus"]}  Bedienen / Spielen    {settings.Keys["visible"]}  Anzeigen / Verstecken");
-        Class("training_panel", "compact", settings.Compact);
+        Text("training_indicator", focused ? "● HUD" : "● Frei");
+        Text("training_keys", $"{settings.Keys["focus"]}  Hud/Crosshair\n{settings.Keys["visible"]}  Hud anzeigen/verstecken");
         Class("training_panel", "editing", focused);
         Class("training_panel", "shown", true);
         Capture(focused);

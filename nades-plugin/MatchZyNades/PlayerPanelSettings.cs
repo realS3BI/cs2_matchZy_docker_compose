@@ -4,7 +4,7 @@ namespace MatchZyNades;
 
 public sealed record PlayerPanelSettings
 {
-    public bool Compact { get; init; }
+    public IReadOnlyList<NadeReference> Favorites { get; init; } = [];
     public bool GameButtons { get; init; }
     public Dictionary<string, string> Keys { get; init; } = new(DefaultKeys, StringComparer.Ordinal);
     public static readonly IReadOnlyDictionary<string, string> DefaultKeys = new Dictionary<string, string>
@@ -16,8 +16,8 @@ public sealed record PlayerPanelSettings
     public static readonly IReadOnlyDictionary<string, string> Labels = new Dictionary<string, string>
     {
         ["focus"] = "Bedienen / Spielen", ["visible"] = "Anzeigen / Verstecken",
-        ["up"] = "Auswahl nach oben", ["down"] = "Auswahl nach unten", ["select"] = "Bestaetigen",
-        ["back"] = "Zurueck", ["previous"] = "Vorherige Seite", ["next"] = "Naechste Seite",
+        ["up"] = "Auswahl nach oben", ["down"] = "Auswahl nach unten", ["select"] = "Bestätigen",
+        ["back"] = "Zurück", ["previous"] = "Vorherige Seite", ["next"] = "Nächste Seite",
         ["details"] = "Weitere Beschreibung", ["settings"] = "Einstellungen"
     };
     public static readonly string[] AllowedKeys = Enumerable.Range('A', 26).Select(c => ((char)c).ToString())
@@ -30,11 +30,21 @@ public sealed record PlayerPanelSettings
     public static PlayerPanelSettings Validate(PlayerPanelSettings value)
     {
         if (value.Keys == null || value.Keys.Count != DefaultKeys.Count || DefaultKeys.Keys.Any(a => !value.Keys.ContainsKey(a)))
-            throw new InvalidDataException("Unvollstaendige Tastenbelegung.");
+            throw new InvalidDataException("Unvollständige Tastenbelegung.");
         var normalized = value.Keys.ToDictionary(p => p.Key, p => (p.Value ?? "").ToUpperInvariant(), StringComparer.Ordinal);
         if (normalized.Values.Any(k => !AllowedKeys.Contains(k)) || normalized.Values.Distinct().Count() != normalized.Count)
-            throw new InvalidDataException("Ungueltige oder doppelte Taste.");
-        return value with { Keys = normalized };
+            throw new InvalidDataException("Ungültige oder doppelte Taste.");
+        if (value.Favorites == null || value.Favorites.Count > 1000 || value.Favorites.Any(f => f == null ||
+            string.IsNullOrWhiteSpace(f.Owner) || string.IsNullOrWhiteSpace(f.Map) || string.IsNullOrWhiteSpace(f.Name)))
+            throw new InvalidDataException("Ungültige Favoritenliste.");
+        return value with { Keys = normalized, Favorites = value.Favorites.Distinct().ToArray() };
+    }
+    public bool IsFavorite(NadeLineup lineup) => Favorites.Contains(NadeReference.From(lineup));
+    public PlayerPanelSettings ToggleFavorite(NadeLineup lineup)
+    {
+        var key = NadeReference.From(lineup);
+        return Validate(this with { Favorites = IsFavorite(lineup)
+            ? Favorites.Where(f => f != key).ToArray() : Favorites.Append(key).ToArray() });
     }
     public PlayerPanelSettings Bind(string action, string key)
     {
@@ -52,7 +62,7 @@ public sealed class PlayerPanelSettingsStore(string directory)
 {
     private string FilePath(ulong steamId)
     {
-        if (steamId == 0) throw new InvalidDataException("Steam-ID noch nicht verfuegbar.");
+        if (steamId == 0) throw new InvalidDataException("Steam-ID noch nicht verfügbar.");
         return Path.Combine(directory, steamId.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".json");
     }
     public PlayerPanelSettings Load(ulong steamId)

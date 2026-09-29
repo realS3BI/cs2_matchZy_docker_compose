@@ -21,9 +21,14 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 }
 
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
-    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "")
+    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "", bool MustKnow = false)
 {
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
+}
+
+public sealed record NadeReference(string Owner, string Map, string Name)
+{
+    public static NadeReference From(NadeLineup lineup) => new(lineup.Owner, lineup.Map, lineup.Name);
 }
 
 public static class NadeCatalog
@@ -48,7 +53,7 @@ public static class NadeCatalog
                     !Coordinates.TryParse(Field(data, "LineupPos"), out var position) ||
                     !Coordinates.TryParse(Field(data, "LineupAng"), out var angles)) continue;
                 result.Add(new(owner.Name, entry.Name, entryMap, Kind(Field(data, "Type")),
-                    Field(data, "Desc"), position, angles, Field(data, "DisplayName")));
+                    Field(data, "Desc"), position, angles, Field(data, "DisplayName"), MustKnow: Flag(data, "MustKnow")));
             }
         }
         if (metadata != null)
@@ -58,12 +63,18 @@ public static class NadeCatalog
                 foreach (var title in titles.RootElement.EnumerateArray())
                 {
                     var index = result.FindIndex(n => n.Owner == Field(title, "owner") && n.Map == Field(title, "map") && n.Name == Field(title, "name"));
-                    if (index >= 0) result[index] = result[index] with { DisplayName = Field(title, "displayName") };
+                    if (index >= 0) result[index] = result[index] with {
+                        DisplayName = Field(title, "displayName"),
+                        MustKnow = title.TryGetProperty("mustKnow", out _) ? Flag(title, "mustKnow") : result[index].MustKnow
+                    };
                 }
         }
         return result.OrderBy(n => n.Title, StringComparer.OrdinalIgnoreCase)
             .ThenBy(n => n.Owner, StringComparer.Ordinal).ToArray();
     }
+
+    private static bool Flag(JsonElement data, string name) => data.ValueKind == JsonValueKind.Object &&
+        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 
     private static string Field(JsonElement data, string name) =>
         data.ValueKind == JsonValueKind.Object && data.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String

@@ -93,7 +93,7 @@ public sealed partial class MatchZyNadesPlugin
     {
         ReleaseControl(player.Slot);
         if (_draftNameRequests.ContainsKey(player.Slot))
-        { Tell(player, "Es gibt eine ungespeicherte Aufnahme. Zuerst Aufnahme speichern oder verwerfen waehlen."); return; }
+        { Tell(player, "Es gibt eine ungespeicherte Aufnahme. Zuerst Aufnahme speichern oder verwerfen wählen."); return; }
         _capture.Forget(player.Slot);
         _draftNameRequests.Remove(player.Slot);
         _saveSamples[player.Slot] = [];
@@ -150,7 +150,7 @@ public sealed partial class MatchZyNadesPlugin
                 NadeCaptureFile.CreateNew(request.Owner, name, displayName, request.Map, request.Kind,
                     request.Start, request.Angles, request.Target, request.Technique, request.Trace));
             _draftNameRequests.Remove(player.Slot);
-            Tell(player, $"{MenuRenderer.Plain(displayName, 100)} gespeichert. Das Dashboard synchronisiert das Lineup automatisch. Danach im Panel Bibliothek aktualisieren waehlen.");
+            Tell(player, $"{MenuRenderer.Plain(displayName, 100)} gespeichert. Dashboard und Ingame-Bibliothek übernehmen das Lineup automatisch.");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
@@ -168,7 +168,7 @@ public sealed partial class MatchZyNadesPlugin
             return;
         }
         if (request.Map != Server.MapName)
-        { ClearCapture(player.Slot); Tell(player, "Die Aufnahme gehoert zu einer anderen Map. Bitte erneut aufnehmen."); return; }
+        { ClearCapture(player.Slot); Tell(player, "Die Aufnahme gehört zu einer anderen Map. Bitte erneut aufnehmen."); return; }
         // A unique suffix also prevents collisions with captures awaiting dashboard sync.
         var name = $"{NadeCatalog.Label(request.Kind)} {request.Map} {DateTime.UtcNow:yyyyMMdd-HHmmss} {Guid.NewGuid().ToString("N")[..6]}";
         TrySaveNameFromChat(player, name);
@@ -178,7 +178,7 @@ public sealed partial class MatchZyNadesPlugin
     {
         if (!TrainingEnabled || lineup.Kind is NadeKind.Fire or NadeKind.Other) { _capture.Forget(player.Slot); return; }
         _capture.Arm(player.Slot, player.SteamID, lineup, Server.CurrentTime);
-        Tell(player, "Der naechste Wurf erfasst das Ziel automatisch (gleicher Typ, innerhalb 2 Minuten). Danach Dashboard aktualisieren.");
+        Tell(player, "Der nächste Wurf erfasst das Ziel automatisch (gleicher Typ, innerhalb 2 Minuten). Danach Dashboard aktualisieren.");
     }
 
     private void ArmAfterCommand(CCSPlayerController? player, string name)
@@ -198,7 +198,7 @@ public sealed partial class MatchZyNadesPlugin
                 Math.Abs(n.Position.Z - pos.Z) <= 8 && Math.Abs(n.Angles.X - pawn.EyeAngles.X) < 1 &&
                 Math.Abs(n.Angles.Y - pawn.EyeAngles.Y) < 1).ToArray();
             if (candidates.Length == 1) ArmCapture(player, candidates[0]);
-            else if (candidates.Length > 1) Tell(player, "Name mehrfach vorhanden. Bitte das genaue Lineup im .nades-Menue laden.");
+            else if (candidates.Length > 1) Tell(player, "Name mehrfach vorhanden. Bitte das genaue Lineup im .nades-Menü laden.");
         });
     }
 
@@ -242,7 +242,7 @@ public sealed partial class MatchZyNadesPlugin
         {
             NadeCaptureFile.Write(Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.captures.json"),
                 NadeCaptureFile.Create(lineup, target));
-            Tell(player, $"Ziel fuer {MenuRenderer.Plain(lineup.Title, 90)} erfasst. Dashboard aktualisieren.");
+            Tell(player, $"Ziel für {MenuRenderer.Plain(lineup.Title, 90)} erfasst. Dashboard aktualisieren.");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {

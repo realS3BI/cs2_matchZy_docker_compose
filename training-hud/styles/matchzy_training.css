@@ -1,4 +1,4 @@
-/* Panorama CSS. One surface, anchored to the viewport; never animated or repositioned by the server. */
+/* Panorama CSS: fixed nine-row surface, anchored to the viewport. */
 .training-screen { width: 100%; height: 100%; }
 .training-panel {
     visibility: collapse;
@@ -6,36 +6,40 @@
     position: -4000px 0px 0px;
     horizontal-align: right;
     vertical-align: center;
-    margin-right: 28px;
-    width: 420px;
+    margin-right: 16px;
+    width: 380px;
     flow-children: down;
     background-color: #111923f5;
     border: 1px solid #3b4858;
     border-radius: 8px;
-    padding: 20px;
+    padding: 12px;
 }
 .training-panel.shown { visibility: visible; opacity: 1; position: 0px 0px 0px; }
-.training-panel.compact { width: 360px; padding: 16px; margin-right: 16px; }
-Label { font-family: "Arial"; font-size: 17px; color: #f0f4f8; }
-.heading, .rows, .details, .footer { width: 100%; flow-children: down; }
-.eyebrow { font-size: 12px; color: #9eb6cc; letter-spacing: 1.5px; margin-bottom: 6px; }
-.map { font-size: 15px; color: #9eb6cc; margin-bottom: 8px; }
-.title { font-size: 24px; font-weight: bold; margin-bottom: 12px; width: 100%; }
-.status-line { flow-children: down; margin-bottom: 16px; }
-.state { font-size: 12px; color: #b7c3ce; margin-bottom: 4px; }
-.editing .state { color: #89d3ff; }
-.muted { font-size: 13px; color: #b7c3ce; width: 100%; }
-.row { width: 100%; min-height: 42px; padding: 10px 12px; margin-bottom: 4px; border-left: 3px solid transparent; border-radius: 3px; }
-.row Label { width: 100%; }
+Label { font-family: "Arial"; font-size: 16px; color: #f0f4f8; }
+.heading { width: 100%; flow-children: down; }
+.rows { width: 100%; height: 306px; flow-children: down; }
+.details { width: 100%; flow-children: down; border-top: 1px solid #344253; margin-top: 10px; padding-top: 10px; }
+.eyebrow { font-size: 11px; color: #9eb6cc; letter-spacing: 1px; margin-bottom: 4px; }
+.title { font-size: 24px; font-weight: bold; margin-bottom: 6px; width: 100%; text-align: center; }
+.breadcrumb { width: 100%; height: 32px; font-size: 12px; line-height: 15px; color: #b7c3ce; white-space: normal; text-overflow: ellipsis; margin-bottom: 6px; }
+.row { width: 100%; height: 32px; padding: 6px 9px; margin-bottom: 2px; border-left: 3px solid transparent; border-radius: 3px; }
+.row Label { width: 100%; white-space: nowrap; text-overflow: ellipsis; }
 .row.selected { background-color: #273d50; border-left-color: #89d3ff; }
 .row.selected Label { font-weight: bold; }
-.editing .row:hover, .editing .row:focus { background-color: #334d62; }
+.editing .row:hover { background-color: #334d62; }
+.editing .row:focus { background-color: #334d62; }
 .row.disabled Label { color: #a4afba; }
-.row.empty { visibility: collapse; }
+/* Keep unused slots in the flow so pagination never moves the controls. */
+.row.empty { opacity: 0; }
 .navigation { flow-children: right; width: 100%; margin-top: 8px; }
-.small-button { padding: 8px 10px; margin-right: 6px; background-color: #22303f; border-radius: 3px; }
-.small-button Label { font-size: 13px; }
-.editing .small-button:hover, .editing .small-button:focus { background-color: #3a526b; }
-.details { border-top: 1px solid #344253; margin-top: 16px; padding-top: 16px; }
-.description { width: 100%; min-height: 105px; font-size: 16px; line-height: 22px; margin-bottom: 8px; white-space: normal; }
-.footer { border-top: 1px solid #344253; margin-top: 16px; padding-top: 12px; }
+.small-button { padding: 8px 6px; background-color: #22303f; border-radius: 3px; width: fill-parent-flow(1); margin-right: 3px; }
+.small-button Label { font-size: 12px; width: 100%; text-align: center; white-space: nowrap; }
+.editing .small-button:hover { background-color: #3a526b; }
+.editing .small-button:focus { background-color: #3a526b; }
+.small-button.unavailable { opacity: 0.4; }
+.page-number { font-size: 12px; color: #b7c3ce; width: 40px; text-align: center; vertical-align: center; }
+.description { width: 100%; height: 60px; font-size: 14px; line-height: 20px; white-space: normal; text-overflow: ellipsis; }
+.footer { width: 100%; flow-children: right; border-top: 1px solid #344253; margin-top: 10px; padding-top: 10px; }
+.mode-indicator { width: 70px; font-size: 12px; color: #7de2a7; vertical-align: center; }
+.editing .mode-indicator { color: #ff8b8b; }
+.key-hints { font-size: 13px; color: #c4ced8; width: fill-parent-flow(1); line-height: 20px; }

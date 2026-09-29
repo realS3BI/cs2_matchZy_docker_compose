@@ -13,7 +13,7 @@ public sealed partial class MatchZyNadesPlugin
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
             Logger.LogWarning(error, "Could not read panel settings for {SteamId}; keeping file and using defaults", player.SteamID);
-            Tell(player, "Deine Einstellungen konnten nicht gelesen werden. Vorlaeufig gelten die Standardwerte.");
+            Tell(player, "Deine Einstellungen konnten nicht gelesen werden. Vorläufig gelten die Standardwerte.");
             return new();
         }
     }
@@ -32,7 +32,7 @@ public sealed partial class MatchZyNadesPlugin
             session.DetailPage = 0;
             session.NextDraw = 0;
         }
-        Tell(player, "Deine Einstellungen wurden fuer deine Steam-ID gespeichert.");
+        Tell(player, "Deine Einstellungen wurden für deine Steam-ID gespeichert.");
         return true;
     }
 
@@ -56,13 +56,13 @@ public sealed partial class MatchZyNadesPlugin
                     {
                         var line = changed.BindingLine(request.Setting);
                         player.PrintToConsole(line);
-                        Tell(player, "Gespeichert. Einmal in deiner CS2-Konsole setzen: " + line + ". Der Server kann Client-Binds nicht selbst aendern.");
+                        Tell(player, "Gespeichert. Einmal in deiner CS2-Konsole setzen: " + line + ". Der Server kann Client-Binds nicht selbst ändern.");
                     }
                 }
                 catch (InvalidDataException error) { Tell(player, error.Message); }
                 return true;
             case TrainingAction.ExportBindings:
-                player.PrintToConsole("// MatchZy Training: vorher eigene Binds sichern; in lokale CFG uebernehmen.\n" + settings.Export());
+                player.PrintToConsole("// MatchZy Training: vorher eigene Binds sichern; in lokale CFG übernehmen.\n" + settings.Export());
                 Tell(player, "Deine Bind-Befehle stehen in der Client-Konsole. Alte, nicht mehr verwendete Binds dort selbst wiederherstellen.");
                 return true;
             default: return false;
@@ -104,6 +104,7 @@ public sealed partial class MatchZyNadesPlugin
         var action = buttonId switch
         {
             "training_back" => "back", "training_previous" => "previous", "training_next" => "next",
+            "training_home" => "home",
             "training_more" => "details", "training_settings" => "settings", "training_play" => "focus",
             "training_hide" => "visible", _ => ""
         };
@@ -129,13 +130,14 @@ public sealed partial class MatchZyNadesPlugin
             case "up": session.Menu.Move(-1); break;
             case "down": session.Menu.Move(1); break;
             case "select": Select(player, session.Menu.Cursor + 1); break;
-            case "back": Select(player, 6); break;
-            case "previous": Select(player, 7); break;
-            case "next": Select(player, 8); break;
+            case "back": if (!session.Menu.Back()) SetFocus(session, false); break;
+            case "previous": session.Menu.ChangePage(-1); break;
+            case "next": session.Menu.ChangePage(1); break;
+            case "home": session.Menu.Home(); break;
             case "details":
                 var detail = session.Menu.Notice.Length > 0 ? session.Menu.Notice : session.Menu.Selected?.Hint;
                 if (string.IsNullOrWhiteSpace(detail)) detail = session.Menu.Current.Description;
-                session.DetailPage = (session.DetailPage + 1) % PanelText.DetailPages(detail ?? "").Count;
+                session.DetailPage = (session.DetailPage + 1) % PanelText.DetailPages(detail ?? "", maxLines: 3).Count;
                 break;
         }
         session.NextDraw = 0;

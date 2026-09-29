@@ -52,6 +52,11 @@ class FakeStore {
     return this.entries;
   }
 
+  async saveNades(entries) {
+    this.entries = entries;
+    return entries;
+  }
+
   async replaceNadesFromSync(entries, details = {}) {
     this.entries = entries;
     await this.logAction("nades_sync", "success", "Nades imported from MatchZy savednades.json", details);
@@ -257,6 +262,7 @@ test("captures respect owner, map, technical key, position and angle", () => {
     { lineupPos: "2 2 3" }, { lineupAng: "4 6 6" }, { landingPos: "NaN 0 0" }, { landingPos: "" }]) {
     assert.deepEqual(mergeNadeCaptures([entry], [sampleCapture(patch)]), [entry]);
   }
+
   const edited = sampleEntry({ captureId: "throw-1", landingPos: "9 8 7" });
   assert.deepEqual(mergeNadeCaptures([edited], [sampleCapture()]), [edited]);
   const next = mergeNadeCaptures([edited], [sampleCapture({ captureId: "throw-2" })]);
@@ -272,4 +278,66 @@ test("moving a saved lineup invalidates captured targets and old manual referenc
   assert.equal(store.entries[0].radarFrom, undefined);
   assert.equal(store.entries[0].radarTo, undefined);
   assert.equal(store.entries[0].captureId, undefined);
+});
+
+test("deleting captured lineups survives polling and restart without blocking a new recording", async (t) => {
+  const { store, service } = await createHarness(t);
+  const captureFile = join(dirname(service.liveFile), "savednades.captures.json");
+  const capture = sampleCapture({ newLineup: true });
+  await service.writeFromMongo([]);
+  await writeJson(captureFile, [capture]);
+  await service.poll();
+  assert.equal(store.entries.length, 1);
+
+  await service.saveFromPanel([]);
+  await service.poll();
+  assert.equal(store.entries.length, 0);
+  assert.deepEqual(JSON.parse(await readFile(service.liveFile, "utf8")), {});
+  assert.deepEqual(JSON.parse(await readFile(service.runtimeFile, "utf8")), {});
+  assert.deepEqual(JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8")), []);
+
+  const restarted = new NadesSyncService({ config: service.config, store });
+  await restarted.start();
+  await restarted.stop();
+  assert.equal(store.entries.length, 0);
+  await writeJson(captureFile, [{ ...capture, captureId: "throw-2" }]);
+  await restarted.poll();
+  assert.equal(store.entries.length, 1);
+  assert.equal(store.entries[0].captureId, "throw-2");
+});
+
+test("deleting a capture imported by an older panel seeds its receipt before saving", async (t) => {
+  const captured = sampleEntry({ captureId: "throw-1" });
+  const { store, service } = await createHarness(t, [captured]);
+  await service.writeFromMongo([captured]);
+  await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [sampleCapture({ newLineup: true })]);
+  await Promise.all([service.saveFromPanel([]), service.poll()]);
+  assert.deepEqual(store.entries, []);
+});
+
+test("a new capture queued during a panel save is still imported", async (t) => {
+  const { store, service } = await createHarness(t, [sampleEntry({ captureId: "throw-1" })]);
+  await service.writeFromMongo(store.entries);
+  await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [
+    sampleCapture({ newLineup: true }),
+    sampleCapture({ newLineup: true, name: "new_flash", captureId: "throw-2", type: "Flash" })
+  ]);
+  await Promise.all([service.saveFromPanel([]), service.poll()]);
+  assert.deepEqual(store.entries.map(entry => entry.name), ["new_flash"]);
+});
+
+test("Must Know survives MatchZy writes, publishes metadata and can be removed", async (t) => {
+  const existing = sampleEntry({ mustKnow: true });
+  const { store, service } = await createHarness(t, [existing]);
+  await service.saveFromPanel([existing]);
+  const metadataFile = join(dirname(service.liveFile), "savednades.metadata.json");
+  assert.equal(JSON.parse(await readFile(metadataFile, "utf8"))[0].mustKnow, true);
+  await writeJson(service.liveFile, sampleConfig({ desc: "updated by MatchZy" }));
+  await service.poll();
+  assert.equal(store.entries[0].mustKnow, true);
+  await service.saveFromPanel([{ ...store.entries[0], mustKnow: false }]);
+  await writeJson(service.liveFile, sampleConfig({ desc: "updated again" }));
+  await service.poll();
+  assert.equal(store.entries[0].mustKnow, false);
+  assert.equal(JSON.parse(await readFile(metadataFile, "utf8"))[0].mustKnow, false);
 });

@@ -25,6 +25,9 @@ export type ServerSettings = {
   workshopMapCatalog: string;
   workshopMapsEnabled: boolean;
   workshopForceDownload: boolean;
+  trainingHudEnabled: boolean;
+  trainingHudWorkshopEnabled: boolean;
+  trainingHudWorkshopId: string;
   simpleAdminEnabled: boolean;
   simpleAdminVersion: string;
   playerSettingsVersion: string;
@@ -103,6 +106,14 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ]
   },
   {
+    id: "training-hud", title: "Trainings-HUD", description: "Für Nades und MatchZy. Änderungen mit Apply & restart übernehmen; dabei wird der Server neu gestartet.",
+    fields: [
+      { key: "trainingHudEnabled", label: "Trainings-HUD aktivieren", type: "boolean", description: "Erlaubt das Ingame-Panel. Die HUD-Dateien müssen lokal installiert oder über den Workshop verfügbar sein." },
+      { key: "trainingHudWorkshopEnabled", label: "HUD über Workshop ausliefern", type: "boolean", description: "Aus: keine HUD-Workshop-ID an Spieler senden. Lokale Entwicklung benötigt weiterhin ein aktiviertes Trainings-HUD." },
+      { key: "trainingHudWorkshopId", label: "HUD-Workshop-ID", type: "text", placeholder: "1234567890", description: "Bleibt beim Ausschalten gespeichert. Lokale Dateien werden damit weder installiert noch aktualisiert. Nach Layoutänderungen CS2 vollständig neu starten und erneut verbinden." }
+    ]
+  },
+  {
     id: "advanced", title: "Advanced launch", description: "Optional process arguments passed to the dedicated server.",
     fields: [
       { key: "additionalArgs", label: "Additional launch arguments", type: "textarea" }
@@ -152,6 +163,9 @@ const DEFAULTS: ServerSettings = {
   workshopMapCatalog: "[]",
   workshopMapsEnabled: false,
   workshopForceDownload: false,
+  trainingHudEnabled: false,
+  trainingHudWorkshopEnabled: false,
+  trainingHudWorkshopId: "",
   simpleAdminEnabled: false,
   simpleAdminVersion: "latest",
   playerSettingsVersion: "latest",
@@ -207,11 +221,17 @@ export function validateSettings(input) {
   if (source.maxPlayers !== undefined && (typeof source.maxPlayers !== "number" || !Number.isInteger(source.maxPlayers) || source.maxPlayers < 1 || source.maxPlayers > 64)) {
     throw new Error("Max players must be an integer between 1 and 64");
   }
+  if (source.trainingHudWorkshopId !== undefined && source.trainingHudWorkshopId !== "" && (!/^[1-9][0-9]{0,19}$/.test(source.trainingHudWorkshopId) || source.trainingHudWorkshopId.trim() !== source.trainingHudWorkshopId)) {
+    throw new Error("HUD-Workshop-ID muss eine gültige numerische Workshop-ID sein.");
+  }
   return source;
 }
 
 export function validateRunnableSettings(input) {
   const source = validateSettings(input);
+  if (source.trainingHudEnabled && source.trainingHudWorkshopEnabled && !source.trainingHudWorkshopId) {
+    throw new Error("Für die HUD-Workshop-Auslieferung fehlt die Workshop-ID.");
+  }
   if (!String(source.steamToken || "").trim()) {
     throw new Error("Steam Game Server Login Token is required before CS2 can start");
   }

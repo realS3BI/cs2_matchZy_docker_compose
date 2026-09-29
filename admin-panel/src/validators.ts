@@ -154,6 +154,9 @@ export function sanitizeNades(entries) {
     const name = String(entry.name ?? "").trim();
     const map = String(entry.map ?? "").trim();
     const displayName = String(entry.displayName ?? "").trim();
+    if (entry.mustKnow !== undefined && typeof entry.mustKnow !== "boolean") {
+      throw new Error("Must Know must be a boolean");
+    }
     const throwTechnique = String(entry.throwTechnique ?? "").trim();
     const throwTrace = String(entry.throwTrace ?? "").trim();
     if (throwTechnique.length > 500 || throwTrace.length > 120_000) {
@@ -208,6 +211,7 @@ export function sanitizeNades(entries) {
     if (throwTrace) cleanEntry.throwTrace = throwTrace;
     if (landingPos) cleanEntry.landingPos = landingPos;
     if (displayName) cleanEntry.displayName = displayName;
+    if (entry.mustKnow !== undefined) cleanEntry.mustKnow = entry.mustKnow;
     if (entry.captureId) cleanEntry.captureId = String(entry.captureId);
     if (throwFromTitle) cleanEntry.throwFromTitle = throwFromTitle;
     if (throwToTitle) cleanEntry.throwToTitle = throwToTitle;
@@ -230,6 +234,7 @@ export function nadesToMatchZySavedNadesConfig(entries) {
       Type: entry.type
     };
     if (entry.displayName) config[entry.owner][entry.name].DisplayName = entry.displayName;
+    if (entry.mustKnow !== undefined) config[entry.owner][entry.name].MustKnow = entry.mustKnow;
     if (entry.landingPos) config[entry.owner][entry.name].LandingPos = entry.landingPos;
   }
   return config;
@@ -247,6 +252,7 @@ export function matchZySavedNadesConfigToNades(config) {
       const entry = {
         name,
         displayName: nade.DisplayName,
+        mustKnow: nade.MustKnow,
         landingPos: nade.LandingPos,
         map: nade.Map,
         type: nade.Type || "",

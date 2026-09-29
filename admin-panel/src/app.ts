@@ -232,14 +232,17 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
 
   app.put("/api/nades", async (req, res) => {
     const entries = sanitizeNades(req.body?.entries);
-    const savedEntries = await store.saveNades(entries);
-    await nadesSync?.writeFromMongo(savedEntries);
+    const savedEntries = nadesSync ? await nadesSync.saveFromPanel(entries) : await store.saveNades(entries);
     res.json({ entries: savedEntries });
   });
 
   app.post("/api/nades/import", async (req, res) => {
     const importedEntries = matchZySavedNadesConfigToNades(req.body?.matchzyConfig);
     const mode = req.body?.mode === "merge" ? "merge" : "replace";
+    if (nadesSync) {
+      res.json({ entries: await nadesSync.saveFromPanel(importedEntries, mode) });
+      return;
+    }
     if (mode === "merge") {
       const mergedByKey = new Map();
       for (const entry of [...(await store.getNades()), ...importedEntries]) {

@@ -28,13 +28,13 @@ public static class PanelText
         return lines.ToArray();
     }
 
-    public static IReadOnlyList<string> DetailPages(string text)
+    public static IReadOnlyList<string> DetailPages(string text, int maxLines = 6)
     {
         var pages = new List<string>();
         var page = new List<string>();
         foreach (var line in Wrap(text))
         {
-            if (page.Count == 6 || Encoding.UTF8.GetByteCount(string.Join('\n', page) + "\n" + line) > 420)
+            if (page.Count == maxLines || Encoding.UTF8.GetByteCount(string.Join('\n', page) + "\n" + line) > 420)
             { pages.Add(string.Join('\n', page)); page.Clear(); }
             page.Add(line);
         }

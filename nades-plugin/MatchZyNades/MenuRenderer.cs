@@ -32,8 +32,8 @@ public static class MenuRenderer
         var hint = menu.Notice.Length != 0 ? menu.Notice : menu.Selected?.Hint;
         if (string.IsNullOrWhiteSpace(hint)) hint = menu.Current.Description;
         html.Append($"<font color='{Muted}'>{Escape(hint, 100)}</font><br>")
-            .Append($"<font color='{Accent}'>W/S Auswahl &nbsp; E / USE Bestaetigen<br>")
-            .Append($"G / INSPECT {(menu.IsRoot ? "Schliessen" : "Zurueck")} &nbsp; A/D Seite</font>");
+            .Append($"<font color='{Accent}'>W/S Auswahl &nbsp; E / USE Bestätigen<br>")
+            .Append($"G / INSPECT {(menu.IsRoot ? "Schließen" : "Zurück")} &nbsp; A/D Seite</font>");
         return html.ToString();
     }
 

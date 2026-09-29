@@ -222,3 +222,18 @@ test("display names change presentation without changing IDs or MatchZy keys", (
   assert.throws(() => sanitizeNades([{ ...original, displayName: "bad\nname" }]), /Display name/);
   assert.throws(() => sanitizeNades([{ ...original, displayName: "x".repeat(121) }]), /Display name/);
 });
+
+test("Must Know round-trips as a strict boolean without changing lineup identity", () => {
+  const original = { owner: "default", name: "window_smoke", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6" };
+  for (const mustKnow of [true, false]) {
+    const [entry] = sanitizeNades([{ ...original, mustKnow }]);
+    const config: any = nadesToMatchZySavedNadesConfig([entry]);
+    assert.equal(config.default.window_smoke.MustKnow, mustKnow);
+    const [imported] = matchZySavedNadesConfigToNades(config);
+    assert.equal(imported.mustKnow, mustKnow);
+    assert.equal(imported.id, entry.id);
+  }
+  assert.equal(sanitizeNades([original])[0].mustKnow, undefined);
+  for (const mustKnow of ["false", "true", 1, null])
+    assert.throws(() => sanitizeNades([{ ...original, mustKnow }]), /Must Know must be a boolean/);
+});

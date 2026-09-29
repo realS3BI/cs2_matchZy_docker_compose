@@ -126,7 +126,7 @@ function isVersionRelevant(key, settings) {
   if (key === "WEAPONPAINTS") return settings.weaponPaintsEnabled;
   if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return settings.weaponPaintsEnabled || settings.simpleAdminEnabled;
   if (key === "SIMPLEADMIN") return settings.simpleAdminEnabled;
-  if (key === "MULTIADDONMANAGER") return settings.fortniteEmotesEnabled || settings.workshopMapsEnabled;
+  if (key === "MULTIADDONMANAGER") return settings.fortniteEmotesEnabled || settings.workshopMapsEnabled || (settings.trainingHudEnabled && settings.trainingHudWorkshopEnabled);
   if (["RAYTRACE", "FORTNITE_EMOTES"].includes(key)) return settings.fortniteEmotesEnabled;
   return true;
 }

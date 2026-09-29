@@ -16,22 +16,24 @@ public sealed class InGameMenuTests
         var menu = TrainingMenu.Create(library, "de_mirage", true, null);
         menu.Select(1); // Library
         menu.Select(1); // Smokes
+        menu.Select(4); // Alle
         var seen = new List<NadeLineup>();
         for (var i = 0; i < library.Length; i++)
         {
             menu.Select(menu.Cursor + 1); // Details
             seen.Add(menu.Select(1)!.Lineup!);
             Assert.True(menu.Back());
-            Assert.Equal(i / 5, menu.Page);
-            Assert.Equal(i % 5, menu.Cursor);
+            Assert.Equal(i / 9, menu.Page);
+            Assert.Equal(i % 9, menu.Cursor);
             menu.Move(1);
         }
         Assert.Equal(library, seen);
-        Assert.Null(menu.Select(4));
+        Assert.Null(menu.Select(5));
         Assert.Null(menu.Select(0));
         Assert.Null(menu.Select(6));
         menu.ChangePage(-100);
         Assert.Equal(0, menu.Page);
+        Assert.True(menu.Back());
         Assert.True(menu.Back());
         Assert.True(menu.Back());
         Assert.False(menu.Back());
@@ -44,11 +46,13 @@ public sealed class InGameMenuTests
         Assert.Contains(menu.Current.Items, item => item.Label == "Neue Nade aufnehmen");
         menu.Select(1);
         menu.Select(1);
+        menu.Select(4); // Alle
         Assert.Empty(menu.Visible);
         menu.ChangePage(100);
         menu.Move(1);
         Assert.Null(menu.Select(1));
         Assert.Contains("Noch keine Lineups", MenuRenderer.Render(menu, true));
+        Assert.True(menu.Back());
         Assert.True(menu.Back());
         Assert.True(menu.Back());
         menu.Select(3);
@@ -71,13 +75,12 @@ public sealed class InGameMenuTests
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null);
         menu.Select(3);
-        menu.ChangePage(1);
-        Assert.Null(menu.Select(1)); // Clear grenades confirmation
+        Assert.Null(menu.Select(6)); // Clear grenades confirmation
         Assert.Equal(TrainingAction.Back, menu.Select(1)!.Action);
         Assert.Equal(TrainingAction.ClearGrenades, menu.Select(2)!.Action);
         Assert.True(menu.Back());
-        Assert.Equal(1, menu.Page);
-        Assert.Equal(0, menu.Cursor);
+        Assert.Equal(0, menu.Page);
+        Assert.Equal(5, menu.Cursor);
     }
 
     [Fact]
@@ -86,6 +89,7 @@ public sealed class InGameMenuTests
         var menu = TrainingMenu.Create([Lineup("<b>Window</b>\n\u0001", owner: "7656")], "<map>", true, null);
         menu.Select(1);
         menu.Select(1);
+        menu.Select(4); // Alle
         var html = MenuRenderer.Render(menu, true);
         Assert.Contains("&lt;b&gt;Window&lt;/b&gt;", html);
         Assert.Contains("&lt;map&gt;", html);
@@ -100,7 +104,7 @@ public sealed class InGameMenuTests
     {
         var local = new[] { TrainingAction.Close, TrainingAction.Back, TrainingAction.LoadLineup,
             TrainingAction.RepeatLineup, TrainingAction.CheckPosition, TrainingAction.StartCapture,
-            TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.PanelSize,
+            TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.ToggleFavorite, TrainingAction.TeleportSpawn,
             TrainingAction.GiveGrenade, TrainingAction.Settings, TrainingAction.BindKey,
             TrainingAction.ToggleGameButtons, TrainingAction.ExportBindings };
         foreach (var action in Enum.GetValues<TrainingAction>().Except(local))
@@ -141,13 +145,12 @@ public sealed class InGameMenuTests
         Assert.Equal(TrainingAction.SaveCapture, menu.Select(2)!.Action);
         Assert.Equal(TrainingAction.CancelCapture, menu.Select(3)!.Action);
         Assert.True(menu.Back());
-        menu.ChangePage(1);
-        Assert.Equal(TrainingAction.RefreshLibrary, menu.Select(1)!.Action);
-        Assert.Equal(TrainingAction.Settings, menu.Select(2)!.Action);
-        Assert.Equal(TrainingAction.Close, menu.Select(3)!.Action);
+        Assert.Contains(menu.Current.Items, item => item.Page?.Key == "favorites");
+        Assert.Contains(menu.Current.Items, item => item.Page?.Key == "spawns");
+        Assert.Equal(TrainingAction.Settings, menu.Select(8)!.Action);
+        Assert.Equal(TrainingAction.Close, menu.Select(9)!.Action);
         var inactive = TrainingMenu.Create([], "de_mirage", false, null);
-        inactive.ChangePage(1);
-        Assert.Null(inactive.Select(1));
+        Assert.Null(inactive.Select(6));
         Assert.True(inactive.IsRoot);
     }
 
@@ -167,8 +170,7 @@ public sealed class InGameMenuTests
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null);
         menu.Select(3);
-        menu.ChangePage(1);
-        menu.Select(4);
+        menu.Select(9);
         foreach (var (kind, index) in Enum.GetValues<NadeKind>().Where(k => k != NadeKind.Other).Select((k, i) => (k, i)))
         {
             var request = menu.Select(index + 1)!;
@@ -177,5 +179,66 @@ public sealed class InGameMenuTests
             Assert.NotNull(NadeCatalog.Equipment(kind, counterTerrorist: true));
             Assert.NotNull(NadeCatalog.Equipment(kind, counterTerrorist: false));
         }
+    }
+
+    [Fact]
+    public void RefreshKeepsRenamedLineupAndBackUsesUpdatedParent()
+    {
+        var library = Enumerable.Range(0, 12).Select(i => Lineup($"nade-{i}")).ToArray();
+        var menu = TrainingMenu.Create(library, "de_mirage", true, null);
+        menu.Select(1);
+        menu.Select(1);
+        menu.Select(4); // Alle
+        menu.ChangePage(1);
+        menu.Select(3);
+        var changed = library[11] with { DisplayName = "New title", Description = "New instructions" };
+        var updated = new[] { changed }.Concat(library.Take(11)).ToArray();
+        menu.Refresh(TrainingMenu.Create(updated, "de_mirage", true, null).Current);
+        Assert.Equal("New title", menu.Current.Title);
+        Assert.Equal(changed, menu.Select(1)!.Lineup);
+        Assert.True(menu.Back());
+        Assert.Equal(0, menu.Index);
+        Assert.Equal("New title", menu.Selected!.Label);
+        menu.Home();
+        Assert.True(menu.IsRoot);
+        Assert.Equal(0, menu.Index);
+    }
+
+    [Fact]
+    public void DeletingOpenLineupReturnsToCategoryAndClampsLastPage()
+    {
+        var library = Enumerable.Range(0, 10).Select(i => Lineup($"nade-{i}")).ToArray();
+        var menu = TrainingMenu.Create(library, "de_mirage", true, null);
+        menu.Select(1);
+        menu.Select(1);
+        menu.Select(4); // Alle
+        menu.ChangePage(1);
+        menu.Select(1);
+        menu.Refresh(TrainingMenu.Create(library.Take(9).ToArray(), "de_mirage", true, null).Current);
+        Assert.Equal("Alle", menu.Current.Title);
+        Assert.Equal(0, menu.Page);
+        Assert.Equal(8, menu.Index);
+        Assert.Equal(9, menu.Visible.Count());
+        menu.Refresh(TrainingMenu.Create([], "de_mirage", true, null).Current);
+        Assert.Empty(menu.Visible);
+        Assert.Null(menu.Select(1));
+        Assert.Equal(1, menu.PageCount);
+        Assert.True(menu.Back());
+    }
+
+    [Fact]
+    public void RefreshDistinguishesPrivateAndSharedLineupsWithSameName()
+    {
+        var shared = Lineup("window");
+        var own = Lineup("window", owner: "7656");
+        var menu = TrainingMenu.Create([shared, own], "de_mirage", true, null);
+        menu.Select(1);
+        menu.Select(1);
+        menu.Select(4); // Alle
+        menu.Select(2);
+        menu.Refresh(TrainingMenu.Create([own, shared], "de_mirage", true, null).Current);
+        Assert.Equal(own, menu.Select(1)!.Lineup);
+        Assert.True(menu.Back());
+        Assert.Equal(0, menu.Index);
     }
 }

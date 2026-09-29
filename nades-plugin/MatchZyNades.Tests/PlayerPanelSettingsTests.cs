@@ -12,15 +12,16 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     public void SettingsSurviveNewStoreAndStayIsolatedBySteamId()
     {
         var store = new PlayerPanelSettingsStore(_directory);
-        var first = new PlayerPanelSettings().Bind("focus", "k") with { Compact = true };
+        var first = new PlayerPanelSettings().Bind("focus", "k") with { Favorites = [new("default", "de_mirage", "window")] };
         store.Save(76561198000000001, first);
         store.Save(76561198000000002, new PlayerPanelSettings().Bind("visible", "l") with { GameButtons = true });
         var restarted = new PlayerPanelSettingsStore(_directory);
         Assert.Equal("K", restarted.Load(76561198000000001).Keys["focus"]);
-        Assert.True(restarted.Load(76561198000000001).Compact);
+        Assert.Equal(new NadeReference("default", "de_mirage", "window"), Assert.Single(restarted.Load(76561198000000001).Favorites));
         Assert.Equal("F6", restarted.Load(76561198000000002).Keys["focus"]);
         Assert.True(restarted.Load(76561198000000002).GameButtons);
-        Assert.False(restarted.Load(76561198000000003).Compact);
+        Assert.Empty(restarted.Load(76561198000000002).Favorites);
+        Assert.Empty(restarted.Load(76561198000000003).Favorites);
     }
 
     [Theory]
@@ -64,7 +65,7 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     public void MenuOffersAllActionsAndDisablesConflicts()
     {
         var page = PanelSettingsMenu.Create(new());
-        Assert.Equal(PlayerPanelSettings.DefaultKeys.Count + 3, page.Items.Count);
+        Assert.Equal(PlayerPanelSettings.DefaultKeys.Count + 2, page.Items.Count);
         var focusKeys = page.Items[0].Page!;
         Assert.False(focusKeys.Items.Single(i => i.Label == "F7").Enabled);
         var key = focusKeys.Items.Single(i => i.Label == "K");

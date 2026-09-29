@@ -74,3 +74,17 @@ test("apply validation requires platform-managed Steam and RCON secrets", () => 
   assert.throws(() => validateRunnableSettings({ steamToken: "token", rconPassword: "" }), /RCON password/);
   assert.doesNotThrow(() => validateRunnableSettings({ steamToken: "token", rconPassword: "secret" }));
 });
+
+test("HUD settings retain the Workshop ID while delivery is disabled and validate activation", () => {
+  const settings = normalizeSettings({ trainingHudEnabled: true, trainingHudWorkshopEnabled: false, trainingHudWorkshopId: "123456" });
+  assert.equal(settings.trainingHudWorkshopId, "123456");
+  assert.equal(settings.trainingHudWorkshopEnabled, false);
+  assert.equal(normalizeSettings({}).trainingHudEnabled, false);
+  const runnable = { ...settings, steamToken: "token", rconPassword: "secret" };
+  assert.doesNotThrow(() => validateRunnableSettings({ ...runnable, trainingHudWorkshopId: "" }));
+  assert.throws(() => validateRunnableSettings({ ...runnable, trainingHudWorkshopEnabled: true, trainingHudWorkshopId: "" }), /Workshop-ID/);
+  assert.doesNotThrow(() => validateRunnableSettings({ ...runnable, trainingHudWorkshopEnabled: true }));
+  for (const id of ["0", "123;quit", "123\n", "https://steamcommunity.com/", "1".repeat(21)]) {
+    assert.throws(() => validateSettings({ trainingHudWorkshopId: id }), /Workshop-ID/);
+  }
+});

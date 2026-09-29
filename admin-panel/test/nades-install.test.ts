@@ -5,9 +5,54 @@ import { mkdtemp, mkdir, readFile, rm, writeFile, access } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { normalizeSettings } from "../src/policy.js";
 
 const execFileAsync = promisify(execFile);
 const quote = (path: string) => `'${path.replaceAll("\\", "/").replaceAll("'", `'"'"'`)}'`;
+
+test("panel HUD controls override legacy environment and clear only client addons", async (t) => {
+  const fixture = await mkdtemp(join(tmpdir(), "matchzy-hud-settings-"));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  const settingsFile = join(fixture, "settings.json");
+  const config = join(fixture, "multiaddonmanager.cfg");
+  const entry = await readFile(resolve("../cs2/entrypoint.sh"), "utf8");
+  const configure = entry.match(/configure_upstream_process\(\) \{[\s\S]*?\n\}/)?.[0];
+  const pre = await readFile(resolve("../cs2/pre.sh"), "utf8");
+  const writer = pre.match(/  write_multiaddonmanager_config\(\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(configure);
+  assert.ok(writer);
+  const script = `set -eu
+settings_file=${quote(settingsFile)}
+read_setting() { jq -er "$1" "$settings_file"; }
+log() { :; }
+fail() { exit 1; }
+is_enabled() { [[ "$1" == "1" ]]; }
+${configure}
+${writer}
+export MATCHZY_TRAINING_HUD_READY=1
+export MATCHZY_TRAINING_HUD_ADDON_ID=999
+configure_upstream_process
+write_multiaddonmanager_config ${quote(config)} 1 111 222
+printf '%s' "$MATCHZY_TRAINING_HUD_READY"
+`;
+  for (const [enabled, workshop, expectedId, ready] of [
+    [true, true, "123456", "1"], [true, false, "", "1"], [false, true, "", "0"]
+  ] as const) {
+    await writeFile(settingsFile, JSON.stringify(normalizeSettings({ trainingHudEnabled: enabled, trainingHudWorkshopEnabled: workshop, trainingHudWorkshopId: "123456" })));
+    const result = await execFileAsync("bash", ["-c", script]);
+    assert.equal(result.stdout, ready);
+    assert.equal(await readFile(config, "utf8"), `mm_extra_addons "111,222"\nmm_client_extra_addons "${expectedId}"\nmm_addon_mount_download "1"\n`);
+  }
+  const legacy: any = normalizeSettings({});
+  delete legacy.trainingHudEnabled;
+  delete legacy.trainingHudWorkshopEnabled;
+  delete legacy.trainingHudWorkshopId;
+  await writeFile(settingsFile, JSON.stringify(legacy));
+  assert.equal((await execFileAsync("bash", ["-c", script])).stdout, "1");
+  assert.match(await readFile(config, "utf8"), /mm_client_extra_addons "999"/);
+  await writeFile(settingsFile, JSON.stringify(normalizeSettings({ trainingHudEnabled: true, trainingHudWorkshopEnabled: true })));
+  await assert.rejects(execFileAsync("bash", ["-c", script]));
+});
 
 test("bootstrap installs the menu for both MatchZy and Nades, removes only its DLL in other modes", async (t) => {
   const fixture = await mkdtemp(join(tmpdir(), "matchzy-nades-install-"));

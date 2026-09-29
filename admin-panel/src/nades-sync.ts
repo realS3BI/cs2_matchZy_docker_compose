@@ -17,6 +17,7 @@ function stableNades(entries) {
     id: entry.id,
     name: entry.name,
     displayName: entry.displayName,
+    mustKnow: entry.mustKnow === true,
     landingPos: entry.landingPos,
     captureId: entry.captureId,
     throwTechnique: entry.throwTechnique,
@@ -44,7 +45,7 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
-    for (const key of ["displayName", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+    for (const key of ["displayName", "mustKnow", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
       if (current[key] !== undefined) merged[key] = current[key];
     }
     if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
@@ -55,6 +56,10 @@ function preservePanelMetadata(importedEntries, currentEntries) {
     }
     return merged;
   });
+}
+
+function captureKey(entry) {
+  return `${nadeKey(entry)}\0${entry.captureId || ""}`;
 }
 
 function sameVector(left, right) {
@@ -121,6 +126,45 @@ async function writeJsonFileAtomic(path, value) {
 }
 
 export class NadesSyncService {
+  private queue: Promise<unknown> = Promise.resolve();
+
+  private exclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.queue.then(operation);
+    this.queue = pending.catch(() => {});
+    return pending;
+  }
+
+  // Persist processed capture IDs separately: old recording files may outlive a
+  // lineup deletion, a service restart, or the plugin's in-memory capture list.
+  private async captureReceipts(): Promise<Set<string>> {
+    try {
+      const { value } = await readJsonFile(`${dirname(this.liveFile)}/savednades.capture-receipts.json`);
+      if (!Array.isArray(value) || value.some(item => typeof item !== "string")) throw new Error("Invalid capture receipts");
+      return new Set(value);
+    } catch (error) { if (error?.code === "ENOENT") return new Set(); throw error; }
+  }
+
+  private async rememberCaptures(entries, receipts?: Set<string>) {
+    const known = receipts ?? await this.captureReceipts();
+    const size = known.size;
+    for (const entry of entries) if (entry.captureId) known.add(captureKey(entry));
+    if (known.size !== size)
+      await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.capture-receipts.json`, [...known]);
+  }
+
+  async saveFromPanel(entries, mode: "replace" | "merge" = "replace") {
+    return this.exclusive(async () => {
+      const current = await this.store.getNades();
+      // Seed receipts for captures imported before this version, before removing them.
+      if (this.enabled) await this.rememberCaptures(current);
+      const next = mode === "merge"
+        ? [...new Map([...current, ...entries].map(entry => [nadeKey(entry), entry])).values()]
+        : entries;
+      const saved = await this.store.saveNades(next);
+      await this.writeFromMongoUnlocked(saved);
+      return saved;
+    });
+  }
   config: any;
   store: any;
   liveFile: string;
@@ -206,7 +250,7 @@ export class NadesSyncService {
   async start() {
     if (!this.enabled || this.running) return;
     this.running = true;
-    await this.bootstrap();
+    await this.exclusive(() => this.bootstrap());
     this.schedule();
   }
 
@@ -229,7 +273,7 @@ export class NadesSyncService {
 
       const nades = await this.store.getNades();
       if (nades.length > 0) {
-        await this.writeFromMongo(nades);
+        await this.writeFromMongoUnlocked(nades);
       }
     } catch (error) {
       await this.handleError(error, "startup");
@@ -245,6 +289,10 @@ export class NadesSyncService {
   }
 
   async poll() {
+    return this.exclusive(() => this.pollUnlocked());
+  }
+
+  private async pollUnlocked() {
     if (this.polling) return;
     this.polling = true;
     try {
@@ -298,6 +346,10 @@ export class NadesSyncService {
   }
 
   async writeFromMongo(entries) {
+    return this.exclusive(() => this.writeFromMongoUnlocked(entries));
+  }
+
+  private async writeFromMongoUnlocked(entries) {
     if (!this.enabled) return;
     const cleanEntries = sanitizeNades(entries);
     const config = nadesToMatchZySavedNadesConfig(cleanEntries);
@@ -318,7 +370,7 @@ export class NadesSyncService {
   }
 
   async writeMetadata(entries) {
-    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName }) => ({ owner, map, name, displayName: displayName || "" })));
+    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName, mustKnow }) => ({ owner, map, name, displayName: displayName || "", mustKnow: mustKnow === true })));
   }
 
   async importCaptures() {
@@ -326,13 +378,18 @@ export class NadesSyncService {
     try { captures = (await readJsonFile(`${dirname(this.liveFile)}/savednades.captures.json`)).value; }
     catch (error) { if (error?.code === "ENOENT") return; throw error; }
     const current = await this.store.getNades();
-    const entries = mergeNadeCaptures(current, captures);
+    if (!Array.isArray(captures)) throw new Error("Grenade captures must be an array");
+    const receipts = await this.captureReceipts();
+    const present = new Set(current.map(nadeKey));
+    const entries = mergeNadeCaptures(current, captures.filter(capture => capture &&
+      (present.has(nadeKey(capture)) || !receipts.has(captureKey(capture)))));
     if (stableNades(entries) !== stableNades(current)) {
       await this.store.replaceNadesFromSync(entries, { source: "grenade-capture" });
       if (entries.some(entry => !current.some(existing => nadeKey(existing) === nadeKey(entry))))
-        await this.writeFromMongo(entries);
+        await this.writeFromMongoUnlocked(entries);
       this.lastDirection = "matchzy-to-panel";
     }
+    await this.rememberCaptures(entries, receipts);
   }
 
   async refreshFileState() {
