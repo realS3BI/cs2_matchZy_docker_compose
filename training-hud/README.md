@@ -4,7 +4,7 @@ Das Layout ist ein einziges Panorama-Panel, rechts und vertikal mittig am Bildsc
 
 ## Stand und Voraussetzungen
 
-Quellen und Serveranbindung sind vorhanden. **Das Layout ist ohne installierte Workshop Tools noch nicht kompiliert oder im CS2-Client getestet.** Keine World-Text-Ersatzanzeige. Bis zur Asset-Installation bleibt das neue HUD bewusst abgeschaltet; es darf kein unsichtbares Panel die Steuerung sperren.
+Quellen und Serveranbindung sind vorhanden. Die Workshop Tools wurden installiert und beide Panorama-Dateien erfolgreich kompiliert und in `matchzy_training_hud` abgelegt. **Das HUD wurde noch nicht im laufenden CS2-Client getestet oder veroeffentlicht.** Bis zur Asset-Auslieferung bleibt es bewusst abgeschaltet; es darf kein unsichtbares Panel die Steuerung sperren.
 
 - CounterStrikeSharp API **374** oder neuer, passendes Metamod und aktuelles CS2.
 - Zum Bauen: CS2 Workshop Tools mit `game/bin/win64/resourcecompiler.exe`.
@@ -16,9 +16,9 @@ Quellen und Serveranbindung sind vorhanden. **Das Layout ist ohne installierte W
 ./training-hud/build.ps1 -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
 ```
 
-Das Skript kopiert ausschliesslich die zwei Projektquellen in `content/csgo_addons/matchzy_training`, ruft Valves Compiler auf und sammelt die Ergebnisse unter `training-hud/dist`. Es veraendert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veroeffentlicht nichts.
+Das Skript kopiert ausschliesslich die zwei Projektquellen in `content/csgo_addons/matchzy_training_hud`, ruft Valves Compiler auf und legt die kompilierten Dateien direkt im zuvor mit den Workshop Tools angelegten Addon `game/csgo_addons/matchzy_training_hud` sowie unter `training-hud/dist` ab. Es veraendert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veroeffentlicht nichts.
 
-Fuer einen lokalen Test die kompilierten `panorama`-Dateien aus `dist` unter dem entsprechenden Pfad in `game/csgo` installieren und CS2 neu starten (Layout-Cache). Fuer Mitspieler das Addon ueber die Workshop Tools veroeffentlichen. Das Veroeffentlichen ist ein separater Schritt und bisher nicht erfolgt.
+Fuer einen lokalen Test das Addon `matchzy_training_hud` in den Workshop Tools starten und CS2 neu starten (Layout-Cache). Fuer Mitspieler das Addon ueber die Workshop Tools veroeffentlichen. Das Veroeffentlichen ist ein separater Schritt und bisher nicht erfolgt.
 
 Im Compose/Coolify-Deployment nach dem Veroeffentlichen setzen:
 

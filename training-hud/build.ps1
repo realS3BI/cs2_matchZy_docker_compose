@@ -6,8 +6,9 @@ if (-not (Test-Path -LiteralPath $compiler)) {
     throw 'CS2 Workshop Tools fehlen: resourcecompiler.exe nicht gefunden. In CS2 installieren und Steam den Download abschliessen lassen.'
 }
 $sourceRoot = $PSScriptRoot
-$addonContent = Join-Path $installRoot 'content/csgo_addons/matchzy_training'
-$addonGame = Join-Path $installRoot 'game/csgo_addons/matchzy_training'
+$addonName = 'matchzy_training_hud'
+$addonContent = Join-Path $installRoot "content/csgo_addons/$addonName"
+$addonGame = Join-Path $installRoot "game/csgo_addons/$addonName"
 $dist = Join-Path $sourceRoot 'dist'
 foreach ($part in @(@('styles', 'css', 'vcss_c'), @('layout', 'xml', 'vxml_c'))) {
     $source = Join-Path $sourceRoot "$($part[0])/matchzy_training.$($part[1])"
@@ -23,4 +24,4 @@ foreach ($part in @(@('styles', 'css', 'vcss_c'), @('layout', 'xml', 'vxml_c')))
     Copy-Item -LiteralPath $compiled -Destination $output -Force
 }
 Write-Output "HUD kompiliert: $dist"
-Write-Output 'Noch nicht installiert oder veroeffentlicht. Workshop-Addon aus game/csgo_addons/matchzy_training erstellen.'
+Write-Output "HUD-Dateien in Workshop-Addon '$addonName' abgelegt. Noch nicht veroeffentlicht."
