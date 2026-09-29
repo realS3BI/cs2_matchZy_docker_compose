@@ -2,7 +2,7 @@ using CounterStrikeSharp.API;
 
 namespace MatchZyNades;
 
-public enum MenuInputAction { None, Up, Down, PreviousPage, NextPage, Select, Back }
+public enum MenuInputAction { None, Up, Down, PreviousPage, NextPage, Select, Back, Details }
 
 public sealed class MenuInput(PlayerButtons initial)
 {
@@ -18,6 +18,7 @@ public sealed class MenuInput(PlayerButtons initial)
         _previous = current;
         // Back wins if two actions are released together. Attacks never select a menu row.
         if ((released & PlayerButtons.Inspect) != 0) return MenuInputAction.Back;
+        if ((released & PlayerButtons.Reload) != 0) return MenuInputAction.Details;
         if ((released & PlayerButtons.Use) != 0) return MenuInputAction.Select;
         if ((released & PlayerButtons.Forward) != 0) return MenuInputAction.Up;
         if ((released & PlayerButtons.Back) != 0) return MenuInputAction.Down;

@@ -41,7 +41,7 @@ public sealed class InGameMenuTests
     public void EmptyLibraryStillOffersTrainingAndEmptyCategoryHasAnExit()
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null);
-        Assert.Equal(5, menu.Current.Items.Count);
+        Assert.Contains(menu.Current.Items, item => item.Label == "Neue Nade aufnehmen");
         menu.Select(1);
         menu.Select(1);
         Assert.Empty(menu.Visible);
@@ -99,7 +99,9 @@ public sealed class InGameMenuTests
     public void EveryActionHasAnExplicitHandlerAndNoUserTextBecomesACommand()
     {
         var local = new[] { TrainingAction.Close, TrainingAction.Back, TrainingAction.LoadLineup,
-            TrainingAction.RepeatLineup, TrainingAction.CheckPosition };
+            TrainingAction.RepeatLineup, TrainingAction.CheckPosition, TrainingAction.StartCapture,
+            TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.PanelAspect,
+            TrainingAction.GiveGrenade };
         foreach (var action in Enum.GetValues<TrainingAction>().Except(local))
             Assert.Matches("^(css_[a-z]+|noclip)$", TrainingMenu.Command(action)!);
         foreach (var action in local) Assert.Null(TrainingMenu.Command(action));
@@ -127,5 +129,52 @@ public sealed class InGameMenuTests
         Assert.Equal(MenuInputAction.None, input.Read(0));
         input.Read(PlayerButtons.Moveright);
         Assert.Equal(MenuInputAction.NextPage, input.Read(0));
+    }
+
+    [Fact]
+    public void CaptureIsReachableWithoutChatAndRequiresPractice()
+    {
+        var menu = TrainingMenu.Create([], "de_mirage", true, null);
+        menu.Select(5);
+        Assert.Equal(TrainingAction.StartCapture, menu.Select(1)!.Action);
+        Assert.Equal(TrainingAction.SaveCapture, menu.Select(2)!.Action);
+        Assert.Equal(TrainingAction.CancelCapture, menu.Select(3)!.Action);
+        Assert.True(menu.Back());
+        menu.ChangePage(1);
+        Assert.Equal(TrainingAction.RefreshLibrary, menu.Select(1)!.Action);
+        Assert.Equal(TrainingAction.PanelAspect, menu.Select(2)!.Action);
+        Assert.Equal(TrainingAction.Close, menu.Select(3)!.Action);
+        var inactive = TrainingMenu.Create([], "de_mirage", false, null);
+        inactive.ChangePage(1);
+        Assert.Null(inactive.Select(1));
+        Assert.True(inactive.IsRoot);
+    }
+
+    [Fact]
+    public void ReloadPagesDetailsOnlyAfterFreshPress()
+    {
+        var input = new MenuInput(PlayerButtons.Reload);
+        Assert.Equal(MenuInputAction.None, input.Read(0));
+        input.Read(PlayerButtons.Reload);
+        Assert.Equal(MenuInputAction.Details, input.Read(0));
+        input.Read(PlayerButtons.Reload | PlayerButtons.Inspect);
+        Assert.Equal(MenuInputAction.Back, input.Read(0));
+    }
+
+    [Fact]
+    public void EquipmentMenuUsesTypedActionsForEveryGrenade()
+    {
+        var menu = TrainingMenu.Create([], "de_mirage", true, null);
+        menu.Select(3);
+        menu.ChangePage(1);
+        menu.Select(4);
+        foreach (var (kind, index) in Enum.GetValues<NadeKind>().Where(k => k != NadeKind.Other).Select((k, i) => (k, i)))
+        {
+            var request = menu.Select(index + 1)!;
+            Assert.Equal(TrainingAction.GiveGrenade, request.Action);
+            Assert.Equal(kind, request.Kind);
+            Assert.NotNull(NadeCatalog.Equipment(kind, counterTerrorist: true));
+            Assert.NotNull(NadeCatalog.Equipment(kind, counterTerrorist: false));
+        }
     }
 }

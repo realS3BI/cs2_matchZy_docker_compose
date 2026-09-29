@@ -5,10 +5,10 @@ public enum TrainingAction
     Close, Back, StartPractice, LoadLineup, RepeatLineup, CheckPosition,
     Rethrow, LastThrow, ClearGrenades, SavePosition, LoadPosition, Noclip,
     Bot, CrouchBot, RemoveBots, Trajectory, Impacts, NoFlash, God,
-    BestSpawn, WorstSpawn
+    BestSpawn, WorstSpawn, StartCapture, SaveCapture, CancelCapture, RefreshLibrary, PanelAspect, GiveGrenade
 }
 
-public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null);
+public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null, NadeKind Kind = NadeKind.Other);
 public sealed record MenuItem(string Label, string Hint = "", MenuPage? Page = null,
     MenuRequest? Request = null, bool Enabled = true);
 public sealed record MenuPage(string Title, string Description, IReadOnlyList<MenuItem> Items);

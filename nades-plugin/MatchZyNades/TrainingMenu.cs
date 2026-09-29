@@ -18,7 +18,7 @@ public static class TrainingMenu
             .Where(k => k != NadeKind.Other || library.Any(n => n.Kind == k))
             .Select(kind => new MenuItem($"{NadeCatalog.Label(kind)} ({library.Count(n => n.Kind == kind)})",
                 "Lineup waehlen, Beschreibung lesen und zum Abwurfpunkt gehen.",
-                Page: new(NadeCatalog.Label(kind), libraryError.Length == 0 ? "Lineups im Dashboard anlegen oder synchronisieren." : libraryError,
+                Page: new(NadeCatalog.Label(kind), libraryError.Length == 0 ? "Neue Nades ueber die Aufnahme im Hauptmenue speichern." : libraryError,
                     library.Where(n => n.Kind == kind).Select(n => new MenuItem(
                         n.Title + (n.Owner == "default" ? "" : " [privat]"),
                         n.Description.Length == 0 ? "Details und Abwurfpunkt oeffnen." : n.Description,
@@ -33,7 +33,12 @@ public static class TrainingMenu
             Action("Noclip umschalten", TrainingAction.Noclip, "Flugmodus ein- oder ausschalten."),
             Action("Granaten entfernen", TrainingAction.ClearGrenades, "Entfernt aktive Granaten auf dem Server.", true),
             Action("Naechster Team-Spawn", TrainingAction.BestSpawn, "Zum naechsten Spawn deines Teams."),
-            Action("Entferntester Team-Spawn", TrainingAction.WorstSpawn, "Zum entferntesten Spawn deines Teams.")]);
+            Action("Entferntester Team-Spawn", TrainingAction.WorstSpawn, "Zum entferntesten Spawn deines Teams."),
+            new("Granate ausruesten", "Smoke, Flash, HE, Molotov / Incendiary oder Decoy waehlen.",
+                Page: new("Granate ausruesten", "Gibt dir die Granate, sofern im Inventar Platz ist.",
+                    Enum.GetValues<NadeKind>().Where(k => k != NadeKind.Other).Select(k =>
+                        new MenuItem(NadeCatalog.Label(k), "Granate ausruesten und weiterspielen.",
+                            Request: new(TrainingAction.GiveGrenade, Kind: k))).ToArray()))]);
         var tools = new MenuPage("Trainingswerkzeuge", "MatchZy meldet das Ergebnis der Aktion.", [
             Action("Bot hier platzieren", TrainingAction.Bot, "Platziert einen Trainingsbot an deiner Position."),
             Action("Duckenden Bot platzieren", TrainingAction.CrouchBot, "Platziert einen duckenden Trainingsbot."),
@@ -42,7 +47,7 @@ public static class TrainingMenu
             Action("Einschlaege umschalten", TrainingAction.Impacts, "Schaltet sichtbare Einschlaege fuer den Server um.", true),
             Action("Flashschutz umschalten", TrainingAction.NoFlash, "Schaltet deinen Flashschutz um."),
             Action("Unverwundbarkeit umschalten", TrainingAction.God, "Schaltet deine Unverwundbarkeit um."),
-            Action("Position & Blickwinkel pruefen", TrainingAction.CheckPosition, "Gibt Diagnosewerte im Chat und Serverlog aus.")]);
+            Action("Position & Blickwinkel pruefen", TrainingAction.CheckPosition, "Zeigt Diagnosewerte im Panel; R blaettert lange Details weiter.")]);
         var home = new List<MenuItem>();
         if (!practice) home.Add(Action("Training starten", TrainingAction.StartPractice, "Startet MatchZy Practice mit deinen bestehenden Berechtigungen."));
         home.Add(new("Granaten-Bibliothek", practice ? $"{library.Count} Lineups auf dieser Map. {libraryError}" : "Zuerst Training starten.",
@@ -51,7 +56,14 @@ public static class TrainingMenu
             Request: new(TrainingAction.RepeatLineup), Enabled: practice && last != null));
         home.Add(new("Wurf & Position", practice ? "Wiederholen, Position merken und frei bewegen." : "Zuerst Training starten.", Page: training, Enabled: practice));
         home.Add(new("Trainingswerkzeuge", practice ? "Bots, Vorschau und persoenliche Einstellungen." : "Zuerst Training starten.", Page: tools, Enabled: practice));
-        home.Add(Action("Menue schliessen", TrainingAction.Close, "Zurueck ins Spiel."));
+        home.Add(new("Neue Nade aufnehmen", "Aufnahme starten, werfen und danach speichern. Ohne Chat; der Name wird automatisch vergeben.",
+            Page: new("Nade aufnehmen", "Nach dem Wurf F6 druecken und Aufnahme speichern waehlen.", [
+                Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von 3 Minuten eine Granate. Position, Blickwinkel, Wurf und Ziel werden erfasst."),
+                Action("Aufnahme speichern", TrainingAction.SaveCapture, "Nach der Explosion speichern. Automatischer Name aus Granatentyp, Map und Zeit; spaeter im Dashboard umbenennbar."),
+                Action("Aufnahme verwerfen", TrainingAction.CancelCapture, "Verwirft die laufende oder noch ungespeicherte Aufnahme.")]), Enabled: practice));
+        home.Add(Action("Bibliothek aktualisieren", TrainingAction.RefreshLibrary, "Laedt die Bibliothek nach der Dashboard-Synchronisierung neu."));
+        home.Add(Action("Panelposition 16:9 / 4:3", TrainingAction.PanelAspect, "Wechselt zwischen breitem Bildschirm und 4:3 / 16:10. Auswahl gilt fuer dieses Panel."));
+        home.Add(Action("Panel ausblenden", TrainingAction.Close, "F7 blendet das Panel mit derselben Auswahl wieder ein."));
         return new(new("Trainingszentrale", "Alle Trainingsaktionen an einem Ort.", home), map);
     }
 
@@ -68,5 +80,11 @@ public static class TrainingMenu
         TrainingAction.Impacts => "css_impacts", TrainingAction.NoFlash => "css_noflash",
         TrainingAction.God => "css_god", TrainingAction.BestSpawn => "css_bestspawn",
         TrainingAction.WorstSpawn => "css_worstspawn", _ => null
+    };
+
+    public static string ActionHint(TrainingAction action) => action switch
+    {
+        TrainingAction.StartPractice => "Training wird nach erfolgreicher Aktivierung hier freigeschaltet.",
+        _ => "Du kannst weiterspielen. F6 gibt dir wieder die Menuebedienung. MatchZy meldet Details weiterhin im Chat."
     };
 }

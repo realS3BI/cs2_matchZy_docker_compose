@@ -8,6 +8,11 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin
 {
     private readonly NadeCaptureTracker _capture = new();
+    private sealed record DraftNameRequest(string Owner, NadeKind Kind, string Map,
+        Coordinates Start, Coordinates Angles, Coordinates Target, string Technique, string Trace);
+    private readonly Dictionary<int, float> _saveRequests = [];
+    private readonly Dictionary<int, List<ThrowSample>> _saveSamples = [];
+    private readonly Dictionary<int, DraftNameRequest> _draftNameRequests = [];
 
     private void RegisterCapture()
     {
@@ -22,13 +27,41 @@ public sealed partial class MatchZyNadesPlugin
         {
             var player = e.Userid;
             if (player == null || !TrainingEnabled) return HookResult.Continue;
-            var kind = ProjectileKind(e.Weapon.Replace("weapon_", "") + "_projectile");
-            _capture.Thrown(player.Slot, player.SteamID, kind, Server.CurrentTime);
+            var kind = ThrownKind(e.Weapon);
+            if (_saveRequests.TryGetValue(player.Slot, out var saveExpires))
+            {
+                if (saveExpires < Server.CurrentTime) _saveRequests.Remove(player.Slot);
+                else if (kind != NadeKind.Other && player.PlayerPawn.Value is { IsValid: true } pawn && pawn.AbsOrigin is { } origin)
+                {
+                    _saveRequests.Remove(player.Slot);
+                    var start = new Coordinates(origin.X, origin.Y, origin.Z + 4);
+                    var angles = new Coordinates(pawn.EyeAngles.X, pawn.EyeAngles.Y, pawn.EyeAngles.Z);
+                    var samples = _saveSamples.GetValueOrDefault(player.Slot) ?? [];
+                    AddSample(samples, player, pawn);
+                    var trace = ThrowTechnique.Serialize(samples);
+                    var owner = _saveNadesGlobally?.GetPrimitiveValue<bool>() == true
+                        ? "default" : player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    _capture.Forget(player.Slot);
+                    var draft = new NadeLineup(owner, $"capture_{Guid.NewGuid():N}", Server.MapName,
+                        kind, "", start, angles, "", trace);
+                    _capture.Arm(player.Slot, player.SteamID, draft, Server.CurrentTime);
+                    _capture.Thrown(player.Slot, player.SteamID, kind, Server.CurrentTime);
+                    _saveSamples.Remove(player.Slot);
+                    Tell(player, $"Wurf erkannt: {NadeCatalog.Label(kind)}. Warte auf die Explosion.");
+                    return HookResult.Continue;
+                }
+            }
+            var expected = _capture.ArmedKind(player.Slot, player.SteamID, Server.CurrentTime);
+            var matched = _capture.Thrown(player.Slot, player.SteamID, kind, Server.CurrentTime);
+            if (expected.HasValue && !matched)
+                Tell(player, $"Erfassung erwartet {NadeCatalog.Label(expected.Value)}, geworfen wurde {NadeCatalog.Label(kind)}. Lineup erneut laden und passende Granate werfen.");
+            else if (matched) Tell(player, "Wurf erkannt. Das Ziel wird bei der Explosion gespeichert.");
             return HookResult.Continue;
         });
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => CompleteCapture(e.Entityid, e.Userid, NadeKind.Smoke, new(e.X, e.Y, e.Z)));
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => CompleteCapture(e.Entityid, e.Userid, NadeKind.Flash, new(e.X, e.Y, e.Z)));
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => CompleteCapture(e.Entityid, e.Userid, NadeKind.HE, new(e.X, e.Y, e.Z)));
+        RegisterEventHandler<EventMolotovDetonate>((e, _) => CompleteFireCapture(e.Userid, new(e.X, e.Y, e.Z)));
         RegisterEventHandler<EventDecoyStarted>((e, _) => CompleteCapture(e.Entityid, e.Userid, NadeKind.Decoy, new(e.X, e.Y, e.Z)));
         RegisterEventHandler<EventRoundStart>((_, _) => { ResetCapture(); return HookResult.Continue; });
         RegisterEventHandler<EventPlayerDeath>((e, _) => { if (e.Userid is { } p) ClearCapture(p.Slot); return HookResult.Continue; });
@@ -39,9 +72,107 @@ public sealed partial class MatchZyNadesPlugin
         "smokegrenade_projectile" => NadeKind.Smoke,
         "flashbang_projectile" => NadeKind.Flash,
         "hegrenade_projectile" => NadeKind.HE,
+        "molotov_projectile" or "incendiary_projectile" => NadeKind.Fire,
         "decoy_projectile" => NadeKind.Decoy,
         _ => NadeKind.Other
     };
+
+    private static NadeKind ThrownKind(string weapon) =>
+        ProjectileKind(weapon.Replace("weapon_", "", StringComparison.OrdinalIgnoreCase) + "_projectile");
+
+    private static void AddSample(List<ThrowSample> samples, CCSPlayerController player, CCSPlayerPawn pawn)
+    {
+        if (pawn.AbsOrigin is not { } origin) return;
+        var velocity = pawn.AbsVelocity;
+        samples.Add(new(Server.CurrentTime, NadeCaptureFile.Vector(new(origin.X, origin.Y, origin.Z)),
+            NadeCaptureFile.Vector(new(velocity.X, velocity.Y, velocity.Z)),
+            FormattableString.Invariant($"{pawn.EyeAngles.X:0.##} {pawn.EyeAngles.Y:0.##} {pawn.EyeAngles.Z:0.##}"), player.Buttons.ToString()));
+    }
+
+    private void ArmNewLineupCapture(CCSPlayerController player)
+    {
+        ReleaseControl(player.Slot);
+        if (_draftNameRequests.ContainsKey(player.Slot))
+        { Tell(player, "Es gibt eine ungespeicherte Aufnahme. Zuerst Aufnahme speichern oder verwerfen waehlen."); return; }
+        _capture.Forget(player.Slot);
+        _draftNameRequests.Remove(player.Slot);
+        _saveSamples[player.Slot] = [];
+        if (player.PlayerPawn.Value is { IsValid: true } pawn) AddSample(_saveSamples[player.Slot], player, pawn);
+        _saveRequests[player.Slot] = Server.CurrentTime + 180;
+        Tell(player, "Aufnahme bereit. Wirf genau eine Granate; Position, Blickwinkel und Tastenfolge werden erfasst.");
+    }
+
+    private void RecordSaveInputs()
+    {
+        foreach (var (slot, expires) in _saveRequests.ToArray())
+        {
+            var player = Utilities.GetPlayers().FirstOrDefault(p => p is { IsValid: true } && p.Slot == slot);
+            if (expires < Server.CurrentTime || player is not { IsValid: true, PawnIsAlive: true } || player.PlayerPawn.Value is not { IsValid: true } pawn)
+            {
+                _saveRequests.Remove(slot);
+                _saveSamples.Remove(slot);
+                if (player is { IsValid: true }) Tell(player, "Aufnahme abgelaufen. Im Panel erneut starten.");
+                continue;
+            }
+            if (!_saveSamples.TryGetValue(slot, out var samples)) _saveSamples[slot] = samples = [];
+            if (samples.Count == 0 || Server.CurrentTime - samples[^1].Time >= 0.02f) AddSample(samples, player, pawn);
+            samples.RemoveAll(sample => Server.CurrentTime - sample.Time > 8f);
+            if (samples.Count > 512) samples.RemoveRange(0, samples.Count - 512);
+        }
+    }
+
+    private bool TrySaveNameFromChat(CCSPlayerController? player, string rawText)
+    {
+        if (player is not { IsValid: true } || !_draftNameRequests.TryGetValue(player.Slot, out var request)) return false;
+        var displayName = rawText.Trim().Trim('"').Trim();
+        if (displayName.Equals("cancel", StringComparison.OrdinalIgnoreCase) || displayName.Equals("abbrechen", StringComparison.OrdinalIgnoreCase) ||
+            displayName.Equals(".cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            _draftNameRequests.Remove(player.Slot);
+            Tell(player, "Nade-Aufnahme verworfen.");
+            return true;
+        }
+        displayName = new string(displayName.Where(c => !char.IsControl(c)).Take(120).ToArray()).Trim();
+        var name = System.Text.RegularExpressions.Regex.Replace(displayName.ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-', '_');
+        if (displayName.Length == 0 || name.Length == 0)
+        {
+            Tell(player, "Bitte einen Namen mit mindestens einem Buchstaben oder einer Zahl eingeben (oder 'abbrechen').");
+            return true;
+        }
+        name = name[..Math.Min(name.Length, 64)];
+        var used = new HashSet<string>((ReadLibrary(player, quiet: true) ?? []).Where(n => n.Owner == request.Owner && n.Map == request.Map)
+            .Select(n => n.Name), StringComparer.OrdinalIgnoreCase);
+        var baseName = name;
+        for (var suffix = 2; used.Contains(name); suffix++) name = $"{baseName[..Math.Min(baseName.Length, 58)]}-{suffix}";
+        try
+        {
+            NadeCaptureFile.Write(Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.captures.json"),
+                NadeCaptureFile.CreateNew(request.Owner, name, displayName, request.Map, request.Kind,
+                    request.Start, request.Angles, request.Target, request.Technique, request.Trace));
+            _draftNameRequests.Remove(player.Slot);
+            Tell(player, $"{MenuRenderer.Plain(displayName, 100)} gespeichert. Das Dashboard synchronisiert das Lineup automatisch. Danach im Panel Bibliothek aktualisieren waehlen.");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            Logger.LogWarning(error, "Could not persist newly captured nade");
+            Tell(player, "Lineup konnte nicht gespeichert werden. Aufnahme bleibt erhalten; Speichern erneut versuchen.");
+        }
+        return true;
+    }
+
+    private void SavePanelCapture(CCSPlayerController player)
+    {
+        if (!_draftNameRequests.TryGetValue(player.Slot, out var request))
+        {
+            Tell(player, "Noch keine fertige Aufnahme. Aufnahme starten, werfen und Explosion abwarten.");
+            return;
+        }
+        if (request.Map != Server.MapName)
+        { ClearCapture(player.Slot); Tell(player, "Die Aufnahme gehoert zu einer anderen Map. Bitte erneut aufnehmen."); return; }
+        // A unique suffix also prevents collisions with captures awaiting dashboard sync.
+        var name = $"{NadeCatalog.Label(request.Kind)} {request.Map} {DateTime.UtcNow:yyyyMMdd-HHmmss} {Guid.NewGuid().ToString("N")[..6]}";
+        TrySaveNameFromChat(player, name);
+    }
 
     private void ArmCapture(CCSPlayerController player, NadeLineup lineup)
     {
@@ -89,8 +220,24 @@ public sealed partial class MatchZyNadesPlugin
     {
         if (!TrainingEnabled || player is not { IsValid: true } ||
             !float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z)) return HookResult.Continue;
-        var lineup = _capture.Complete(entityId, player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime);
+        var lineup = _capture.Complete(entityId, player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime)
+            ?? _capture.CompleteByThrower(player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime);
         if (lineup == null) return HookResult.Continue;
+        return CompleteNamedCapture(player, lineup, target);
+    }
+
+    private HookResult CompleteNamedCapture(CCSPlayerController player, NadeLineup lineup, Coordinates target)
+    {
+        if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z)) return HookResult.Continue;
+        if (lineup.Name.StartsWith("capture_", StringComparison.Ordinal))
+        {
+            var samples = System.Text.Json.JsonSerializer.Deserialize<ThrowSample[]>(lineup.ThrowTrace) ?? [];
+            var technique = ThrowTechnique.Summarize(samples);
+            _draftNameRequests[player.Slot] = new(lineup.Owner, lineup.Kind, lineup.Map,
+                lineup.Position, lineup.Angles, target, technique, lineup.ThrowTrace);
+            Tell(player, $"Ziel erfasst: {technique}. F6 > Neue Nade aufnehmen > Aufnahme speichern oder verwerfen. Falls diese Seite schon offen ist, direkt Aufnahme speichern waehlen. Optional einen eigenen Namen im Chat eingeben.");
+            return HookResult.Continue;
+        }
         try
         {
             NadeCaptureFile.Write(Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.captures.json"),
@@ -105,6 +252,26 @@ public sealed partial class MatchZyNadesPlugin
         return HookResult.Continue;
     }
 
-    private void ClearCapture(int slot) => _capture.Forget(slot);
-    private void ResetCapture() => _capture.Clear();
+    private HookResult CompleteFireCapture(CCSPlayerController? player, Coordinates target)
+    {
+        if (player is not { IsValid: true }) return HookResult.Continue;
+        // Molotov detonation does not expose a projectile entity id in the CS# event.
+        var lineup = _capture.CompleteByThrower(player.Slot, player.SteamID, NadeKind.Fire, Server.MapName, Server.CurrentTime);
+        return lineup == null ? HookResult.Continue : CompleteNamedCapture(player, lineup, target);
+    }
+
+    private void ClearCapture(int slot)
+    {
+        _capture.Forget(slot);
+        _saveRequests.Remove(slot);
+        _saveSamples.Remove(slot);
+        _draftNameRequests.Remove(slot);
+    }
+    private void ResetCapture()
+    {
+        _capture.Clear();
+        _saveRequests.Clear();
+        _saveSamples.Clear();
+        _draftNameRequests.Clear();
+    }
 }

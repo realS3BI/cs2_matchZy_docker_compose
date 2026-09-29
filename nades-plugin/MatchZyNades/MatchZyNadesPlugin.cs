@@ -17,7 +17,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.2.0";
+    public override string ModuleVersion => "1.4.0";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -25,6 +25,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private readonly Dictionary<int, NadeLineup> _last = [];
     private string _libraryPath = "";
     private ConVar? _cheats;
+    private ConVar? _saveNadesGlobally;
     private NadeRuntimeStatus? _runtimeStatus;
     private bool _statusWriteFailed;
 
@@ -32,26 +33,37 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         public CCSPlayerController Player { get; } = player;
         public CCSPlayerPawn Pawn { get; } = player.PlayerPawn.Value!;
-        public InGameMenu Menu { get; } = menu;
-        public bool Practice { get; } = practice;
-        public MoveType_t MoveType { get; } = player.PlayerPawn.Value!.MoveType;
-        public MoveType_t ActualMoveType { get; } = player.PlayerPawn.Value!.ActualMoveType;
-        public float NextAttack { get; } = player.PlayerPawn.Value!.WeaponServices!.As<CCSPlayer_WeaponServices>().NextAttack;
-        public MenuInput Input { get; } = new(player.Buttons);
+        public InGameMenu Menu { get; set; } = menu;
+        public bool Practice { get; set; } = practice;
+        public MoveType_t MoveType { get; set; }
+        public MoveType_t ActualMoveType { get; set; }
+        public float NextAttack { get; set; }
+        public MenuInput Input { get; set; } = new(player.Buttons);
         public float LastInput { get; set; } = Server.CurrentTime;
         public float NextDraw { get; set; }
         public float AttackLock { get; set; }
-        public string Html { get; set; } = MenuRenderer.Render(menu, practice);
+        public bool Visible { get; set; } = true;
+        public bool Focused { get; set; }
+        public bool Wide { get; set; } = true;
+        public int DetailPage { get; set; }
+        public ScreenPanel Panel { get; } = new(player.PlayerPawn.Value!);
     }
 
     public override void Load(bool hotReload)
     {
         _libraryPath = Path.Combine(Server.GameDirectory, "csgo", "cfg", "MatchZy", "savednades.json");
         _cheats = ConVar.Find("sv_cheats");
+        _saveNadesGlobally = ConVar.Find("matchzy_save_nades_as_global_enabled");
         RegisterCapture();
         AddCommandListener("say", OnSay, HookMode.Pre);
         AddCommandListener("say_team", OnSay, HookMode.Pre);
         RegisterListener<Listeners.OnTick>(OnTick);
+        RegisterListener<Listeners.CheckTransmit>(infoList =>
+        {
+            foreach (var (info, recipient) in infoList)
+                foreach (var session in _menus.Values)
+                    if (recipient?.Slot != session.Player.Slot) session.Panel.ExcludeFrom(info);
+        });
         RegisterListener<Listeners.OnMapEnd>(Reset);
         RegisterEventHandler<EventPlayerDisconnect>((e, _) => { Forget(e.Userid); return HookResult.Continue; }, HookMode.Pre);
         RegisterEventHandler<EventPlayerDeath>((e, _) => { if (e.Userid is { } p) Close(p.Slot); return HookResult.Continue; }, HookMode.Pre);
@@ -86,6 +98,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private HookResult OnSay(CCSPlayerController? player, CommandInfo command)
     {
+        if (TrySaveNameFromChat(player, command.ArgString)) return HookResult.Stop;
         var words = command.ArgString.Trim().Trim('"').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length > 1 && words[0].ToLowerInvariant() is ".savenade" or ".sn" or ".loadnade" or ".ln")
             ArmAfterCommand(player, words[1]);
@@ -98,24 +111,51 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     public void OnNades(CCSPlayerController? player, CommandInfo command) =>
         Handle(player, command.ArgCount > 1 ? command.GetArg(1) : "");
 
-    [ConsoleCommand("css_training", "Toggle the in-game training menu (bind to a key)")]
+    [ConsoleCommand("css_training", "Toggle panel control (bind to F6)")]
     public void OnTraining(CCSPlayerController? player, CommandInfo command)
     {
-        if (player is { IsValid: true } && _menus.ContainsKey(player.Slot)) Close(player.Slot);
-        else Handle(player, "");
+        if (!Alive(player)) return;
+        if (_menus.TryGetValue(player!.Slot, out var session))
+        {
+            session.Visible = true;
+            SetFocus(session, !session.Focused);
+        }
+        else Open(player);
+    }
+
+    [ConsoleCommand("css_training_visible", "Show/hide panel without losing selection (bind to F7)")]
+    public void OnPanelVisible(CCSPlayerController? player, CommandInfo command)
+    {
+        if (!Alive(player)) return;
+        if (_menus.TryGetValue(player!.Slot, out var session))
+        {
+            if (session.Visible) Hide(session);
+            else { session.Visible = true; session.NextDraw = 0; }
+        }
+        else Open(player, focus: false);
     }
 
     [ConsoleCommand("css_nades_select", "Select menu option 1-9 (optional number key bind)")]
     public void OnSelect(CCSPlayerController? player, CommandInfo command)
     {
-        if (player is not { IsValid: true } || !_menus.ContainsKey(player.Slot)) return;
+        if (player is not { IsValid: true } || !_menus.TryGetValue(player.Slot, out var session) ||
+            !session.Visible || !session.Focused) return;
         Handle(player, command.ArgCount > 1 ? command.GetArg(1) : "");
     }
 
     [ConsoleCommand("css_nades_last", "Return to your last selected lineup")]
     public void OnLast(CCSPlayerController? player, CommandInfo command) => Handle(player, "last");
 
-    private static void Tell(CCSPlayerController player, string message) => player.PrintToChat($" [Nades] {message}");
+    private void Tell(CCSPlayerController player, string message)
+    {
+        if (_menus.TryGetValue(player.Slot, out var session))
+        {
+            session.Menu.Notice = message;
+            session.DetailPage = 0;
+            session.NextDraw = 0;
+        }
+        player.PrintToChat($" [Nades] {message}");
+    }
     private static bool Alive(CCSPlayerController? player) => player is { IsValid: true, IsBot: false, PawnIsAlive: true }
         && player.TeamNum is 2 or 3 && player.PlayerPawn.Value is { IsValid: true, MovementServices: not null, WeaponServices: not null };
     private bool TrainingEnabled => _cheats?.GetPrimitiveValue<bool>() == true;
@@ -123,14 +163,16 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void Handle(CCSPlayerController? player, string action)
     {
         if (player is not { IsValid: true, IsBot: false }) return;
-        if (action.Equals("close", StringComparison.OrdinalIgnoreCase) || action == "9") { Close(player.Slot); return; }
+        if (action.Equals("close", StringComparison.OrdinalIgnoreCase) || action == "9")
+        { if (_menus.TryGetValue(player.Slot, out var open)) Hide(open); return; }
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
         if (action.Length == 0) { Open(player); return; }
         if (int.TryParse(action, out var key)) { Select(player, key); return; }
         if (!TrainingEnabled) { Tell(player, "Training zuerst ueber die Trainingszentrale starten."); return; }
+        if (action.Equals("save", StringComparison.OrdinalIgnoreCase)) { ArmNewLineupCapture(player); return; }
         if (action.Equals("check", StringComparison.OrdinalIgnoreCase))
         {
-            Close(player.Slot);
+            ReleaseControl(player.Slot);
             CheckPlacement(player);
             return;
         }
@@ -140,7 +182,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             else Tell(player, "Zuerst mit .nades ein Lineup auswaehlen.");
             return;
         }
-        Tell(player, ".nades | .nades 1-9 | .nades last | .nades check | .nades close");
+        Tell(player, ".nades | .nades 1-9 | .nades last | .nades save | .nades check | .nades close");
     }
 
     private IReadOnlyList<NadeLineup>? ReadLibrary(CCSPlayerController player, bool quiet = false)
@@ -171,48 +213,61 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         return null;
     }
 
-    private void Open(CCSPlayerController player)
+    private InGameMenu BuildMenu(CCSPlayerController player)
+    {
+        var library = ReadLibrary(player, quiet: true);
+        return TrainingMenu.Create(library ?? [], Server.MapName, TrainingEnabled,
+            _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfuegbar; im Dashboard pruefen." : "");
+    }
+
+    private void Open(CCSPlayerController player, bool focus = true)
     {
         Close(player.Slot);
-        var library = ReadLibrary(player, quiet: true);
-        // Do not let two menus consume the same inputs / compete for the center HUD.
         MenuManager.CloseActiveMenu(player);
-        var session = new MenuSession(player, TrainingMenu.Create(library ?? [], Server.MapName, TrainingEnabled,
-            _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfuegbar; im Dashboard pruefen." : ""), TrainingEnabled);
+        var session = new MenuSession(player, BuildMenu(player), TrainingEnabled);
         _menus[player.Slot] = session;
-        session.Pawn.MoveType = MoveType_t.MOVETYPE_NONE;
-        session.Pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
-        Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_MoveType");
-        LockAttacks(session);
-        player.PrintToCenterHtml(session.Html, 1);
+        SetFocus(session, focus);
     }
 
     private void Select(CCSPlayerController player, int key)
     {
-        if (!_menus.TryGetValue(player.Slot, out var session)) return;
+        if (!_menus.TryGetValue(player.Slot, out var session) || !session.Visible || !session.Focused) return;
         session.LastInput = Server.CurrentTime;
+        session.DetailPage = 0;
         switch (key)
         {
             case 6:
-                if (!session.Menu.Back()) { Close(player.Slot); return; }
+                if (!session.Menu.Back()) { SetFocus(session, false); return; }
                 break;
             case 7: session.Menu.ChangePage(-1); break;
             case 8: session.Menu.ChangePage(1); break;
-            case 9: Close(player.Slot); return;
+            case 9: Hide(session); return;
             default:
                 var request = session.Menu.Select(key);
                 if (request?.Action == TrainingAction.Back) session.Menu.Back();
                 else if (request != null) { ExecuteAction(player, request); return; }
                 break;
         }
-        session.Html = MenuRenderer.Render(session.Menu, session.Practice);
         session.NextDraw = 0;
     }
 
     private void ExecuteAction(CCSPlayerController player, MenuRequest request)
     {
-        Close(player.Slot);
-        if (request.Action == TrainingAction.Close || !Alive(player)) return;
+        if (!Alive(player)) return;
+        if (request.Action == TrainingAction.Close)
+        { if (_menus.TryGetValue(player.Slot, out var panel)) Hide(panel); return; }
+        if (request.Action == TrainingAction.PanelAspect)
+        {
+            if (_menus.TryGetValue(player.Slot, out var panel))
+            { panel.Wide = !panel.Wide; Tell(player, panel.Wide ? "Panelposition: 16:9" : "Panelposition: 4:3 / 16:10"); }
+            return;
+        }
+        if (request.Action == TrainingAction.RefreshLibrary)
+        {
+            if (_menus.TryGetValue(player.Slot, out var panel)) { panel.Menu = BuildMenu(player); panel.NextDraw = 0; }
+            return;
+        }
+        ReleaseControl(player.Slot);
         if (request.Action != TrainingAction.StartPractice && !TrainingEnabled)
         { Tell(player, "Training ist inzwischen beendet. Menue erneut oeffnen."); return; }
         switch (request.Action)
@@ -222,14 +277,23 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
                 return;
             case TrainingAction.CheckPosition: CheckPlacement(player); return;
+            case TrainingAction.StartCapture: ArmNewLineupCapture(player); return;
+            case TrainingAction.SaveCapture: SavePanelCapture(player); return;
+            case TrainingAction.CancelCapture: ClearCapture(player.Slot); Tell(player, "Nade-Aufnahme verworfen."); return;
+            case TrainingAction.GiveGrenade:
+                if (EquipGrenade(player, request.Kind)) Tell(player, $"Ausgeruestet: {NadeCatalog.Label(request.Kind)}. Bereit zum Werfen.");
+                return;
         }
         if (TrainingMenu.Command(request.Action) is { } command)
+        {
+            Tell(player, "An MatchZy gesendet. " + TrainingMenu.ActionHint(request.Action));
             player.ExecuteClientCommandFromServer(command);
+        }
     }
 
     private void LoadLineup(CCSPlayerController player, NadeLineup selected)
     {
-        Close(player.Slot);
+        ReleaseControl(player.Slot);
         if (!TrainingEnabled || !Alive(player)) return;
         // Re-read at selection time: a panel sync may have edited, removed or unshared this entry.
         var library = ReadLibrary(player);
@@ -237,17 +301,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var lineup = library.FirstOrDefault(n => n.Owner == selected.Owner && n.Name == selected.Name && n.Map == selected.Map);
         if (lineup == null) { Tell(player, "Lineup nicht mehr vorhanden oder auf einer anderen Map. .nades erneut oeffnen."); return; }
         var pawn = player.PlayerPawn.Value!;
-        if (NadeCatalog.Equipment(lineup.Kind, player.TeamNum == 3) is { } equipment)
-        {
-            var hasGrenade = pawn.WeaponServices!.MyWeapons.Any(w => w.Value is { IsValid: true } weapon && weapon.DesignerName == equipment.Weapon);
-            if (!hasGrenade && player.GiveNamedItem(equipment.Weapon) == IntPtr.Zero)
-            {
-                Tell(player, "Granate konnte nicht gegeben werden. Bitte Inventar freimachen und erneut versuchen.");
-                return;
-            }
-            // Same client slot commands used by MatchZy's own .loadnade; no user strings executed.
-            player.ExecuteClientCommand(equipment.Slot);
-        }
+        if (!EquipGrenade(player, lineup.Kind)) return;
         // Loading is a training action: leave noclip / ladder mode so normal gravity can
         // settle MatchZy's saved Z+4 positions. Closing a menu alone still restores its old mode.
         pawn.MoveType = MoveType_t.MOVETYPE_WALK;
@@ -258,9 +312,25 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         PlayerBodyRotation.Repair(pawn);
         _last[player.Slot] = lineup;
         ArmCapture(player, lineup);
-        Tell(player, $"Geladen: {MenuRenderer.Plain(lineup.Title, 90)}. Bereit zum Trainieren.");
-        if (!string.IsNullOrWhiteSpace(lineup.Description)) Tell(player, MenuRenderer.Plain(lineup.Description, 180));
-        if (lineup.Kind == NadeKind.Other) Tell(player, "Dieses Lineup hat keinen Granatentyp. Passende Granate selbst waehlen.");
+        Tell(player, $"Geladen: {lineup.Title}. {lineup.Description}" +
+            (lineup.Kind == NadeKind.Other ? " Passende Granate selbst waehlen." : " Bereit zum Trainieren."));
+    }
+
+    private bool EquipGrenade(CCSPlayerController player, NadeKind kind)
+    {
+        var pawn = player.PlayerPawn.Value!;
+        if (NadeCatalog.Equipment(kind, player.TeamNum == 3) is { } equipment)
+        {
+            var hasGrenade = pawn.WeaponServices!.MyWeapons.Any(w => w.Value is { IsValid: true } weapon && weapon.DesignerName == equipment.Weapon);
+            if (!hasGrenade && player.GiveNamedItem(equipment.Weapon) == IntPtr.Zero)
+            {
+                Tell(player, "Granate konnte nicht gegeben werden. Bitte Inventar freimachen und erneut versuchen.");
+                return false;
+            }
+            // Same client slot commands used by MatchZy's own .loadnade; no user strings executed.
+            player.ExecuteClientCommand(equipment.Slot);
+        }
+        return true;
     }
 
     private void CheckPlacement(CCSPlayerController player)
@@ -274,8 +344,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var body = scene.AbsRotation;
         var message = FormattableString.Invariant($"Position {position.X:0.###} {position.Y:0.###} {position.Z:0.###}; Bewegung {pawn.MoveType}/{pawn.ActualMoveType}.");
         var angles = FormattableString.Invariant($"Blick (Pitch/Yaw/Roll): {eye.X:0.###}/{eye.Y:0.###}/{eye.Z:0.###}; Koerper: {body.X:0.###}/{body.Y:0.###}/{body.Z:0.###}.");
-        Tell(player, message);
-        Tell(player, angles);
+        Tell(player, message + " " + angles);
         Logger.LogInformation("Nades position check: {Details} {Angles}", message, angles);
     }
 
@@ -289,6 +358,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void OnTick()
     {
         if (!TrainingEnabled) ResetCapture();
+        RecordSaveInputs();
         // MatchZy's own .loadnade/.last/.loadpos bypass our loader. Repair the same
         // scene-node tilt for living practice players (including practice bots).
         // No changes in live matches or to parented/spectator/dead pawns.
@@ -302,12 +372,19 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         foreach (var (slot, session) in _menus.ToArray())
         {
             var player = session.Player;
-            if (!Alive(player) || player.PlayerPawn.Value!.Handle != session.Pawn.Handle || TrainingEnabled != session.Practice ||
-                session.Menu.Map != Server.MapName || Server.CurrentTime - session.LastInput > 90f ||
-                MenuManager.GetActiveMenu(player) != null)
+            if (!Alive(player) || player.PlayerPawn.Value!.Handle != session.Pawn.Handle || session.Menu.Map != Server.MapName)
             { Close(slot); continue; }
-            LockAttacks(session);
-            var input = session.Input.Read(player.Buttons);
+            if (TrainingEnabled != session.Practice)
+            {
+                SetFocus(session, false);
+                session.Practice = TrainingEnabled;
+                session.Menu = BuildMenu(player);
+            }
+            if (session.Focused && (Server.CurrentTime - session.LastInput > 90f || MenuManager.GetActiveMenu(player) != null))
+                SetFocus(session, false);
+            if (!session.Visible) continue;
+            if (session.Focused) LockAttacks(session);
+            var input = session.Focused ? session.Input.Read(player.Buttons) : MenuInputAction.None;
             if (input != MenuInputAction.None) session.LastInput = Server.CurrentTime;
             switch (input)
             {
@@ -317,16 +394,35 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 case MenuInputAction.NextPage: Select(player, 8); break;
                 case MenuInputAction.Up: session.Menu.Move(-1); break;
                 case MenuInputAction.Down: session.Menu.Move(1); break;
+                case MenuInputAction.Details:
+                    var detail = session.Menu.Notice.Length > 0 ? session.Menu.Notice : session.Menu.Selected?.Hint;
+                    if (string.IsNullOrWhiteSpace(detail)) detail = session.Menu.Current.Description;
+                    var pages = PanelText.DetailPages(detail ?? "").Count;
+                    session.DetailPage = (session.DetailPage + 1) % pages;
+                    break;
             }
             if (input != MenuInputAction.None)
             {
-                session.Html = MenuRenderer.Render(session.Menu, session.Practice);
+                if (input != MenuInputAction.Details) session.DetailPage = 0;
                 session.NextDraw = 0;
             }
-            if (_menus.ContainsKey(slot) && Server.CurrentTime >= session.NextDraw)
+            if (_menus.ContainsKey(slot) && session.Visible)
             {
-                player.PrintToCenterHtml(session.Html, 1);
-                session.NextDraw = Server.CurrentTime + 0.1f;
+                try
+                {
+                    if (Server.CurrentTime >= session.NextDraw)
+                    {
+                        session.Panel.Draw(PanelText.Render(session.Menu, session.Focused, session.Practice, session.DetailPage), session.Wide);
+                        session.NextDraw = Server.CurrentTime + 0.1f;
+                    }
+                    session.Panel.FollowCamera();
+                }
+                catch (Exception error)
+                {
+                    Logger.LogError(error, "Could not draw training panel for slot {Slot}", slot);
+                    Close(slot);
+                    Tell(player, "Seitenpanel konnte nicht erstellt werden. Serverlog pruefen.");
+                }
             }
         }
     }
@@ -334,6 +430,41 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void Close(int slot)
     {
         if (!_menus.Remove(slot, out var session)) return;
+        SetFocus(session, false);
+        session.Panel.Dispose();
+    }
+
+    private void ReleaseControl(int slot)
+    {
+        if (_menus.TryGetValue(slot, out var session)) SetFocus(session, false);
+    }
+
+    private void Hide(MenuSession session)
+    {
+        SetFocus(session, false);
+        session.Visible = false;
+        session.Panel.Dispose();
+    }
+
+    private static void SetFocus(MenuSession session, bool focus)
+    {
+        if (session.Focused == focus) return;
+        session.Focused = focus;
+        session.NextDraw = 0;
+        session.Input = new(session.Player.IsValid ? session.Player.Buttons : 0);
+        session.LastInput = Server.CurrentTime;
+        if (focus)
+        {
+            MenuManager.CloseActiveMenu(session.Player);
+            session.MoveType = session.Pawn.MoveType;
+            session.ActualMoveType = session.Pawn.ActualMoveType;
+            session.NextAttack = session.Pawn.WeaponServices!.As<CCSPlayer_WeaponServices>().NextAttack;
+            session.Pawn.MoveType = MoveType_t.MOVETYPE_NONE;
+            session.Pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
+            Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_MoveType");
+            LockAttacks(session);
+            return;
+        }
         if (session.Pawn.IsValid)
         {
             // Restore only state still owned by this menu, and only on the original pawn.
@@ -350,7 +481,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                     weapons.NextAttack = Math.Max(session.NextAttack, Server.CurrentTime + 0.15f);
             }
         }
-        if (session.Player.IsValid) session.Player.PrintToCenterHtml(" ", 1);
     }
 
     private void Forget(CCSPlayerController? player)

@@ -154,6 +154,11 @@ export function sanitizeNades(entries) {
     const name = String(entry.name ?? "").trim();
     const map = String(entry.map ?? "").trim();
     const displayName = String(entry.displayName ?? "").trim();
+    const throwTechnique = String(entry.throwTechnique ?? "").trim();
+    const throwTrace = String(entry.throwTrace ?? "").trim();
+    if (throwTechnique.length > 500 || throwTrace.length > 120_000) {
+      throw new Error("Captured throw details are too large");
+    }
     if (displayName.length > 120 || /[\u0000-\u001f\u007f]/.test(displayName)) {
       throw new Error("Display name must be at most 120 characters without control characters");
     }
@@ -199,6 +204,8 @@ export function sanitizeNades(entries) {
       owner,
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
+    if (throwTechnique) cleanEntry.throwTechnique = throwTechnique;
+    if (throwTrace) cleanEntry.throwTrace = throwTrace;
     if (landingPos) cleanEntry.landingPos = landingPos;
     if (displayName) cleanEntry.displayName = displayName;
     if (entry.captureId) cleanEntry.captureId = String(entry.captureId);

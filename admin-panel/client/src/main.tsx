@@ -1252,6 +1252,14 @@ function MapsAndNades(props) {
   );
 }
 
+function formatThrowTrace(value) {
+  try {
+    const samples = JSON.parse(String(value || ""));
+    if (!Array.isArray(samples)) return "";
+    return samples.map(sample => `${Number(sample.time).toFixed(2)}s · ${sample.buttons || "keine Taste"} · pos ${sample.position || "?"} · velocity ${sample.velocity || "?"} · view ${sample.view || "?"}`).join("\n");
+  } catch { return ""; }
+}
+
 function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onRefresh, onApply, viewNav }) {
   const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
   const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
@@ -1477,6 +1485,8 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                     <div className="grid gap-1"><span className="text-muted-foreground">Position</span><code className="truncate">{nade.lineupPos}</code></div>
                     <div className="grid gap-1"><span className="text-muted-foreground">Angle</span><code className="truncate">{nade.lineupAng}</code></div>
                     {nade.landingPos ? <div className="grid gap-1"><span className="text-muted-foreground">Landing</span><code className="truncate">{nade.landingPos}</code></div> : null}
+                    {nade.throwTechnique ? <div className="grid gap-1"><span className="text-muted-foreground">Throw</span><strong>{nade.throwTechnique}</strong></div> : null}
+                    {nade.throwTrace ? <details className="mt-1 rounded-md border border-border p-2"><summary className="cursor-pointer text-xs font-medium">Show recorded throw inputs and movement</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed text-muted-foreground">{formatThrowTrace(nade.throwTrace)}</pre></details> : null}
                   </CardContent>
                   <CardFooter className="justify-between border-t border-border pt-4">
                     <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"}>{String(nade.owner || "default") === "default" ? "Shared" : "Private"}</Badge>

@@ -21,7 +21,7 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 }
 
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
-    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "")
+    string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "")
 {
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }

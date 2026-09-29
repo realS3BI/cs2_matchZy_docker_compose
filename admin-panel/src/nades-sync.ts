@@ -19,6 +19,8 @@ function stableNades(entries) {
     displayName: entry.displayName,
     landingPos: entry.landingPos,
     captureId: entry.captureId,
+    throwTechnique: entry.throwTechnique,
+    throwTrace: entry.throwTrace,
     map: entry.map,
     type: entry.type,
     desc: entry.desc,
@@ -42,7 +44,7 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
-    for (const key of ["displayName", "landingPos", "captureId", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+    for (const key of ["displayName", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
       if (current[key] !== undefined) merged[key] = current[key];
     }
     if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
@@ -64,7 +66,7 @@ function sameVector(left, right) {
 export function mergeNadeCaptures(entries, captures) {
   if (!Array.isArray(captures)) throw new Error("Grenade captures must be an array");
   const byKey = new Map(captures.filter(c => c && typeof c === "object").map(c => [nadeKey(c), c]));
-  return entries.map(entry => {
+  const mergedEntries = entries.map(entry => {
     const capture = byKey.get(nadeKey(entry));
     if (!capture?.captureId || capture.captureId === entry.captureId ||
         !sameVector(entry.lineupPos, capture.lineupPos) || !sameVector(entry.lineupAng, capture.lineupAng) ||
@@ -75,6 +77,21 @@ export function mergeNadeCaptures(entries, captures) {
         captureId: capture.captureId, updatedAt: capture.capturedAt }])[0];
     } catch { return entry; }
   });
+  for (const capture of captures) {
+    if (capture?.newLineup !== true || !capture.name || mergedEntries.some(entry => nadeKey(entry) === nadeKey(capture))) continue;
+    try {
+      const [entry] = sanitizeNades([{
+        name: capture.name, displayName: capture.displayName, map: capture.map, type: capture.type,
+        desc: capture.description || capture.throwTechnique || "Captured in game",
+        lineupPos: capture.lineupPos, lineupAng: capture.lineupAng, landingPos: capture.landingPos,
+        owner: capture.owner, captureId: capture.captureId,
+        throwTechnique: capture.throwTechnique, throwTrace: capture.throwTrace,
+        updatedAt: capture.capturedAt
+      }]);
+      mergedEntries.push(entry);
+    } catch { /* Ignore malformed capture entries; regular MatchZy sync remains available. */ }
+  }
+  return mergedEntries;
 }
 
 async function readJsonFile(path) {
@@ -312,6 +329,8 @@ export class NadesSyncService {
     const entries = mergeNadeCaptures(current, captures);
     if (stableNades(entries) !== stableNades(current)) {
       await this.store.replaceNadesFromSync(entries, { source: "grenade-capture" });
+      if (entries.some(entry => !current.some(existing => nadeKey(existing) === nadeKey(entry))))
+        await this.writeFromMongo(entries);
       this.lastDirection = "matchzy-to-panel";
     }
   }
