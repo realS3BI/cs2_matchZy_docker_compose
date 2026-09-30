@@ -39,7 +39,7 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     }
 
     [Fact]
-    public void FixedKeysIgnoreLegacyOverridesAndExportOnlyNineCommands()
+    public void FixedKeysIgnoreLegacyOverridesAndExportOnlyEightCommands()
     {
         var settings = PlayerPanelSettings.Validate(new() { Keys = new() { ["focus"] = "K;quit" }, GameButtons = true });
         Assert.Null(settings.ActionForKey("F6"));
@@ -48,7 +48,7 @@ public sealed class PlayerPanelSettingsTests : IDisposable
         Assert.Equal("visible", settings.ActionForKey("KP_DEL"));
         Assert.Contains("bind \"KP_0\" \"css_training_key KP_0\"", settings.Export());
         Assert.DoesNotContain("quit", settings.Export());
-        Assert.Equal(9, settings.Export().Split('\n').Length);
+        Assert.Equal(8, settings.Export().Split('\n').Length);
         Assert.False(settings.GameButtons);
     }
 
@@ -68,7 +68,7 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     {
         var page = PanelSettingsMenu.Create(new());
         Assert.Equal("Keybinds", page.Title);
-        Assert.Equal(10, page.Items.Count);
+        Assert.Equal(9, page.Items.Count);
         Assert.All(page.Items.Skip(1), item => { Assert.Null(item.Page); Assert.Null(item.Request); });
         Assert.Equal(TrainingAction.ExportBindings, page.Items.First().Request!.Action);
     }
@@ -79,7 +79,18 @@ public sealed class PlayerPanelSettingsTests : IDisposable
         var settings = new PlayerPanelSettings();
         var lines = settings.ConsoleExport().Split('\n');
         Assert.Equal(2, lines.Length);
-        Assert.Equal(settings.Export().Split('\n'), lines[0].Split("; "));
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(lines[0]) < 240);
+        var commands = lines[0].Split(';');
+        Assert.Equal(8, commands.Length);
+        for (var i = 0; i < commands.Length; i++)
+        {
+            Assert.Equal($"bind {PlayerPanelSettings.DefaultKeys.Values.ElementAt(i)} \"css_tk {i}\"", commands[i]);
+            Assert.Equal(PlayerPanelSettings.DefaultKeys.Keys.ElementAt(i), PlayerPanelSettings.ActionForIndex(i.ToString()));
+        }
+        Assert.Null(settings.ActionForKey("PGDN"));
+        Assert.Null(PlayerPanelSettings.ActionForIndex("8"));
+        Assert.Null(PlayerPanelSettings.ActionForIndex("-1"));
+        Assert.Null(PlayerPanelSettings.ActionForIndex("0;quit"));
         Assert.Equal("bind \"n\" \"noclip\"", lines[1]);
     }
 }

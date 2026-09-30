@@ -17,7 +17,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.8.0";
+    public override string ModuleVersion => "1.9.0";
     public override string ModuleAuthor => "MatchZy Control";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -46,7 +46,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         public bool Visible { get; set; } = true;
         public bool Focused { get; set; }
         public PlayerPanelSettings Settings { get; set; } = new();
-        public int DetailPage { get; set; }
         public IReadOnlyList<NadeLineup>? Library { get; set; }
         public ScreenPanel Panel { get; } = new(player);
     }
@@ -92,6 +91,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         try
         {
             _runtimeStatus?.Write(loaded, TrainingEnabled, Server.MapName);
+            if (loaded) WriteMapInventory();
             _statusWriteFailed = false;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -164,7 +164,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (_menus.TryGetValue(player.Slot, out var session))
         {
             session.Menu.Notice = message;
-            session.DetailPage = 0;
             session.NextDraw = 0;
         }
         player.PrintToChat($" [Nades] {message}");
@@ -253,7 +252,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         if (!_menus.TryGetValue(player.Slot, out var session) || !session.Visible || !session.Focused) return;
         session.LastInput = Server.CurrentTime;
-        session.DetailPage = 0;
         var request = session.Menu.Select(key);
         if (request?.Action == TrainingAction.Back) session.Menu.Back();
         else if (request != null) { ExecuteAction(player, request); return; }
@@ -398,7 +396,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 {
                     if (Server.CurrentTime >= session.NextDraw)
                     {
-                        session.Panel.Draw(session.Menu, session.Focused, session.Practice, session.DetailPage, session.Settings);
+                        session.Panel.Draw(session.Menu, session.Focused);
                         session.NextDraw = Server.CurrentTime + 0.1f;
                     }
                 }

@@ -3,7 +3,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FLAG_PRESETS } from "./defaults.js";
 import {
@@ -83,6 +83,13 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
 }
 
 export function createApp({ config, store, compose, nadesSync, restartScheduler = null, rcon = executeRcon }) {
+  async function readMapInventory() {
+    try {
+      const parsed = JSON.parse(await readFile(join(dirname(config.liveMatchZyNadesFile), "savednades.maps.json"), "utf8"));
+      return Array.isArray(parsed) ? parsed : null;
+    } catch { return null; }
+  }
+
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -219,7 +226,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       restartScheduler?.status() || Promise.resolve({ enabled: false })
     ]);
     const nades = nadesDocument?.entries || [];
-    res.json({ settings, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, nadesSync: nadesSync?.status() || { enabled: false, state: "disabled" }, nadesLibrary: nadesLibraryStatus(nadesDocument) }, policy: buildControlModel(settings) });
+    const mapInventory = await readMapInventory();
+    res.json({ settings, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, mapInventory, nadesSync: nadesSync?.status() || { enabled: false, state: "disabled" }, nadesLibrary: nadesLibraryStatus(nadesDocument) }, policy: buildControlModel(settings) });
   });
 
   app.put("/api/control", async (req, res) => {
@@ -320,6 +328,9 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     try {
       command = mapChangeCommand(req.body);
       settings = await runtimeSettings();
+      const inventory = await readMapInventory();
+      if (inventory && !inventory.some(m => m.Available === true && (req.body.workshopId ? m.WorkshopId === req.body.workshopId : m.MapName === req.body.map && !m.WorkshopId)))
+        throw new Error("Diese Map ist nicht als ladbare Server-Map verfügbar. Bestand aktualisieren oder Workshop-Version aktivieren.");
       if (req.body.workshopId && !String(settings.workshopMaps || "").split(/[\s,]+/).includes(req.body.workshopId)) {
         throw new Error("Add and apply this Workshop map before switching to it.");
       }

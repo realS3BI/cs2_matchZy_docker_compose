@@ -1,6 +1,6 @@
-# Trainingszentrale im Spiel (1.8.0)
+# Trainingszentrale im Spiel (1.9.0)
 
-Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und drei Beschreibungszeilen. Lange Texte lassen sich mit PGDN weiterlesen. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
+Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und vier Beschreibungszeilen über die volle Breite. Längere Texte werden mit Auslassungspunkten gekürzt. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
 
 ## Aktivieren und Practice prüfen
 
@@ -19,7 +19,7 @@ Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. O
 5. **Favoriten:** persönlich gemerkte Granaten auf dieser Map. Die Identität ist Owner + Map + interner Name; Umbenennen des Anzeigenamens verliert keine Favoriten.
 6. **Competitive-Spawns:** CT- oder T-Startposition wählen und dorthin teleportieren.
 7. **Map wechseln:** eine Map vorschlagen oder in einer laufenden Abstimmung Ja/Nein wählen.
-8. **Keybinds:** die festen neun Tasten und die Bind-Befehle anzeigen.
+8. **Keybinds:** die festen acht Tasten und die Bind-Befehle anzeigen.
 9. **Panel ausblenden:** mit KP_DEL wieder anzeigen. KP_0 wechselt zwischen Bedienung und freiem Spielen.
 
 **Bots** enthält stehenden Bot, duckenden Bot und Bots entfernen. **Trainingshilfen** enthält Flugbahnvorschau, Einschläge, Flashschutz und God Mode. Die Beschriftung zeigt „einschalten“ oder „ausschalten“ entsprechend dem tatsächlichen Zustand. MatchZys God Mode wird anhand seiner Lebenspunkte-Logik erkannt. Gemeinsame Trainingsaktionen werden sofort ausgeführt; die Beschreibung kennzeichnet ihre Wirkung auf alle Spieler. MatchZy behält seine Berechtigungsprüfung und meldet das Ergebnis im Chat.
@@ -36,13 +36,13 @@ Spieleranfragen werden mit authentifizierter Steam-ID und Versionsstand über `s
 
 Jeder lebende Spieler in Practice darf eine Abstimmung starten. Zur Auswahl stehen lokal vorhandene Standard-Map-VPKs und im angewendeten Dashboard konfigurierte Workshop-Maps. Mapnamen und Workshop-IDs werden geprüft; freie Befehle sind nicht zulässig.
 
-Die Abstimmung dauert 30 Sekunden. Der Vorschlag zählt als Ja-Stimme des Initiators. Es gilt `floor(Anzahl / 2) + 1`: bei vier Spielern sind drei Ja-Stimmen nötig. Gezählt werden alle beim Start verbundenen menschlichen Spieler inklusive Zuschauer, ohne Bots oder HLTV. Jeder hat eine Stimme. Spätere Beitritte stimmen nicht mit; Disconnects verkleinern den Nenner nicht, Enthaltungen sind keine Ja-Stimmen.
+Die Abstimmung dauert 30 Sekunden. Auch der Initiator muss ausdrücklich mit Ja oder Nein abstimmen. Es gilt `floor(Anzahl / 2) + 1`: bei vier Spielern sind drei Ja-Stimmen nötig. Gezählt werden alle beim Start verbundenen menschlichen Spieler inklusive Zuschauer, ohne Bots oder HLTV. Jeder hat eine Stimme. Spätere Beitritte stimmen nicht mit; Disconnects verkleinern den Nenner nicht, Enthaltungen sind keine Ja-Stimmen.
 
 Abstimmen im Panel unter **Map wechseln**, im Chat mit `.mapja` / `.mapnein` oder in der Konsole mit `css_training_vote yes` / `css_training_vote no`. Bei erreichter Mehrheit wird gewechselt; ohne Mehrheit bleibt die Map. Zwischen Vorschlägen liegen mindestens 60 Sekunden. Practice-Ende, Map-Ende und Plugin-Unload verwerfen die Abstimmung.
 
 ## Abnahmestand
 
-Version 1.8.0 wird mit Unit-/Integrationstests, Web-Build und Valves Panorama-Compiler geprüft. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
+Version 1.9.0 wird mit Unit-/Integrationstests, Web-Build und Valves Panorama-Compiler geprüft. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
 
 ## Architektur
 
@@ -135,8 +135,25 @@ Die verwendeten API-Einstiegspunkte sind in den offiziellen CounterStrikeSharp-Q
 In der Map-Galerie und unter **All lineups** entfernt **Delete** nach Bestätigung einen Eintrag aus dem Entwurf. Erst **Save lineups** bzw. **Save nades** schreibt die Änderung auf den Server. Das offene Ingame-Menü übernimmt sie automatisch. Bereits verarbeitete Aufnahme-IDs werden in `savednades.capture-receipts.json` neben der Bibliothek gespeichert, damit alte `savednades.captures.json`-Dateien gelöschte Einträge auch nach einem Neustart nicht wieder anlegen. Eine neue Aufnahme mit neuer ID bleibt möglich. Speichern und Sync-Polling laufen im Dashboard nacheinander, damit sie sich nicht gegenseitig überschreiben.
 
 
-## Competitive-Spawns (1.8.0)
+## Competitive-Spawns (1.9.0)
 
 Im Hauptmenü **Competitive-Spawns → CT-Spawns / T-Spawns → Spawn** wählen. Das Plugin liest die `info_player_counterterrorist`- und `info_player_terrorist`-Entities direkt aus der geladenen Map. Es verwendet pro Seite die aktivierten Punkte mit dem kleinsten numerischen Prioritätswert, entsprechend dem Grundprinzip in [MatchZys Spawn-Erfassung](https://github.com/shobhit-pathak/MatchZy/blob/main/PracticeMode.cs). Die beiden Teams werden getrennt ausgewertet, damit auch unterschiedliche Prioritäten auf Custom-Maps funktionieren. Es wird keine feste Anzahl von fünf Spawns vorausgesetzt.
 
 Die Nummerierung folgt den Entity-Indizes der geladenen Map. Der Teleport prüft den Spawn erneut, setzt Position und Blickrichtung, stoppt Bewegung und beendet Noclip. Er ist nur für lebende Spieler im Training verfügbar und ändert nicht das Team. Besetzte oder inzwischen deaktivierte Spawnpunkte werden mit einer Meldung abgewiesen. Die tatsächlichen Teleports müssen im laufenden CS2 auf den verwendeten Maps geprüft werden.
+
+## Map-Katalog und Abstimmung ab 1.9.0
+
+Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **MatchZy Nades 1.9.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
+
+Das Dashboard schreibt den gemeinsamen Katalog als `map-catalog.json` neben die angewendeten Einstellungen. Das Plugin ermittelt installierte VPK-Maps und aktivierte Workshop-IDs und veröffentlicht `savednades.maps.json` neben der Granatenbibliothek. Nach **Refresh** verwendet der Web-Atlas genau diese Kategorien und Verfügbarkeiten. Ohne Serverbestand kennzeichnet die Website die Ladbarkeit als unbestätigt.
+
+- **Active Duty:** Mirage, Dust II, Nuke, Inferno, Ancient, Anubis, Cache (Valve Season Five).
+- **Reserve & Community:** die bisherigen Reserve-/Community-Referenzen, sofern auf dem Server vorhanden oder als aktivierte Workshop-Version hinterlegt.
+- **Others:** weitere installierte Maps und sonstige konfigurierte Workshop-Maps.
+- **Nicht verfügbar:** Katalogeinträge ohne installierte oder aktivierte Workshop-Version; vorhandene Lineups bleiben erhalten.
+
+Vanity-, Workshop-Vorschau-, Grafiktest- und Lobby-Kulissen erscheinen nicht als ladbare Maps. Das Ingame-Menü startet eine 30-sekündige Ja/Nein-Abstimmung. Der Vorschlagende hat keine automatische Stimme; auch allein muss er ausdrücklich zustimmen. Für lebende Spieler wird die Abstimmungsseite im HUD eingeblendet, ohne freies Zielen zu sperren. Mit KP_0 kann man sie bedienen; Zuschauer stimmen über `.mapja`/`.mapnein` ab. Ein administrativer RCON-Mapwechsel auf der Website bleibt ein direkter Admin-Befehl.
+
+Review-Anfragen verwenden stabile IDs für identische Änderungen. Das Dashboard hält Verarbeitungsbelege unter `savednades.requests/processed` vor, damit eine übrig gebliebene Anfrage nicht nochmals ausgeführt wird. Benachrichtigungen hängen nicht davon ab, ob der Spielprozess eine vom Dashboard erzeugte Ergebnisdatei löschen darf.
+
+Zusätzliche Radaransichten für Baggage, Shoots, Shoots (Nacht), Ancient (Nacht), Shelter, Boulder, Debris, El Dorado, Fachwerk, Poseidon und Training stammen aus den extrahierten Valve-/Map-Autoren-Assets unter https://github.com/MurkyYT/cs2-map-icons/tree/main/images/radars (abgerufen am 30.09.2026). Sie liegen unverändert als PNG unter `admin-panel/client/public/maps`; jeweils die Hauptansicht, keine automatische Ebenenauswahl. Für Pool Day wurde dort keine Radaransicht gefunden; hier bleibt die neutrale Darstellung. Vorhandene CSNADES-Radare bleiben unverändert.

@@ -71,5 +71,6 @@ export function mapChangeCommand(input) {
     return `host_workshop_map ${input.workshopId}`;
   }
   if (typeof input?.map !== "string" || !/^[a-z0-9_]{1,64}$/i.test(input.map)) throw new Error("Map names may contain only letters, numbers and underscores.");
+  if (/vanity|^workshop_preview_|^graphics_settings$|^lobby_mapveto$/i.test(input.map)) throw new Error("Diese Map ist nur eine Vorschau oder Kulisse und kann nicht geladen werden.");
   return `changelevel ${input.map}`;
 }

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   ACTIVE_DUTY_MAPS,
   BUILT_IN_MAPS,
+  CSNADES_REFERENCE_MAPS,
+  mapsForInventory,
   addWorkshopMap,
   extractWorkshopId,
   mapMatchesNade,
@@ -24,9 +26,10 @@ test("active duty catalog follows Valve Season Five", () => {
 });
 
 test("every fixed CSNADES map has a local radar and stable image bounds", () => {
-  assert.equal(BUILT_IN_MAPS.length, 18);
-  assert.equal(new Set(BUILT_IN_MAPS.map((map) => map.radarUrl)).size, 18);
-  for (const map of BUILT_IN_MAPS) {
+  const radarMaps = [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS];
+  assert.equal(radarMaps.length, 18);
+  assert.equal(new Set(radarMaps.map((map) => map.radarUrl)).size, 18);
+  for (const map of radarMaps) {
     assert.match(map.radarUrl || "", /^\/maps\/[a-z0-9]+\.webp$/);
     assert.ok((map.radarWidth || 0) > 0);
     assert.ok((map.radarHeight || 0) > 0);
@@ -64,4 +67,18 @@ test("map matching tolerates display names and engine prefixes", () => {
   assert.equal(mapMatchesNade(ACTIVE_DUTY_MAPS[1], "Dust 2"), true);
   assert.equal(mapMatchesNade(ACTIVE_DUTY_MAPS[1], "de_dust2"), true);
   assert.equal(mapMatchesNade(ACTIVE_DUTY_MAPS[1], "de_mirage"), false);
+});
+
+test("atlas follows server categories, installed availability and workshop restoration", () => {
+  const maps = mapsForInventory({}, [
+    { Key: "de_mirage", Title: "Mirage", MapName: "de_mirage", Category: "active", Available: true },
+    { Key: "de_thera", Title: "Thera", MapName: "de_thera", Category: "unavailable", Available: false },
+    { Key: "workshop:123", Title: "Mills", MapName: "de_mills", Category: "reserve", Available: true, WorkshopId: "123" },
+    { Key: "sky", Title: "Sky", MapName: "de_mirage_vanity", Category: "other", Available: true }
+  ]);
+  assert.equal(maps.length, 3);
+  assert.equal(maps[1].available, false);
+  assert.equal(maps[1].category, "unavailable");
+  assert.equal(maps[2].workshopId, "123");
+  assert.equal(maps[2].radarUrl, "/maps/mills.webp");
 });

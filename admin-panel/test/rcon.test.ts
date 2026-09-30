@@ -15,7 +15,7 @@ function response(id, type, body = "") {
 test("map commands reject console injection and support Workshop IDs", () => {
   assert.equal(mapChangeCommand({ map: "de_mirage" }), "changelevel de_mirage");
   assert.equal(mapChangeCommand({ workshopId: "3070244462" }), "host_workshop_map 3070244462");
-  for (const map of ["de_mirage;quit", "de_mirage\nquit", "../de_mirage", "", null, ["de_mirage"]]) {
+  for (const map of ["de_mirage_vanity", "warehouse_vanity", "graphics_settings", "workshop_preview_dust2", "de_mirage;quit", "de_mirage\nquit", "../de_mirage", "", null, ["de_mirage"]]) {
     assert.throws(() => mapChangeCommand({ map }));
   }
   assert.throws(() => mapChangeCommand({ workshopId: "123;quit" }));

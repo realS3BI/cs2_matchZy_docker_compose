@@ -76,9 +76,8 @@ Unter **Keybinds** stehen die unveränderlichen Tasten. Alte persönliche Belegu
 | Bestätigen | ENTER |
 | Zurück | BACKSPACE |
 | Vorherige / nächste Seite | LEFTARROW / RIGHTARROW |
-| Weitere Beschreibungsseite | PGDN |
 
-Der erste Eintrag unter **Keybinds**, **Alle Keybinds in Konsole ausgeben**, schreibt eine Erklärung und zwei kopierbare Befehlszeilen in die Client-Konsole. Das geht auch direkt mit `css_training_binds`. Die erste Zeile enthält alle neun Panel-Binds, mit Semikolon getrennt. Die zweite lautet `bind "n" "noclip"` und ist optional: `n` darf durch eine selbst gewählte, freie Taste ersetzt werden. Noclip benötigt `sv_cheats 1`. Jede gewünschte Zeile einzeln kopieren und ausführen.
+Der erste Eintrag unter **Keybinds**, **Alle Keybinds in Konsole ausgeben**, schreibt ausschließlich zwei kopierbare Befehlszeilen in die Client-Konsole. Das geht auch direkt mit `css_training_binds`. Die erste Zeile enthält alle acht Panel-Binds, mit Semikolon getrennt. Der kurze Plugin-Befehl `css_tk` hält die gesamte Zeile unter 240 UTF-8-Bytes, damit sie in der Client-Konsole angezeigt werden kann. Dafür muss auch das Server-Plugin aktualisiert sein. Die zweite lautet `bind "n" "noclip"` und ist optional: `n` darf durch eine selbst gewählte, freie Taste ersetzt werden. Noclip benötigt `sv_cheats 1`. Jede gewünschte Zeile einzeln kopieren und ausführen.
 
 Alternativ [matchzy_training.cfg](matchzy_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec matchzy_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen; auch das Server-Plugin lädt keine lokale Spieler-CFG. Die optionale Noclip-Zeile ist in der Datei auskommentiert.
 
@@ -94,7 +93,7 @@ Siehe [Bedienung der Trainingszentrale](../docs/nades-menu.md). Alle Aufnahmen s
 
 1. Compilerlauf ohne Fehler; Layout mit 16:9 und 4:3 prüfen, auch lange Titel und Beschreibungen.
 2. Schnell drehen, laufen, springen und zoomen: Rahmen bleibt am Bildschirmrand.
-3. Maus: alle neun Einträge, Zurück, Seitenwechsel und Home testen. KP_0/KP_DEL sowie PGDN prüfen. Nach Verlassen darf kein Cursor/Sperrzustand bleiben.
+3. Maus: alle neun Einträge, Zurück, Seitenwechsel und Home testen. KP_0/KP_DEL prüfen. Beschreibungen müssen die volle Breite nutzen und nach höchstens vier Zeilen mit Auslassungspunkten enden, wenn der Text länger ist. Nach Verlassen darf kein Cursor/Sperrzustand bleiben.
 4. Zwei Spieler mit eigenen Favoriten; alle Aufnahmen sind sichtbar, Bearbeitung bleibt dem Ersteller vorbehalten. Reconnect mit wiederverwendetem Slot und Serverneustart prüfen.
 5. Alte Tastenprofile laden: feste Belegung verwenden, Favoriten erhalten. Navigation im passiven/versteckten Zustand darf keine Aktion auslösen.
 6. Aufnahme, Name/Beschreibung per Chat, Review, Admin-Freigabe, Löschen und Sync-Konflikte testen.

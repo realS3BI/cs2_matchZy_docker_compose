@@ -1,3 +1,4 @@
+import { BUILT_IN_MAPS } from "../client/src/lib/maps.js";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
@@ -31,9 +32,11 @@ export async function writeServerRuntimeFiles(config, nadesSync, settings, admin
   await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
   await nadesSync?.writeFromMongo(nades);
   await writeJsonFile(config.runtimeSettingsFile, normalizeSettings(settings));
+  await writeJsonFile(`${dirname(config.runtimeSettingsFile)}/map-catalog.json`, BUILT_IN_MAPS.map(m => ({ mapName: m.mapName, title: m.name, category: m.category })));
 }
 
 export async function writeServerRuntimeSettings(config, settings) {
   await mkdir(dirname(config.runtimeSettingsFile), { recursive: true });
   await writeJsonFile(config.runtimeSettingsFile, normalizeSettings(settings));
+  await writeJsonFile(`${dirname(config.runtimeSettingsFile)}/map-catalog.json`, BUILT_IN_MAPS.map(m => ({ mapName: m.mapName, title: m.name, category: m.category })));
 }

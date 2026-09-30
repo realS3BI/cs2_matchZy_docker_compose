@@ -1,10 +1,11 @@
-export type MapCategory = "active" | "reserve" | "community" | "workshop";
+export type MapCategory = "active" | "reserve" | "community" | "workshop" | "other" | "unavailable";
 
 export type MapDefinition = {
   key: string;
   name: string;
   mapName: string;
   category: MapCategory;
+  available?: boolean;
   radarUrl?: string;
   radarWidth?: number;
   radarHeight?: number;
@@ -56,7 +57,89 @@ export const CSNADES_REFERENCE_MAPS: MapDefinition[] = [
   { key: "contact", name: "Contact", mapName: "de_contact", category: "community", radarUrl: "/maps/contact.webp", radarWidth: 2048, radarHeight: 2048, sourceUrl: "https://csnades.gg/contact" }
 ];
 
-export const BUILT_IN_MAPS = [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS];
+// Other playable maps shipped with CS2; availability comes from the server inventory.
+const extraRadars: Record<string, { radarUrl: string; radarWidth: number; radarHeight: number }> = {
+  "ar_baggage": {
+    "radarUrl": "/maps/ar_baggage.png",
+    "radarWidth": 1024,
+    "radarHeight": 1024
+  },
+  "ar_shoots": {
+    "radarUrl": "/maps/ar_shoots.png",
+    "radarWidth": 1024,
+    "radarHeight": 1024
+  },
+  "ar_shoots_night": {
+    "radarUrl": "/maps/ar_shoots_night.png",
+    "radarWidth": 1024,
+    "radarHeight": 1024
+  },
+  "de_ancient_night": {
+    "radarUrl": "/maps/de_ancient_night.png",
+    "radarWidth": 1024,
+    "radarHeight": 1024
+  },
+  "cs_shelter": {
+    "radarUrl": "/maps/cs_shelter.png",
+    "radarWidth": 2048,
+    "radarHeight": 2048
+  },
+  "de_boulder": {
+    "radarUrl": "/maps/de_boulder.png",
+    "radarWidth": 2048,
+    "radarHeight": 2048
+  },
+  "de_debris": {
+    "radarUrl": "/maps/de_debris.png",
+    "radarWidth": 2048,
+    "radarHeight": 2048
+  },
+  "de_eldorado": {
+    "radarUrl": "/maps/de_eldorado.png",
+    "radarWidth": 2048,
+    "radarHeight": 2048
+  },
+  "de_fachwerk": {
+    "radarUrl": "/maps/de_fachwerk.png",
+    "radarWidth": 2048,
+    "radarHeight": 2048
+  },
+  "de_poseidon": {
+    "radarUrl": "/maps/de_poseidon.png",
+    "radarWidth": 1024,
+    "radarHeight": 1024
+  },
+  "rush_001": {
+    "radarUrl": "/maps/rush_001.png",
+    "radarWidth": 1024,
+    "radarHeight": 1024
+  }
+};
+
+export const OTHER_MAPS: MapDefinition[] = [
+  ["ar_baggage", "Baggage"], ["ar_pool_day", "Pool Day"], ["ar_shoots", "Shoots"],
+  ["ar_shoots_night", "Shoots (Nacht)"], ["de_ancient_night", "Ancient (Nacht)"],
+  ["cs_shelter", "Shelter"], ["de_boulder", "Boulder"], ["de_debris", "Debris"],
+  ["de_eldorado", "El Dorado"], ["de_fachwerk", "Fachwerk"], ["de_poseidon", "Poseidon"], ["rush_001", "Training"]
+].map(([mapName, name]) => ({ key: mapName, name, mapName, category: "other", ...extraRadars[mapName] }));
+
+export function playableMapName(name: string) {
+  return /^[a-z0-9_]+$/.test(name) && !name.includes("vanity") && !name.startsWith("workshop_preview_") && !["graphics_settings", "lobby_mapveto"].includes(name);
+}
+
+export function mapsForInventory(settings, inventory?: any[]): MapDefinition[] {
+  const known = [...BUILT_IN_MAPS, ...workshopMapsFromSettings(settings).filter(m => !m.mapName || playableMapName(m.mapName))];
+  if (!Array.isArray(inventory)) return known;
+  return inventory.filter(m => m && (m.MapName === "" && m.WorkshopId || playableMapName(m.MapName || ""))).map(m => {
+    const definition = known.find(k => m.WorkshopId ? k.workshopId === m.WorkshopId : k.mapName === m.MapName)
+      || known.find(k => k.mapName === m.MapName);
+    return { ...definition, key: m.Key, name: m.Title, mapName: m.MapName,
+      category: m.Category, available: m.Available === true,
+      ...(m.WorkshopId ? { workshopId: m.WorkshopId } : {}) };
+  });
+}
+
+export const BUILT_IN_MAPS = [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...OTHER_MAPS];
 
 export function extractWorkshopId(value: string) {
   const normalized = String(value || "").trim();

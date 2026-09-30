@@ -9,6 +9,7 @@ public sealed partial class MatchZyNadesPlugin
     private sealed record EditRequest(ulong SteamId, NadeLineup Lineup, string Field, float Expires);
     private readonly Dictionary<int, EditRequest> _edits = [];
     private readonly Dictionary<string, ulong> _pendingLineupRequests = [];
+    private readonly HashSet<string> _submittedLineupRequests = [];
     private bool HandleLineupAction(CCSPlayerController player, MenuRequest request)
     {
         if (request.Action is not (TrainingAction.EditName or TrainingAction.EditDescription or TrainingAction.RequestReview or TrainingAction.DeleteLineup)) return false;
@@ -44,13 +45,16 @@ public sealed partial class MatchZyNadesPlugin
     }
     private bool QueueLineupRequest(CCSPlayerController player, NadeLineup selected, string action, string value)
     {
+        var identity = JsonSerializer.Serialize(new { selected.Owner, selected.Map, selected.Name, selected.Revision, action, value });
+        var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)))[..32].ToLowerInvariant();
+        if (_submittedLineupRequests.Contains(id)) return true;
         var current = ReadLibrary(player)?.FirstOrDefault(n => n.Owner == selected.Owner && n.Map == selected.Map && n.Name == selected.Name);
+        if (action == "review" && current?.ReviewStatus == "pending" && current.Owner == player.SteamID.ToString()) return true;
         if (!TrainingEnabled || current == null || current.Owner != player.SteamID.ToString() || current.Official || current.Revision != selected.Revision)
         { Tell(player, "Die Aufnahme wurde inzwischen geändert oder freigegeben. Bitte erneut öffnen."); return false; }
         if (string.IsNullOrEmpty(current.Revision)) { Tell(player, "Die Aufnahme wird noch synchronisiert. Bitte kurz warten."); return false; }
         try
         {
-            var id = Guid.NewGuid().ToString("N");
             var directory = Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.requests");
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, id + ".json");
@@ -59,6 +63,7 @@ public sealed partial class MatchZyNadesPlugin
                 revision = current.Revision, action, value
             }));
             File.Move(path + ".tmp", path);
+            _submittedLineupRequests.Add(id);
             _pendingLineupRequests[id] = player.SteamID;
             Tell(player, "Änderung zur Verarbeitung gesendet. Die Bibliothek aktualisiert sich automatisch; bei zwischenzeitlicher Admin-Änderung bitte erneut öffnen.");
             return true;
@@ -69,18 +74,35 @@ public sealed partial class MatchZyNadesPlugin
 
     private void ReadLineupResults()
     {
-        foreach (var (id, steamId) in _pendingLineupRequests.ToArray())
-        {
-            var path = Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.requests", "results", id + ".json");
-            if (!File.Exists(path)) continue;
-            try
+        LineupResults.Read(_pendingLineupRequests,
+            Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.requests", "results"),
+            (steamId, message) =>
             {
-                using var result = JsonDocument.Parse(File.ReadAllText(path));
-                var message = result.RootElement.GetProperty("message").GetString() ?? "Anfrage verarbeitet.";
                 var player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == steamId);
                 if (player != null) Tell(player, message);
-                File.Delete(path);
-                _pendingLineupRequests.Remove(id);
+            });
+    }
+}
+
+public static class LineupResults
+{
+    public static void Read(Dictionary<string, ulong> pending, string directory, Action<ulong, string> notify)
+    {
+        foreach (var (id, steamId) in pending.ToArray())
+        {
+            var path = Path.Combine(directory, id + ".json");
+            var receipt = Path.Combine(Path.GetDirectoryName(directory)!, "processed", id + ".json");
+            // The dashboard can stop after committing the receipt but before publishing results.
+            var resultPath = File.Exists(path) ? path : receipt;
+            if (!File.Exists(resultPath)) continue;
+            try
+            {
+                using var result = JsonDocument.Parse(File.ReadAllText(resultPath));
+                var message = result.RootElement.GetProperty("message").GetString() ?? "Anfrage verarbeitet.";
+                // Delivery must not depend on permission to delete dashboard-owned files.
+                pending.Remove(id);
+                notify(steamId, message);
+                if (resultPath == path) File.Delete(path); // Permanent receipts must survive delivery.
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { }
         }

@@ -15,7 +15,7 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
     private bool _capturing;
     public bool Owns(CCSCustomHudLayout layout) => _entity is { IsValid: true } && _entity.Handle == layout.Handle;
 
-    public void Draw(InGameMenu menu, bool focused, bool practice, int detailPage, PlayerPanelSettings settings)
+    public void Draw(InGameMenu menu, bool focused)
     {
         if (_entity is not { IsValid: true })
         {
@@ -39,9 +39,7 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
         }
         var detail = menu.Notice.Length > 0 ? menu.Notice : menu.Selected?.Hint;
         if (string.IsNullOrWhiteSpace(detail)) detail = menu.Current.Description;
-        var pages = PanelText.DetailPages(detail ?? "", maxLines: 3);
-        var page = Math.Clamp(detailPage, 0, pages.Count - 1);
-        Text("training_detail", pages[page]);
+        Text("training_detail", PanelText.Description(detail ?? ""));
         Class("training_panel", "editing", focused);
         Class("training_panel", "shown", true);
         Capture(focused);

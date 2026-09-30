@@ -377,3 +377,28 @@ test("Must Know survives MatchZy writes, publishes metadata and can be removed",
   assert.equal(store.entries[0].mustKnow, false);
   assert.equal(JSON.parse(await readFile(metadataFile, "utf8"))[0].mustKnow, false);
 });
+
+test("completed request is never reapplied after a lost unlink or service restart", async (t) => {
+  const owner = "76561198000000001";
+  const [entry] = sanitizeNades([sampleEntry({ owner, updatedAt: "2026-09-01T00:00:00.000Z" })]);
+  const { service, store } = await createHarness(t, [entry]);
+  await service.writeFromMongo([entry]);
+  const directory = join(dirname(service.liveFile), "savednades.requests");
+  const request = { id: "f".repeat(32), owner, actor: owner, map: entry.map, name: entry.name, revision: entry.updatedAt, action: "review" };
+  const file = join(directory, request.id + ".json");
+  await writeJson(file, request);
+  await service.poll();
+  const revision = store.entries[0].updatedAt;
+  const resultFile = join(directory, "results", request.id + ".json");
+  const originalResult = await readFile(resultFile, "utf8");
+  await writeJson(file, request); // A failed unlink leaves the same input on disk.
+  const restarted = new NadesSyncService({ config: service.config, store });
+  await restarted.poll();
+  assert.equal(store.entries[0].updatedAt, revision);
+  assert.equal(await readFile(resultFile, "utf8"), originalResult);
+  await rm(resultFile);
+  await writeJson(file, request);
+  await restarted.poll();
+  await assert.rejects(stat(resultFile), { code: "ENOENT" });
+  assert.equal(store.entries[0].updatedAt, revision);
+});

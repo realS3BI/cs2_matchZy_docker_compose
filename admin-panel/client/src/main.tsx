@@ -66,6 +66,7 @@ import { parseSetpos, parseSetposSetang } from "./lib/nades";
 import { inferRadarCalibration, resolveRadarPoints } from "./lib/nade-radar";
 import {
   ACTIVE_DUTY_MAPS,
+  mapsForInventory,
   BUILT_IN_MAPS,
   CSNADES_REFERENCE_MAPS,
   addWorkshopMap,
@@ -1291,9 +1292,13 @@ function DeleteNadeButton({ nade, onDelete, disabled = false }) {
   </>;
 }
 
-function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onRefresh, onApply, viewNav }) {
+function Maps({ settings, status, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onRefresh, onApply, viewNav }) {
   const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
-  const allMaps = useMemo(() => [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...workshopMaps], [workshopMaps]);
+  const allMaps = useMemo(() => mapsForInventory(settings, status?.mapInventory), [settings, status?.mapInventory]);
+  const activeMaps = allMaps.filter(m => m.category === "active");
+  const reserveMaps = allMaps.filter(m => m.category === "reserve" || m.category === "community");
+  const otherMaps = allMaps.filter(m => m.category === "other" || m.category === "workshop");
+  const unavailableMaps = allMaps.filter(m => m.category === "unavailable");
   const initialMap = allMaps.find((map) => mapMatchesNade(map, settings.startMap)) || ACTIVE_DUTY_MAPS[0];
   const [selectedKey, setSelectedKey] = useState(initialMap.key);
   const [addNadeOpen, setAddNadeOpen] = useState(false);
@@ -1314,7 +1319,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
     counts[type] = (counts[type] || 0) + 1;
     return counts;
   }, {});
-  const canStartMap = Boolean(selectedMap.mapName) && selectedMap.category !== "community";
+  const canStartMap = Boolean(selectedMap.mapName) && selectedMap.available === true;
   const isStartMap = mapMatchesNade(selectedMap, settings.startMap);
 
   function selectMap(key) {
@@ -1361,13 +1366,13 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
         <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
           <div className="grid gap-1.5">
             <CardTitle>Active Duty</CardTitle>
-            <CardDescription>Browse the configured competitive map collection and its saved lineups.</CardDescription>
+            <CardDescription>Aktueller Competitive-Pool. Verfügbarkeit und Kategorien werden mit dem Ingame-Menü abgeglichen.</CardDescription>
           </div>
-          <Badge variant="secondary">7 maps</Badge>
+          <Badge variant="secondary">{activeMaps.length} Maps</Badge>
         </CardHeader>
         <CardContent className="pt-5 sm:pt-6">
           <div className="map-choice-grid">
-            {ACTIVE_DUTY_MAPS.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
+            {activeMaps.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
           </div>
         </CardContent>
         <CardFooter className="border-t border-border pt-5 text-xs text-muted-foreground sm:pt-6">
@@ -1376,13 +1381,24 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
       </Card>
 
       <details className="disclosure-panel mb-4">
-        <summary><MapPinned className="size-4" aria-hidden="true" /><span>Reserve &amp; community maps</span><Badge variant="secondary">{CSNADES_REFERENCE_MAPS.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
+        <summary><MapPinned className="size-4" aria-hidden="true" /><span>Reserve &amp; Community</span><Badge variant="secondary">{reserveMaps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
         <div className="p-4">
           <div className="map-choice-grid">
-            {CSNADES_REFERENCE_MAPS.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
+            {reserveMaps.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
           </div>
         </div>
       </details>
+
+      {!Array.isArray(status?.mapInventory) ? <p className="mb-4 text-sm text-muted-foreground">Serverbestand noch nicht verfügbar. Plugin 1.9.0 starten und Übersicht aktualisieren; bis dahin ist die Ladbarkeit nicht bestätigt.</p> : null}
+      {[["Others", otherMaps], ["Nicht verfügbar", unavailableMaps]].map(([title, maps]: [string, MapDefinition[]]) => (
+        <details className="disclosure-panel mb-4" key={title}>
+          <summary><MapPinned className="size-4" aria-hidden="true" /><span>{title}</span><Badge variant="secondary">{maps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" /></summary>
+          <div className="p-4">
+            {title === "Nicht verfügbar" ? <p className="mb-4 text-sm text-muted-foreground">Nicht auf dem Server installiert. Lineups bleiben erhalten. Eine hinterlegte und aktivierte Workshop-Version erscheint wieder in ihrer passenden Kategorie.</p> : null}
+            <div className="map-choice-grid">{maps.map(map => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}</div>
+          </div>
+        </details>
+      ))}
 
       <details className="disclosure-panel mb-4">
         <summary><PackagePlus className="size-4" aria-hidden="true" /><span>Workshop maps</span><Badge variant="secondary">{workshopMaps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
@@ -1442,7 +1458,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="grid gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={selectedMap.category === "active" ? "success" : "secondary"}>{selectedMap.category === "active" ? "Active Duty" : selectedMap.category === "workshop" ? "Workshop" : selectedMap.category}</Badge>
+                <Badge variant={selectedMap.category === "active" ? "success" : "secondary"}>{({ active: "Active Duty", reserve: "Reserve & Community", community: "Reserve & Community", other: "Others", unavailable: "Nicht verfügbar", workshop: "Workshop" })[selectedMap.category]}</Badge>
                 {isStartMap ? <Badge variant="outline"><span className="server-status-dot" />Server start map</Badge> : null}
               </div>
               <CardTitle className="control-title text-2xl">{selectedMap.name}</CardTitle>
@@ -1481,7 +1497,7 @@ function Maps({ settings, setSettings, nades, setNades, nadesDirty, busy, onSave
                 <div key={type} className="rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">{type}</dt><dd className="mt-1 font-mono text-lg font-medium">{String(count)}</dd></div>
               )) : <div className="col-span-2 text-sm text-muted-foreground">No utility saved for this map yet.</div>}
             </dl>
-            <CopyCommand value={`rcon changelevel ${selectedMap.mapName}`} label="Copy map command" />
+            {selectedMap.available ? <CopyCommand value={selectedMap.workshopId ? `rcon host_workshop_map ${selectedMap.workshopId}` : `rcon changelevel ${selectedMap.mapName}`} label="Map-Befehl kopieren" /> : <p className="text-sm text-muted-foreground">Diese Map ist aktuell nicht als ladbar bestätigt.</p>}
           </div>
         </CardContent>
       </Card>

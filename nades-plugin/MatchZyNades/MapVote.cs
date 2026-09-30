@@ -26,40 +26,23 @@ public sealed class MajorityVote(IEnumerable<ulong> players)
 
 public sealed partial class MatchZyNadesPlugin
 {
-    private sealed record MapChoice(string Key, string Title, string Command);
-    private sealed record ActiveMapVote(MapChoice Map, MajorityVote Ballot, float EndsAt);
+    private sealed record ActiveMapVote(TrainingMap Map, MajorityVote Ballot, float EndsAt);
     private ActiveMapVote? _mapVote;
     private float _nextMapVote;
-    private IReadOnlyList<MapChoice> MapChoices()
+    private IReadOnlyList<TrainingMap> MapChoices()
     {
-        var maps = new List<MapChoice>();
         var directory = Path.Combine(Server.GameDirectory, "csgo", "maps");
-        if (Directory.Exists(directory))
-            foreach (var file in Directory.EnumerateFiles(directory, "*.vpk"))
-            {
-                var name = Path.GetFileNameWithoutExtension(file);
-                if (Regex.IsMatch(name, "^(de|cs|ar)_[a-z0-9_]+$") && name != Server.MapName)
-                    maps.Add(new(name, name, "changelevel " + name));
-            }
-        try
-        {
-            using var settings = JsonDocument.Parse(File.ReadAllText("/config-runtime/settings.json"));
-            var root = settings.RootElement;
-            if (root.TryGetProperty("workshopMapsEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.True)
-            {
-                using var catalog = JsonDocument.Parse(root.GetProperty("workshopMapCatalog").GetString() ?? "[]");
-                var ids = Regex.Matches(root.GetProperty("workshopMaps").GetString() ?? "", "[0-9]+").Select(m => m.Value).ToHashSet();
-                foreach (var entry in catalog.RootElement.EnumerateArray())
-                {
-                    var id = entry.GetProperty("workshopId").GetString() ?? "";
-                    if (!Regex.IsMatch(id, "^[1-9][0-9]{0,19}$") || !ids.Contains(id)) continue;
-                    var title = entry.GetProperty("title").GetString() ?? id;
-                    maps.Add(new("workshop:" + id, title, "host_workshop_map " + id));
-                }
-            }
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException) { }
-        return maps.DistinctBy(m => m.Key).OrderBy(m => m.Title).ToArray();
+        var names = Directory.Exists(directory) ? Directory.EnumerateFiles(directory, "*.vpk").Select(Path.GetFileNameWithoutExtension).OfType<string>() : [];
+        string ReadOptional(string path) { try { return File.ReadAllText(path); } catch (IOException) { return ""; } catch (UnauthorizedAccessException) { return ""; } }
+        return TrainingMaps.Build(names, ReadOptional("/config-runtime/map-catalog.json"), ReadOptional("/config-runtime/settings.json"));
+    }
+    private void WriteMapInventory()
+    {
+        var path = Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.maps.json");
+        var json = JsonSerializer.Serialize(MapChoices());
+        if (File.Exists(path) && File.ReadAllText(path) == json) return;
+        File.WriteAllText(path + ".tmp", json);
+        File.Move(path + ".tmp", path, true);
     }
     private MenuPage MapMenu()
     {
@@ -67,8 +50,15 @@ public sealed partial class MatchZyNadesPlugin
             return new("Map-Abstimmung", $"{vote.Map.Title}: {vote.Ballot.Yes} Ja, {vote.Ballot.No} Nein. Benötigt: {vote.Ballot.Required} Ja. Noch {Math.Max(0, (int)(vote.EndsAt - Server.CurrentTime))} Sekunden.", [
                 new("Ja, Map wechseln", $"{vote.Map.Title}: {vote.Ballot.Yes}/{vote.Ballot.Required} Ja, {vote.Ballot.No} Nein. Noch {Math.Max(0, (int)(vote.EndsAt - Server.CurrentTime))} Sekunden. Für den Wechsel stimmen.", Request: new(TrainingAction.VoteYes)),
                 new("Nein, hier bleiben", $"{vote.Map.Title}: {vote.Ballot.Yes}/{vote.Ballot.Required} Ja, {vote.Ballot.No} Nein. Gegen den Wechsel stimmen. Enthaltungen sind keine Ja-Stimmen.", Request: new(TrainingAction.VoteNo))], Key: "maps");
-        return new("Map wechseln", "Map wählen und Abstimmung starten. Der Vorschlag zählt als deine Ja-Stimme. Alle menschlichen Spieler inklusive Zuschauer dürfen abstimmen.",
-            MapChoices().Select(map => new MenuItem(map.Title, "Startet eine serverweite Abstimmung für diese Map. 30 Sekunden, mehr als die Hälfte aller beim Start verbundenen Spieler muss Ja stimmen.", Request: new(TrainingAction.StartMapVote, Value: map.Key))).ToArray(), Key: "maps");
+        var choices = MapChoices();
+        return new("Map wechseln", "Map wählen und eine Abstimmung starten. Jeder Spieler stimmt ausdrücklich mit Ja oder Nein ab.",
+            new[] { ("active", "Active Duty"), ("reserve", "Reserve & Community"), ("other", "Others"), ("unavailable", "Nicht verfügbar") }
+            .Select(group => new MenuItem(group.Item2,
+                group.Item1 == "unavailable" ? "Hier fehlen die Map-Dateien. Eine passende Workshop-Map kann im Dashboard hinterlegt werden." : "Maps dieser Kategorie anzeigen und einen Wechsel zur Abstimmung vorschlagen.",
+                Page: new MenuPage(group.Item2, "Mehr als die Hälfte aller beim Start verbundenen menschlichen Spieler muss Ja stimmen.",
+                    choices.Where(m => m.Category == group.Item1).Select(map => new MenuItem(map.Title,
+                        !map.Available ? "Auf dem Server nicht installiert. Im Dashboard bei Bedarf eine Workshop-Version hinterlegen." : map.MapName == Server.MapName ? "Diese Map läuft bereits." : "Startet eine Ja/Nein-Abstimmung für diese Map. Du stimmst anschließend selbst ab; nach 30 Sekunden endet die Abstimmung.",
+                        Request: new(TrainingAction.StartMapVote, Value: map.Key), Enabled: map.Available && map.MapName != Server.MapName)).ToArray(), Key: "maps:" + group.Item1))).ToArray(), Key: "maps");
     }
     private bool HandleMapAction(CCSPlayerController player, MenuRequest request)
     {
@@ -78,7 +68,7 @@ public sealed partial class MatchZyNadesPlugin
         if (_mapVote != null) { Tell(player, "Es läuft bereits eine Map-Abstimmung. Unter Map wechseln abstimmen."); return true; }
         if (Server.CurrentTime < _nextMapVote) { Tell(player, "Bitte warte, bevor du die nächste Map-Abstimmung startest."); return true; }
         var map = MapChoices().FirstOrDefault(m => m.Key == request.Value);
-        if (map == null) { Tell(player, "Diese Map ist nicht mehr verfügbar."); return true; }
+        if (map == null || !map.Available || map.MapName == Server.MapName) { Tell(player, "Diese Map ist nicht mehr verfügbar."); return true; }
         var voters = Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV &&
             p.Connected == PlayerConnectedState.Connected).Select(p => p.SteamID);
         var vote = new ActiveMapVote(map, new(voters), Server.CurrentTime + 30);
@@ -86,7 +76,17 @@ public sealed partial class MatchZyNadesPlugin
         _nextMapVote = Server.CurrentTime + 60;
         Server.PrintToChatAll($" [Training] Mapwechsel zu {MenuRenderer.Plain(map.Title, 60)}? .mapja / .mapnein oder im Panel unter Map wechseln. {vote.Ballot.Required} Ja-Stimmen nötig, 30 Sekunden.");
         AddTimer(30, () => { if (_mapVote == vote) { Server.PrintToChatAll(" [Training] Mapwechsel abgelehnt: keine Mehrheit."); CancelMapVote(); } }, TimerFlags.STOP_ON_MAPCHANGE);
-        CastMapVote(player, true);
+        foreach (var voter in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
+        {
+            if (!Alive(voter)) continue; // Spectators can vote via chat or console.
+            if (!_menus.ContainsKey(voter.Slot)) Open(voter, focus: false);
+            if (_menus.TryGetValue(voter.Slot, out var panel))
+            {
+                panel.Visible = true;
+                panel.Menu.Enter(MapMenu());
+                panel.NextDraw = 0;
+            }
+        }
         return true;
     }
     private void CastMapVote(CCSPlayerController player, bool yes)
@@ -98,7 +98,7 @@ public sealed partial class MatchZyNadesPlugin
         _mapVote = null;
         Server.PrintToChatAll($" [Training] Mehrheit erreicht. Wechsel zu {MenuRenderer.Plain(vote.Map.Title, 60)}.");
         Server.NextFrame(() => {
-            if (TrainingEnabled && MapChoices().Any(m => m.Key == vote.Map.Key && m.Command == vote.Map.Command))
+            if (TrainingEnabled && MapChoices().Any(m => m.Available && m.Key == vote.Map.Key && m.Command == vote.Map.Command))
                 Server.ExecuteCommand(vote.Map.Command);
         });
     }

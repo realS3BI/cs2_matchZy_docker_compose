@@ -19,7 +19,6 @@ public sealed partial class MatchZyNadesPlugin
             session.Menu.Refresh(TrainingMenu.Create(library, session.Menu.Map, TrainingEnabled,
                 _last.GetValueOrDefault(player.Slot), settings: settings, spawns: ReadCompetitiveSpawns()).Current);
             session.Library = library;
-            session.DetailPage = 0;
             Tell(player, settings.IsFavorite(lineup) ? "In deinen Favoriten gespeichert." : "Aus deinen Favoriten entfernt.");
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)

@@ -11,14 +11,13 @@ public sealed record PlayerPanelSettings
     {
         ["focus"] = "KP_0", ["visible"] = "KP_DEL", ["up"] = "UPARROW", ["down"] = "DOWNARROW",
         ["select"] = "ENTER", ["back"] = "BACKSPACE", ["previous"] = "LEFTARROW",
-        ["next"] = "RIGHTARROW", ["details"] = "PGDN"
+        ["next"] = "RIGHTARROW"
     };
     public static readonly IReadOnlyDictionary<string, string> Labels = new Dictionary<string, string>
     {
         ["focus"] = "Bedienen / Spielen", ["visible"] = "Anzeigen / Verstecken",
         ["up"] = "Auswahl nach oben", ["down"] = "Auswahl nach unten", ["select"] = "Bestätigen",
-        ["back"] = "Zurück", ["previous"] = "Vorherige Seite", ["next"] = "Nächste Seite",
-        ["details"] = "Weitere Beschreibung"
+        ["back"] = "Zurück", ["previous"] = "Vorherige Seite", ["next"] = "Nächste Seite"
     };
     public static PlayerPanelSettings Validate(PlayerPanelSettings value)
     {
@@ -40,7 +39,10 @@ public sealed record PlayerPanelSettings
     }
     public string BindingLine(string action) => $"bind \"{DefaultKeys[action]}\" \"css_training_key {DefaultKeys[action]}\"";
     public string Export() => string.Join('\n', DefaultKeys.Keys.Select(BindingLine));
-    public string ConsoleExport() => string.Join("; ", DefaultKeys.Keys.Select(BindingLine)) + "\nbind \"n\" \"noclip\"";
+    // Keep the complete line below the client console message limit.
+    public string ConsoleExport() => string.Join(";", DefaultKeys.Values.Select((key, index) => $"bind {key} \"css_tk {index}\"")) + "\nbind \"n\" \"noclip\"";
+    public static string? ActionForIndex(string index) => int.TryParse(index, out var value) && value >= 0 && value < DefaultKeys.Count
+        ? DefaultKeys.Keys.ElementAt(value) : null;
     public string? ActionForKey(string key) => DefaultKeys.FirstOrDefault(p => p.Value.Equals(key, StringComparison.OrdinalIgnoreCase)).Key;
 }
 

@@ -80,7 +80,7 @@ public static class TrainingMenu
             Action("Granaten entfernen", TrainingAction.ClearGrenades, "Entfernt sofort aktive Granaten und ihre Effekte. Betrifft das Training aller Spieler."),
             new("Bots", "Stehenden oder duckenden Bot platzieren oder Trainingsbots entfernen.", Page: bots),
             new("Trainingshilfen", "Flugbahnvorschau, Einschläge, Flashschutz und God Mode ein- oder ausschalten.", Page: switches),
-            Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt Koordinaten und Blickwinkel im Beschreibungsbereich. Mit PGDN weitere Textseiten lesen.")], Key: "tools");
+            Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt deine aktuellen Koordinaten und Blickwinkel im Beschreibungsbereich.")], Key: "tools");
         var home = new List<MenuItem> {
             new("Granaten-Bibliothek", $"{library.Count} verfügbare Granaten auf {map}. Wähle zuerst den Granatentyp und danach deine Sammlung. {libraryError}", Page: new("Granaten-Bibliothek", "Granatentyp auswählen.", categories), Enabled: practice),
             new($"Must Know ({mustKnow.Length})", "Starte hier: wichtige Lineups für diese Map, vom Plattform-Admin ausgewählt.", Page: Lineups("Must Know", mustKnow, "must-know"), Enabled: practice),

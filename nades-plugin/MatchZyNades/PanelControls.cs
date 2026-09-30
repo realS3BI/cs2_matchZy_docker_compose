@@ -28,13 +28,8 @@ public sealed partial class MatchZyNadesPlugin
                 { session.Menu.Enter(PanelSettingsMenu.Create(settings)); session.NextDraw = 0; }
                 return true;
             case TrainingAction.ExportBindings:
-                player.PrintToConsole("// MatchZy Training – Keybinds zum Kopieren");
-                player.PrintToConsole("// VORHER: bisherige Belegungen mit bind \"TASTE\" abfragen und in einer eigenen Wiederherstellungs-CFG sichern.");
-                player.PrintToConsole("// Zeile 1: alle neun Panel-Binds. Zeile 2: optional Noclip; n darf durch deine gewünschte Taste ersetzt werden (benötigt sv_cheats 1).");
-                player.PrintToConsole("// Jede Befehlszeile einzeln kopieren und ausführen. Alternativ lokale matchzy_training.cfg mit exec matchzy_training laden.");
-                player.PrintToConsole("// Binds gelten auf allen Servern. Rückkehr zu bisherigen Belegungen nur mit deiner gesicherten CFG; kein automatisches Wiederherstellen.");
                 foreach (var line in settings.ConsoleExport().Split('\n')) player.PrintToConsole(line);
-                Tell(player, "Zwei kopierbare Befehlszeilen mit Erklärung stehen in deiner Konsole. Vor dem Ausführen bisherige Binds sichern!");
+                Tell(player, "Die beiden Befehlszeilen stehen in deiner Konsole.");
                 return true;
             default: return false;
         }
@@ -62,6 +57,13 @@ public sealed partial class MatchZyNadesPlugin
         if (settings.ActionForKey(command.GetArg(1)) is { } action) RunPanelAction(player, action);
     }
 
+    [ConsoleCommand("css_tk", "Dispatch a fixed panel key by index (0-7)")]
+    public void OnShortPanelKey(CCSPlayerController? player, CommandInfo command)
+    {
+        if (!TrainingEnabled || !Alive(player) || command.ArgCount != 2 || player!.SteamID == 0) return;
+        if (PlayerPanelSettings.ActionForIndex(command.GetArg(1)) is { } action) RunPanelAction(player, action);
+    }
+
     private void OnPanelClicked(CCSPlayerController player, CCSCustomHudLayout layout, string buttonId)
     {
         if (!Alive(player) || !_menus.TryGetValue(player.Slot, out var session) ||
@@ -74,7 +76,7 @@ public sealed partial class MatchZyNadesPlugin
         {
             "training_back" => "back", "training_previous" => "previous", "training_next" => "next",
             "training_home" => "home",
-            "training_more" => "details", "training_settings" => "settings", "training_play" => "focus",
+            "training_settings" => "settings", "training_play" => "focus",
             "training_hide" => "visible", _ => ""
         };
         RunPanelAction(player, action);
@@ -94,7 +96,6 @@ public sealed partial class MatchZyNadesPlugin
         }
         if (!_menus.TryGetValue(player.Slot, out var session) || !session.Visible || !session.Focused) return;
         session.LastInput = CounterStrikeSharp.API.Server.CurrentTime;
-        if (action != "details") session.DetailPage = 0;
         switch (action)
         {
             case "up": session.Menu.Move(-1); break;
@@ -104,11 +105,6 @@ public sealed partial class MatchZyNadesPlugin
             case "previous": session.Menu.ChangePage(-1); break;
             case "next": session.Menu.ChangePage(1); break;
             case "home": session.Menu.Home(); break;
-            case "details":
-                var detail = session.Menu.Notice.Length > 0 ? session.Menu.Notice : session.Menu.Selected?.Hint;
-                if (string.IsNullOrWhiteSpace(detail)) detail = session.Menu.Current.Description;
-                session.DetailPage = (session.DetailPage + 1) % PanelText.DetailPages(detail ?? "", maxLines: 3).Count;
-                break;
         }
         session.NextDraw = 0;
     }

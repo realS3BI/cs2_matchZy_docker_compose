@@ -88,7 +88,7 @@ export function NadeFlightMap({
     return (
       <div className={cn("radar-map radar-map-empty", compact && "radar-map-compact", className)}>
         <MapPin aria-hidden="true" />
-        <span>Add a radar image before placing lineups on this Workshop map.</span>
+        <span>Für diese Map ist noch keine Radaransicht hinterlegt.</span>
       </div>
     );
   }

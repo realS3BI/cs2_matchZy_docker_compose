@@ -188,7 +188,7 @@ test("live map controls use applied credentials, validate input and preserve sav
   const actions = [];
   let fail = false;
   const app = createApp({
-    config: { password: "test-password", sessionSecret: "secret", runtimeSettingsFile, serviceName: "cs2" },
+    config: { password: "test-password", sessionSecret: "secret", runtimeSettingsFile, liveMatchZyNadesFile: join(runtimeDir, "savednades.json"), serviceName: "cs2" },
     store: { logAction: async (...args) => actions.push(args) },
     compose: {},
     nadesSync: null,
@@ -218,6 +218,13 @@ test("live map controls use applied credentials, validate input and preserve sav
     assert.deepEqual(commands, ["status"]);
     assert.equal((await change({ map: "de_dust2" })).status, 200);
     assert.equal((await change({ workshopId: "123456" })).status, 200);
+    assert.deepEqual(commands, ["status", "changelevel de_dust2", "host_workshop_map 123456"]);
+    await writeFile(join(runtimeDir, "savednades.maps.json"), JSON.stringify([
+      { MapName: "de_thera", Available: false }, { MapName: "de_nuke", Available: true, WorkshopId: "" }
+    ]));
+    assert.equal((await change({ map: "de_thera" })).status, 400);
+    assert.equal((await change({ map: "de_mirage_vanity" })).status, 400);
+    assert.equal((await change({ workshopId: "123456" })).status, 400);
     assert.deepEqual(commands, ["status", "changelevel de_dust2", "host_workshop_map 123456"]);
     assert.deepEqual(JSON.parse(await readFile(runtimeSettingsFile, "utf8")), applied);
     fail = true;

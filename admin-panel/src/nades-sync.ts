@@ -410,11 +410,19 @@ export class NadesSyncService {
     catch (error) { if (error?.code === "ENOENT") return; throw error; }
     for (const file of files.filter(name => /^[0-9a-f]{32}\.json$/.test(name)).sort()) {
       const path = `${directory}/${file}`;
+      // Persist completion independently of result delivery/deletion by the game.
+      // A request that cannot be unlinked must never be applied again next poll.
+      const receipt = `${directory}/processed/${file}`;
+      if (await stat(receipt).then(() => true).catch(error => { if (error.code === "ENOENT") return false; throw error; })) {
+        await unlink(path).catch(error => { if (!["ENOENT", "EACCES", "EPERM"].includes(error.code)) throw error; });
+        continue;
+      }
       const { value: request } = await readJsonFile(path);
       const current = await this.store.getNades();
       let next;
       try { next = applyPlayerNadeRequest(current, request); }
       catch (error) {
+        await writeJsonFileAtomic(receipt, { ok: false, message: error.message });
         await writeJsonFileAtomic(`${directory}/results/${file}`, { ok: false, message: error.message });
         await unlink(path);
         continue;
@@ -422,6 +430,7 @@ export class NadesSyncService {
       await this.rememberCaptures(current);
       const saved = await this.store.saveNades(next);
       await this.writeFromMongoUnlocked(saved);
+      await writeJsonFileAtomic(receipt, { ok: true, message: "Änderung übernommen." });
       await writeJsonFileAtomic(`${directory}/results/${file}`, { ok: true, message: "Änderung übernommen." });
       await unlink(path);
     }

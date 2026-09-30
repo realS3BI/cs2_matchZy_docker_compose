@@ -1,37 +1,23 @@
 using System.Text;
 using MatchZyNades;
 using Xunit;
-
 namespace MatchZyNades.Tests;
-
 public sealed class PanelTextTests
 {
     [Fact]
-    public void HardWrappingDoesNotSplitEmojiOrKeepControlCharacters()
+    public void DescriptionUsesFullLabelWidthWithoutArtificialLineBreaks()
     {
-        var text = "a" + string.Concat(Enumerable.Repeat("ðŸ”¥", 60));
-        var lines = PanelText.Wrap(text + "\u0001");
-        Assert.Equal(text, string.Concat(lines));
-        var strictUtf8 = new UTF8Encoding(false, true);
-        Assert.All(lines, line => Assert.True(strictUtf8.GetByteCount(line) > 0));
+        var text = "Diese Beschreibung ist länger als 38 Zeichen und soll die gesamte verfügbare Breite nutzen.";
+        Assert.Equal(text, PanelText.Description(text));
+        Assert.Equal("eins zwei drei", PanelText.Description("eins\n zwei\t drei\u0001"));
     }
-
     [Fact]
-    public void LongDescriptionsCanBeReadCompletelyAcrossPages()
+    public void OversizedDescriptionEndsWithEllipsisAndPreservesUnicode()
     {
-        var words = Enumerable.Range(0, 150).Select(i => $"Beschreibung{i}").ToArray();
-        var pages = PanelText.DetailPages(string.Join(' ', words));
-        Assert.True(pages.Count > 1);
-        Assert.Equal(words, string.Join(' ', pages).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        Assert.All(pages, p => Assert.True(Encoding.UTF8.GetByteCount(p) <= 420));
-    }
-
-    [Fact]
-    public void UnicodeDescriptionsRemainCompleteAcrossBoundedPages()
-    {
-        var text = string.Join(' ', Enumerable.Repeat("æ—¥æœ¬èªžðŸ”¥", 150));
-        var pages = PanelText.DetailPages(text);
-        Assert.Equal(text, string.Join(' ', pages).Replace('\n', ' '));
-        Assert.All(pages, p => Assert.True(Encoding.UTF8.GetByteCount(p) <= 420));
+        var text = string.Concat(Enumerable.Repeat("Übung 🔥 日本語 ", 100));
+        var result = PanelText.Description(text);
+        Assert.EndsWith("...", result);
+        Assert.True(new UTF8Encoding(false, true).GetByteCount(result) <= 420);
+        Assert.StartsWith(result[..^3], text);
     }
 }
