@@ -4,6 +4,8 @@ Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige 
 
 ## Aktivieren und Practice prüfen
 
+Admin, Match Admin und Trainingsspieler dürfen das Panel öffnen. Trainingsspieler sehen im Web ausschließlich den Maps-Bereich mit Lineups und Favoriten. Im Spiel öffnen sie das Panel mit `.nades` und bedienen es mit der Maus, ohne Shortcuts einzurichten. Das eigenständige Nades-Training oder MatchZy Practice muss bereits aktiv sein. Nach dem Ausblenden erneut `.nades` eingeben. Die Rolle erlaubt Trainingswerkzeuge und Map-Abstimmungen, aber keine direkten Mapwechsel, Serververwaltung oder Lineup-Aufnahmen und -Bearbeitung. Player behalten ihre bisherigen Rechte ohne Panel-Zugang.
+
 CS2- und Dashboard-Image gemeinsam aktualisieren; CounterStrikeSharp API 374+ verwenden. Im Dashboard unter **Server → Trainings-HUD** aktivieren und mit **Apply & restart** übernehmen. Für lokale Entwicklung die Workshop-Auslieferung ausschalten und [lokale Assets bauen/installieren](../training-hud/README.md). Für Mitspieler das Workshop-Addon aktualisieren und ausliefern. Nach Layoutänderungen CS2 vollständig neu starten.
 
 Im Nades-Modus startet Playbook sein eigenes Training ohne MatchZy. Im MatchZy-Modus funktioniert das Panel nur, wenn die geladene MatchZy-Instanz `isPractice == true` und `matchStarted == false` meldet. Dort aktiviert `.prac` das Training. Bloßes `sv_cheats 1` schaltet das Panel in anderen Modi nicht frei. Bei `.exitprac`, Competitive-Start oder MatchZy-Unload schließt es sich im MatchZy-Modus. [Modi, verfügbare Werkzeuge und Befehle](playbook.md).

@@ -194,7 +194,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       const document = await store.getNadesDocument();
       const nades = document?.entries || [];
       const status = { mapInventory: await readMapInventory() } as any;
-      if (user.role === "player") return res.json({ user, nades, status,
+      if (user.role === "player" || user.role === "training_player") return res.json({ user, nades, status,
         settings: { workshopMaps: settings.workshopMaps, workshopMapCatalog: settings.workshopMapCatalog } });
       if (user.role === "admin") Object.assign(status, {
         service: await compose.serviceStatus(), lastAction: await store.getLastAction(),

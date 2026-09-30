@@ -2,11 +2,15 @@
 
 Das Layout ist ein einziges Panorama-Panel, rechts und vertikal mittig am Bildschirm. Es wird vom Client gerendert und hat keine Verbindung zu Weltposition oder Kamerabewegung. `ScreenPanel` überträgt ausschließlich Inhalte, Auswahl und Fokus. Navigation ist per Maus sowie festen Console-Binds möglich.
 
+Admin, Match Admin und die Rolle **Trainingsspieler** öffnen es im eigenständigen Nades-Training oder in MatchZy Practice per `.nades`. Die Mausbedienung braucht keine Binds. Trainingsspieler sehen im Web nur Maps und Lineups; sie dürfen den Server nicht verwalten und keine Lineups ändern. Shortcuts sind freiwillig und müssen lokal gesetzt werden.
+
+Das bestehende Workshop-Item ist **3810441722**. Updates per Workshop Manager oder manuell gestartetem GitHub-Actions-Workflow sind in der [Veröffentlichungsanleitung](workshop-release.md) beschrieben. Rollen und Panel-Funktionen kommen aus dem Server-Plugin; ein Workshop-Upload allein aktualisiert diese nicht.
+
 ## Aufbau ab Plugin 1.8.0
 
 Mittige Überschrift, engere Breadcrumb und neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home sowie drei Beschreibungszeilen. Footer-Hinweise und Modusindikator sind entfernt. Die Bibliothek und Zustände werden alle zwei Sekunden aktualisiert. Die ausgewählte Granate bleibt bei Änderungen möglichst erhalten. Das Panel ist im eigenständigen Nades-Training und im tatsächlichen MatchZy-Practice-Modus verfügbar.
 
-Für die Playbook-Überschrift die Assets neu kompilieren. Plugin und Workshop-Addon gemeinsam aktualisieren und CS2 danach ganz neu starten. Die Ingame-Abnahme der eigenständigen Trainingsfunktionen steht noch aus.
+Für die Playbook-Überschrift die aktuellen Assets auf Windows neu kompilieren. Plugin und Workshop-Addon gemeinsam aktualisieren und CS2 danach ganz neu starten. Die Ingame-Abnahme der eigenständigen Trainingsfunktionen steht noch aus.
 
 ## Stand und Voraussetzungen
 

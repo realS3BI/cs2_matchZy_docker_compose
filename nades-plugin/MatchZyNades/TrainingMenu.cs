@@ -98,7 +98,7 @@ public static class TrainingMenu
             new("Competitive-Spawns", "Startpositionen der CT- oder T-Seite auswählen und direkt dorthin teleportieren.", Page: spawnMenu, Enabled: practice),
             new("Map wechseln", "Startet eine 30-Sekunden-Abstimmung. Mehr als die Hälfte der beim Start verbundenen Spieler muss zustimmen; Bots zählen nicht.", Page: maps ?? new("Map wechseln", "Keine Maps verfügbar.", [], Key: "maps"), Enabled: practice),
             Action("Keybinds", TrainingAction.Settings, "Feste Tastenbelegung nachlesen und Bind-Befehle für die einmalige Einrichtung in deiner Konsole anzeigen."),
-            Action("Panel ausblenden", TrainingAction.Close, "Blendet das Panel aus und gibt die Spielsteuerung frei. KP_DEL zeigt es wieder an.")
+            Action("Panel ausblenden", TrainingAction.Close, "Blendet das Panel aus und gibt die Spielsteuerung frei. Mit .nades im Chat erneut öffnen.")
         };
         if (!canWriteNades) home.RemoveAll(item => item.Label == "Neue Nade aufnehmen");
         return new(new("Playbook", "Practice-Werkzeuge und Granaten für die aktuelle Map.", home), map);
@@ -122,6 +122,6 @@ public static class TrainingMenu
     public static string ActionHint(TrainingAction action) => action switch
     {
         TrainingAction.StartPractice => "Training wird nach erfolgreicher Aktivierung hier freigeschaltet.",
-        _ => "Du kannst weiterspielen. Dein Bedien-Hotkey aktiviert das Panel wieder. MatchZy meldet Details weiterhin im Chat."
+        _ => "Du kannst weiterspielen. Mit .nades im Chat das Panel erneut öffnen. MatchZy meldet Details weiterhin im Chat."
     };
 }

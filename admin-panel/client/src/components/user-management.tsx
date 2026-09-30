@@ -8,7 +8,7 @@ import { Input } from "./ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Alert, AlertDescription } from "./ui/alert";
 
-const roles = [{ id: "admin", name: "Admin" }, { id: "match_admin", name: "Match Admin" }, { id: "player", name: "Player" }];
+const roles = [{ id: "admin", name: "Admin" }, { id: "match_admin", name: "Match Admin" }, { id: "training_player", name: "Trainingsspieler" }, { id: "player", name: "Player" }];
 function UserRow({ user, currentSteamId, onSaved }) {
   const [name, setName] = useState(user.name || "");
   const [steamId, setSteamId] = useState(user.identitySteam64 || "");
@@ -40,7 +40,7 @@ export function UserManagement({ currentSteamId }) {
   async function load() { setUsers(await fetchUsers()); setError(""); }
   useEffect(() => { load().catch(error => setError(error.message)); }, []);
   return <div className="flex flex-col gap-5">
-    <div><h1 className="control-title text-3xl">Benutzerverwaltung</h1><p className="mt-2 text-muted-foreground">Neue Steam-Logins erhalten die Rolle Player. Weise hier Admin oder Match Admin zu. Mit Player entziehst du die Verwaltungsrechte.</p></div>
+    <div><h1 className="control-title text-3xl">Benutzerverwaltung</h1><p className="mt-2 text-muted-foreground">Neue Steam-Logins erhalten die Rolle Player. Trainingsspieler sehen im Web nur Maps und Lineups und öffnen im Practice-Modus mit .nades das Ingame-Panel. Admin und Match Admin erhalten zusätzlich Serverrechte. Mit Player entziehst du auch den Panel-Zugang.</p></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="secondary" size="sm" onClick={() => load().catch(error => setError(error.message))}>Erneut laden</Button></AlertDescription></Alert>}
     <Card><CardHeader><CardTitle>Benutzer hinzufügen</CardTitle><CardDescription>Eine Steam64-ID kann bereits vor der ersten Anmeldung freigeschaltet werden.</CardDescription></CardHeader><CardContent><UserRow user={{}} currentSteamId={currentSteamId} onSaved={load} /></CardContent></Card>
     <Card><CardHeader><CardTitle>Registrierte Benutzer · {users.length}</CardTitle><CardDescription>Rollen gelten für Website und Spielserver. Die eigene Admin-Rolle bleibt geschützt.</CardDescription></CardHeader><CardContent className="flex flex-col gap-3">{users.map(user => <UserRow key={user.identitySteam64} user={user} currentSteamId={currentSteamId} onSaved={load} />)}</CardContent></Card>

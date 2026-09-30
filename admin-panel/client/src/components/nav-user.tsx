@@ -20,7 +20,7 @@ export type SidebarUser = {
 export function NavUser({ user, onLogout }: { user: SidebarUser; onLogout: () => void }) {
   const { isMobile } = useSidebar();
   const name = user.name || user.identitySteam64;
-  const role = user.role === "admin" ? "Plattform-Admin" : user.role === "match_admin" ? "Match Admin" : "Spieler";
+  const role = user.role === "admin" ? "Plattform-Admin" : user.role === "match_admin" ? "Match Admin" : user.role === "training_player" ? "Trainingsspieler" : "Spieler";
 
   return (
     <SidebarMenu>

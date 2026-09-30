@@ -15,7 +15,7 @@ public sealed class PlatformRoles(string path)
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             return document.RootElement.TryGetProperty(steamId.ToString(), out var role) &&
-                role.GetString() is "admin" or "match_admin" ? role.GetString()! : "player";
+                role.GetString() is "admin" or "match_admin" or "training_player" ? role.GetString()! : "player";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         { return "player"; }
@@ -24,17 +24,31 @@ public sealed class PlatformRoles(string path)
     public static bool Blocks(string role, string command)
     {
         command = PlaybookCommands.Normalize(command);
-        if (role == "player") return command.StartsWith("css_") || command.StartsWith("matchzy_") || command.StartsWith("get5_") || command is "noclip" or "sm_pause" or "sm_unpause" or "reload_admins";
+        if (role == "training_player" && TrainingCommand(command)) return false;
+        if (role is not ("admin" or "match_admin")) return command.StartsWith("css_") || command.StartsWith("matchzy_") || command.StartsWith("get5_") || command is "noclip" or "sm_pause" or "sm_unpause" or "reload_admins";
         // MatchZy's save/import commands bypass the panel's content checks.
         return role == "match_admin" && command is "css_savenade" or "css_sn" or "css_importnade" or "css_in" or "css_deletenade" or "css_delnade" or "css_dn" or "css_save_nades_as_global" or "css_globalnades";
     }
+
+    public static bool CanUsePanel(string role) => role is "admin" or "match_admin" or "training_player";
+
+    // No CSS admin flags: these commands are usable by ordinary players in MatchZy practice.
+    // Keep the list explicit so new commands do not silently grant server administration.
+    private static bool TrainingCommand(string command) => command is
+        "css_nades" or "css_nades_select" or "css_nades_last" or
+        "css_training" or "css_training_visible" or "css_training_binds" or
+        "css_training_key" or "css_tk" or "css_training_vote" or
+        "css_y" or "css_n" or "css_mapja" or "css_mapnein" or
+        "css_rethrow" or "css_last" or "css_clear" or "css_savepos" or "css_loadpos" or
+        "css_bot" or "css_crouchbot" or "css_nobots" or "css_traj" or "css_impacts" or
+        "css_noflash" or "css_god" or "css_bestspawn" or "css_worstspawn" or "noclip";
 }
 
 public sealed partial class MatchZyNadesPlugin
 {
     private readonly PlatformRoles _roles = new("/config-runtime/platform-roles.json");
     private string _appliedAdmins = "";
-    private bool CanControl([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] CCSPlayerController? player) => player is { IsValid: true, IsBot: false } && _roles.Role(player.SteamID) is "admin" or "match_admin";
+    private bool CanControl([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] CCSPlayerController? player) => player is { IsValid: true, IsBot: false } && PlatformRoles.CanUsePanel(_roles.Role(player.SteamID));
     private bool CanWriteNades(CCSPlayerController? player) => player is { IsValid: true, IsBot: false } && _roles.Role(player.SteamID) == "admin";
 
     private HookResult GuardCommand(CCSPlayerController? player, CommandInfo info)

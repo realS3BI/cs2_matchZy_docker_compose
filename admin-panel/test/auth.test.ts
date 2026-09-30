@@ -59,8 +59,8 @@ async function fixture(role = "admin") {
   return { request, user, nades, sessions, commands, actions, directory, base, close: async () => { await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true }); } };
 }
 
-test("players receive all recordings and map metadata without administrative access or secrets", async () => {
-  const f = await fixture("player");
+for (const role of ["player", "training_player"]) test(`${role} receives all recordings and map metadata without administrative access or secrets`, async () => {
+  const f = await fixture(role);
   try {
     const control = await (await f.request("/control")).json() as any;
     assert.deepEqual(control.nades.map(n => n.name), ["public", "private"]);
@@ -72,7 +72,7 @@ test("players receive all recordings and map metadata without administrative acc
     assert.equal(library.library.count, 2);
     for (const path of ["/users", "/settings", "/admins", "/nades/export", "/server/game", "/server/diagnostics", "/server/logs"])
       assert.equal((await f.request(path)).status, 403, path);
-    for (const [path, method] of [["/control", "PUT"], ["/nades", "PUT"], ["/nades/import", "POST"], ["/server/rcon", "POST"], ["/server/restart", "POST"], ["/control/apply", "POST"]])
+    for (const [path, method] of [["/control", "PUT"], ["/nades", "PUT"], ["/nades/import", "POST"], ["/server/rcon", "POST"], ["/server/map", "POST"], ["/server/restart", "POST"], ["/control/apply", "POST"], [`/users/${steamId}`, "PUT"]])
       assert.equal((await f.request(path, method, {})).status, 403, path);
     assert.equal((await f.request("/uploads/aaaa.png")).status, 200);
     assert.equal((await f.request("/uploads/bbbb.png")).status, 200);
@@ -159,13 +159,14 @@ test("Steam verification rejects forged identity, unsigned fields, wrong return 
 });
 
 test("migration preserves owners and match operators and removes custom privileges", () => {
-  assert.deepEqual(ADMIN_ROLES.map(role => role.name), ["Admin", "Match Admin", "Player"]);
+  assert.deepEqual(ADMIN_ROLES.map(role => role.name), ["Admin", "Match Admin", "Trainingsspieler", "Player"]);
+  assert.equal(migrateAdmins([{ role: "training_player" }])[0].role, "training_player");
   assert.deepEqual(migrateAdmins([{ role: "owner" }, { role: "match_operator" }, { role: "moderator" }, { role: "custom", flags: ["@css/map"] }]).map(user => user.role), ["admin", "match_admin", "player", "player"]);
 });
 
 
-test("favorites are personal, idempotent and use owner, map and internal name", async () => {
-  const f = await fixture("player");
+for (const role of ["player", "training_player"]) test(`${role} favorites are personal, idempotent and use owner, map and internal name`, async () => {
+  const f = await fixture(role);
   try {
     const reference = { owner: "default", map: "de_mirage", name: "public" };
     for (let i = 0; i < 2; i++) {

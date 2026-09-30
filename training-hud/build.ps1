@@ -15,9 +15,11 @@ foreach ($part in @(@('styles', 'css', 'vcss_c'), @('layout', 'xml', 'vxml_c')))
     $destination = Join-Path $addonContent "panorama/$($part[0])/custom_game"
     New-Item -ItemType Directory -Force -Path $destination | Out-Null
     Copy-Item -LiteralPath $source -Destination $destination -Force
+    $compiled = Join-Path $addonGame "panorama/$($part[0])/custom_game/matchzy_training.$($part[2])"
+    # Never accept an output left by an older compiler run.
+    if (Test-Path -LiteralPath $compiled) { Remove-Item -LiteralPath $compiled }
     & $compiler -i (Join-Path $destination "matchzy_training.$($part[1])") -r
     if ($LASTEXITCODE -ne 0) { throw "Panorama-Compiler fehlgeschlagen: $source" }
-    $compiled = Join-Path $addonGame "panorama/$($part[0])/custom_game/matchzy_training.$($part[2])"
     if (-not (Test-Path -LiteralPath $compiled)) { throw "Compiler-Ausgabe fehlt: $compiled" }
     $output = Join-Path $dist "panorama/$($part[0])/custom_game"
     New-Item -ItemType Directory -Force -Path $output | Out-Null

@@ -55,7 +55,7 @@ export function sanitizeAdmins(entries) {
 export function adminsToCssConfig(entries) {
   const config = {};
   for (const entry of sanitizeAdmins(entries)) {
-    if (entry.role === "player") continue;
+    if (entry.flags.length === 0) continue;
     config[entry.identitySteam64] = {
       identity: entry.identitySteam64,
       flags: entry.flags

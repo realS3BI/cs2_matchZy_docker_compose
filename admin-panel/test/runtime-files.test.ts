@@ -52,3 +52,14 @@ test("concurrent runtime publication reads the latest role after a demotion", as
     assert.deepEqual(JSON.parse(await readFile(join(directory, "platform-roles.json"), "utf8")), { "76561198000000001": "player" });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("training players are published to the plugin without CSS or MatchZy admin privileges", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "matchzy-training-role-"));
+  const config = { runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json") };
+  try {
+    await writeAdminRuntimeFiles(config, [{ identitySteam64: "76561198000000001", role: "training_player", flags: ["@css/root"] }]);
+    assert.deepEqual(JSON.parse(await readFile(config.runtimeAdminsFile, "utf8")), {});
+    assert.deepEqual(JSON.parse(await readFile(config.runtimeMatchZyAdminsFile, "utf8")), {});
+    assert.deepEqual(JSON.parse(await readFile(join(directory, "platform-roles.json"), "utf8")), { "76561198000000001": "training_player" });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

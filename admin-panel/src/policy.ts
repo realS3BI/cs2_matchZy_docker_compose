@@ -64,6 +64,7 @@ export const GAME_MODES = [
 export const ADMIN_ROLES = [
   { id: "admin", name: "Admin", description: "Verwaltet Benutzer, Inhalte und den gesamten Server.", flags: ["@css/root"] },
   { id: "match_admin", name: "Match Admin", description: "Steuert Matches, Plugins, Workshop-Maps und RCON. Inhalte bleiben schreibgeschützt.", flags: ["@css/config", "@custom/prac", "@css/map", "@css/chat", "@css/rcon", "@matchzy/control"] },
+  { id: "training_player", name: "Trainingsspieler", description: "Sieht Maps und Lineups im Web und nutzt das Ingame-Panel im Practice-Modus. Keine Serververwaltung oder Lineup-Bearbeitung.", flags: [] },
   { id: "player", name: "Player", description: "Spielt auf dem Server und sieht offizielle Nades auf der Website.", flags: [] }
 ];
 
