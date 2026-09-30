@@ -38,7 +38,7 @@ Jeder lebende Spieler in Practice darf eine Abstimmung starten. Zur Auswahl steh
 
 Die Abstimmung dauert 30 Sekunden. Auch der Initiator muss ausdrücklich mit Ja oder Nein abstimmen. Es gilt `floor(Anzahl / 2) + 1`: bei vier Spielern sind drei Ja-Stimmen nötig. Gezählt werden alle beim Start verbundenen menschlichen Spieler inklusive Zuschauer, ohne Bots oder HLTV. Jeder hat eine Stimme. Spätere Beitritte stimmen nicht mit; Disconnects verkleinern den Nenner nicht, Enthaltungen sind keine Ja-Stimmen.
 
-Abstimmen im Panel unter **Map wechseln**, im Chat mit `.mapja` / `.mapnein` oder in der Konsole mit `css_training_vote yes` / `css_training_vote no`. Bei erreichter Mehrheit wird gewechselt; ohne Mehrheit bleibt die Map. Zwischen Vorschlägen liegen mindestens 60 Sekunden. Practice-Ende, Map-Ende und Plugin-Unload verwerfen die Abstimmung.
+Abstimmen im Chat mit `.y` für Ja und `.n` für Nein, im Panel unter **Map wechseln** oder in der Konsole mit `css_training_vote yes` / `css_training_vote no`. `.mapja` und `.mapnein` bleiben als Chat-Kürzel gültig. Bei erreichter Mehrheit wird gewechselt; ohne Mehrheit bleibt die Map. Zwischen Vorschlägen liegen mindestens 60 Sekunden. Practice-Ende, Map-Ende und Plugin-Unload verwerfen die Abstimmung.
 
 ## Abnahmestand
 
@@ -152,7 +152,7 @@ Das Dashboard schreibt den gemeinsamen Katalog als `map-catalog.json` neben die 
 - **Others:** weitere installierte Maps und sonstige konfigurierte Workshop-Maps.
 - **Nicht verfügbar:** Katalogeinträge ohne installierte oder aktivierte Workshop-Version; vorhandene Lineups bleiben erhalten.
 
-Vanity-, Workshop-Vorschau-, Grafiktest- und Lobby-Kulissen erscheinen nicht als ladbare Maps. Das Ingame-Menü startet eine 30-sekündige Ja/Nein-Abstimmung. Der Vorschlagende hat keine automatische Stimme; auch allein muss er ausdrücklich zustimmen. Für lebende Spieler wird die Abstimmungsseite im HUD eingeblendet, ohne freies Zielen zu sperren. Mit KP_0 kann man sie bedienen; Zuschauer stimmen über `.mapja`/`.mapnein` ab. Ein administrativer RCON-Mapwechsel auf der Website bleibt ein direkter Admin-Befehl.
+Vanity-, Workshop-Vorschau-, Grafiktest- und Lobby-Kulissen erscheinen nicht als ladbare Maps. Das Ingame-Menü startet eine 30-sekündige Ja/Nein-Abstimmung. Der Vorschlagende hat keine automatische Stimme; auch allein muss er ausdrücklich zustimmen. Für lebende Spieler wird die Abstimmungsseite im HUD eingeblendet, ohne freies Zielen zu sperren. Mit KP_0 kann man sie bedienen; Zuschauer stimmen im Chat mit `.y`/`.n` ab. Ein administrativer RCON-Mapwechsel auf der Website bleibt ein direkter Admin-Befehl.
 
 Review-Anfragen verwenden stabile IDs für identische Änderungen. Das Dashboard hält Verarbeitungsbelege unter `savednades.requests/processed` vor, damit eine übrig gebliebene Anfrage nicht nochmals ausgeführt wird. Benachrichtigungen hängen nicht davon ab, ob der Spielprozess eine vom Dashboard erzeugte Ergebnisdatei löschen darf.
 

@@ -31,9 +31,6 @@ services:
       context: .
       dockerfile: cs2/Dockerfile
     restart: unless-stopped
-    environment:
-      MATCHZY_TRAINING_HUD_ADDON_ID: ${MATCHZY_TRAINING_HUD_ADDON_ID:-}
-      MATCHZY_TRAINING_HUD_READY: ${MATCHZY_TRAINING_HUD_READY:-0}
     ports:
       - "27015:27015/tcp"
       - "27015:27015/udp"

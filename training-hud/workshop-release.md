@@ -31,12 +31,7 @@ Initial change note: `Initial HUD release. Locally tested; Workshop delivery ver
 
 ## Server rollout
 
-Once the item is available to other users, set these Coolify runtime variables and redeploy:
-
-```env
-MATCHZY_TRAINING_HUD_ADDON_ID=<Workshop-ID>
-MATCHZY_TRAINING_HUD_READY=1
-```
+Once the item is available to other users, open the server settings in MatchZy Control, enable **Trainings-HUD** and **HUD über Workshop ausliefern**, and enter the Workshop ID. Apply the settings so the server receives the updated configuration.
 
 For the delivery test, close CS2 and move the two local development overrides out of `game/csgo/panorama/{layout,styles}/custom_game/` into a backup directory. Keep the original addon and compiled build outputs. Start normal CS2 via Steam, join the server, spawn, and run `css_training`. Also verify with a second player who has no local HUD files.
 

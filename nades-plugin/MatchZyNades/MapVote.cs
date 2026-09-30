@@ -74,7 +74,7 @@ public sealed partial class MatchZyNadesPlugin
         var vote = new ActiveMapVote(map, new(voters), Server.CurrentTime + 30);
         _mapVote = vote;
         _nextMapVote = Server.CurrentTime + 60;
-        Server.PrintToChatAll($" [Training] Mapwechsel zu {MenuRenderer.Plain(map.Title, 60)}? .mapja / .mapnein oder im Panel unter Map wechseln. {vote.Ballot.Required} Ja-Stimmen nötig, 30 Sekunden.");
+        Server.PrintToChatAll($" [Training] Mapwechsel zu {MenuRenderer.Plain(map.Title, 60)}? Chat: .y = Ja, .n = Nein. Alternativ im Panel unter Map wechseln. {vote.Ballot.Required} Ja-Stimmen nötig, 30 Sekunden.");
         AddTimer(30, () => { if (_mapVote == vote) { Server.PrintToChatAll(" [Training] Mapwechsel abgelehnt: keine Mehrheit."); CancelMapVote(); } }, TimerFlags.STOP_ON_MAPCHANGE);
         foreach (var voter in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
         {
@@ -106,8 +106,8 @@ public sealed partial class MatchZyNadesPlugin
     private bool TryMapVoteFromChat(CCSPlayerController? player, string text)
     {
         text = text.Trim().Trim('"').ToLowerInvariant();
-        if (player is not { IsValid: true, IsBot: false } || text is not (".mapja" or ".mapnein")) return false;
-        CastMapVote(player, text == ".mapja");
+        if (player is not { IsValid: true, IsBot: false } || text is not (".y" or ".n" or ".mapja" or ".mapnein")) return false;
+        CastMapVote(player, text is ".y" or ".mapja");
         return true;
     }
     [ConsoleCommand("css_training_vote", "Vote on the current practice map change: yes/no")]

@@ -24,7 +24,7 @@ Quellen und Serveranbindung sind vorhanden. Die Workshop Tools wurden installier
 
 Das Skript kopiert ausschließlich die zwei Projektquellen in `content/csgo_addons/matchzy_training_hud`, ruft Valves Compiler auf und legt die kompilierten Dateien direkt im zuvor mit den Workshop Tools angelegten Addon `game/csgo_addons/matchzy_training_hud` sowie unter `training-hud/dist` ab. Es verändert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veröffentlicht nichts.
 
-Für einen lokalen Entwicklungstest die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama` installieren und CS2 normal über Steam neu starten. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das Plugin und `MATCHZY_TRAINING_HUD_READY=1`. Für Mitspieler das Addon über die Workshop Tools veröffentlichen. Vor dem anschließenden Download-Test die lokalen Testdateien aus `game/csgo/panorama` in eine Sicherung verschieben, damit sie das Workshop-Addon nicht überdecken.
+Für einen lokalen Entwicklungstest die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama` installieren und CS2 normal über Steam neu starten. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das Plugin und aktiviertes Trainings-HUD in den Servereinstellungen von MatchZy Control. Für Mitspieler das Addon über die Workshop Tools veröffentlichen. Vor dem anschließenden Download-Test die lokalen Testdateien aus `game/csgo/panorama` in eine Sicherung verschieben, damit sie das Workshop-Addon nicht überdecken.
 
 In der Webübersicht unter **Server → Trainings-HUD** einstellen und mit **Apply & restart** übernehmen:
 
@@ -36,14 +36,9 @@ In der Webübersicht unter **Server → Trainings-HUD** einstellen und mit **App
 
 Die Einstellung gilt für den gesamten Server. Ohne Workshop-Auslieferung werden keine HUD-Dateien an Spieler verteilt; jeder Testclient braucht die lokalen Dateien. Die lokale Arbeitskopie wird nicht direkt gelesen: `panel-source.ps1 local` kompiliert und installiert XML/CSS, danach CS2 vollständig neu starten und erneut verbinden. Lokale Overrides können auch eine ausgelieferte Workshop-Version überdecken; für einen Live-Test zusätzlich `panel-source.ps1 live` ausführen.
 
-Die Panel-Einstellungen haben nach dem Übernehmen Vorrang vor den bisherigen Compose/Coolify-Variablen. Bei der ersten Übernahme **Trainings-HUD aktivieren** ausdrücklich setzen; die Voreinstellung ist aus. Für ältere Runtime-Konfigurationen ohne diese Panel-Einstellungen bleiben die bisherigen Variablen als Fallback erhalten:
+Die HUD-Konfiguration erfolgt über die Servereinstellungen in MatchZy Control. Bei der ersten Übernahme **Trainings-HUD aktivieren** ausdrücklich setzen; die Voreinstellung ist aus. Für Workshop-Auslieferung zusätzlich **HUD über Workshop ausliefern** aktivieren und die eigene Workshop-ID eintragen.
 
-```env
-MATCHZY_TRAINING_HUD_ADDON_ID=<eigene Workshop-ID>
-MATCHZY_TRAINING_HUD_READY=1
-```
-
-Der Bootstrap installiert den bereits verwendeten MultiAddonManager bei Bedarf und schreibt die HUD-ID nach `mm_client_extra_addons`. Vorhandene Server-/Map-Addons bleiben in `mm_extra_addons`. Erst `MATCHZY_TRAINING_HUD_READY=1` gibt das Panel frei. Bei rein lokalen Tests ist die Addon-ID leer, aber der Testclient muss die Dateien installiert haben. Ohne Assets erscheint sonst trotz erfolgreich erstellter Server-Entity kein HUD. Für API/Metamod/AddonManager eine zusammen kompatible Version benutzen; keine ungetestete pauschale Versionserhöhung des gesamten Servers.
+Der Bootstrap installiert den bereits verwendeten MultiAddonManager bei Bedarf und schreibt die HUD-ID nach `mm_client_extra_addons`. Vorhandene Server-/Map-Addons bleiben in `mm_extra_addons`. Die aktivierte Panel-Einstellung schaltet das Ingame-Panel frei. Bei rein lokalen Tests wird keine Addon-ID benötigt, aber der Testclient muss die Dateien installiert haben. Ohne Assets erscheint sonst trotz erfolgreich erstellter Server-Entity kein HUD. Für API/Metamod/AddonManager eine zusammen kompatible Version benutzen; keine ungetestete pauschale Versionserhöhung des gesamten Servers.
 
 ## Zwischen lokaler Entwicklung und Live wechseln
 
