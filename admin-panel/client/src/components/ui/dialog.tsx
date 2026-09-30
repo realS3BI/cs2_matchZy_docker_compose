@@ -45,7 +45,7 @@ const DialogContent = forwardRef<
         {showCloseButton ? (
           <DialogPrimitive.Close className="absolute right-3 top-3 inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4">
             <X />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">Schließen</span>
           </DialogPrimitive.Close>
         ) : null}
       </DialogPrimitive.Content>

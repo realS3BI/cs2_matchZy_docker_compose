@@ -97,8 +97,8 @@ export function NadeFlightMap({
     <div className={cn("radar-map", compact && "radar-map-compact", onMapClick && "radar-map-editable", className)}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={`${map.name} radar with ${placedCount} mapped nade routes`}
+        role={onSelectNade ? "group" : "img"}
+        aria-label={`${map.name}: ${placedCount} Wurfwege auf dem Radar`}
         onClick={handleMapClick}
       >
         <image href={map.radarUrl} width={width} height={height} preserveAspectRatio="none" />
@@ -134,6 +134,15 @@ export function NadeFlightMap({
                 key={nade.id || `${nade.name}-${index}`}
                 className={cn("radar-route", onSelectNade && "radar-route-selectable")}
                 style={{ "--route-color": color } as React.CSSProperties}
+                role={onSelectNade && (from || to) ? "button" : undefined}
+                tabIndex={onSelectNade && (from || to) ? 0 : undefined}
+                aria-label={onSelectNade && (from || to) ? title : undefined}
+                onKeyDown={onSelectNade && (from || to) ? event => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectNade(nade);
+                  }
+                } : undefined}
                 onClick={onSelectNade ? (event) => {
                   event.stopPropagation();
                   onSelectNade(nade);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { fetchUsers } from "../lib/admin-data";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Field, FieldGroup, FieldLabel } from "./ui/field";
@@ -36,11 +37,11 @@ function UserRow({ user, currentSteamId, onSaved }) {
 export function UserManagement({ currentSteamId }) {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
-  async function load() { const result = await api("/api/users"); setUsers(result.entries); }
+  async function load() { setUsers(await fetchUsers()); setError(""); }
   useEffect(() => { load().catch(error => setError(error.message)); }, []);
   return <div className="flex flex-col gap-5">
     <div><h1 className="control-title text-3xl">Benutzerverwaltung</h1><p className="mt-2 text-muted-foreground">Neue Steam-Logins erhalten die Rolle Player. Weise hier Admin oder Match Admin zu. Mit Player entziehst du die Verwaltungsrechte.</p></div>
-    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="secondary" size="sm" onClick={() => load().catch(error => setError(error.message))}>Erneut laden</Button></AlertDescription></Alert>}
     <Card><CardHeader><CardTitle>Benutzer hinzufügen</CardTitle><CardDescription>Eine Steam64-ID kann bereits vor der ersten Anmeldung freigeschaltet werden.</CardDescription></CardHeader><CardContent><UserRow user={{}} currentSteamId={currentSteamId} onSaved={load} /></CardContent></Card>
     <Card><CardHeader><CardTitle>Registrierte Benutzer · {users.length}</CardTitle><CardDescription>Rollen gelten für Website und Spielserver. Die eigene Admin-Rolle bleibt geschützt.</CardDescription></CardHeader><CardContent className="flex flex-col gap-3">{users.map(user => <UserRow key={user.identitySteam64} user={user} currentSteamId={currentSteamId} onSaved={load} />)}</CardContent></Card>
   </div>;

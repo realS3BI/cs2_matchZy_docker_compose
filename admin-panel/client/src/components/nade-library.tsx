@@ -1,33 +1,105 @@
-import { useMemo, useState } from "react";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowRight, Check, Crosshair, RefreshCw, Settings2, Star, X, Zap } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Field, FieldGroup, FieldLabel } from "./ui/field";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia } from "./ui/empty";
+import { Field, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import { FavoriteButton, useNadeFavorites } from "./nade-favorites";
 import { NadeFlightMap } from "./map-radar";
-import { mapsForInventory } from "../lib/maps";
+import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
+import { lineupKey, lineupPath } from "../lib/lineups";
 import { inferRadarCalibration } from "../lib/nade-radar";
+import { cn } from "../lib/utils";
 
-export function NadeLibrary({ nades, settings, status, role }) {
-  const [query, setQuery] = useState("");
-  const [map, setMap] = useState("all");
-  const [kind, setKind] = useState("all");
-  const [selected, setSelected] = useState<any>(null);
-  const maps = useMemo(() => mapsForInventory(settings, status?.mapInventory), [settings, status]);
-  const mapNames = [...new Set([...nades.map(nade => nade.map), ...(role === "match_admin" ? maps.map(map => map.mapName) : [])])].sort() as string[];
-  const visible = nades.filter(nade => (map === "all" || nade.map === map) && (kind === "all" || nade.type === kind) && `${nade.displayName || nade.name} ${nade.desc} ${nade.map}`.toLowerCase().includes(query.toLowerCase()));
-  const selectedMap = maps.find(map => map.mapName === selected?.map);
-  return <div className="flex flex-col gap-5">
-    <header><p className="font-mono text-xs text-muted-foreground">MATCHZY / LINEUPS</p><h1 className="control-title mt-2 text-3xl">{role === "player" ? "Offizielle Nades" : "Maps & Nades"}</h1><p className="mt-2 text-muted-foreground">{role === "player" ? "Lerne die freigegebenen Lineups für deine nächste Runde." : "Alle Aufnahmen und offiziellen Lineups. Nades und Map-Daten sind schreibgeschützt."}</p></header>
-    <FieldGroup className="sm:flex-row"><Field><FieldLabel><label htmlFor="nade-search">Suchen</label></FieldLabel><Input id="nade-search" placeholder="Name, Beschreibung oder Map" value={query} onChange={event => setQuery(event.target.value)} /></Field><Field><FieldLabel>Map</FieldLabel><Select value={map} onValueChange={setMap}><SelectTrigger aria-label="Map filtern"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">Alle Maps</SelectItem>{mapNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectGroup></SelectContent></Select></Field><Field><FieldLabel>Granate</FieldLabel><Select value={kind} onValueChange={setKind}><SelectTrigger aria-label="Granatentyp filtern"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">Alle Typen</SelectItem>{["Smoke", "Flash", "HE", "Molly", "Decoy"].map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectGroup></SelectContent></Select></Field></FieldGroup>
-    <p className="text-sm text-muted-foreground">{visible.length} Lineups{map !== "all" ? ` auf ${map}` : ""}</p>
-    {visible.length === 0 && <Card><CardHeader><CardTitle>Keine Lineups gefunden</CardTitle><CardDescription>{nades.length ? "Wähle eine andere Map oder passe deine Suche an." : "Hier erscheinen Nades, sobald passende Aufnahmen verfügbar sind."}</CardDescription></CardHeader></Card>}
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visible.map(nade => {
-      const image = nade.lineupImages?.[0]?.url || maps.find(map => map.mapName === nade.map)?.radarUrl;
-      return <Card key={`${nade.owner}/${nade.map}/${nade.name}`} className="overflow-hidden"><CardHeader><div className="flex flex-wrap gap-2"><Badge variant="secondary">{nade.map}</Badge><Badge variant="outline">{nade.type || "Nade"}</Badge>{nade.mustKnow ? <Badge>Must Know</Badge> : nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div><CardTitle>{nade.displayName || nade.name}</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">{image && <img src={image} alt={`Lineup auf ${nade.map}`} loading="lazy" className="h-40 w-full rounded-md bg-console object-contain" />}<p className="line-clamp-2 text-sm text-muted-foreground">{nade.desc || "Noch keine Beschreibung."}</p><Button variant="secondary" onClick={() => setSelected(nade)}>Lineup ansehen</Button></CardContent></Card>;
-    })}</div>
-    <Dialog open={Boolean(selected)} onOpenChange={open => { if (!open) setSelected(null); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{selected?.displayName || selected?.name}</DialogTitle><DialogDescription>{selected?.map} · {selected?.type}</DialogDescription></DialogHeader>{selected && <div className="flex flex-col gap-4"><p className="whitespace-pre-wrap">{selected.desc}</p>{selectedMap && <NadeFlightMap map={selectedMap} nades={[selected]} calibration={inferRadarCalibration(selectedMap, nades.filter(nade => nade.map === selected.map))} />}<p className="text-sm text-muted-foreground">{selected.throwTechnique}</p>{selected.lineupImages?.map(image => <img key={image.key} src={image.url} alt={image.name} className="w-full rounded-lg" />)}</div>}</DialogContent></Dialog>
+const kinds = [
+  { value: "all", label: "Alle" }, { value: "Smoke", label: "Smokes" },
+  { value: "Flash", label: "Flashes" }, { value: "HE", label: "HE" },
+  { value: "Molly", label: "Molotovs" }, { value: "Decoy", label: "Decoys" },
+];
+const collections = [
+  { value: "all", label: "Alle", icon: Crosshair },
+  { value: "favorites", label: "Favoriten", icon: Star },
+  { value: "mustKnow", label: "Must Know", icon: Zap },
+  { value: "official", label: "Offiziell", icon: Check },
+];
+
+export function LegacyLibraryRedirect({ maps }) {
+  const [search] = useSearchParams();
+  const previousMap = search.get("map");
+  const map = previousMap && maps.find(map => previousMap === map.key || mapSlug(map) === previousMap || mapMatchesNade(map, previousMap));
+  const next = new URLSearchParams(search);
+  next.delete("map");
+  next.delete("view");
+  return <Navigate to={`${map ? mapPath(map) : "/maps"}${map && next.size ? `?${next}` : ""}`} replace />;
+}
+
+export function NadeLibrary({ nades, maps, role, onRefresh, busy, nadesDirty, renderGuide }) {
+  const { mapSlug: slug } = useParams();
+  const [search, setSearch] = useSearchParams();
+  const favorites = useNadeFavorites();
+  const map = maps.find(map => mapSlug(map) === slug);
+  const query = search.get("q") || "";
+  const kind = kinds.some(kind => kind.value === search.get("type")) ? search.get("type") : "all";
+  const collection = collections.some(item => item.value === search.get("collection")) ? search.get("collection") : "all";
+  if (!map) return <Empty><EmptyHeader><EmptyTitle>Map nicht gefunden</EmptyTitle><EmptyDescription>Diese Map ist nicht in der Bibliothek. Wähle eine Map aus der Übersicht.</EmptyDescription></EmptyHeader><EmptyContent><Button asChild variant="secondary"><Link to="/maps">All Maps</Link></Button></EmptyContent></Empty>;
+  const mapNades = nades.filter(nade => mapMatchesNade(map, nade.map));
+  const filtered = mapNades.filter(nade =>
+    (kind === "all" || nade.type === kind) &&
+    (collection !== "official" || nade.official) &&
+    (collection !== "mustKnow" || nade.mustKnow) &&
+    (collection !== "favorites" || favorites.has(nade)) &&
+    `${nade.displayName || nade.name} ${nade.desc || ""} ${nade.throwFromTitle || ""} ${nade.throwToTitle || ""}`.toLowerCase().includes(query.trim().toLowerCase())
+  );
+  function filter(key, value) {
+    setSearch(current => {
+      const next = new URLSearchParams(current);
+      if (!value || value === "all") next.delete(key); else next.set(key, value);
+      return next;
+    }, { replace: key === "q" });
+  }
+  const hasFilters = Boolean(query || kind !== "all" || collection !== "all");
+  const calibration = inferRadarCalibration(map, mapNades);
+  return <div className="playbook-page">
+    <header className="playbook-heading map-page-heading">
+      <div><p className="control-kicker">Lineup-Bibliothek</p><h1>{map.name}</h1><p>{mapNades.length} {mapNades.length === 1 ? "Lineup" : "Lineups"}. Wähle deine Granate und finde den passenden Wurf.</p></div>
+      <div className="library-tools">
+        <Button variant="ghost" size="sm" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Speichere zuerst die Änderungen in der Bibliotheksverwaltung." : "Aufnahmen aktualisieren"}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} />Aktualisieren</Button>
+        {role === "admin" && <Button variant="ghost" size="sm" asChild><Link to="/nades?view=manage"><Settings2 data-icon="inline-start" />Verwalten{nadesDirty && <span aria-label="Ungespeicherte Änderungen">•</span>}</Link></Button>}
+      </div>
+    </header>
+    <Tabs value={kind} onValueChange={value => filter("type", value)} className="min-w-0 gap-6">
+      <div className="nade-type-tabs"><TabsList variant="line" aria-label="Granatentyp">
+        {kinds.map(item => <TabsTrigger key={item.value} value={item.value}>{item.label}<span className="tab-count" aria-hidden="true">{mapNades.filter(nade => item.value === "all" || nade.type === item.value).length}</span></TabsTrigger>)}
+      </TabsList></div>
+      <div className="map-lineup-filters">
+        <ToggleGroup type="single" variant="outline" value={collection} onValueChange={value => filter("collection", value || "all")} aria-label="Sammlung" className="flex-wrap">
+          {collections.map(item => <ToggleGroupItem key={item.value} value={item.value}><item.icon data-icon="inline-start" />{item.label}</ToggleGroupItem>)}
+        </ToggleGroup>
+        <Field htmlFor="nade-search"><FieldLabel className="sr-only">Lineups durchsuchen</FieldLabel><Input id="nade-search" placeholder="Name, Spot oder Beschreibung …" value={query} onChange={event => filter("q", event.target.value)} /></Field>
+      </div>
+      <TabsContent value={kind}>
+        <div className="section-heading"><span className="result-count" role="status">{collection === "favorites" && favorites.pending ? "Favoriten werden geladen …" : `${filtered.length} ${filtered.length === 1 ? "Lineup" : "Lineups"}`}</span>{hasFilters && <Button variant="ghost" size="sm" onClick={() => setSearch({})}><X data-icon="inline-start" />Filter zurücksetzen</Button>}</div>
+        {filtered.length === 0 && <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><Crosshair /></EmptyMedia><EmptyTitle>{collection === "favorites" ? "Keine passenden Favoriten" : "Keine passenden Lineups"}</EmptyTitle><EmptyDescription>{collection === "favorites" ? "Merke dir Lineups über den Stern. Deine Favoriten findest du anschließend hier." : mapNades.length ? "Passe die Filter an oder suche nach einem anderen Spot." : "Für diese Map wurden noch keine Nades aufgenommen."}</EmptyDescription></EmptyHeader>{hasFilters && <EmptyContent><Button variant="secondary" onClick={() => setSearch({})}>Alle Lineups anzeigen</Button></EmptyContent>}</Empty>}
+        <div className="nade-card-grid">{filtered.map(nade => {
+          const image = nade.lineupImages?.[0]?.url;
+          const name = nade.displayName || nade.name;
+          const href = `${lineupPath(map, nade)}${search.size ? `?${search}` : ""}`;
+          return <Card key={lineupKey(nade)} className="nade-card">
+            <Link className="nade-card-preview" to={href} aria-label={`${name} ansehen`}>
+              {image ? <img src={image} alt="" loading="lazy" /> : <NadeFlightMap map={map} nades={[nade]} calibration={calibration} compact />}
+              <span className="nade-preview-label">{nade.type || "Nade"}</span><span className="nade-preview-open"><ArrowRight aria-hidden="true" /></span>
+            </Link>
+            <CardHeader><div className="flex flex-wrap gap-2">{nade.mustKnow && <Badge>Must Know</Badge>}{nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div><CardTitle><Link className="nade-title-button" to={href}>{name}</Link></CardTitle><CardDescription className="line-clamp-2">{nade.desc || "Öffne das Lineup für Wurfweg und Ausrichtung."}</CardDescription></CardHeader>
+            <CardContent><p className="nade-route"><span>{nade.throwFromTitle || "Startposition"}</span><ArrowRight aria-hidden="true" /><span>{nade.throwToTitle || "Landeposition"}</span></p></CardContent>
+            <CardFooter><FavoriteButton nade={nade} compact /><Button variant="ghost" size="sm" asChild><Link to={href}>Lineup ansehen<ArrowRight data-icon="inline-end" /></Link></Button></CardFooter>
+          </Card>;
+        })}</div>
+      </TabsContent>
+    </Tabs>
+    <details className="disclosure-panel"><summary>Map-Guide erstellen</summary><div className="p-4">{renderGuide(map)}</div></details>
   </div>;
 }

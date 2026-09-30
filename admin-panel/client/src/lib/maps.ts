@@ -141,6 +141,31 @@ export function mapsForInventory(settings, inventory?: any[]): MapDefinition[] {
 
 export const BUILT_IN_MAPS = [...ACTIVE_DUTY_MAPS, ...CSNADES_REFERENCE_MAPS, ...OTHER_MAPS];
 
+export function mapSlug(map: MapDefinition) {
+  return map.workshopId ? `workshop-${map.workshopId}` : map.mapName.replace(/^(de|cs)_/, "");
+}
+
+export function mapPath(map: MapDefinition) {
+  return `/maps/${encodeURIComponent(mapSlug(map))}`;
+}
+
+// Browsing includes maps absent from the server. Server map controls still use mapsForInventory.
+export function mapsForLibrary(settings, inventory?: any[], nades: { map: string }[] = []): MapDefinition[] {
+  const maps = new Map<string, MapDefinition>();
+  for (const map of [...BUILT_IN_MAPS, ...workshopMapsFromSettings(settings)]) {
+    maps.set(mapSlug(map), { ...map, ...(Array.isArray(inventory) ? { available: false } : {}) });
+  }
+  for (const map of mapsForInventory(settings, inventory)) {
+    maps.set(mapSlug(map), map);
+  }
+  for (const nade of nades) {
+    if (!nade.map || [...maps.values()].some(map => mapMatchesNade(map, nade.map))) continue;
+    const map: MapDefinition = { key: nade.map, name: nade.map, mapName: nade.map, category: "unavailable", available: false };
+    maps.set(mapSlug(map), map);
+  }
+  return [...maps.values()];
+}
+
 export function extractWorkshopId(value: string) {
   const normalized = String(value || "").trim();
   if (/^\d+$/.test(normalized)) return normalized;

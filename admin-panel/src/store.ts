@@ -2,6 +2,18 @@ import { Collection, Db, MongoClient } from "mongodb";
 import { sanitizeAdmins, sanitizeNades, sanitizeSettings } from "./validators.js";
 import { normalizeSettings, migrateAdmins } from "./policy.js";
 
+type UserDocument = {
+  _id: string;
+  identitySteam64?: string;
+  name?: string;
+  role?: string;
+  flags?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+  lastLoginAt?: Date;
+  nadeFavorites?: { owner: string; map: string; name: string }[];
+};
+
 export class Store {
   config: any;
   client: MongoClient;
@@ -11,7 +23,7 @@ export class Store {
   nades!: Collection<any>;
   actions!: Collection<any>;
   maintenance!: Collection<any>;
-  users!: Collection<any>;
+  users!: Collection<UserDocument>;
   sessions!: Collection<any>;
 
   constructor(config) {
@@ -27,7 +39,7 @@ export class Store {
     this.nades = this.db.collection("nades");
     this.actions = this.db.collection("actions");
     this.maintenance = this.db.collection("maintenance");
-    this.users = this.db.collection("users");
+    this.users = this.db.collection<UserDocument>("users");
     this.sessions = this.db.collection("sessions");
     await this.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
     const legacy = await this.admins.findOne({ _id: "current" });
@@ -96,6 +108,18 @@ export class Store {
       $setOnInsert: { identitySteam64: steamId, name: "", role: "player", createdAt: new Date() },
       $set: { lastLoginAt: new Date() }
     }, { upsert: true });
+  }
+
+  async getNadeFavorites(steamId) {
+    const user = await this.users.findOne({ _id: steamId }, { projection: { nadeFavorites: 1 } });
+    return user?.nadeFavorites || [];
+  }
+
+  async setNadeFavorite(steamId, reference, favorite) {
+    await this.users.updateOne({ _id: steamId }, favorite
+      ? { $addToSet: { nadeFavorites: reference } }
+      : { $pull: { nadeFavorites: reference } });
+    return this.getNadeFavorites(steamId);
   }
 
   async saveUser(entry) {

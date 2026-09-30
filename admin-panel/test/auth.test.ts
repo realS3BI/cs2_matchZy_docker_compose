@@ -16,6 +16,7 @@ async function fixture(role = "admin") {
   const sessions = new Map<string, any>([[tokenHash(token, "secret"), { purpose: "user", steamId, expiresAt: new Date(Date.now() + 60_000) }]]);
   let settings = normalizeSettings({ steamToken: "gslt-secret", rconPassword: "rcon-secret", joinPassword: "join-secret" });
   const nades = [{ name: "public", official: true, owner: "default", map: "de_mirage", lineupImages: [{ url: "/api/uploads/aaaa.png" }] }, { name: "private", owner: steamId, map: "de_mirage", lineupImages: [{ url: "/api/uploads/bbbb.png" }] }];
+  const favorites = new Map<string, any[]>();
   const commands = [];
   const actions = [];
   const config = { publicUrl: "https://cs2.example.com", sessionSecret: "secret", liveMatchZyNadesFile: join(directory, "nades.json"), runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(directory, "savednades.json"), uploadDir: directory };
@@ -32,6 +33,13 @@ async function fixture(role = "admin") {
     getSettings: async () => settings,
     saveSettings: async value => { settings = value; return value; },
     getNades: async () => nades,
+    getNadeFavorites: async id => favorites.get(id) || [],
+    setNadeFavorite: async (id, reference, favorite) => {
+      const entries = (favorites.get(id) || []).filter(entry => JSON.stringify(entry) !== JSON.stringify(reference));
+      if (favorite) entries.push(reference);
+      favorites.set(id, entries);
+      return entries;
+    },
     getNadesDocument: async () => ({ entries: nades }),
     getAdmins: async () => [user],
     saveUser: async value => Object.assign(user, value),
@@ -48,24 +56,26 @@ async function fixture(role = "admin") {
   const request = (path, method = "GET", body = undefined, extra = {}) => fetch(`${base}/api${path}`, {
     method, redirect: "manual", headers: { Cookie: `cs2_panel_session=${token}`, "Content-Type": "application/json", ...extra }, body: body === undefined ? undefined : JSON.stringify(body)
   });
-  return { request, user, sessions, commands, actions, directory, base, close: async () => { await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true }); } };
+  return { request, user, nades, sessions, commands, actions, directory, base, close: async () => { await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true }); } };
 }
 
-test("players only receive official content and cannot access administrative routes", async () => {
+test("players receive all recordings and map metadata without administrative access or secrets", async () => {
   const f = await fixture("player");
   try {
     const control = await (await f.request("/control")).json() as any;
-    assert.deepEqual(control.nades.map(n => n.name), ["public"]);
-    assert.equal(control.settings, undefined);
+    assert.deepEqual(control.nades.map(n => n.name), ["public", "private"]);
+    assert.deepEqual(Object.keys(control.settings).sort(), ["workshopMapCatalog", "workshopMaps"]);
+    assert.ok(!JSON.stringify(control).includes("secret"));
+    assert.equal(control.status.mapInventory, null);
     assert.equal(control.admins, undefined);
     const library = await (await f.request("/nades")).json() as any;
-    assert.equal(library.library.count, 1);
+    assert.equal(library.library.count, 2);
     for (const path of ["/users", "/settings", "/admins", "/nades/export", "/server/game", "/server/diagnostics", "/server/logs"])
       assert.equal((await f.request(path)).status, 403, path);
     for (const [path, method] of [["/control", "PUT"], ["/nades", "PUT"], ["/nades/import", "POST"], ["/server/rcon", "POST"], ["/server/restart", "POST"], ["/control/apply", "POST"]])
       assert.equal((await f.request(path, method, {})).status, 403, path);
     assert.equal((await f.request("/uploads/aaaa.png")).status, 200);
-    assert.equal((await f.request("/uploads/bbbb.png")).status, 404);
+    assert.equal((await f.request("/uploads/bbbb.png")).status, 200);
   } finally { await f.close(); }
 });
 
@@ -151,4 +161,30 @@ test("Steam verification rejects forged identity, unsigned fields, wrong return 
 test("migration preserves owners and match operators and removes custom privileges", () => {
   assert.deepEqual(ADMIN_ROLES.map(role => role.name), ["Admin", "Match Admin", "Player"]);
   assert.deepEqual(migrateAdmins([{ role: "owner" }, { role: "match_operator" }, { role: "moderator" }, { role: "custom", flags: ["@css/map"] }]).map(user => user.role), ["admin", "match_admin", "player", "player"]);
+});
+
+
+test("favorites are personal, idempotent and use owner, map and internal name", async () => {
+  const f = await fixture("player");
+  try {
+    const reference = { owner: "default", map: "de_mirage", name: "public" };
+    for (let i = 0; i < 2; i++) {
+      const response = await f.request("/nades/favorites", "PUT", { ...reference, favorite: true, identitySteam64: "76561198000000002" });
+      assert.equal(response.status, 200);
+      assert.deepEqual((await response.json() as any).entries, [reference]);
+    }
+    // Changing a display name does not affect the stored identity.
+    Object.assign(f.nades[0], { displayName: "Fenster über T-Spawn" });
+    assert.deepEqual((await (await f.request("/nades/favorites")).json() as any).entries, [reference]);
+    for (const change of [{ owner: "someone-else" }, { map: "de_nuke" }, { name: "another" }])
+      assert.equal((await f.request("/nades/favorites", "PUT", { ...reference, ...change, favorite: true })).status, 404);
+    f.user.identitySteam64 = "76561198000000002";
+    assert.deepEqual((await (await f.request("/nades/favorites")).json() as any).entries, []);
+    f.user.identitySteam64 = steamId;
+    // Deleted recordings can still be removed from favorites.
+    f.nades.shift();
+    assert.deepEqual((await (await f.request("/nades/favorites", "PUT", { ...reference, favorite: false })).json() as any).entries, []);
+    assert.equal((await f.request("/nades/favorites", "PUT", { ...reference, favorite: "true" })).status, 400);
+    assert.equal((await f.request("/nades/favorites", "GET", undefined, { Cookie: "" })).status, 401);
+  } finally { await f.close(); }
 });

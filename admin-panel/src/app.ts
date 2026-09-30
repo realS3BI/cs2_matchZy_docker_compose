@@ -78,7 +78,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   app.use("/api", (req, res, next) => {
     const role = res.locals.user.role;
     const route = `${req.method} ${req.path}`;
-    const shared = ["GET /control", "GET /nades", "GET /nades/status"];
+    const shared = ["GET /control", "GET /nades", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites"];
     const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
     if (role === "admin" || shared.includes(route) ||
         (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
@@ -86,7 +86,6 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     res.status(403).json({ error: "Für diese Aktion fehlt dir die Berechtigung." });
   });
 
-  function visibleNades(entries, role) { return role === "player" ? entries.filter(n => n.official === true) : entries; }
   async function controlSettings(req, res) {
     const input: any = sanitizeSettings(req.body?.settings);
     if (req.body?.admins !== undefined) throw new Error("Benutzer bitte über die Benutzerverwaltung ändern.");
@@ -148,7 +147,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     const key = String(req.params.key || "");
     if (!/^[0-9a-f-]+\.(?:jpg|png|webp|gif)$/i.test(key)) return res.status(404).end();
     try {
-      if (res.locals.user.role !== "admin" && !visibleNades(await store.getNades(), res.locals.user.role)
+      if (res.locals.user.role !== "admin" && !(await store.getNades())
           .some(nade => nade.lineupImages?.some(image => image.url === `/api/uploads/${key}`))) return res.status(404).end();
       const content = await readFile(join(config.uploadDir, key));
       const contentTypes = { ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif" };
@@ -175,8 +174,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   app.get("/api/nades", async (req, res) => {
     const document = await store.getNadesDocument();
     res.json({
-      entries: visibleNades(document?.entries || [], res.locals.user.role),
-      library: nadesLibraryStatus({ ...document, entries: visibleNades(document?.entries || [], res.locals.user.role) }),
+      entries: document?.entries || [],
+      library: nadesLibraryStatus(document),
       sync: res.locals.user.role === "admin" ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
     });
   });
@@ -184,7 +183,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   app.get("/api/nades/status", async (req, res) => {
     const document = await store.getNadesDocument();
     res.json({
-      library: nadesLibraryStatus({ ...document, entries: visibleNades(document?.entries || [], res.locals.user.role) }),
+      library: nadesLibraryStatus(document),
       sync: res.locals.user.role === "admin" ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
     });
   });
@@ -194,9 +193,10 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       const user = res.locals.user;
       const settings = await store.getSettings();
       const document = await store.getNadesDocument();
-      const nades = visibleNades(document?.entries || [], user.role);
-      if (user.role === "player") return res.json({ user, nades });
+      const nades = document?.entries || [];
       const status = { mapInventory: await readMapInventory() } as any;
+      if (user.role === "player") return res.json({ user, nades, status,
+        settings: { workshopMaps: settings.workshopMaps, workshopMapCatalog: settings.workshopMapCatalog } });
       if (user.role === "admin") Object.assign(status, {
         service: await compose.serviceStatus(), lastAction: await store.getLastAction(),
         maintenance: await restartScheduler?.status() || { enabled: false },
@@ -205,6 +205,23 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       const policy = buildControlModel(settings);
       if (user.role !== "admin") { policy.settingsGroups = []; policy.adminRoles = []; }
       res.json({ user, settings: settingsForRole(settings, user.role), admins: user.role === "admin" ? await store.getAdmins() : [], nades, status, policy });
+    } catch (error) { next(error); }
+  });
+
+  app.get("/api/nades/favorites", async (req, res, next) => {
+    try { res.json({ entries: await store.getNadeFavorites(res.locals.user.identitySteam64) }); }
+    catch (error) { next(error); }
+  });
+
+  app.put("/api/nades/favorites", async (req, res, next) => {
+    try {
+      const { owner, map, name, favorite } = req.body || {};
+      if (![owner, map, name].every(value => typeof value === "string" && value.length > 0 && value.length <= 500) || typeof favorite !== "boolean")
+        return res.status(400).json({ error: "Ungültiger Favorit." });
+      const reference = { owner, map, name };
+      if (favorite && !(await store.getNades()).some(nade => nade.owner === owner && nade.map === map && nade.name === name))
+        return res.status(404).json({ error: "Dieses Lineup ist nicht mehr verfügbar." });
+      res.json({ entries: await store.setNadeFavorite(res.locals.user.identitySteam64, reference, favorite) });
     } catch (error) { next(error); }
   });
 

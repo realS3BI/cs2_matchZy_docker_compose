@@ -9,6 +9,7 @@ import {
   X
 } from "lucide-react";
 import { api } from "./lib/api";
+import { fetchDiagnostics } from "./lib/admin-data";
 import { cn } from "./lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Badge } from "./components/ui/badge";
@@ -191,7 +192,7 @@ export function Diagnostics({ active, onOpenLogs }) {
     setLoading(true);
     setError("");
     try {
-      setDiagnostics(await api("/api/server/diagnostics"));
+      setDiagnostics(await fetchDiagnostics());
     } catch (loadError) {
       setError(loadError.message);
     } finally {

@@ -1,9 +1,18 @@
+import { AppSidebar } from "./components/app-sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
+import { TooltipProvider } from "./components/ui/tooltip";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "./components/ui/breadcrumb";
 import { UserManagement } from "./components/user-management";
 import { RconChat } from "./components/rcon-chat";
-import { NadeLibrary } from "./components/nade-library";
+import { MapAtlas } from "./components/map-atlas";
+import { LineupPage } from "./components/lineup-page";
+import { NadeFavoritesProvider } from "./components/nade-favorites";
+import { findLineup } from "./lib/lineups";
+import { mapPath, mapSlug, mapsForLibrary } from "./lib/maps";
+import { NadeLibrary, LegacyLibraryRedirect } from "./components/nade-library";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   ArrowLeftRight,
@@ -22,11 +31,8 @@ import {
   FileJson,
   Globe2,
   LayoutDashboard,
-  Link2,
   LockKeyhole,
-  LogOut,
   MapPinned,
-  Menu,
   PackagePlus,
   Pause,
   Play,
@@ -59,26 +65,24 @@ import {
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "./components/ui/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "./components/ui/switch";
 import { parseSetpos, parseSetposSetang } from "./lib/nades";
-import { inferRadarCalibration, resolveRadarPoints } from "./lib/nade-radar";
+import { inferRadarCalibration } from "./lib/nade-radar";
 import {
-  ACTIVE_DUTY_MAPS,
   mapsForInventory,
   BUILT_IN_MAPS,
-  CSNADES_REFERENCE_MAPS,
   addWorkshopMap,
   mapMatchesNade,
   removeWorkshopMap,
   workshopMapsFromSettings,
   type MapDefinition
 } from "./lib/maps";
-import { NadeFlightMap, NadePlacementEditor } from "./components/map-radar";
+import { NadePlacementEditor } from "./components/map-radar";
 import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
@@ -103,33 +107,37 @@ const routePaths = {
 };
 
 const tabs = [
-  { id: "overview", path: routePaths.overview, label: "Overview", icon: LayoutDashboard, group: "Control" },
-  { id: "server", path: routePaths.server, label: "Server settings", icon: Server, group: "Control" },
-  { id: "plugins", path: routePaths.plugins, label: "Plugins", icon: Boxes, group: "Control" },
-  { id: "console", path: routePaths.console, label: "Server-Konsole", icon: Terminal, group: "Control" },
-  { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Control" },
-  { id: "maps", path: routePaths.maps, label: "Maps & Nades", icon: MapPinned, group: "Content" },
-  { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnostics", icon: Activity, group: "Monitor" },
-  { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Monitor" },
-  { id: "maintenance", path: routePaths.maintenance, label: "Maintenance", icon: CalendarClock, group: "Monitor" },
-  { id: "links", path: routePaths.links, label: "Resources", icon: Link2, group: "Support" }
+  { id: "nades", path: routePaths.nades, label: "Nades", icon: Crosshair, group: "Training" },
+  { id: "maps", path: routePaths.maps, label: "Maps", icon: MapPinned, group: "Training" },
+  { id: "overview", path: routePaths.overview, label: "Übersicht", icon: LayoutDashboard, group: "Server" },
+  { id: "server", path: routePaths.server, label: "Einstellungen", icon: Server, group: "Server" },
+  { id: "plugins", path: routePaths.plugins, label: "Modi & Plugins", icon: Boxes, group: "Server" },
+  { id: "console", path: routePaths.console, label: "Konsole", icon: Terminal, group: "Server" },
+  { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Server" },
+  { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnose", icon: Activity, group: "Server" },
+  { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Server" },
+  { id: "maintenance", path: routePaths.maintenance, label: "Wartung", icon: CalendarClock, group: "Server" },
+  { id: "links", path: routePaths.links, label: "Dokumentation", icon: BookOpen, group: "Server" }
 ];
 
-const defaultRoute = routePaths.overview;
-function allowedTabs(role) { return tabs.filter(tab => role === "admin" || (role === "match_admin" ? ["overview", "plugins", "maps", "console"].includes(tab.id) : tab.id === "maps")); }
-
+const defaultRoute = routePaths.maps;
+function isMapRoute(pathname) {
+  return Boolean(matchPath("/maps/:mapSlug", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId", pathname));
+}
+function allowedTabs(role) { return tabs.filter(tab => role === "admin" || tab.group === "Training" || (role === "match_admin" && ["overview", "plugins", "console"].includes(tab.id))); }
 
 function routeFromLoginSearch(search) {
   const requestedRoute = new URLSearchParams(search).get("redirect");
-  if (requestedRoute === routePaths.nades) return `${routePaths.maps}?view=library`;
-  return tabs.some((item) => item.path === requestedRoute) ? requestedRoute : defaultRoute;
+  if (!requestedRoute) return defaultRoute;
+  const pathname = requestedRoute.split("?")[0];
+  return (tabs.some(item => item.path === pathname) || isMapRoute(pathname)) ? requestedRoute : defaultRoute;
 }
 
 function Message({ message = "", error = "" }: { message?: string; error?: string }) {
   if (!message && !error) return null;
   return (
     <Alert className="mb-4" variant={error ? "destructive" : "success"}>
-      <AlertTitle>{error ? "Action failed" : "Control room updated"}</AlertTitle>
+      <AlertTitle>{error ? "Aktion fehlgeschlagen" : "Aktualisiert"}</AlertTitle>
       <AlertDescription className="whitespace-pre-wrap">{error || message}</AlertDescription>
     </Alert>
   );
@@ -216,102 +224,51 @@ function OperationDialog({ operation }) {
 function Login({ error }) {
   const failed = new URLSearchParams(window.location.search).has("error");
   return <main className="login-shell login-grid grid min-h-screen place-items-center p-6">
-    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">MATCHZY CONTROL</span></div><CardTitle className="control-title text-3xl">Dein Server. Deine Lineups.</CardTitle><CardDescription>Melde dich mit Steam an, um die offiziellen Nades anzusehen. Deine Rolle bestimmt den Zugriff auf die Serversteuerung.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : error} /><Button asChild><a href="/api/auth/steam">Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler erhalten die Rolle Player. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
+    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">MATCHZY CONTROL</span></div><CardTitle className="control-title text-3xl">Deine Maps. Deine Nades.</CardTitle><CardDescription>Entdecke Lineups, lerne Wurfwege und bereite deine nächste Runde vor. Melde dich mit Steam an.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : error} /><Button asChild><a href="/api/auth/steam">Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler erhalten die Rolle Player. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
   </main>;
 }
 
-const tabGroups = ["Control", "Content", "Monitor", "Support"];
-
-function Navigation({ onNavigate, onLogout, serviceState, user }) {
-  return (
-    <>
-      <nav className="control-nav" aria-label="Control room sections">
-        {tabGroups.filter(group => allowedTabs(user.role).some(item => item.group === group)).map((group) => (
-          <div key={group} className="control-nav-group">
-            <p className="control-nav-label">{group}</p>
-            {allowedTabs(user.role).filter((item) => item.group === group).map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink key={item.id} to={item.path} end className={({ isActive }) => cn("control-nav-item", isActive && "control-nav-item-active")} onClick={onNavigate}>
-                  <Icon aria-hidden="true" />
-                  <span>{item.label}</span>
-                  <ChevronRight className="control-nav-chevron" aria-hidden="true" />
-                </NavLink>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-      <footer className="control-sidebar-footer">
-        <div className="sidebar-session">
-          <span className={cn("server-status-dot", serviceState === "running" ? "text-success" : "text-muted-foreground")} />
-          <span>{user.name || user.identitySteam64} · {user.role === "admin" ? "Admin" : user.role === "match_admin" ? "Match Admin" : "Player"}</span>
-        </div>
-        <Button className="w-full justify-start" variant="sidebar" onClick={onLogout}><LogOut data-icon="inline-start" />Abmelden</Button>
-      </footer>
-    </>
-  );
-}
-
-function Brand() {
-  return (
-    <div className="control-brand">
-      <span className="control-brand-mark"><Crosshair aria-hidden="true" /></span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-sidebar-accent-foreground">MatchZy Control</p>
-        <p className="font-mono text-[10px] tracking-[0.12em] text-sidebar-foreground/50">SERVER OPERATIONS</p>
-      </div>
-    </div>
-  );
-}
-
-function Shell({ user, children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
+function Shell({ user, children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState, selectedMap, selectedNade }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigateFromMenu = () => { setMobileMenuOpen(false); onNavigate(); };
+  const currentPage = selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "All Maps" : activeTab.label);
 
   return (
-    <div className="control-shell">
-      <a className="skip-link" href="#main-content">Zum Inhalt</a>
-      <aside className="control-sidebar hidden min-w-0 flex-col lg:flex">
-        <header className="control-sidebar-header"><Brand /></header>
-        <Navigation onNavigate={onNavigate} onLogout={onLogout} serviceState={serviceState} user={user} />
-      </aside>
-      <div className="min-w-0">
-        <header className="control-topbar sticky top-0 z-30">
-          <div className="control-content topbar-inner">
-            <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <Button className="lg:hidden" variant="secondary" size="icon" aria-label="Open navigation" onClick={() => setMobileMenuOpen(true)}><Menu aria-hidden="true" /></Button>
-              <DialogContent className="mobile-nav-dialog lg:hidden" showCloseButton>
-                <DialogTitle className="sr-only">Navigation</DialogTitle>
-                <Brand />
-                <Navigation onNavigate={navigateFromMenu} onLogout={onLogout} serviceState={serviceState} user={user} />
-              </DialogContent>
-            </Dialog>
-            <div className="topbar-context">
-              <span className="text-muted-foreground">Control room</span>
-              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-              <span className="font-medium text-foreground">{activeTab.label}</span>
+    <TooltipProvider>
+      <SidebarProvider>
+        <a className="skip-link" href="#main-content">Zum Inhalt</a>
+        <AppSidebar user={user} serverItems={allowedTabs(user.role).filter(item => item.group === "Server")} onNavigate={onNavigate} onLogout={onLogout} dirty={dirty} serviceState={serviceState} />
+        <SidebarInset className="workspace-inset min-w-0">
+          <header className="control-topbar sticky top-0 z-30 md:rounded-t-xl">
+            <div className="control-content topbar-inner">
+              <SidebarTrigger />
+              <Separator orientation="vertical" className="h-4 self-center" />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink asChild><NavLink to={activeTab.group === "Training" ? routePaths.maps : routePaths.overview}>{activeTab.group === "Training" ? "Maps" : "Server"}</NavLink></BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator />
+                  {selectedNade && selectedMap && <><BreadcrumbItem><BreadcrumbLink asChild><NavLink to={mapPath(selectedMap)}>{selectedMap.name}</NavLink></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /></>}
+                  <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate max-w-48 sm:max-w-80">{currentPage}</BreadcrumbPage></BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+              <div className="topbar-status"><span className="topbar-caption">COUNTER-STRIKE 2</span></div>
             </div>
-            <div className="topbar-status">
-              <Badge variant="outline">{user.role === "admin" ? "Admin" : user.role === "match_admin" ? "Match Admin" : "Player"}</Badge>
-              {dirty ? <Badge variant="warning">Unsaved changes</Badge> : null}
-            </div>
-            {user.role === "admin" && !["access", "console"].includes(tab) && <div className="topbar-actions">
-              <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}><Save data-icon="inline-start" />Save draft</Button>
-              <Button onClick={onApply} disabled={busy}>
-                {operation?.kind === "apply" ? <Spinner data-icon="inline-start" /> : <UploadCloud data-icon="inline-start" />}
-                {operation?.kind === "apply" ? "Applying..." : "Apply & restart"}
-              </Button>
-            </div>}
-          </div>
-        </header>
-        <main id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
+          </header>
+        <div id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
           <Message message={message} error={error} />
-          {children}
-        </main>
-      </div>
-    </div>
+          <NadeFavoritesProvider key={user.identitySteam64}>{children}</NadeFavoritesProvider>
+          {user.role !== "player" && ["overview", "server", "plugins", "maintenance"].includes(tab) && <section className="server-save-panel" aria-label="Servereinstellungen speichern">
+            <div><h2>Servereinstellungen übernehmen</h2><p>{dirty ? "Du hast ungespeicherte Änderungen." : "Der aktuelle Entwurf ist gespeichert."} Ein Neustart trennt verbundene Spieler.</p></div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}><Save data-icon="inline-start" />Entwurf speichern</Button>
+              <Button onClick={onApply} disabled={busy}>{operation?.kind === "apply" ? <Spinner data-icon="inline-start" /> : <RotateCcw data-icon="inline-start" />}Übernehmen & neu starten</Button>
+            </div>
+          </section>}
+        </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }
 
@@ -352,9 +309,9 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
   return (
     <>
       <PageHeader
-        eyebrow="Live operations"
+        eyebrow="Serververwaltung"
         title={settings.serverName || "CS2 server"}
-        description="Switch maps, choose a server mode and manage the next session from one place."
+        description="Verwalte deinen CS2-Server, wechsle den Modus und bereite die nächste Session vor."
         actions={<div className="flex gap-2"><Button variant="secondary" onClick={onRefresh} disabled={busy}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} /> Refresh</Button><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
       />
       {setupRequired ? (
@@ -438,7 +395,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
         <p className="control-kicker">Explore workspace</p>
         <div className="quick-links-grid">
           <NavLink to={routePaths.maps}><MapPinned aria-hidden="true" /><span>Map atlas</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={`${routePaths.maps}?view=library`}><Crosshair aria-hidden="true" /><span>Nade library</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.nades}><Crosshair aria-hidden="true" /><span>Nade library</span><ChevronRight aria-hidden="true" /></NavLink>
           <NavLink to={routePaths.diagnostics}><Activity aria-hidden="true" /><span>Diagnostics</span><ChevronRight aria-hidden="true" /></NavLink>
           <NavLink to={routePaths.logs}><Terminal aria-hidden="true" /><span>Server logs</span><ChevronRight aria-hidden="true" /></NavLink>
         </div>
@@ -460,13 +417,13 @@ function Settings({ settings, setSettings, policy }) {
 
   return (
     <>
-      <PageHeader eyebrow="Configuration" title="Server settings" description="Edit the supported runtime settings used by the Coolify deployment." />
+      <PageHeader eyebrow="Configuration" title="Servereinstellungen" description="Verbindung, Spielbetrieb und Zugangsdaten für deinen CS2-Server." />
       <div className="grid gap-4">
-        {(policy?.settingsGroups || []).filter((group) => group.id !== "matchzy" || ["matchzy", "nades"].includes(settings.serverMode)).map((group) => (
+        {(policy?.settingsGroups || []).filter((group) => group.id !== "workshop" && (group.id !== "matchzy" || ["matchzy", "nades"].includes(settings.serverMode))).map((group) => (
           <Card key={group.id}>
             <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {group.fields.filter((field) => field.key !== "matchZySaveNadesGlobally").map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
+              {group.fields.filter((field) => !["matchZySaveNadesGlobally", "startMap"].includes(field.key)).map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
             </CardContent>
           </Card>
         ))}
@@ -706,7 +663,7 @@ function NadeReviewFields({ nade, onChange }) {
   return <div className="col-span-full grid gap-3 rounded-lg border border-border p-3">
     <div className="flex flex-wrap items-center gap-2">
       <Badge variant={nade.official ? "success" : nade.reviewStatus === "pending" ? "warning" : "secondary"}>{nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review angefragt" : nade.reviewStatus === "rejected" ? "Review abgelehnt" : "Ungeprüfte Aufnahme"}</Badge>
-      <span className="text-xs text-muted-foreground">Für alle unter „Alle“ sichtbar. Freigaben werden mit Save nades gespeichert.</span>
+      <span className="text-xs text-muted-foreground">Für alle unter „Alle“ sichtbar. Freigaben werden mit „Nades speichern“ gespeichert.</span>
     </div>
     <Field><FieldLabel>Offiziell freigeben</FieldLabel><Switch aria-label={`Offiziell: ${nade.displayName || nade.name || "Neue Granate"}`} checked={nade.official === true} onCheckedChange={(official) => onChange({ official, reviewStatus: official ? "approved" : "", ...(!official ? { mustKnow: false } : {}) })} /><FieldDescription>Nur als Plattform-Admin nach Prüfung von Abwurfpunkt, Beschreibung und Wirkung freigeben. Der Ersteller kann offizielle Granaten nicht mehr ändern.</FieldDescription></Field>
     <Field><FieldLabel>Must Know</FieldLabel><Switch aria-label={`Must Know: ${nade.displayName || nade.name || "Neue Granate"}`} checked={nade.mustKnow === true} onCheckedChange={(mustKnow) => onChange({ mustKnow, ...(mustKnow ? { official: true, reviewStatus: "approved" } : {}) })} /><FieldDescription>Markiert ein geprüftes Grundlagen-Lineup und zeigt es im Must-Know-Shortcut auf Home. Aktivieren gibt die Granate zugleich offiziell frei.</FieldDescription></Field>
@@ -951,30 +908,6 @@ function CopyCommand({ value, label = "Copy" }: { value: string; label?: string 
   );
 }
 
-function MapChoice({ map, nades, selected, onSelect }) {
-  return (
-    <button
-      type="button"
-      className={cn("map-choice", selected && "map-choice-selected")}
-      aria-pressed={selected}
-      onClick={() => onSelect(map.key)}
-    >
-      {map.radarUrl ? (
-        <div className="map-choice-radar"><img src={map.radarUrl} alt={`${map.name} radar`} loading="lazy" /></div>
-      ) : (
-        <NadeFlightMap map={map} nades={nades} compact />
-      )}
-      <span className="flex items-start justify-between gap-3 px-3 pb-3 pt-2.5">
-        <span className="min-w-0 text-left">
-          <strong className="block truncate text-sm">{map.name}</strong>
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">{map.mapName || map.workshopId}</span>
-        </span>
-        <Badge variant={nades.length > 0 ? "secondary" : "outline"}>{nades.length}</Badge>
-      </span>
-    </button>
-  );
-}
-
 function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
   const [draft, setDraft] = useState({ title: "", mapName: "", workshopId: "", radarUrl: "" });
   const [dialogError, setDialogError] = useState("");
@@ -1153,31 +1086,6 @@ function AnnotationGuide({ map }: { map: MapDefinition }) {
   );
 }
 
-function MapsAndNades(props) {
-  const [search, setSearch] = useSearchParams();
-  const library = search.get("view") === "library";
-  const viewNav = (
-    <nav className="map-view-nav mb-5 flex flex-wrap gap-2" aria-label="Maps and nades views">
-      <Button variant={library ? "secondary" : "default"} aria-current={!library ? "page" : undefined} onClick={() => setSearch({})}><MapPinned data-icon="inline-start" />Map atlas</Button>
-      <Button variant={library ? "default" : "secondary"} aria-current={library ? "page" : undefined} onClick={() => setSearch({ view: "library" })}><Crosshair data-icon="inline-start" />All lineups</Button>
-      {props.nadesDirty ? <Badge variant="warning">Unsaved lineup edits</Badge> : null}
-    </nav>
-  );
-  return (
-    <>
-      {library ? <Nades {...props} viewNav={viewNav} /> : <Maps {...props} viewNav={viewNav} onSaveNades={props.onSave} />}
-    </>
-  );
-}
-
-function formatThrowTrace(value) {
-  try {
-    const samples = JSON.parse(String(value || ""));
-    if (!Array.isArray(samples)) return "";
-    return samples.map(sample => `${Number(sample.time).toFixed(2)}s · ${sample.buttons || "keine Taste"} · pos ${sample.position || "?"} · velocity ${sample.velocity || "?"} · view ${sample.view || "?"}`).join("\n");
-  } catch { return ""; }
-}
-
 function DeleteNadeButton({ nade, onDelete, disabled = false }) {
   const [open, setOpen] = useState(false);
   const name = nade.displayName || nade.name || "Untitled lineup";
@@ -1195,278 +1103,36 @@ function DeleteNadeButton({ nade, onDelete, disabled = false }) {
   </>;
 }
 
-function Maps({ settings, status, setSettings, nades, setNades, nadesDirty, busy, onSaveNades, onRefresh, onApply, viewNav }) {
-  const workshopMaps = useMemo(() => workshopMapsFromSettings(settings), [settings.workshopMaps, settings.workshopMapCatalog]);
-  const allMaps = useMemo(() => mapsForInventory(settings, status?.mapInventory), [settings, status?.mapInventory]);
-  const activeMaps = allMaps.filter(m => m.category === "active");
-  const reserveMaps = allMaps.filter(m => m.category === "reserve" || m.category === "community");
-  const otherMaps = allMaps.filter(m => m.category === "other" || m.category === "workshop");
-  const unavailableMaps = allMaps.filter(m => m.category === "unavailable");
-  const initialMap = allMaps.find((map) => mapMatchesNade(map, settings.startMap)) || ACTIVE_DUTY_MAPS[0];
-  const [selectedKey, setSelectedKey] = useState(initialMap.key);
-  const [addNadeOpen, setAddNadeOpen] = useState(false);
-  const [editingNade, setEditingNade] = useState<any>(null);
-  const [addWorkshopOpen, setAddWorkshopOpen] = useState(false);
-
-  useEffect(() => {
-    if (!allMaps.some((map) => map.key === selectedKey)) setSelectedKey(ACTIVE_DUTY_MAPS[0].key);
-  }, [allMaps, selectedKey]);
-
-  const selectedMap = allMaps.find((map) => map.key === selectedKey) || ACTIVE_DUTY_MAPS[0];
-  const nadesForMap = useCallback((map) => nades.filter((nade) => mapMatchesNade(map, nade.map)), [nades]);
-  const selectedNades = nadesForMap(selectedMap);
-  const calibration = inferRadarCalibration(selectedMap, nades);
-  const placedNades = selectedNades.filter((nade) => { const p = resolveRadarPoints(nade, calibration); return p.radarFrom && p.radarTo; });
-  const typeCounts = selectedNades.reduce((counts, nade) => {
-    const type = nade.type || "Other";
-    counts[type] = (counts[type] || 0) + 1;
-    return counts;
-  }, {});
-  const canStartMap = Boolean(selectedMap.mapName) && selectedMap.available === true;
-  const isStartMap = mapMatchesNade(selectedMap, settings.startMap);
-
-  function selectMap(key) {
-    setSelectedKey(key);
-    window.requestAnimationFrame(() => document.getElementById("selected-map")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" }));
-  }
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="Tactical atlas"
-        title="Maps & Nades"
-        description="Pick a map to explore its radar and saved lineups. Open All lineups to search, import, export and manage the shared library."
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Save edits before refreshing" : "Load captured positions from the server"}><RefreshCw data-icon="inline-start" />Refresh lineups</Button>
-            <Button variant="secondary" onClick={() => { setEditingNade(null); setAddNadeOpen(true); }}><Plus data-icon="inline-start" />Add {selectedMap.name} nade</Button>
-            <Button onClick={onSaveNades} disabled={busy || !nadesDirty}><Save data-icon="inline-start" />Save lineups</Button>
-          </div>
-        )}
-      />
-      {viewNav}
-      <NadeDialog
-        settings={settings}
-        nades={nades}
-        initialMap={selectedMap.mapName}
-        initialNade={editingNade}
-        open={addNadeOpen || Boolean(editingNade)}
-        onOpenChange={(nextOpen) => {
-          setAddNadeOpen(nextOpen);
-          if (!nextOpen) setEditingNade(null);
-        }}
-        onAdd={(entry) => setNades((current) => editingNade
-          ? current.map((nade) => nade.id === editingNade.id ? entry : nade)
-          : [...current, entry])}
-      />
-      <WorkshopMapDialog
-        open={addWorkshopOpen}
-        onOpenChange={setAddWorkshopOpen}
-        onAdd={(input) => setSettings((current) => ({ ...current, ...addWorkshopMap(current, input), workshopMapsEnabled: true }))}
-      />
-
-      <Card className="mb-4">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
-          <div className="grid gap-1.5">
-            <CardTitle>Active Duty</CardTitle>
-            <CardDescription>Aktueller Competitive-Pool. Verfügbarkeit und Kategorien werden mit dem Ingame-Menü abgeglichen.</CardDescription>
-          </div>
-          <Badge variant="secondary">{activeMaps.length} Maps</Badge>
-        </CardHeader>
-        <CardContent className="pt-5 sm:pt-6">
-          <div className="map-choice-grid">
-            {activeMaps.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
-          </div>
-        </CardContent>
-        <CardFooter className="border-t border-border pt-5 text-xs text-muted-foreground sm:pt-6">
-          Select a map to inspect its radar, routes and server options.
-        </CardFooter>
-      </Card>
-
-      <details className="disclosure-panel mb-4">
-        <summary><MapPinned className="size-4" aria-hidden="true" /><span>Reserve &amp; Community</span><Badge variant="secondary">{reserveMaps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
-        <div className="p-4">
-          <div className="map-choice-grid">
-            {reserveMaps.map((map) => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}
-          </div>
-        </div>
+function ServerMapSettings({ settings, setSettings, status, busy }) {
+  const [workshopOpen, setWorkshopOpen] = useState(false);
+  const maps = mapsForInventory(settings, status?.mapInventory);
+  const workshops = workshopMapsFromSettings(settings);
+  return <Card className="mt-5">
+    <CardHeader><CardTitle>Maps auf dem Server</CardTitle><CardDescription>Lege die Startmap fest und verwalte installierte Workshop-Maps. Übernimm die Änderungen anschließend mit einem Serverneustart.</CardDescription></CardHeader>
+    <CardContent>
+      <FieldGroup>
+        <Field htmlFor="server-start-map"><FieldLabel>Startmap</FieldLabel><Select value={settings.startMap || "__none__"} onValueChange={startMap => setSettings(current => ({ ...current, startMap }))}>
+          <SelectTrigger id="server-start-map"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>
+            {!settings.startMap && <SelectItem value="__none__" disabled>Map auswählen</SelectItem>}
+            {settings.startMap && !maps.some(map => map.mapName === settings.startMap) && <SelectItem value={settings.startMap}>{settings.startMap}</SelectItem>}
+            {maps.filter(map => map.mapName).map(map => <SelectItem key={map.key} value={map.mapName} disabled={map.available !== true}>{map.name}{map.available !== true ? " · Verfügbarkeit nicht bestätigt" : ""}</SelectItem>)}
+          </SelectGroup></SelectContent>
+        </Select></Field>
+        <Field className="flex items-center justify-between"><span><FieldLabel>Workshop-Maps laden</FieldLabel><FieldDescription>Aktivierte Workshop-Maps werden beim Serverstart heruntergeladen und eingebunden.</FieldDescription></span><Switch aria-label="Workshop-Maps laden" checked={settings.workshopMapsEnabled === true} onCheckedChange={workshopMapsEnabled => setSettings(current => ({ ...current, workshopMapsEnabled }))} /></Field>
+      </FieldGroup>
+      <details className="disclosure-panel mt-5">
+        <summary>Erweiterte Map-Einstellungen</summary>
+        <FieldGroup className="p-4">
+          <Field htmlFor="manual-start-map"><FieldLabel>Interner Name der Startmap</FieldLabel><Input id="manual-start-map" value={settings.startMap || ""} onChange={event => setSettings(current => ({ ...current, startMap: event.target.value }))} /><FieldDescription>Für Maps, die noch nicht im Serverbestand erscheinen.</FieldDescription></Field>
+          <Field htmlFor="workshop-ids"><FieldLabel>Workshop-IDs oder Links</FieldLabel><Textarea id="workshop-ids" value={settings.workshopMaps || ""} onChange={event => setSettings(current => ({ ...current, workshopMaps: event.target.value }))} /></Field>
+          <Field><FieldLabel>Downloads bei jedem Map-Wechsel prüfen</FieldLabel><Switch aria-label="Downloads bei jedem Map-Wechsel prüfen" checked={settings.workshopForceDownload === true} onCheckedChange={workshopForceDownload => setSettings(current => ({ ...current, workshopForceDownload }))} /></Field>
+        </FieldGroup>
       </details>
-
-      {!Array.isArray(status?.mapInventory) ? <p className="mb-4 text-sm text-muted-foreground">Serverbestand noch nicht verfügbar. Plugin 1.9.0 starten und Übersicht aktualisieren; bis dahin ist die Ladbarkeit nicht bestätigt.</p> : null}
-      {[["Others", otherMaps], ["Nicht verfügbar", unavailableMaps]].map(([title, maps]: [string, MapDefinition[]]) => (
-        <details className="disclosure-panel mb-4" key={title}>
-          <summary><MapPinned className="size-4" aria-hidden="true" /><span>{title}</span><Badge variant="secondary">{maps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" /></summary>
-          <div className="p-4">
-            {title === "Nicht verfügbar" ? <p className="mb-4 text-sm text-muted-foreground">Nicht auf dem Server installiert. Lineups bleiben erhalten. Eine hinterlegte und aktivierte Workshop-Version erscheint wieder in ihrer passenden Kategorie.</p> : null}
-            <div className="map-choice-grid">{maps.map(map => <MapChoice key={map.key} map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />)}</div>
-          </div>
-        </details>
-      ))}
-
-      <details className="disclosure-panel mb-4">
-        <summary><PackagePlus className="size-4" aria-hidden="true" /><span>Workshop maps</span><Badge variant="secondary">{workshopMaps.length}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
-        <div className="p-3 sm:p-4">
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div className="grid gap-1.5">
-            <CardTitle>Workshop maps</CardTitle>
-            <CardDescription>Maps added here also update the MultiAddonManager list used by the CS2 container.</CardDescription>
-          </div>
-          <Button variant="secondary" onClick={() => setAddWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Add map</Button>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <Field className="flex min-h-20 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-background px-4 py-3">
-            <span>
-              <FieldLabel>Load Workshop maps on the server</FieldLabel>
-              <FieldDescription className="mt-1 block">Enables MultiAddonManager and mounts every Workshop ID in this list.</FieldDescription>
-            </span>
-            <Switch aria-label="Load Workshop maps on the server" checked={settings.workshopMapsEnabled === true} onCheckedChange={(checked) => setSettings((current) => ({ ...current, workshopMapsEnabled: checked }))} />
-          </Field>
-          {workshopMaps.length > 0 ? (
-            <div className="map-choice-grid">
-              {workshopMaps.map((map) => (
-                <div key={map.key} className="workshop-map-choice">
-                  <MapChoice map={map} nades={nadesForMap(map)} selected={selectedMap.key === map.key} onSelect={selectMap} />
-                  <Button
-                    className="workshop-map-remove"
-                    type="button"
-                    variant="secondary"
-                    size="icon"
-                    title={`Remove ${map.name}`}
-                    onClick={() => setSettings((current) => ({ ...current, ...removeWorkshopMap(current, map.workshopId) }))}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Alert>
-              <AlertTitle>No Workshop maps pinned</AlertTitle>
-              <AlertDescription>Add a Workshop item ID, a display name and its internal map name. It will appear beside the fixed CS2 maps.</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-        <CardFooter className="flex-wrap">
-          <Button onClick={onApply} disabled={busy}><UploadCloud data-icon="inline-start" />Apply maps & restart</Button>
-          <span className="text-xs text-muted-foreground">A restart downloads and mounts newly added Workshop addons.</span>
-        </CardFooter>
-      </Card>
-
-        </div>
-      </details>
-
-      <Card className="map-atlas-detail mb-4 scroll-mt-24" id="selected-map">
-        <CardHeader className="border-b border-border">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="grid gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={selectedMap.category === "active" ? "success" : "secondary"}>{({ active: "Active Duty", reserve: "Reserve & Community", community: "Reserve & Community", other: "Others", unavailable: "Nicht verfügbar", workshop: "Workshop" })[selectedMap.category]}</Badge>
-                {isStartMap ? <Badge variant="outline"><span className="server-status-dot" />Server start map</Badge> : null}
-              </div>
-              <CardTitle className="control-title text-2xl">{selectedMap.name}</CardTitle>
-              <CardDescription className="font-mono text-xs">{selectedMap.mapName || `Workshop ${selectedMap.workshopId}`}</CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {selectedMap.sourceUrl ? (
-                <Button variant="secondary" asChild><a href={selectedMap.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />CSNADES</a></Button>
-              ) : null}
-              {selectedMap.workshopId ? (
-                <Button variant="secondary" asChild><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMap.workshopId}`} target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Workshop</a></Button>
-              ) : null}
-              <Button variant="secondary" disabled={!canStartMap || isStartMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap.mapName }))}><MapPinned data-icon="inline-start" />{isStartMap ? "Start map selected" : "Set as start map"}</Button>
-              <Button onClick={() => { setEditingNade(null); setAddNadeOpen(true); }}><Plus data-icon="inline-start" />Add lineup</Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="map-atlas-layout grid gap-6 pt-5 sm:pt-6">
-          <div className="map-stage">
-            <NadeFlightMap map={selectedMap} nades={selectedNades} calibration={calibration} emptyMessage="No start-to-target routes placed yet" onSelectNade={setEditingNade} />
-            <div className="map-stage-legend">
-              <span><i className="radar-status-dot radar-status-dot-ready" />Start position</span>
-              <span><i className="radar-status-diamond radar-status-dot-ready" />Landing position</span>
-              <span>{placedNades.length}/{selectedNades.length} routes placed · curves show direction, not vertical trajectory</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-5">
-            <div>
-              <p className="control-kicker">Library coverage</p>
-              <p className="mt-2 text-4xl font-semibold tracking-tight">{selectedNades.length}</p>
-              <p className="mt-1 text-sm text-muted-foreground">lineups synchronized with MatchZy</p>
-            </div>
-            <Separator />
-            <dl className="grid grid-cols-2 gap-3">
-              {Object.keys(typeCounts).length > 0 ? Object.entries(typeCounts).map(([type, count]) => (
-                <div key={type} className="rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">{type}</dt><dd className="mt-1 font-mono text-lg font-medium">{String(count)}</dd></div>
-              )) : <div className="col-span-2 text-sm text-muted-foreground">No utility saved for this map yet.</div>}
-            </dl>
-            {selectedMap.available ? <CopyCommand value={selectedMap.workshopId ? `rcon host_workshop_map ${selectedMap.workshopId}` : `rcon changelevel ${selectedMap.mapName}`} label="Map-Befehl kopieren" /> : <p className="text-sm text-muted-foreground">Diese Map ist aktuell nicht als ladbar bestätigt.</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-4">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
-          <div className="grid gap-1.5">
-            <CardTitle>{selectedMap.name} lineups</CardTitle>
-            <CardDescription>Everything saved for this map in the shared MatchZy library.</CardDescription>
-          </div>
-          <Badge variant="secondary">{selectedNades.length}</Badge>
-        </CardHeader>
-        <CardContent className="pt-5 sm:pt-6">
-          {selectedNades.length > 0 ? (
-            <div className="lineup-card-grid">
-              {selectedNades.map((nade) => (
-                <Card key={nade.id} className="lineup-gallery-card overflow-hidden">
-                  {(nade.lineupImages || []).length > 0 ? (
-                    <a className="lineup-gallery-image" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer">
-                      <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || nade.displayName || nade.name} />
-                      {nade.lineupImages.length > 1 ? <Badge variant="secondary">+{nade.lineupImages.length - 1} images</Badge> : null}
-                    </a>
-                  ) : <div className="lineup-gallery-sketch"><NadeFlightMap map={selectedMap} nades={[nade]} calibration={calibration} compact /></div>}
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0"><CardTitle className="break-words">{nade.displayName || nade.name}</CardTitle><CardDescription className="mt-1 line-clamp-2">{nade.desc || "No description"}</CardDescription></div>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Badge variant="outline">{nade.type || "Nade"}</Badge>
-                        {nade.mustKnow ? <Badge variant="success">Must Know</Badge> : null}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-2 text-xs">
-                    <div className="grid gap-1"><span className="text-muted-foreground">Route</span><strong>{nade.throwFromTitle || "Start"} → {nade.throwToTitle || "Target"}</strong></div>
-                    <div className="grid gap-1"><span className="text-muted-foreground">Position</span><code className="truncate">{nade.lineupPos}</code></div>
-                    <div className="grid gap-1"><span className="text-muted-foreground">Angle</span><code className="truncate">{nade.lineupAng}</code></div>
-                    {nade.landingPos ? <div className="grid gap-1"><span className="text-muted-foreground">Landing</span><code className="truncate">{nade.landingPos}</code></div> : null}
-                    {nade.throwTechnique ? <div className="grid gap-1"><span className="text-muted-foreground">Throw</span><strong>{nade.throwTechnique}</strong></div> : null}
-                    {nade.throwTrace ? <details className="mt-1 rounded-md border border-border p-2"><summary className="cursor-pointer text-xs font-medium">Show recorded throw inputs and movement</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed text-muted-foreground">{formatThrowTrace(nade.throwTrace)}</pre></details> : null}
-                  </CardContent>
-                  <CardFooter className="justify-between border-t border-border pt-4">
-                    <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"}>{nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review" : "Aufnahme"}</Badge>
-                    <div className="flex flex-1 flex-wrap justify-end gap-2">
-                      <Button variant="secondary" size="sm" onClick={() => setEditingNade(nade)}><MapPinned data-icon="inline-start" />Edit route</Button>
-                      <CopyCommand value={`.loadnade ${nade.name}`} label="Copy load" />
-                      <DeleteNadeButton nade={nade} disabled={busy} onDelete={() => setNades((current) => current.filter((item) => item.id !== nade.id))} />
-                    </div>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Alert>
-              <AlertTitle>No {selectedMap.name} lineups yet</AlertTitle>
-              <AlertDescription>Add one in the panel or save it in-game with MatchZy. The sync service will place it here automatically.</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-
-      <details className="disclosure-panel">
-        <summary><BookOpen className="size-4" aria-hidden="true" /><span>Build map guide <span className="font-normal text-muted-foreground">· {selectedMap.name}</span></span><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
-        <div className="p-3 sm:p-4"><AnnotationGuide map={selectedMap} /></div>
-      </details>
-    </>
-  );
+      <div className="mt-5 flex flex-col gap-2">{workshops.map(map => <div key={map.key} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"><div><p className="text-sm font-medium">{map.name}</p><p className="font-mono text-xs text-muted-foreground">{map.mapName || map.workshopId}</p></div><Button variant="secondary" size="icon" aria-label={`${map.name} entfernen`} disabled={busy} onClick={() => setSettings(current => ({ ...current, ...removeWorkshopMap(current, map.workshopId) }))}><Trash2 /></Button></div>)}</div>
+    </CardContent>
+    <CardFooter><Button variant="secondary" disabled={busy} onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></CardFooter>
+    <WorkshopMapDialog open={workshopOpen} onOpenChange={setWorkshopOpen} onAdd={input => setSettings(current => ({ ...current, ...addWorkshopMap(current, input), workshopMapsEnabled: true }))} />
+  </Card>;
 }
 
 function nadesSyncPresentation(sync) {
@@ -1489,6 +1155,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
   const [reviewFilter, setReviewFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [editingNade, setEditingNade] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importJson, setImportJson] = useState("");
   const [exportJson, setExportJson] = useState("");
@@ -1605,8 +1272,8 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
     <>
       <PageHeader
         eyebrow="Match library"
-        title="Maps & Nades"
-        description="Search and edit every saved lineup, or import and export your library. Use Map atlas to place routes on the radar."
+        title="Bibliothek verwalten"
+        description="Prüfe Aufnahmen und verwalte den Import und Export deiner Lineups."
         actions={(
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Save or discard your local edits before refreshing" : "Load the latest library from MongoDB"}>
@@ -1627,7 +1294,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
             </Button>
             <Button onClick={onSave} disabled={busy}>
               <Save data-icon="inline-start" />
-              Save nades
+              Nades speichern
             </Button>
           </div>
         )}
@@ -1635,10 +1302,11 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
       {viewNav}
       <NadeDialog
         settings={settings}
-        open={addOpen}
+        open={addOpen || Boolean(editingNade)}
+        initialNade={editingNade}
         nades={nades}
-        onOpenChange={setAddOpen}
-        onAdd={(entry) => setNades((current) => [...current, entry])}
+        onOpenChange={open => { setAddOpen(open); if (!open) setEditingNade(null); }}
+        onAdd={entry => setNades(current => editingNade ? current.map(nade => nade.id === editingNade.id ? entry : nade) : [...current, entry])}
       />
       {localError ? <Message error={localError} /> : null}
       <details className="disclosure-panel mb-4">
@@ -1790,6 +1458,7 @@ function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirt
                           <span>{nade.lineupImages.length} image{nade.lineupImages.length === 1 ? "" : "s"}</span>
                         </a>
                       ) : <span className="text-xs text-muted-foreground">No image attached</span>}
+                      <Button variant="secondary" size="sm" onClick={() => setEditingNade(nade)}><MapPinned data-icon="inline-start" />Wurfweg & Bilder</Button>
                       <DeleteNadeButton nade={nade} disabled={busy} onDelete={() => setNades((current) => current.filter((item) => item.id !== nade.id))} />
                     </div>
                   </div>
@@ -1897,20 +1566,20 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [operation, setOperation] = useState(null);
 
-  async function loadAll() {
+  async function loadAll({ preserveSettings = false, preserveNades = false } = {}) {
     const control = await api("/api/control");
     setAuthenticated(true);
     setUser(control.user);
-    setSettings(control.settings || {});
+    if (!preserveSettings) setSettings(control.settings || {});
     setAdmins(control.admins || []);
-    setNades(control.nades || []);
+    if (!preserveNades) setNades(control.nades || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
-    setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
-    setSavedNadesSignature(JSON.stringify(control.nades || []));
+    if (!preserveSettings) setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
+    if (!preserveNades) setSavedNadesSignature(JSON.stringify(control.nades || []));
   }
 
-  async function runAction(action, operationKind = null) {
+  async function runAction(action, operationKind = null, scope = "server") {
     setBusy(true);
     setMessage("");
     setError("");
@@ -1922,7 +1591,7 @@ function App() {
       if (operationKind) {
         setOperation((current) => current ? { ...current, phase: "refreshing" } : current);
       }
-      await loadAll();
+      await loadAll({ preserveSettings: scope === "library" && dirty, preserveNades: scope === "server" && nadesDirty });
       setMessage(result?.message || "Done.");
     } catch (actionError) {
       setError(actionError.message);
@@ -1936,13 +1605,18 @@ function App() {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
 
-  const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs[0];
+  const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs[1];
+  const libraryMaps = useMemo(() => mapsForLibrary(settings, status?.mapInventory, nades), [settings, status?.mapInventory, nades]);
+  const mapRoute = matchPath("/maps/:mapSlug/*", location.pathname);
+  const lineupRoute = matchPath("/maps/:mapSlug/lineups/:lineupId", location.pathname);
+  const selectedMap = libraryMaps.find(map => mapSlug(map) === mapRoute?.params.mapSlug);
+  const selectedNade = findLineup(nades, lineupRoute?.params.lineupId);
 
   useEffect(() => {
     document.title = authenticated === false
-      ? "Anmelden | MatchZy Control"
-      : `${activeTab.label} | MatchZy Control`;
-  }, [activeTab.label, authenticated]);
+      ? "Anmelden | MatchZy"
+      : `${selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | MatchZy`;
+  }, [activeTab.label, authenticated, selectedMap?.name, selectedNade]);
 
   useEffect(() => {
     setMessage("");
@@ -1952,6 +1626,18 @@ function App() {
 
   const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings });
   const nadesDirty = savedNadesSignature !== "" && savedNadesSignature !== JSON.stringify(nades);
+
+  function refreshLibrary() {
+    return runAction(async () => ({ message: "Nades aktualisiert." }), null, "library");
+  }
+
+  function saveNades() {
+    return runAction(async () => {
+      const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
+      setNades(result.entries);
+      return { message: "Nades gespeichert." };
+    }, null, "library");
+  }
 
   function applyControl() {
     return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings }) }), "apply");
@@ -1969,7 +1655,7 @@ function App() {
 
   if (authenticated === null) {
     return (
-      <main className="grid min-h-screen place-items-center" aria-label="Loading control room">
+      <main className="grid min-h-screen place-items-center" aria-label="Playbook wird geladen">
         <Spinner className="size-6" />
       </main>
     );
@@ -1977,15 +1663,15 @@ function App() {
 
   if (!authenticated) {
     if (location.pathname !== routePaths.login) {
-      const requestedRoute = (location.pathname === routePaths.nades || tabs.some((item) => item.path === location.pathname)) ? location.pathname : defaultRoute;
+      const requestedRoute = (isMapRoute(location.pathname) || tabs.some((item) => item.path === location.pathname)) ? `${location.pathname}${location.search}` : defaultRoute;
       return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
     }
 
     return <Login error={error} />;
   }
 
-  const roleHome = user.role === "player" ? routePaths.maps : defaultRoute;
-  if (location.pathname !== "/" && !allowedTabs(user.role).some(tab => tab.path === location.pathname))
+  const roleHome = defaultRoute;
+  if (location.pathname !== "/" && location.pathname !== routePaths.login && !isMapRoute(location.pathname) && !allowedTabs(user.role).some(tab => tab.path === location.pathname))
     return <Navigate to={roleHome} replace />;
 
 
@@ -1993,6 +1679,8 @@ function App() {
     <Shell
       user={user}
       tab={activeTab.id}
+      selectedMap={selectedMap}
+      selectedNade={selectedNade}
       onNavigate={() => {
         setMessage("");
         setError("");
@@ -2005,7 +1693,7 @@ function App() {
       serviceState={status?.service?.state}
       onSave={() => runAction(async () => {
         await api("/api/control", { method: "PUT", body: JSON.stringify({ settings }) });
-        return { message: "Draft saved. Apply it when you are ready to restart CS2." };
+        return { message: "Serverentwurf gespeichert. Du kannst ihn in der Serververwaltung übernehmen." };
       })}
       onApply={applyControl}
       onLogout={async () => {
@@ -2019,7 +1707,7 @@ function App() {
         <Route
           path={routePaths.overview}
           element={(
-            user.role === "match_admin" ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field><Button onClick={applyControl} disabled={busy}>Änderungen übernehmen & neu starten</Button></> : <Overview
+            user.role === "match_admin" ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><div className="my-5"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></div><Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field></> : <Overview
               settings={settings}
               setSettings={setSettings}
               onApply={applyControl}
@@ -2029,8 +1717,7 @@ function App() {
               policy={policy}
               busy={busy}
               onRefresh={() => runAction(async () => {
-                await loadAll();
-                return { message: "Refreshed." };
+                return { message: "Serverstatus aktualisiert." };
               })}
               onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
             />
@@ -2045,8 +1732,11 @@ function App() {
             </>
           )}
         />
-        <Route path={routePaths.server} element={<Settings settings={settings} setSettings={setSettings} policy={policy} />} />
-        <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={user.role === "admin"} />{user.role === "match_admin" && <Button onClick={applyControl} disabled={busy}>Änderungen übernehmen & neu starten</Button>}</>} />
+        <Route path={routePaths.server} element={<>
+          <Settings settings={settings} setSettings={setSettings} policy={policy} />
+          <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />
+        </>} />
+        <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={user.role === "admin"} /></>} />
         <Route
           path={routePaths.access}
           element={<UserManagement currentSteamId={user.identitySteam64} />}
@@ -2055,39 +1745,21 @@ function App() {
           path={routePaths.maintenance}
           element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")} />}
         />
-        <Route
-          path={routePaths.maps}
-          element={(
-            user.role !== "admin" ? <>
-              {user.role === "match_admin" && <div className="mb-5 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}>Workshop-Map hinzufügen</Button><Button onClick={applyControl} disabled={busy}>Änderungen übernehmen & neu starten</Button></div>}
-              <NadeLibrary nades={nades} settings={settings} status={status} role={user.role} />
-              <WorkshopMapDialog open={workshopOpen} onOpenChange={setWorkshopOpen} onAdd={input => { const patch = addWorkshopMap(settings, input); setSettings(current => ({ ...current, ...patch, workshopMapsEnabled: true })); }} />
-            </> : <MapsAndNades
-              settings={settings}
-              setSettings={setSettings}
-              nades={nades}
-              setNades={setNades}
-              status={status}
-              busy={busy}
-              nadesDirty={nadesDirty}
-              onApply={applyControl}
-              onRefresh={() => runAction(async () => ({ message: "Nade library refreshed." }))}
-              onReload={loadAll}
-              onSave={() => runAction(async () => {
-                const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
-                setNades(result.entries);
-                return { message: "Nades saved." };
-              })}
-            />
-          )}
-        />
-        <Route path={routePaths.nades} element={<Navigate to={`${routePaths.maps}?view=library`} replace />} />
+        <Route path={routePaths.maps} element={new URLSearchParams(location.search).has("map") || new URLSearchParams(location.search).get("view") === "library"
+          ? <LegacyLibraryRedirect maps={libraryMaps} />
+          : <MapAtlas nades={nades} maps={libraryMaps} />} />
+        <Route path="/maps/:mapSlug" element={<NadeLibrary nades={nades} maps={libraryMaps} role={user.role} onRefresh={refreshLibrary} busy={busy} nadesDirty={nadesDirty} renderGuide={map => <AnnotationGuide map={map} />} />} />
+        <Route path="/maps/:mapSlug/lineups/:lineupId" element={<LineupPage maps={libraryMaps} nades={nades} />} />
+        <Route path={routePaths.nades} element={user.role === "admin" && new URLSearchParams(location.search).get("view") === "manage"
+          ? <Nades settings={settings} setSettings={setSettings} nades={nades} setNades={setNades} status={status} busy={busy} nadesDirty={nadesDirty} onApply={applyControl} onRefresh={refreshLibrary} onReload={() => loadAll({ preserveSettings: true })} onSave={saveNades} viewNav={<Button className="mb-5" variant="secondary" asChild><NavLink to={routePaths.maps}>Zurück zu den Maps</NavLink></Button>} />
+          : <LegacyLibraryRedirect maps={libraryMaps} />} />
         <Route path={routePaths.console} element={<RconChat />} />
         <Route path={routePaths.logs} element={<DockerLogs active />} />
         <Route path={routePaths.links} element={<Links />} />
         <Route path={routePaths.login} element={<Navigate to={routeFromLoginSearch(location.search)} replace />} />
         <Route path="*" element={<Navigate to={roleHome} replace />} />
       </Routes>
+      <WorkshopMapDialog open={workshopOpen} onOpenChange={setWorkshopOpen} onAdd={input => { const patch = addWorkshopMap(settings, input); setSettings(current => ({ ...current, ...patch, workshopMapsEnabled: true })); }} />
       <OperationDialog operation={operation} />
     </Shell>
   );

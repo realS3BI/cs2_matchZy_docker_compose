@@ -5,6 +5,9 @@ import {
   BUILT_IN_MAPS,
   CSNADES_REFERENCE_MAPS,
   mapsForInventory,
+  mapsForLibrary,
+  mapPath,
+  mapSlug,
   addWorkshopMap,
   extractWorkshopId,
   mapMatchesNade,
@@ -81,4 +84,20 @@ test("atlas follows server categories, installed availability and workshop resto
   assert.equal(maps[1].category, "unavailable");
   assert.equal(maps[2].workshopId, "123");
   assert.equal(maps[2].radarUrl, "/maps/mills.webp");
+});
+
+
+test("library keeps reserve, inactive and workshop maps even with a partial server inventory", () => {
+  const maps = mapsForLibrary({ workshopMaps: "123" }, [
+    { Key: "de_mirage", Title: "Mirage", MapName: "de_mirage", Category: "active", Available: true },
+    { Key: "de_thera", Title: "Thera", MapName: "de_thera", Category: "unavailable", Available: false },
+    { Key: "workshop:123", Title: "Mirage practice", MapName: "de_mirage", Category: "reserve", Available: true, WorkshopId: "123" }
+  ], [{ map: "de_old_map" }]);
+  assert.ok(maps.some(map => map.category === "reserve" && map.mapName === "de_overpass"));
+  assert.equal(maps.find(map => map.mapName === "de_thera").category, "unavailable");
+  assert.equal(maps.filter(map => mapSlug(map) === "mirage").length, 1);
+  assert.equal(mapPath(maps.find(map => map.workshopId === "123")), "/maps/workshop-123");
+  assert.equal(mapPath(maps.find(map => mapSlug(map) === "mirage")), "/maps/mirage");
+  assert.ok(maps.some(map => map.mapName === "de_old_map"));
+  assert.ok(mapsForLibrary({}, []).length >= BUILT_IN_MAPS.length);
 });

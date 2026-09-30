@@ -78,20 +78,18 @@ Coolify / Compose
 
 ## Dashboard
 
-Das Desktop-Dashboard umfasst:
+Die Website öffnet nach der Anmeldung **All Maps**. Die einklappbare shadcn-Sidebar basiert auf `sidebar-08` und gliedert sich in **Maps** und **Server**. Auf dem Handy öffnet sie sich als seitliches Menü.
 
-- `Overview`: Containerzustand, Modus, Spielerplaetze und letzte Aktion
-- `Server`: Steam-Token, RCON, Name, Startmap, Slots, Workshop und Versions-Pins
-- `Plugins`: genau ein Servermodus und optionale Komponenten
-- `Benutzer`: Steam-Konten und feste Rollen
-- `Server-Konsole`: RCON-Befehle mit Serverantwort
-- `Maintenance`: taeglicher Neustart mit IANA-Zeitzone
-- `Maps`: Active-Duty-Atlas, CSNADES-Referenzkarten, Workshop-Katalog, Lineup-Galerie und Annotation-Guide
-- `Nades`: gemeinsame MatchZy-Lineups, lokale Bilder und Live-Sync-Status
-- `Diagnostics`: Startkette und One-shot-Reparatur
-- `Logs`: aktuelle CS2-Containerlogs
+- **Maps → All Maps**: durchsuchbare Kartenübersicht mit Active Duty, Reserve-Pool, inaktiven Maps, weiteren Spielmodi und Workshop-Maps. Auch nicht installierte Maps bleiben zum Durchstöbern verfügbar.
+- **Map-Seiten**, etwa `/maps/mirage`: ausschließlich die Lineups dieser Map. shadcn-Tabs wählen Alle, Smokes, Flashes, HE, Molotovs oder Decoys. Darunter stehen die Sammlungen Alle, Favoriten, Must Know und Offiziell sowie eine Suche. „Alle“ zeigt auch ungeprüfte Aufnahmen. Jede Active-Duty-Map ist direkt in der Sidebar verlinkt. Der Annotation-Guide bleibt auf der Map-Seite erreichbar.
+- **Lineup-Seiten** unter `/maps/:map/lineups/:id`: direkt verlinkbare Detailseiten mit Wurfweg, Wurftechnik, Bildern und kopierbarem Ingame-Befehl. Die ID unterscheidet Owner, Map und internen Namen; ein neuer Anzeigename verändert den Link nicht.
+- **Favoriten**: über den Stern in der Galerie oder auf der Detailseite merken. Website-Favoriten werden in MongoDB pro Steam-ID und vollständiger Lineup-Identität gespeichert. Sie sind unabhängig von den Favoriten des Ingame-Panels.
+- **Verwalten** in der Nade-Bibliothek: Bibliotheksverwaltung für Plattform-Admins mit Review, Wurfweg- und Bildbearbeitung, Import, Export und Sync-Status.
+- **Server**: aufklappbarer Bereich mit den bisherigen Einträgen Übersicht, Einstellungen, Modi & Plugins, Konsole, Benutzer, Diagnose, Logs, Wartung und Dokumentation. Workshop-Maps und Startmap befinden sich in den Servereinstellungen. Die verfügbaren Werkzeuge richten sich nach der Rolle.
 
-`Save draft` speichert nur in MongoDB. `Apply & restart` validiert Steam-Token und RCON-Passwort, aktualisiert die Runtime-Dateien und startet den CS2-Container neu. Ein manueller Neustart schreibt ebenfalls zuerst den zuletzt gespeicherten Stand in die Runtime; noch ungespeicherte Browser-Aenderungen werden dabei nicht uebernommen.
+Granatentyp, Sammlung und Suche stehen in der URL. Beim Wechsel zur Detailseite und zurück bleiben sie erhalten. `/` und `/nades` öffnen `/maps`; bisherige Links wie `/nades?map=de_mirage` und `/maps?map=mirage` führen auf die passende Map-Seite. `/nades?view=manage` bleibt für die Verwaltung erhalten.
+
+„Entwurf speichern“ und „Übernehmen & neu starten“ stehen am Ende der jeweiligen Serverseite. Sie erscheinen nicht in der Nade-Bibliothek oder im Atlas. Der Entwurf wird in MongoDB gespeichert. Beim Übernehmen validiert das Panel Steam-Token und RCON-Passwort, aktualisiert die Runtime-Dateien und startet den CS2-Container neu. Ein manueller Neustart schreibt ebenfalls zuerst den zuletzt gespeicherten Stand in die Runtime; noch ungespeicherte Browser-Änderungen werden dabei nicht übernommen. Nades werden separat und ohne Serverneustart gespeichert. Das Aktualisieren oder Speichern eines Bereichs erhält ungespeicherte Änderungen im anderen Bereich.
 
 Das Dashboard findet den CS2-Container ueber Docker-Compose-Labels. Dafuer ist `/var/run/docker.sock` eingebunden. Dieser Zugriff ist sicherheitsrelevant; das Panel sollte ueber HTTPS und nach Moeglichkeit zusaetzlich per VPN oder IP-Allowlist geschuetzt werden.
 
@@ -120,7 +118,7 @@ Die Website verwendet [Steams OpenID-Anmeldung](https://steamcommunity.com/dev).
 | --- | --- | --- |
 | Admin | Alle Bereiche, Benutzerverwaltung, Nade-Freigaben und Server-Konsole | Alle Rechte |
 | Match Admin | Alle Nades und Maps lesen, Workshop-Maps hinzufügen, Servermodus, Plugins und Colored Smokes ändern, RCON senden | Panel und MatchZy-Befehle; keine Nade-Aufnahmen bearbeiten, importieren oder löschen |
-| Player | Ausschließlich offizielle Nades ansehen | Spielen; kein Panel und keine MatchZy-Befehle, auch kein `.ready` |
+| Player | Alle Nades und Maps ansehen, persönliche Website-Favoriten speichern | Spielen; kein Panel und keine MatchZy-Befehle, auch kein `.ready` |
 
 Neue Steam-Logins werden dauerhaft als Player gespeichert. Unter „Benutzer“ kann ein Admin Namen und Rollen ändern oder Steam64-IDs vorab anlegen. Eine Umstellung auf Player entzieht die Verwaltungsrechte. Die eigene Admin-Rolle kann nur ein anderer Admin ändern.
 
@@ -141,7 +139,7 @@ RCON ist wie gewünscht uneingeschränkt. Ein Match Admin kann darüber auch adm
 
 `MatchZyNades` wird in allen Modi für die Rollenprüfung installiert. Das Trainingspanel ist für Admin und Match Admin im Practice-Modus verfügbar. Aufnahmen dürfen nur Admins erstellen. Das feste Panorama-HUD bietet Mausbedienung, persönliche Hotkeys, Favoriten und pro Steam-ID gespeicherte Einstellungen. Granaten-Bibliothek, Aufnahme und Trainingswerkzeuge bleiben enthalten. **Vor Aktivierung müssen die HUD-Assets kompiliert und auf den Clients verfügbar sein**; der C#-Build allein reicht nicht. Unter **Server → Trainings-HUD** lassen sich das Panel und die Workshop-Auslieferung getrennt einschalten und die Workshop-ID hinterlegen. Für lokale Entwicklung das HUD aktivieren und die Workshop-Auslieferung ausschalten. Mit **Apply & restart** übernehmen. Anleitung, lokale Build-Befehle und aktueller Abnahmestand: [Training-HUD](training-hud/README.md). CounterStrikeSharp API 374+ ist erforderlich.
 
-Unter **Plugins** und **Nades** zeigt eine Statuskarte, ob das Menue fehlt, nur installiert oder vom laufenden Plugin bestaetigt ist. **Loaded** basiert auf einer aktuellen Rueckmeldung aus diesem Containerstart und zeigt auch den Practice-Zustand. **Diagnostics** prueft das Menue separat. Nach dem Update muessen sowohl Dashboard als auch CS2 neu gebaut und deployed werden.
+Unter **Server → Modi & Plugins** und **Verwalten** in der Nade-Bibliothek zeigt eine Statuskarte, ob das Menü fehlt, nur installiert oder vom laufenden Plugin bestätigt ist. **Loaded** basiert auf einer aktuellen Rückmeldung aus diesem Containerstart und zeigt auch den Practice-Zustand. **Diagnostics** prüft das Menü separat. Nach dem Update müssen sowohl Dashboard als auch CS2 neu gebaut und deployed werden.
 
 Direkte Zifferntasten 1–9 sind mit einer optionalen Client-CFG moeglich; ohne Binds funktioniert auch `.nades 1` bis `.nades 9`. [Bedienung, Installation und Testablauf](docs/nades-menu.md) sowie [Zifferntasten-CFG](docs/nades-menu.cfg). Nach dem Repository-Update muss das CS2-Image neu gebaut werden.
 
