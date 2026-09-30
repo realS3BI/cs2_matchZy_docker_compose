@@ -30,7 +30,7 @@ public sealed partial class MatchZyNadesPlugin
     private bool TryEditFromChat(CCSPlayerController? player, string text)
     {
         if (player is not { IsValid: true } || !_edits.TryGetValue(player.Slot, out var edit)) return false;
-        if (!TrainingEnabled || edit.SteamId != player.SteamID || edit.Expires < Server.CurrentTime || edit.Lineup.Map != Server.MapName)
+        if (!CanWriteNades(player) || !TrainingEnabled || edit.SteamId != player.SteamID || edit.Expires < Server.CurrentTime || edit.Lineup.Map != Server.MapName)
         { _edits.Remove(player.Slot); return false; }
         text = text.Trim().Trim('"').Trim();
         if (text.Equals("abbrechen", StringComparison.OrdinalIgnoreCase) || text.Equals(".cancel", StringComparison.OrdinalIgnoreCase))
@@ -50,7 +50,7 @@ public sealed partial class MatchZyNadesPlugin
         if (_submittedLineupRequests.Contains(id)) return true;
         var current = ReadLibrary(player)?.FirstOrDefault(n => n.Owner == selected.Owner && n.Map == selected.Map && n.Name == selected.Name);
         if (action == "review" && current?.ReviewStatus == "pending" && current.Owner == player.SteamID.ToString()) return true;
-        if (!TrainingEnabled || current == null || current.Owner != player.SteamID.ToString() || current.Official || current.Revision != selected.Revision)
+        if (!CanWriteNades(player) || !TrainingEnabled || current == null || current.Owner != player.SteamID.ToString() || current.Official || current.Revision != selected.Revision)
         { Tell(player, "Die Aufnahme wurde inzwischen geändert oder freigegeben. Bitte erneut öffnen."); return false; }
         if (string.IsNullOrEmpty(current.Revision)) { Tell(player, "Die Aufnahme wird noch synchronisiert. Bitte kurz warten."); return false; }
         try

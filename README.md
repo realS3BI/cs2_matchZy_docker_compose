@@ -1,22 +1,24 @@
 # CS2 + MatchZy Control
 
-Dieses Repository betreibt einen CS2 Dedicated Server und ein geschuetztes Web-Dashboard fuer Docker Compose oder Coolify. Servername, Steam-Registrierung, RCON, Spielmodus, Plugins, Versionen, Admins, Workshop-Maps, Nades und Wartung werden im Dashboard gepflegt.
+Dieses Repository betreibt einen CS2 Dedicated Server und ein geschütztes Web-Dashboard für Docker Compose oder Coolify. Servername, Steam-Registrierung, RCON, Spielmodus, Plugins, Versionen, Admins, Workshop-Maps, Nades und Wartung werden im Dashboard gepflegt.
 
 ## Deployment
 
-Am Deployment werden genau zwei Variablen gesetzt:
+Am Deployment werden die öffentliche Adresse und ein Session-Secret gesetzt. Bei einer neuen Installation kommt die Steam64-ID des ersten Admins hinzu:
 
 ```dotenv
-ADMIN_PANEL_PASSWORD=
+ADMIN_PANEL_PUBLIC_URL=https://cs2.example.com
+ADMIN_PANEL_ADMIN_STEAM_ID=
 ADMIN_PANEL_SESSION_SECRET=
 ```
 
 | Variable | Zweck |
 | --- | --- |
-| `ADMIN_PANEL_PASSWORD` | Passwort fuer den ersten Login ins Dashboard |
-| `ADMIN_PANEL_SESSION_SECRET` | Langer Zufallswert zum Signieren der Login-Session |
+| `ADMIN_PANEL_PUBLIC_URL` | Öffentliche HTTP(S)-Adresse ohne Pfad. In Produktion HTTPS verwenden. |
+| `ADMIN_PANEL_ADMIN_STEAM_ID` | Steam64-ID des ersten Admins. Optional bei vorhandenen Ownern; legt nur einen noch nicht vorhandenen Benutzer an. |
+| `ADMIN_PANEL_SESSION_SECRET` | Langer Zufallswert zum Hashen der zufälligen Sitzungstokens |
 
-Fuer ein starkes Session-Secret eignet sich zum Beispiel:
+Für ein starkes Session-Secret eignet sich zum Beispiel:
 
 ```bash
 openssl rand -hex 32
@@ -28,7 +30,7 @@ Danach:
 docker compose up -d --build
 ```
 
-In Coolify wird das Repository als Compose-Ressource verbunden. Die beiden Werte kommen in die Environment-Ansicht der Ressource. Fuer `admin-panel` wird eine Domain mit dem internen Zielport `8080` angelegt. Der Stack bindet diesen Port nicht an den Host; dadurch kollidiert er nicht mit anderen Coolify-Projekten, die intern ebenfalls Port 8080 verwenden.
+In Coolify wird das Repository als Compose-Ressource verbunden. Diese Werte kommen in die Environment-Ansicht der Ressource. Fuer `admin-panel` wird eine Domain mit dem internen Zielport `8080` angelegt. Der Stack bindet diesen Port nicht an den Host; dadurch kollidiert er nicht mit anderen Coolify-Projekten, die intern ebenfalls Port 8080 verwenden.
 
 Am Host werden nur die Spielports veroeffentlicht:
 
@@ -43,7 +45,7 @@ Beim ersten Start geschieht Folgendes:
 1. MongoDB und das Dashboard starten.
 2. Das Dashboard legt ein neues, typisiertes Settings-Dokument mit sicheren Defaults an.
 3. Der CS2-Container wartet und startet noch keinen Gameserver.
-4. Du meldest dich mit `ADMIN_PANEL_PASSWORD` an.
+4. Du meldest dich über „Mit Steam anmelden“ mit dem konfigurierten Admin-Konto an.
 5. Unter `Server` traegst du mindestens den Steam Game Server Login Token fuer App 730 und ein RCON-Passwort ein.
 6. `Apply & restart` schreibt die Runtime-Dateien und startet CS2.
 
@@ -61,7 +63,7 @@ Alte Dateien in einem bestehenden Runtime-Volume werden nicht gelesen. Fuer eine
 
 ```text
 Coolify / Compose
-  └─ zwei Panel-Secrets
+  └─ öffentliche URL, Admin-Steam-ID und Session-Secret
        └─ MatchZy Control
             ├─ MongoDB: settings, admins, nades
             └─ privates Runtime-Volume
@@ -81,7 +83,8 @@ Das Desktop-Dashboard umfasst:
 - `Overview`: Containerzustand, Modus, Spielerplaetze und letzte Aktion
 - `Server`: Steam-Token, RCON, Name, Startmap, Slots, Workshop und Versions-Pins
 - `Plugins`: genau ein Servermodus und optionale Komponenten
-- `Access`: CounterStrikeSharp-Rollen und Steam64-IDs
+- `Benutzer`: Steam-Konten und feste Rollen
+- `Server-Konsole`: RCON-Befehle mit Serverantwort
 - `Maintenance`: taeglicher Neustart mit IANA-Zeitzone
 - `Maps`: Active-Duty-Atlas, CSNADES-Referenzkarten, Workshop-Katalog, Lineup-Galerie und Annotation-Guide
 - `Nades`: gemeinsame MatchZy-Lineups, lokale Bilder und Live-Sync-Status
@@ -103,26 +106,40 @@ Es ist immer genau ein Modus aktiv:
 
 Bei bestehenden Installationen wird ein gespeicherter Executes-Modus beim Update auf MatchZy umgestellt. Der naechste CS2-Start entfernt die alten Executes-Plugin-Dateien aus dem persistenten Volume.
 
-Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar sind Fake RCON, WeaponPaints, SimpleAdmin, Fortnite Emotes und Workshop-Maps. Notwendige Abhaengigkeiten werden automatisch installiert oder entfernt.
+Metamod und CounterStrikeSharp sind feste Kernkomponenten. Optional aktivierbar sind WeaponPaints, Fortnite Emotes und Workshop-Maps. Notwendige Abhängigkeiten werden automatisch installiert oder entfernt. SimpleAdmin und Fake RCON werden nicht mehr installiert; vorhandene Dateien entfernt der nächste CS2-Start. Die MatchZy-Nades-Erweiterung bleibt in allen Modi für die Rollenprüfung aktiv.
 
 `METAMOD=latest` waehlt den neuesten verfuegbaren 2.0-Linux-Build ab `1467`. Aktuelle CounterStrikeSharp-Versionen benoetigen Metamod-Plugin-Schnittstelle 18. Fuer aeltere CounterStrikeSharp-Versionen mit Schnittstelle 17 kann `METAMOD=compatible` (Build `1411`) gesetzt werden. Beide Komponenten muessen zur gleichen Schnittstelle passen.
 
 WeaponPaints benoetigt eine eigene Datenbankkonfiguration im erzeugten Plugin-Config-File und kann wegen der Server-Guideline-Einstellung ein Risiko fuer den Steam-Token darstellen. Das Dashboard zeigt deshalb eine Warnung an.
 
-## Admins
+## Steam-Anmeldung und Rollen
 
-MongoDB ist die einzige Adminquelle des Dashboards. Verfuegbar sind `Owner`, `Match operator`, `Moderator` und `Custom`. Beim Anwenden erzeugt das Panel:
+Die Website verwendet [Steams OpenID-Anmeldung](https://steamcommunity.com/dev). Dafür ist kein Steam-Web-API-Key nötig. Steam bestätigt die Steam64-ID; Passwörter werden nur bei Steam eingegeben. Die feste Callback-Adresse lautet `ADMIN_PANEL_PUBLIC_URL/api/auth/steam/callback`. Hinter Coolify muss die konfigurierte öffentliche Adresse der Browser-Adresse entsprechen.
 
-```text
-game/csgo/addons/counterstrikesharp/configs/admins.json
-game/csgo/cfg/MatchZy/admins.json
-```
+| Rolle | Website | Spielserver |
+| --- | --- | --- |
+| Admin | Alle Bereiche, Benutzerverwaltung, Nade-Freigaben und Server-Konsole | Alle Rechte |
+| Match Admin | Alle Nades und Maps lesen, Workshop-Maps hinzufügen, Servermodus, Plugins und Colored Smokes ändern, RCON senden | Panel und MatchZy-Befehle; keine Nade-Aufnahmen bearbeiten, importieren oder löschen |
+| Player | Ausschließlich offizielle Nades ansehen | Spielen; kein Panel und keine MatchZy-Befehle, auch kein `.ready` |
 
-MatchZys eigene Admin-Datei bleibt leer. MatchZy verwendet die Rechte aus CounterStrikeSharp, damit es keine zweite Berechtigungsquelle gibt.
+Neue Steam-Logins werden dauerhaft als Player gespeichert. Unter „Benutzer“ kann ein Admin Namen und Rollen ändern oder Steam64-IDs vorab anlegen. Eine Umstellung auf Player entzieht die Verwaltungsrechte. Die eigene Admin-Rolle kann nur ein anderer Admin ändern.
+
+Vorhandene Owner und alte Einträge mit Root-Rechten werden als Admin übernommen. Match Operator wird Match Admin; Moderator und andere Custom-Rollen werden Player. Es gibt keine frei vergebbaren Flags mehr. Die Migration überschreibt keine bereits umgestellten Benutzer. Nach dem Update sind alte Passwort-Sitzungen ungültig; `ADMIN_PANEL_PASSWORD` kann aus Coolify entfernt werden.
+
+Die Website liest die Rolle bei jeder Anfrage aus MongoDB. Zufällige Sitzungstokens werden nur gehasht gespeichert und laufen nach zwölf Stunden ab. Abmelden widerruft die Sitzung. Steam-Rückleitungen sind an eine einmalig verwendbare Browser-Anmeldung gebunden. Schreibende Browser-Anfragen müssen von der konfigurierten Website stammen.
+
+Das Panel schreibt Rollen und feste CounterStrikeSharp-Rechte in das Runtime-Volume. Die gebündelte Server-Erweiterung prüft Rollen vor Konsolen- und Chatbefehlen und lädt geänderte CSS-Rechte innerhalb weniger Sekunden. MatchZys eigene `admins.json` bleibt leer, `matchzy_everyone_is_admin` ist beim Start deaktiviert. Das Ingame-Panel bleibt kompakt mit neun Listenplätzen.
+
+## Server-Konsole
+
+Admin und Match Admin können unter „Server-Konsole“ RCON-Befehle wie `status` senden. Der Chat zeigt die Serverantwort oder einen Verbindungsfehler. Er verwendet das RCON-Passwort der angewendeten Serverkonfiguration; ein Neustart ist zum Senden nicht nötig. Der Verlauf bleibt nur im geöffneten Browserfenster. Im Audit werden Steam-ID und Ergebnis gespeichert, keine Befehle mit möglichen Passwörtern.
+
+RCON ist wie gewünscht uneingeschränkt. Ein Match Admin kann darüber auch administrative Serverbefehle ausführen. Die Schreibsperren für Nades und Map-Daten gelten für Website und direkte Ingame-Befehle, nicht als Isolation gegenüber uneingeschränktem RCON.
+
 
 ## Nades und Bilder
 
-In den Servermodi **Nades und MatchZy** wird `MatchZyNades` automatisch installiert. Das feste Panorama-HUD bietet Mausbedienung, persönliche Hotkeys, Favoriten und pro Steam-ID gespeicherte Einstellungen. Granaten-Bibliothek, Aufnahme und Trainingswerkzeuge bleiben enthalten. **Vor Aktivierung müssen die HUD-Assets kompiliert und auf den Clients verfügbar sein**; der C#-Build allein reicht nicht. Unter **Server → Trainings-HUD** lassen sich das Panel und die Workshop-Auslieferung getrennt einschalten und die Workshop-ID hinterlegen. Für lokale Entwicklung das HUD aktivieren und die Workshop-Auslieferung ausschalten. Mit **Apply & restart** übernehmen. Anleitung, lokale Build-Befehle und aktueller Abnahmestand: [Training-HUD](training-hud/README.md). CounterStrikeSharp API 374+ ist erforderlich.
+`MatchZyNades` wird in allen Modi für die Rollenprüfung installiert. Das Trainingspanel ist für Admin und Match Admin im Practice-Modus verfügbar. Aufnahmen dürfen nur Admins erstellen. Das feste Panorama-HUD bietet Mausbedienung, persönliche Hotkeys, Favoriten und pro Steam-ID gespeicherte Einstellungen. Granaten-Bibliothek, Aufnahme und Trainingswerkzeuge bleiben enthalten. **Vor Aktivierung müssen die HUD-Assets kompiliert und auf den Clients verfügbar sein**; der C#-Build allein reicht nicht. Unter **Server → Trainings-HUD** lassen sich das Panel und die Workshop-Auslieferung getrennt einschalten und die Workshop-ID hinterlegen. Für lokale Entwicklung das HUD aktivieren und die Workshop-Auslieferung ausschalten. Mit **Apply & restart** übernehmen. Anleitung, lokale Build-Befehle und aktueller Abnahmestand: [Training-HUD](training-hud/README.md). CounterStrikeSharp API 374+ ist erforderlich.
 
 Unter **Plugins** und **Nades** zeigt eine Statuskarte, ob das Menue fehlt, nur installiert oder vom laufenden Plugin bestaetigt ist. **Loaded** basiert auf einer aktuellen Rueckmeldung aus diesem Containerstart und zeigt auch den Practice-Zustand. **Diagnostics** prueft das Menue separat. Nach dem Update muessen sowohl Dashboard als auch CS2 neu gebaut und deployed werden.
 
@@ -138,7 +155,7 @@ Panel-Aenderungen werden ohne Server-Neustart geschrieben. Ingame-Aenderungen we
 
 Der Nades-Bereich zeigt, ob beide Sync-Dateien erreichbar sind, wann der letzte Abgleich bestaetigt wurde und in welche Richtung zuletzt Daten uebertragen wurden. Er prueft den Status alle 2,5 Sekunden. Aendert MatchZy die Bibliothek, weist das Panel auf die neuere Fassung hin.
 
-`Save new in-game lineups for everyone` setzt MatchZys globale Nade-Option. Nach `Apply sharing & restart` speichert `.savenade` neue Lineups unter dem MatchZy-Owner `default`; damit koennen alle Spieler sie mit `.listnades` sehen und mit `.loadnade` laden. Bereits privat gespeicherte Lineups bleiben privat und werden im Panel entsprechend markiert.
+`Save new in-game lineups for everyone` setzt MatchZys globale Nade-Option. Nach `Apply sharing & restart` speichert `.savenade` neue Lineups unter dem MatchZy-Owner `default`; damit können Admin und Match Admin sie mit `.listnades` sehen und mit `.loadnade` laden. Bereits privat gespeicherte Lineups bleiben privat und werden im Panel entsprechend markiert.
 
 Beim Import einer Ingame-Aenderung behaelt das Panel vorhandene Bildzuordnungen fuer dasselbe Lineup (Owner, Map und Name) bei. MatchZys eigene JSON-Datei enthaelt weiterhin nur die Felder, die das Plugin versteht.
 

@@ -17,15 +17,15 @@ test("sanitizeSettings rejects fields outside the application schema", () => {
 
 test("sanitizeAdmins validates steam ids and defaults flags", () => {
   assert.deepEqual(sanitizeAdmins([{ identitySteam64: "76561198000000001" }]), [
-    { name: "", identitySteam64: "76561198000000001", role: "owner", flags: ["@css/root"] }
+    { name: "", identitySteam64: "76561198000000001", role: "player", flags: [] }
   ]);
 });
 
 test("adminsToCssConfig builds CounterStrikeSharp config", () => {
-  assert.deepEqual(adminsToCssConfig([{ identitySteam64: "76561198000000001", flags: ["@css/map"] }]), {
+  assert.deepEqual(adminsToCssConfig([{ identitySteam64: "76561198000000001", role: "admin", flags: ["@css/root"] }]), {
     "76561198000000001": {
       identity: "76561198000000001",
-      flags: ["@css/map"]
+      flags: ["@css/root"]
     }
   });
 });
@@ -35,12 +35,12 @@ test("adminsToMatchZyConfig keeps the MatchZy admin file empty", () => {
 });
 
 test("sanitizeAdmins derives permissions from the selected role", () => {
-  const [entry]: any = sanitizeAdmins([{ identitySteam64: "76561198000000001", role: "match_operator", flags: ["@css/root"] }]);
-  assert.deepEqual(entry.flags, ["@css/config", "@custom/prac", "@css/map", "@css/chat"]);
+  const [entry]: any = sanitizeAdmins([{ identitySteam64: "76561198000000001", role: "match_admin", flags: ["@css/root"] }]);
+  assert.deepEqual(entry.flags, ["@css/config", "@custom/prac", "@css/map", "@css/chat", "@css/rcon", "@matchzy/control"]);
 });
 
 test("custom admins cannot silently escalate from an empty permission list", () => {
-  assert.throws(() => sanitizeAdmins([{ identitySteam64: "76561198000000001", role: "custom", flags: [] }]), /at least one permission/);
+  assert.throws(() => sanitizeAdmins([{ identitySteam64: "76561198000000001", role: "custom", flags: [] }]), /Ungültige Rolle/);
 });
 
 test("sanitizeNades validates and defaults owner", () => {

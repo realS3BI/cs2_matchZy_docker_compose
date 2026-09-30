@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FLAG_PRESETS } from "./defaults.js";
+import { installAuth } from "./auth.js";
 import {
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
@@ -14,44 +14,12 @@ import {
   sanitizeNades
 } from "./validators.js";
 import { buildDiagnostics } from "./diagnostics.js";
-import { buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
+import { ADMIN_ROLES, MATCH_ADMIN_SETTINGS, settingsForRole, buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
 import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
 import { currentMapFromStatus, executeRcon, mapChangeCommand } from "./rcon.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
-const COOKIE_NAME = "cs2_panel_session";
-
-function sign(value, secret) {
-  return crypto.createHmac("sha256", secret).update(value).digest("base64url");
-}
-
-function createSession(secret) {
-  const payload = Buffer.from(JSON.stringify({ authenticated: true, createdAt: Date.now() }), "utf8").toString("base64url");
-  return `${payload}.${sign(payload, secret)}`;
-}
-
-function isValidSession(cookie, secret) {
-  if (!cookie || !cookie.includes(".")) return false;
-  const [payload, signature] = cookie.split(".");
-  const expected = sign(payload, secret);
-  if (Buffer.byteLength(signature) !== Buffer.byteLength(expected)) return false;
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return false;
-  try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return data.authenticated === true && Date.now() - Number(data.createdAt || 0) < 12 * 60 * 60 * 1000;
-  } catch {
-    return false;
-  }
-}
-
-function requireAuth(config) {
-  return (req, res, next) => {
-    if (isValidSession(req.cookies[COOKIE_NAME], config.sessionSecret)) return next();
-    return res.status(401).json({ error: "Unauthorized" });
-  };
-}
-
 function actionMessage(result) {
   const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
   return output || (result.ok ? "Command completed" : "Command failed");
@@ -82,7 +50,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
   );
 }
 
-export function createApp({ config, store, compose, nadesSync, restartScheduler = null, rcon = executeRcon }) {
+export function createApp({ config, store, compose, nadesSync, restartScheduler = null, rcon = executeRcon, steamVerifier = undefined }) {
   async function readMapInventory() {
     try {
       const parsed = JSON.parse(await readFile(join(dirname(config.liveMatchZyNadesFile), "savednades.maps.json"), "utf8"));
@@ -103,35 +71,53 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     legacyHeaders: false
   });
 
-  app.post("/api/auth/login", loginLimiter, async (req, res) => {
-    const password = String(req.body?.password || "");
-    const isMatch = crypto.timingSafeEqual(
-      crypto.createHash("sha256").update(password).digest(),
-      crypto.createHash("sha256").update(config.password).digest()
-    );
-    if (!isMatch) {
-      await store.logAction("login_fail", "failed", "Invalid password");
-      return res.status(401).json({ error: "Invalid password" });
-    }
-    res.cookie(COOKIE_NAME, createSession(config.sessionSecret), {
-      httpOnly: true,
-      sameSite: "strict",
-      secure: req.secure,
-      maxAge: 12 * 60 * 60 * 1000
-    });
-    return res.json({ ok: true });
+  app.get("/healthz", (req, res) => res.json({ ok: true, service: "cs2-matchzy-admin" }));
+  installAuth(app, { config, store, loginLimiter, steamVerifier });
+
+  // Deny by default. Content writes, users, credentials and diagnostics stay admin-only.
+  app.use("/api", (req, res, next) => {
+    const role = res.locals.user.role;
+    const route = `${req.method} ${req.path}`;
+    const shared = ["GET /control", "GET /nades", "GET /nades/status"];
+    const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
+    if (role === "admin" || shared.includes(route) ||
+        (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
+        (role === "match_admin" && operator.includes(route))) return next();
+    res.status(403).json({ error: "Für diese Aktion fehlt dir die Berechtigung." });
   });
 
-  app.post("/api/auth/logout", (req, res) => {
-    res.clearCookie(COOKIE_NAME);
-    res.json({ ok: true });
-  });
+  function visibleNades(entries, role) { return role === "player" ? entries.filter(n => n.official === true) : entries; }
+  async function controlSettings(req, res) {
+    const input: any = sanitizeSettings(req.body?.settings);
+    if (req.body?.admins !== undefined) throw new Error("Benutzer bitte über die Benutzerverwaltung ändern.");
+    if (res.locals.user.role === "admin") return normalizeSettings(validateSettings(input));
+    if (Object.keys(input).some(key => !MATCH_ADMIN_SETTINGS.includes(key))) throw new Error("Diese Einstellung darf nur ein Admin ändern.");
+    const previous = await store.getSettings();
+    // Match admins may add Workshop maps; changing/removing existing metadata is forbidden.
+    const before = JSON.parse(previous.workshopMapCatalog || "[]");
+    const after = JSON.parse(input.workshopMapCatalog ?? previous.workshopMapCatalog ?? "[]");
+    if (!Array.isArray(after) || !before.every(map => after.some(candidate => JSON.stringify(candidate) === JSON.stringify(map))))
+      throw new Error("Bestehende Workshop-Maps dürfen nicht bearbeitet oder entfernt werden.");
+    const ids = String(previous.workshopMaps || "").split(/[\s,]+/).filter(Boolean);
+    const nextIds = String(input.workshopMaps ?? previous.workshopMaps ?? "").split(/[\s,]+/);
+    if (!ids.every(id => nextIds.includes(id))) throw new Error("Bestehende Workshop-Maps dürfen nicht entfernt werden.");
+    return normalizeSettings(validateSettings({ ...previous, ...input }));
+  }
 
-  app.get("/healthz", (req, res) => {
-    res.json({ ok: true, service: "cs2-matchzy-admin" });
+  app.get("/api/users", async (req, res, next) => {
+    try { res.json({ entries: await store.getAdmins(), roles: ADMIN_ROLES }); } catch (error) { next(error); }
   });
-
-  app.use("/api", requireAuth(config));
+  app.put("/api/users/:steamId", async (req, res, next) => {
+    try {
+      const user = sanitizeAdmins([{ ...req.body, identitySteam64: req.params.steamId }])[0];
+      if (user.identitySteam64 === res.locals.user.identitySteam64 && user.role !== "admin")
+        return res.status(400).json({ error: "Die eigene Admin-Rolle kann nicht entfernt werden. Ein anderer Admin kann sie ändern." });
+      await store.saveUser(user);
+      await writeAdminRuntimeFiles(config, () => store.getAdmins());
+      await store.logAction("user_role", "success", "Benutzer gespeichert", { actor: res.locals.user.identitySteam64, subject: user.identitySteam64, role: user.role });
+      res.json({ user });
+    } catch (error) { next(error); }
+  });
 
   app.post(
     "/api/uploads/lineup-image",
@@ -162,6 +148,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     const key = String(req.params.key || "");
     if (!/^[0-9a-f-]+\.(?:jpg|png|webp|gif)$/i.test(key)) return res.status(404).end();
     try {
+      if (res.locals.user.role !== "admin" && !visibleNades(await store.getNades(), res.locals.user.role)
+          .some(nade => nade.lineupImages?.some(image => image.url === `/api/uploads/${key}`))) return res.status(404).end();
       const content = await readFile(join(config.uploadDir, key));
       const contentTypes = { ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif" };
       res.type(contentTypes[extname(key).toLowerCase()] || "application/octet-stream").send(content);
@@ -184,58 +172,48 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     res.json({ settings: await store.saveSettings(settings) });
   });
 
-  app.get("/api/admins", async (req, res) => {
-    res.json({
-      entries: await store.getAdmins(),
-      flagPresets: FLAG_PRESETS,
-      roles: buildControlModel(await store.getSettings()).adminRoles
-    });
-  });
-
-  app.put("/api/admins", async (req, res) => {
-    const entries = sanitizeAdmins(req.body?.entries);
-    const savedEntries = await store.saveAdmins(entries);
-    await writeAdminRuntimeFiles(config, savedEntries);
-    res.json({ entries: savedEntries });
-  });
-
   app.get("/api/nades", async (req, res) => {
     const document = await store.getNadesDocument();
     res.json({
-      entries: document?.entries || [],
-      library: nadesLibraryStatus(document),
-      sync: nadesSync?.status() || { enabled: false, state: "disabled" }
+      entries: visibleNades(document?.entries || [], res.locals.user.role),
+      library: nadesLibraryStatus({ ...document, entries: visibleNades(document?.entries || [], res.locals.user.role) }),
+      sync: res.locals.user.role === "admin" ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
     });
   });
 
   app.get("/api/nades/status", async (req, res) => {
     const document = await store.getNadesDocument();
     res.json({
-      library: nadesLibraryStatus(document),
-      sync: nadesSync?.status() || { enabled: false, state: "disabled" }
+      library: nadesLibraryStatus({ ...document, entries: visibleNades(document?.entries || [], res.locals.user.role) }),
+      sync: res.locals.user.role === "admin" ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
     });
   });
 
-  app.get("/api/control", async (req, res) => {
-    const [settings, admins, nadesDocument, service, lastAction, maintenance] = await Promise.all([
-      store.getSettings(),
-      store.getAdmins(),
-      store.getNadesDocument(),
-      compose.serviceStatus(),
-      store.getLastAction(["apply", "restart", "scheduled_restart", "map_change", "repair", "save", "nades_sync", "login_fail"]),
-      restartScheduler?.status() || Promise.resolve({ enabled: false })
-    ]);
-    const nades = nadesDocument?.entries || [];
-    const mapInventory = await readMapInventory();
-    res.json({ settings, admins, nades, flagPresets: FLAG_PRESETS, status: { service, lastAction, maintenance, mapInventory, nadesSync: nadesSync?.status() || { enabled: false, state: "disabled" }, nadesLibrary: nadesLibraryStatus(nadesDocument) }, policy: buildControlModel(settings) });
+  app.get("/api/control", async (req, res, next) => {
+    try {
+      const user = res.locals.user;
+      const settings = await store.getSettings();
+      const document = await store.getNadesDocument();
+      const nades = visibleNades(document?.entries || [], user.role);
+      if (user.role === "player") return res.json({ user, nades });
+      const status = { mapInventory: await readMapInventory() } as any;
+      if (user.role === "admin") Object.assign(status, {
+        service: await compose.serviceStatus(), lastAction: await store.getLastAction(),
+        maintenance: await restartScheduler?.status() || { enabled: false },
+        nadesSync: nadesSync?.status() || { enabled: false, state: "disabled" }, nadesLibrary: nadesLibraryStatus(document)
+      });
+      const policy = buildControlModel(settings);
+      if (user.role !== "admin") { policy.settingsGroups = []; policy.adminRoles = []; }
+      res.json({ user, settings: settingsForRole(settings, user.role), admins: user.role === "admin" ? await store.getAdmins() : [], nades, status, policy });
+    } catch (error) { next(error); }
   });
 
-  app.put("/api/control", async (req, res) => {
-    const settings = normalizeSettings(validateSettings(sanitizeSettings(req.body?.settings)));
-    const admins = sanitizeAdmins(req.body?.admins);
-    const [savedSettings, savedAdmins] = await Promise.all([store.saveSettings(settings), store.saveAdmins(admins)]);
-    await writeAdminRuntimeFiles(config, savedAdmins);
-    res.json({ settings: savedSettings, admins: savedAdmins, policy: buildControlModel(savedSettings) });
+  app.put("/api/control", async (req, res, next) => {
+    try {
+      const settings = await controlSettings(req, res);
+      await store.saveSettings(settings);
+      res.json({ settings: settingsForRole(settings, res.locals.user.role) });
+    } catch (error) { next(error); }
   });
 
   app.put("/api/nades", async (req, res) => {
@@ -273,11 +251,10 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
 
   app.post("/api/server/apply", async (req, res) => {
     const settings = normalizeSettings(validateRunnableSettings(await store.getSettings()));
-    const admins = await store.getAdmins();
     const nades = await store.getNades();
     const nextSettings = normalizeSettings(settings);
 
-    await writeServerRuntimeFiles(config, nadesSync, nextSettings, admins, nades);
+    await writeServerRuntimeFiles(config, nadesSync, nextSettings, () => store.getAdmins(), nades);
     await store.saveSettings(nextSettings);
 
     const result = await compose.recreateService();
@@ -287,9 +264,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
 
   app.post("/api/server/restart", async (req, res) => {
     const settings = normalizeSettings(validateRunnableSettings(await store.getSettings()));
-    const admins = await store.getAdmins();
     const nades = await store.getNades();
-    await writeServerRuntimeFiles(config, nadesSync, settings, admins, nades);
+    await writeServerRuntimeFiles(config, nadesSync, settings, () => store.getAdmins(), nades);
 
     const result = await compose.restartService();
     await store.logAction("restart", result.ok ? "success" : "failed", actionMessage(result), {
@@ -354,20 +330,37 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     }
   });
 
-  app.post("/api/control/apply", async (req, res) => {
-    const nextSettings = normalizeSettings(validateRunnableSettings(sanitizeSettings(req.body?.settings)));
-    const admins = sanitizeAdmins(req.body?.admins);
-    const nades = await store.getNades();
-    await Promise.all([store.saveSettings(nextSettings), store.saveAdmins(admins)]);
-    await writeServerRuntimeFiles(config, nadesSync, nextSettings, admins, nades);
+  app.post("/api/control/apply", async (req, res, next) => {
+    try {
+      const settings = validateRunnableSettings(await controlSettings(req, res));
+      await store.saveSettings(settings);
+      await writeServerRuntimeFiles(config, nadesSync, settings, () => store.getAdmins(), await store.getNades());
+      const result = await compose.recreateService();
+      await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { actor: res.locals.user.identitySteam64 });
+      res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result) });
+    } catch (error) { next(error); }
+  });
 
-    const result = await compose.recreateService();
-    await store.logAction("apply", result.ok ? "success" : "failed", actionMessage(result), { code: result.code, mode: nextSettings.serverMode });
-    res.status(result.ok ? 200 : 500).json({ ok: result.ok, message: actionMessage(result), settings: nextSettings, admins, policy: buildControlModel(nextSettings) });
+  const rconLimiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: true, legacyHeaders: false });
+  app.post("/api/server/rcon", rconLimiter, async (req, res, next) => {
+    const command = req.body?.command;
+    if (typeof command !== "string" || !command.trim() || command.length > 1024 || /[\x00-\x1f\x7f]/.test(command))
+      return res.status(400).json({ error: "Bitte einen Befehl mit maximal 1024 Zeichen ohne Zeilenumbrüche eingeben." });
+    try {
+      const settings = await runtimeSettings();
+      const output = await liveCommand(settings, command.trim());
+      // Audit the actor and outcome, never raw commands: they can contain passwords.
+      await store.logAction("rcon", "success", "RCON-Befehl ausgeführt", { actor: res.locals.user.identitySteam64 });
+      res.json({ output: output || "Befehl gesendet. Der Server hat keinen Text zurückgegeben.", at: new Date().toISOString() });
+    } catch (error) {
+      try {
+        await store.logAction("rcon", "failed", "RCON-Verbindung fehlgeschlagen", { actor: res.locals.user.identitySteam64 });
+        res.status(502).json({ error: "RCON-Befehl fehlgeschlagen. Serververbindung prüfen." });
+      } catch (logError) { next(logError); }
+    }
   });
 
   app.post("/api/server/repair", async (req, res) => {
-    const admins = await store.getAdmins();
     const nades = await store.getNades();
     const repairSettings = normalizeSettings({
       ...(await store.getSettings()),
@@ -375,7 +368,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     });
 
     const repairStartedAt = new Date().toISOString();
-    await writeServerRuntimeFiles(config, nadesSync, repairSettings, admins, nades);
+    await writeServerRuntimeFiles(config, nadesSync, repairSettings, () => store.getAdmins(), nades);
     await store.saveSettings(repairSettings);
     const result = await compose.restartService();
 
@@ -426,6 +419,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
       message: actionMessage(result)
     });
   });
+
+  app.use("/api", (req, res) => res.status(404).json({ error: "API-Endpunkt nicht gefunden." }));
 
   app.use(express.static(publicDir, { redirect: false }));
   app.get("*", (req, res) => res.sendFile(join(publicDir, "index.html")));

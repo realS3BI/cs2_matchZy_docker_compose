@@ -1,6 +1,6 @@
 import { Collection, Db, MongoClient } from "mongodb";
 import { sanitizeAdmins, sanitizeNades, sanitizeSettings } from "./validators.js";
-import { normalizeSettings } from "./policy.js";
+import { normalizeSettings, migrateAdmins } from "./policy.js";
 
 export class Store {
   config: any;
@@ -11,6 +11,8 @@ export class Store {
   nades!: Collection<any>;
   actions!: Collection<any>;
   maintenance!: Collection<any>;
+  users!: Collection<any>;
+  sessions!: Collection<any>;
 
   constructor(config) {
     this.config = config;
@@ -25,6 +27,19 @@ export class Store {
     this.nades = this.db.collection("nades");
     this.actions = this.db.collection("actions");
     this.maintenance = this.db.collection("maintenance");
+    this.users = this.db.collection("users");
+    this.sessions = this.db.collection("sessions");
+    await this.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+    const legacy = await this.admins.findOne({ _id: "current" });
+    for (const entry of sanitizeAdmins(migrateAdmins(legacy?.entries || []))) {
+      await this.users.updateOne({ _id: entry.identitySteam64 }, { $setOnInsert: { ...entry, createdAt: new Date() } }, { upsert: true });
+    }
+    if (this.config.bootstrapAdminSteamId) {
+      if (!/^[0-9]{17}$/.test(this.config.bootstrapAdminSteamId)) throw new Error("Ungültige ADMIN_PANEL_ADMIN_STEAM_ID.");
+      await this.users.updateOne({ _id: this.config.bootstrapAdminSteamId }, {
+        $setOnInsert: { identitySteam64: this.config.bootstrapAdminSteamId, name: "", role: "admin", createdAt: new Date() }
+      }, { upsert: true });
+    }
     await this.actions.createIndex({ createdAt: -1 });
     await this.maintenance.updateOne(
       { _id: "scheduled-restart" },
@@ -68,20 +83,33 @@ export class Store {
   }
 
   async getAdmins() {
-    const doc = await this.admins.findOne({ _id: "current" });
-    return sanitizeAdmins(doc?.entries || []);
+    return sanitizeAdmins(await this.users.find({}).sort({ createdAt: 1 }).toArray());
   }
 
-  async saveAdmins(entries) {
-    const cleanEntries = sanitizeAdmins(entries);
-    await this.admins.updateOne(
-      { _id: "current" },
-      { $set: { entries: cleanEntries, updatedAt: new Date() } },
-      { upsert: true }
-    );
-    await this.logAction("save", "success", "Admins saved");
-    return cleanEntries;
+  async getUser(steamId) {
+    const user = await this.users.findOne({ _id: steamId });
+    return user ? { ...sanitizeAdmins([user])[0], lastLoginAt: user.lastLoginAt || null } : null;
   }
+
+  async recordLogin(steamId) {
+    await this.users.updateOne({ _id: steamId }, {
+      $setOnInsert: { identitySteam64: steamId, name: "", role: "player", createdAt: new Date() },
+      $set: { lastLoginAt: new Date() }
+    }, { upsert: true });
+  }
+
+  async saveUser(entry) {
+    const clean = sanitizeAdmins([entry])[0];
+    await this.users.updateOne({ _id: clean.identitySteam64 }, {
+      $set: { ...clean, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() }
+    }, { upsert: true });
+    return clean;
+  }
+
+  async createSession(id, value) { await this.sessions.insertOne({ _id: id, ...value }); }
+  async getSession(id) { return this.sessions.findOne({ _id: id, expiresAt: { $gt: new Date() } }); }
+  async consumeSession(id, purpose) { return this.sessions.findOneAndDelete({ _id: id, purpose, expiresAt: { $gt: new Date() } }); }
+  async deleteSession(id) { await this.sessions.deleteOne({ _id: id }); }
 
   async claimScheduledRestart(slot) {
     const result = await this.maintenance.findOneAndUpdate(

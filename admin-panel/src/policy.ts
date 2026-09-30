@@ -13,8 +13,6 @@ export type ServerSettings = {
   metamodVersion: string;
   matchZyVersion: string;
   counterStrikeSharpVersion: string;
-  fakeRconEnabled: boolean;
-  fakeRconVersion: string;
   weaponPaintsEnabled: boolean;
   weaponPaintsVersion: string;
   fortniteEmotesEnabled: boolean;
@@ -28,8 +26,6 @@ export type ServerSettings = {
   trainingHudEnabled: boolean;
   trainingHudWorkshopEnabled: boolean;
   trainingHudWorkshopId: string;
-  simpleAdminEnabled: boolean;
-  simpleAdminVersion: string;
   playerSettingsVersion: string;
   anyBaseLibVersion: string;
   menuManagerVersion: string;
@@ -66,10 +62,9 @@ export const GAME_MODES = [
 ];
 
 export const ADMIN_ROLES = [
-  { id: "owner", name: "Owner", description: "Full CounterStrikeSharp access, including RCON.", flags: ["@css/root"] },
-  { id: "match_operator", name: "Match operator", description: "Runs MatchZy matches and practice sessions without full root access.", flags: ["@css/config", "@custom/prac", "@css/map", "@css/chat"] },
-  { id: "moderator", name: "Moderator", description: "Player moderation, chat and votes.", flags: ["@css/generic", "@css/kick", "@css/ban", "@css/unban", "@css/slay", "@css/chat", "@css/vote"] },
-  { id: "custom", name: "Custom", description: "Explicit CounterStrikeSharp permissions.", flags: [] }
+  { id: "admin", name: "Admin", description: "Verwaltet Benutzer, Inhalte und den gesamten Server.", flags: ["@css/root"] },
+  { id: "match_admin", name: "Match Admin", description: "Steuert Matches, Plugins, Workshop-Maps und RCON. Inhalte bleiben schreibgeschützt.", flags: ["@css/config", "@custom/prac", "@css/map", "@css/chat", "@css/rcon", "@matchzy/control"] },
+  { id: "player", name: "Player", description: "Spielt auf dem Server und sieht offizielle Nades auf der Website.", flags: [] }
 ];
 
 export const SETTINGS_GROUPS: SettingsGroup[] = [
@@ -125,9 +120,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { key: "metamodVersion", label: "Metamod", type: "text", placeholder: "latest" },
       { key: "counterStrikeSharpVersion", label: "CounterStrikeSharp", type: "text", placeholder: "latest" },
       { key: "matchZyVersion", label: "MatchZy", type: "text", placeholder: "latest" },
-      { key: "fakeRconVersion", label: "Fake RCON", type: "text", placeholder: "latest" },
       { key: "weaponPaintsVersion", label: "WeaponPaints", type: "text", placeholder: "latest" },
-      { key: "simpleAdminVersion", label: "SimpleAdmin", type: "text", placeholder: "latest" },
       { key: "playerSettingsVersion", label: "PlayerSettings", type: "text", placeholder: "latest" },
       { key: "anyBaseLibVersion", label: "AnyBaseLib", type: "text", placeholder: "latest" },
       { key: "menuManagerVersion", label: "MenuManager", type: "text", placeholder: "latest" },
@@ -151,8 +144,6 @@ const DEFAULTS: ServerSettings = {
   metamodVersion: "latest",
   matchZyVersion: "latest",
   counterStrikeSharpVersion: "latest",
-  fakeRconEnabled: false,
-  fakeRconVersion: "latest",
   weaponPaintsEnabled: false,
   weaponPaintsVersion: "latest",
   fortniteEmotesEnabled: false,
@@ -166,8 +157,6 @@ const DEFAULTS: ServerSettings = {
   trainingHudEnabled: false,
   trainingHudWorkshopEnabled: false,
   trainingHudWorkshopId: "",
-  simpleAdminEnabled: false,
-  simpleAdminVersion: "latest",
   playerSettingsVersion: "latest",
   anyBaseLibVersion: "latest",
   menuManagerVersion: "latest",
@@ -265,8 +254,6 @@ export function normalizeSettings(input): ServerSettings {
 const PLUGINS: any[] = [
   { id: "metamod", name: "Metamod", detail: "Native plugin loader", url: "https://www.metamodsource.net/", locked: true, enabled: true, dependencies: [] },
   { id: "counterstrikesharp", name: "CounterStrikeSharp", detail: "Admin and managed plugin framework", url: "https://docs.cssharp.dev/", locked: true, enabled: true, dependencies: ["Metamod"] },
-  { id: "fake-rcon", name: "Fake RCON", detail: "In-game RCON bridge", url: "https://github.com/Salvatore-Als/cs2-fake-rcon", settingKey: "fakeRconEnabled", dependencies: ["Metamod"] },
-  { id: "simpleadmin", name: "SimpleAdmin", detail: "Additional moderation commands", url: "https://github.com/daffyyyy/CS2-SimpleAdmin", settingKey: "simpleAdminEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager"], warning: "Configure its database or SQLite settings after the first start." },
   { id: "weaponpaints", name: "WeaponPaints", detail: "Cosmetic weapon inventory", url: "https://github.com/Nereziel/cs2-WeaponPaints", settingKey: "weaponPaintsEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager", "MySQL"], warning: "Experimental plugin. It disables CounterStrikeSharp's server-guideline guard and may put the GSLT at risk." },
   { id: "fortnite-emotes", name: "Fortnite Emotes", detail: "Emote and dance commands", url: "https://github.com/Cruze03/FortniteEmotesNDances", settingKey: "fortniteEmotesEnabled", dependencies: ["CounterStrikeSharp", "MultiAddonManager", "RayTrace", "Workshop addon"] },
   { id: "workshop-maps", name: "Workshop maps", detail: "Mount configured Workshop map addons", url: "https://steamcommunity.com/app/730/workshop/", settingKey: "workshopMapsEnabled", dependencies: ["MultiAddonManager"] }
@@ -288,17 +275,24 @@ export function buildControlModel(input) {
   };
 }
 
-export function roleForFlags(flags) {
-  const values = [...new Set((flags || []).map(String))].sort();
-  for (const role of ADMIN_ROLES) {
-    if (role.id === "custom") continue;
-    if ([...role.flags].sort().join("\0") === values.join("\0")) return role.id;
-  }
-  return values.includes("@css/root") ? "owner" : "custom";
+export function flagsForRole(role) {
+  const preset = ADMIN_ROLES.find((item) => item.id === role);
+  if (!preset) throw new Error(`Ungültige Rolle: ${role}`);
+  return preset.flags;
 }
 
-export function flagsForRole(role, customFlags = []) {
-  const preset = ADMIN_ROLES.find((item) => item.id === role);
-  if (!preset) throw new Error(`Invalid admin role: ${role}`);
-  return preset.id === "custom" ? customFlags : preset.flags;
+export function migrateAdmins(entries) {
+  return entries.map(entry => ({ ...entry, role:
+    entry.role === "owner" || entry.flags?.includes("@css/root") ? "admin" :
+    entry.role === "match_operator" ? "match_admin" :
+    ADMIN_ROLES.some(role => role.id === entry.role) ? entry.role : "player"
+  }));
+}
+
+export const MATCH_ADMIN_SETTINGS = ["serverMode", "weaponPaintsEnabled", "fortniteEmotesEnabled",
+  "workshopMapsEnabled", "workshopMaps", "workshopMapCatalog", "matchZySmokeColor", "trainingHudEnabled"];
+
+export function settingsForRole(settings, role) {
+  if (role === "admin") return settings;
+  return Object.fromEntries(MATCH_ADMIN_SETTINGS.map(key => [key, settings[key]]));
 }

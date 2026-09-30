@@ -667,11 +667,6 @@ _matchzy_bootstrap_main() (
     local mode="$1"
     local source_file="/opt/matchzy-nades/MatchZyNades.dll"
     local destination_dir="$CSS_DIR/plugins/MatchZyNades"
-    if [[ "$mode" != "nades" && "$mode" != "matchzy" ]]; then
-      # Only remove our bundled assembly; preserve any local data or configuration.
-      rm -f "$destination_dir/MatchZyNades.dll"
-      return
-    fi
     [[ -f "$source_file" ]] || fail "Bundled MatchZy Nades plugin not found: $source_file"
     mkdir -p "$destination_dir"
     copy_file_atomic "$source_file" "$destination_dir/MatchZyNades.dll"
@@ -761,6 +756,7 @@ _matchzy_bootstrap_main() (
 
     tmp_file="$(mktemp)"
     {
+      printf 'matchzy_everyone_is_admin false\n'
       printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
       printf 'matchzy_save_nades_as_global_enabled "%s"\n' "$save_nades_as_global_value"
       printf 'matchzy_chat_prefix "%s"\n' "$chat_prefix"
@@ -833,8 +829,6 @@ _matchzy_bootstrap_main() (
   local matchzy_version="$(jq -er '.matchZyVersion' "$SETTINGS_FILE")"
   local counter_strike_sharp_version="$(jq -er '.counterStrikeSharpVersion' "$SETTINGS_FILE")"
   local repair_mods="$(jq -r 'if .repairMods then "1" else "0" end' "$SETTINGS_FILE")"
-  local fake_rcon_enabled="$(jq -r '.fakeRconEnabled' "$SETTINGS_FILE")"
-  local fake_rcon_version="$(jq -er '.fakeRconVersion' "$SETTINGS_FILE")"
   local weapon_paints_enabled="$(jq -r '.weaponPaintsEnabled' "$SETTINGS_FILE")"
   local weapon_paints_version="$(jq -er '.weaponPaintsVersion' "$SETTINGS_FILE")"
   local fortnite_emotes_enabled="$(jq -r '.fortniteEmotesEnabled' "$SETTINGS_FILE")"
@@ -845,8 +839,6 @@ _matchzy_bootstrap_main() (
   local workshop_maps_enabled="$(jq -r '.workshopMapsEnabled' "$SETTINGS_FILE")"
   local workshop_maps="$(jq -er '.workshopMaps' "$SETTINGS_FILE")"
   local workshop_force_download="$(jq -r '.workshopForceDownload' "$SETTINGS_FILE")"
-  local simple_admin_enabled="$(jq -r '.simpleAdminEnabled' "$SETTINGS_FILE")"
-  local simple_admin_version="$(jq -er '.simpleAdminVersion' "$SETTINGS_FILE")"
   local player_settings_version="$(jq -er '.playerSettingsVersion' "$SETTINGS_FILE")"
   local any_base_lib_version="$(jq -er '.anyBaseLibVersion' "$SETTINGS_FILE")"
   local menu_manager_version="$(jq -er '.menuManagerVersion' "$SETTINGS_FILE")"
@@ -884,7 +876,7 @@ _matchzy_bootstrap_main() (
   log "Server mode '$server_mode' selected (MatchZy=$matchzy_enabled)"
 
   local NEED_MENU_STACK=0
-  if is_enabled "$simple_admin_enabled" || is_enabled "$weapon_paints_enabled"; then
+  if is_enabled "$weapon_paints_enabled"; then
     NEED_MENU_STACK=1
   fi
   local NEED_MULTIADDONMANAGER=0
@@ -940,10 +932,7 @@ _matchzy_bootstrap_main() (
     remove_matchzy_component
   fi
 
-  if ! is_enabled "$fake_rcon_enabled"; then
-    log "cs2-fake-rcon disabled; removing installed files"
-    remove_fake_rcon_component
-  fi
+  remove_fake_rcon_component
 
   if ! is_enabled "$weapon_paints_enabled"; then
     log "WeaponPaints disabled; removing installed files"
@@ -955,10 +944,7 @@ _matchzy_bootstrap_main() (
     remove_menu_stack_components
   fi
 
-  if ! is_enabled "$simple_admin_enabled"; then
-    log "CS2-SimpleAdmin disabled; removing installed files"
-    remove_simpleadmin_component
-  fi
+  remove_simpleadmin_component
 
   if ! is_enabled "$fortnite_emotes_enabled"; then
     log "FortniteEmotesNDances disabled; removing installed files"
@@ -1024,26 +1010,6 @@ _matchzy_bootstrap_main() (
     || fail "Could not resolve CounterStrikeSharp linux asset"
   log "CounterStrikeSharp resolved to tag '$COUNTERSTRIKESHARP_TAG'"
 
-  local FAKE_RCON_TAG=""
-  local FAKE_RCON_URL=""
-  if is_enabled "$fake_rcon_enabled"; then
-    log "Resolving cs2-fake-rcon release: $fake_rcon_version"
-    mapfile -t _fake_rcon_release < <(
-      resolve_github_release_asset \
-        "Salvatore-Als/cs2-fake-rcon" \
-        "$fake_rcon_version" \
-        'linux\.(zip|tar\.gz)$' \
-        'cs2-fake-rcon'
-    )
-    FAKE_RCON_TAG="${_fake_rcon_release[0]:-}"
-    FAKE_RCON_URL="${_fake_rcon_release[1]:-}"
-    unset _fake_rcon_release
-    [[ -n "${FAKE_RCON_TAG:-}" && -n "${FAKE_RCON_URL:-}" ]] \
-      || fail "Could not resolve cs2-fake-rcon linux asset"
-    log "cs2-fake-rcon resolved to tag '$FAKE_RCON_TAG'"
-  else
-    log "cs2-fake-rcon installation disabled"
-  fi
 
   local WEAPONPAINTS_TAG=""
   local WEAPONPAINTS_URL=""
@@ -1072,8 +1038,6 @@ _matchzy_bootstrap_main() (
   local ANYBASELIB_URL=""
   local MENUMANAGER_TAG=""
   local MENUMANAGER_URL=""
-  local SIMPLEADMIN_TAG=""
-  local SIMPLEADMIN_URL=""
   if (( NEED_MENU_STACK == 1 )); then
     log "Resolving shared CounterStrikeSharp menu dependencies"
     mapfile -t _playersettings_release < <(
@@ -1118,24 +1082,6 @@ _matchzy_bootstrap_main() (
     log "Shared CounterStrikeSharp menu dependencies not needed"
   fi
 
-  if is_enabled "$simple_admin_enabled"; then
-    log "Resolving CS2-SimpleAdmin release: $simple_admin_version"
-    mapfile -t _simpleadmin_release < <(
-      resolve_github_release_asset \
-        "daffyyyy/CS2-SimpleAdmin" \
-        "$simple_admin_version" \
-        'CS2-SimpleAdmin-.*\.zip$' \
-        'CS2-SimpleAdmin'
-    )
-    SIMPLEADMIN_TAG="${_simpleadmin_release[0]:-}"
-    SIMPLEADMIN_URL="${_simpleadmin_release[1]:-}"
-    unset _simpleadmin_release
-    [[ -n "${SIMPLEADMIN_TAG:-}" && -n "${SIMPLEADMIN_URL:-}" ]] \
-      || fail "Could not resolve CS2-SimpleAdmin asset"
-    log "CS2-SimpleAdmin resolved to tag '$SIMPLEADMIN_TAG'"
-  else
-    log "CS2-SimpleAdmin installation disabled"
-  fi
 
   local MULTIADDONMANAGER_TAG=""
   local MULTIADDONMANAGER_URL=""
@@ -1198,12 +1144,10 @@ _matchzy_bootstrap_main() (
   local INSTALLED_METAMOD_TAG
   local INSTALLED_MATCHZY_TAG
   local INSTALLED_COUNTERSTRIKESHARP_TAG
-  local INSTALLED_FAKE_RCON_TAG
   local INSTALLED_WEAPONPAINTS_TAG
   local INSTALLED_PLAYERSETTINGS_TAG
   local INSTALLED_ANYBASELIB_TAG
   local INSTALLED_MENUMANAGER_TAG
-  local INSTALLED_SIMPLEADMIN_TAG
   local INSTALLED_MULTIADDONMANAGER_TAG
   local INSTALLED_RAYTRACE_TAG
   local INSTALLED_FORTNITE_EMOTES_TAG
@@ -1211,12 +1155,10 @@ _matchzy_bootstrap_main() (
   INSTALLED_METAMOD_TAG="$(read_state_value metamodTag)"
   INSTALLED_MATCHZY_TAG="$(read_state_value matchZyTag)"
   INSTALLED_COUNTERSTRIKESHARP_TAG="$(read_state_value counterStrikeSharpTag)"
-  INSTALLED_FAKE_RCON_TAG="$(read_state_value fakeRconTag)"
   INSTALLED_WEAPONPAINTS_TAG="$(read_state_value weaponPaintsTag)"
   INSTALLED_PLAYERSETTINGS_TAG="$(read_state_value playerSettingsTag)"
   INSTALLED_ANYBASELIB_TAG="$(read_state_value anyBaseLibTag)"
   INSTALLED_MENUMANAGER_TAG="$(read_state_value menuManagerTag)"
-  INSTALLED_SIMPLEADMIN_TAG="$(read_state_value simpleAdminTag)"
   INSTALLED_MULTIADDONMANAGER_TAG="$(read_state_value multiAddonManagerTag)"
   INSTALLED_RAYTRACE_TAG="$(read_state_value rayTraceTag)"
   INSTALLED_FORTNITE_EMOTES_TAG="$(read_state_value fortniteEmotesTag)"
@@ -1226,14 +1168,12 @@ _matchzy_bootstrap_main() (
   local css_marker="$CSS_DIR/api/CounterStrikeSharp.API.dll"
   local installed_css_api_version=""
   local expected_css_api_version="${COUNTERSTRIKESHARP_TAG#v}"
-  local fake_rcon_marker="$ADDONS_DIR/fake_rcon/bin/linuxsteamrt64/fake_rcon.so"
   local weaponpaints_marker="$CSS_DIR/plugins/WeaponPaints/WeaponPaints.dll"
   local weaponpaints_gamedata_src="$CSS_DIR/plugins/WeaponPaints/gamedata/weaponpaints.json"
   local weaponpaints_gamedata_dst="$CSS_DIR/gamedata/weaponpaints.json"
   local playersettings_marker="$CSS_DIR/plugins/PlayerSettings/PlayerSettings.dll"
   local anybaselib_marker="$CSS_DIR/shared/AnyBaseLib/AnyBaseLib.dll"
   local menumanager_marker="$CSS_DIR/plugins/MenuManagerCore/MenuManagerCore.dll"
-  local simpleadmin_marker="$CSS_DIR/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.dll"
   local multiaddonmanager_marker="$ADDONS_DIR/multiaddonmanager/bin/multiaddonmanager.so"
   local multiaddonmanager_cfg="$GAME_DIR/cfg/multiaddonmanager/multiaddonmanager.cfg"
   local raytrace_marker="$ADDONS_DIR/RayTrace/bin/linuxsteamrt64/RayTrace.so"
@@ -1293,14 +1233,6 @@ _matchzy_bootstrap_main() (
     write_matchzy_savednades_file_from_runtime "$runtime_matchzy_savednades_file" "$matchzy_savednades_file"
   fi
 
-  if is_enabled "$fake_rcon_enabled"; then
-    if [[ "$repair_mods" == "1" || "$INSTALLED_FAKE_RCON_TAG" != "$FAKE_RCON_TAG" || ! -f "$fake_rcon_marker" ]]; then
-      log "Installing or updating cs2-fake-rcon"
-      install_archive_component "fake-rcon" "$FAKE_RCON_URL" "$GAME_DIR" "$fake_rcon_marker"
-    else
-      log "cs2-fake-rcon already current; skipping"
-    fi
-  fi
 
   if (( NEED_MENU_STACK == 1 )); then
     if [[ "$repair_mods" == "1" || "$INSTALLED_ANYBASELIB_TAG" != "$ANYBASELIB_TAG" || ! -f "$anybaselib_marker" ]]; then
@@ -1343,14 +1275,6 @@ _matchzy_bootstrap_main() (
     patch_css_core_follow_guidelines "$css_core_config"
   fi
 
-  if is_enabled "$simple_admin_enabled"; then
-    if [[ "$repair_mods" == "1" || "$INSTALLED_SIMPLEADMIN_TAG" != "$SIMPLEADMIN_TAG" || ! -f "$simpleadmin_marker" ]]; then
-      log "Installing or updating CS2-SimpleAdmin"
-      install_archive_component "simpleadmin" "$SIMPLEADMIN_URL" "$ADDONS_DIR" "$simpleadmin_marker"
-    else
-      log "CS2-SimpleAdmin already current; skipping"
-    fi
-  fi
 
   if is_enabled "$fortnite_emotes_enabled"; then
     if (( NEED_MULTIADDONMANAGER == 1 )); then
@@ -1395,12 +1319,10 @@ _matchzy_bootstrap_main() (
     --arg serverMode "$server_mode" \
     --arg matchZyTag "$MATCHZY_TAG" \
     --arg counterStrikeSharpTag "$COUNTERSTRIKESHARP_TAG" \
-    --arg fakeRconTag "$FAKE_RCON_TAG" \
     --arg weaponPaintsTag "$WEAPONPAINTS_TAG" \
     --arg playerSettingsTag "$PLAYERSETTINGS_TAG" \
     --arg anyBaseLibTag "$ANYBASELIB_TAG" \
     --arg menuManagerTag "$MENUMANAGER_TAG" \
-    --arg simpleAdminTag "$SIMPLEADMIN_TAG" \
     --arg multiAddonManagerTag "$MULTIADDONMANAGER_TAG" \
     --arg rayTraceTag "$RAYTRACE_TAG" \
     --arg fortniteEmotesTag "$FORTNITE_EMOTES_TAG" \
@@ -1409,12 +1331,10 @@ _matchzy_bootstrap_main() (
       serverMode: $serverMode,
       matchZyTag: $matchZyTag,
       counterStrikeSharpTag: $counterStrikeSharpTag,
-      fakeRconTag: $fakeRconTag,
       weaponPaintsTag: $weaponPaintsTag,
       playerSettingsTag: $playerSettingsTag,
       anyBaseLibTag: $anyBaseLibTag,
       menuManagerTag: $menuManagerTag,
-      simpleAdminTag: $simpleAdminTag,
       multiAddonManagerTag: $multiAddonManagerTag,
       rayTraceTag: $rayTraceTag,
       fortniteEmotesTag: $fortniteEmotesTag

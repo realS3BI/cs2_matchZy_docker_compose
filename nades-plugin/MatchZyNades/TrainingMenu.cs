@@ -5,7 +5,7 @@ public static class TrainingMenu
     public static InGameMenu Create(IReadOnlyList<NadeLineup> library, string map, bool practice,
         NadeLineup? last, string libraryError = "", PlayerPanelSettings? settings = null,
         IReadOnlyList<CompetitiveSpawn>? spawns = null, TrainingToggles? toggles = null,
-        MenuPage? maps = null, string steamId = "")
+        MenuPage? maps = null, string steamId = "", bool canWriteNades = true)
     {
         MenuItem Action(string title, TrainingAction action, string hint) => new(title, hint, Request: new(action));
         settings ??= new();
@@ -15,7 +15,7 @@ public static class TrainingMenu
             Action($"{title} {(active ? "ausschalten" : "einschalten")}", action, $"Aktuell {(active ? "an" : "aus")}. {hint}");
         MenuItem Lineup(NadeLineup n)
         {
-            var own = n.Owner == steamId && n.Owner != "default" && !n.Official;
+            var own = canWriteNades && n.Owner == steamId && n.Owner != "default" && !n.Official;
             var status = n.Official ? "Offiziell" : n.ReviewStatus == "pending" ? "Im Review" : "Aufnahme";
             var items = new List<MenuItem> {
                 new("Lineup laden & trainieren", "Teleportiert dich zum Abwurfpunkt, stellt die Blickrichtung ein und rüstet die passende Granate aus. Danach selbst werfen.", Request: new(TrainingAction.LoadLineup, n)),
@@ -96,6 +96,7 @@ public static class TrainingMenu
             Action("Keybinds", TrainingAction.Settings, "Feste Tastenbelegung nachlesen und Bind-Befehle für die einmalige Einrichtung in deiner Konsole anzeigen."),
             Action("Panel ausblenden", TrainingAction.Close, "Blendet das Panel aus und gibt die Spielsteuerung frei. KP_DEL zeigt es wieder an.")
         };
+        if (!canWriteNades) home.RemoveAll(item => item.Label == "Neue Nade aufnehmen");
         return new(new("Trainingszentrale", "Practice-Werkzeuge und Granaten für die aktuelle Map.", home), map);
     }
 

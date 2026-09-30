@@ -29,7 +29,7 @@ await writeServerRuntimeFiles(
   config,
   nadesSync,
   await store.getSettings(),
-  await store.getAdmins(),
+  () => store.getAdmins(),
   await store.getNades()
 );
 

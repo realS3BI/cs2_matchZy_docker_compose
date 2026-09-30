@@ -2,19 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getConfig } from "../src/config.js";
 
-test("only the two bootstrap secrets come from deployment environment", () => {
+test("Steam login uses the configured public origin", () => {
   const previous = {
-    ADMIN_PANEL_PASSWORD: process.env.ADMIN_PANEL_PASSWORD,
+    ADMIN_PANEL_PUBLIC_URL: process.env.ADMIN_PANEL_PUBLIC_URL,
     ADMIN_PANEL_SESSION_SECRET: process.env.ADMIN_PANEL_SESSION_SECRET
   };
   Object.assign(process.env, {
-    ADMIN_PANEL_PASSWORD: "panel-password",
+    ADMIN_PANEL_PUBLIC_URL: "https://cs2.example.com",
     ADMIN_PANEL_SESSION_SECRET: "session-secret"
   });
 
   try {
     const config = getConfig();
-    assert.equal(config.password, "panel-password");
+    assert.equal(config.publicUrl, "https://cs2.example.com");
     assert.equal(config.sessionSecret, "session-secret");
     assert.equal(config.port, 8080);
     assert.equal(config.mongodbUri, "mongodb://mongodb:27017/cs2_admin_panel");

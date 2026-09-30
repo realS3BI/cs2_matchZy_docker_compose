@@ -49,12 +49,10 @@ if [ -f "$status_file" ]; then
     printf 'RUNTIME\tmatchZyNades\t%s\n' "$runtime"
   fi
 fi
-probe_file fakeRcon "$root/addons/fake_rcon/bin/linuxsteamrt64/fake_rcon.so"
 probe_file weaponPaints "$root/addons/counterstrikesharp/plugins/WeaponPaints/WeaponPaints.dll"
 probe_file playerSettings "$root/addons/counterstrikesharp/plugins/PlayerSettings/PlayerSettings.dll"
 probe_file anyBaseLib "$root/addons/counterstrikesharp/shared/AnyBaseLib/AnyBaseLib.dll"
 probe_file menuManager "$root/addons/counterstrikesharp/plugins/MenuManagerCore/MenuManagerCore.dll"
-probe_file simpleAdmin "$root/addons/counterstrikesharp/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.dll"
 probe_file multiAddonManager "$root/addons/multiaddonmanager/bin/multiaddonmanager.so"
 probe_file rayTrace "$root/addons/RayTrace/bin/linuxsteamrt64/RayTrace.so"
 probe_file fortniteEmotes "$root/addons/counterstrikesharp/plugins/FortniteEmotesNDances/FortniteEmotesNDances.dll"
@@ -75,12 +73,10 @@ if [ -f "$state" ]; then
 METAMOD	metamodTag
 MATCHZY	matchZyTag
 COUNTERSTRIKESHARP	counterStrikeSharpTag
-FAKE_RCON	fakeRconTag
 WEAPONPAINTS	weaponPaintsTag
 PLAYERSETTINGS	playerSettingsTag
 ANYBASELIB	anyBaseLibTag
 MENUMANAGER	menuManagerTag
-SIMPLEADMIN	simpleAdminTag
 MULTIADDONMANAGER	multiAddonManagerTag
 RAYTRACE	rayTraceTag
 FORTNITE_EMOTES	fortniteEmotesTag

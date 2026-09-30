@@ -4,7 +4,16 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApp } from "../src/app.js";
+import { createApp as createRealApp } from "../src/app.js";
+
+const testToken = "a".repeat(43);
+function createApp(options) {
+  return createRealApp({ ...options, store: {
+    getSession: async () => ({ purpose: "user", steamId: "76561198000000001" }),
+    getUser: async () => ({ identitySteam64: "76561198000000001", role: "admin" }),
+    ...options.store
+  } });
+}
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -60,12 +69,7 @@ test("authenticated lineup uploads are stored locally", async () => {
   try {
     const address: any = await listen(server);
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const login = await fetch(`${baseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "test-password" })
-    });
-    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const cookie = `cs2_panel_session=${testToken}`;
     const content = Buffer.from("test-image");
     const upload = await fetch(`${baseUrl}/api/uploads/lineup-image`, {
       method: "POST",
@@ -109,12 +113,7 @@ test("authenticated nades status reports sync health and library version", async
   try {
     const address: any = await listen(server);
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const login = await fetch(`${baseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "test-password" })
-    });
-    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const cookie = `cs2_panel_session=${testToken}`;
     const response = await fetch(`${baseUrl}/api/nades/status`, { headers: { Cookie: cookie } });
     const status: any = await response.json();
 
@@ -158,12 +157,7 @@ test("restart writes the saved server mode before restarting CS2", async () => {
   try {
     const address: any = await listen(server);
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const login = await fetch(`${baseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "test-password" })
-    });
-    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const cookie = `cs2_panel_session=${testToken}`;
     const response = await fetch(`${baseUrl}/api/server/restart`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
@@ -207,8 +201,7 @@ test("live map controls use applied credentials, validate input and preserve sav
     const denied = await fetch(`${baseUrl}/api/server/map`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map: "de_dust2" }) });
     assert.equal(denied.status, 401);
     assert.equal(commands.length, 0);
-    const login = await fetch(`${baseUrl}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "test-password" }) });
-    const cookie = String(login.headers.get("set-cookie")).split(";")[0];
+    const cookie = `cs2_panel_session=${testToken}`;
     const headers = { Cookie: cookie, "Content-Type": "application/json" };
     const status = await fetch(`${baseUrl}/api/server/game`, { headers });
     assert.deepEqual(await status.json(), { map: "de_inferno", mode: "nades", startMap: "de_mirage" });

@@ -56,6 +56,9 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         _settingsStore = new(Path.Combine(ModuleDirectory, "data", "players"));
         _cheats = ConVar.Find("sv_cheats");
         _saveNadesGlobally = ConVar.Find("matchzy_save_nades_as_global_enabled");
+        AddCommandListener(null, GuardCommand, HookMode.Pre);
+        SyncPermissions();
+        AddTimer(2f, SyncPermissions, TimerFlags.REPEAT);
         RegisterCapture();
         AddCommandListener("say", OnSay, HookMode.Pre);
         AddCommandListener("say_team", OnSay, HookMode.Pre);
@@ -103,6 +106,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private HookResult OnSay(CCSPlayerController? player, CommandInfo command)
     {
+        if (GuardCommand(player, command) == HookResult.Stop) return HookResult.Stop;
         if (TryEditFromChat(player, command.ArgString)) return HookResult.Stop;
         if (TryMapVoteFromChat(player, command.ArgString)) return HookResult.Stop;
         if (TrySaveNameFromChat(player, command.ArgString)) return HookResult.Stop;
@@ -123,7 +127,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void TogglePanelControl(CCSPlayerController? player)
     {
-        if (!Alive(player)) return;
+        if (!CanControl(player) || !Alive(player)) return;
         if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar (.prac)."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
@@ -138,7 +142,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void TogglePanelVisible(CCSPlayerController? player)
     {
-        if (!Alive(player)) return;
+        if (!CanControl(player) || !Alive(player)) return;
         if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar (.prac)."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
@@ -174,7 +178,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void Handle(CCSPlayerController? player, string action)
     {
-        if (player is not { IsValid: true, IsBot: false }) return;
+        if (!CanControl(player)) return;
         if (action.Equals("close", StringComparison.OrdinalIgnoreCase))
         { if (_menus.TryGetValue(player.Slot, out var open)) Hide(open); return; }
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
@@ -230,11 +234,12 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var library = ReadLibrary(player, quiet: true);
         return TrainingMenu.Create(library ?? [], Server.MapName, TrainingEnabled,
             _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfügbar; im Dashboard prüfen." : "",
-            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns(), MatchZyState.Toggles(player), MapMenu(), player.SteamID.ToString(CultureInfo.InvariantCulture));
+            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns(), MatchZyState.Toggles(player), MapMenu(), player.SteamID.ToString(CultureInfo.InvariantCulture), CanWriteNades(player));
     }
 
     private void Open(CCSPlayerController player, bool focus = true)
     {
+        if (!CanControl(player)) return;
         if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar. Mit .prac aktivieren, sofern du dazu berechtigt bist."); return; }
         if (Environment.GetEnvironmentVariable("MATCHZY_TRAINING_HUD_READY") != "1")
         {
@@ -260,7 +265,9 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void ExecuteAction(CCSPlayerController player, MenuRequest request)
     {
-        if (!TrainingEnabled || !Alive(player)) return;
+        if (!CanControl(player) || !TrainingEnabled || !Alive(player)) return;
+        if (!CanWriteNades(player) && request.Action is TrainingAction.StartCapture or TrainingAction.SaveCapture or TrainingAction.EditName or TrainingAction.EditDescription or TrainingAction.DeleteLineup or TrainingAction.RequestReview)
+        { Tell(player, "Nades sind für deine Rolle schreibgeschützt."); return; }
         if (HandleLineupAction(player, request) || HandleMapAction(player, request)) return;
         if (request.Action == TrainingAction.Close)
         { if (_menus.TryGetValue(player.Slot, out var panel)) Hide(panel); return; }
@@ -299,7 +306,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void LoadLineup(CCSPlayerController player, NadeLineup selected)
     {
         ReleaseControl(player.Slot);
-        if (!TrainingEnabled || !Alive(player)) return;
+        if (!CanControl(player) || !TrainingEnabled || !Alive(player)) return;
         // Re-read at selection time: a panel sync may have edited, removed or unshared this entry.
         var library = ReadLibrary(player);
         if (library == null) return;

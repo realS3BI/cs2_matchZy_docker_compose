@@ -4,21 +4,17 @@ const VERSION_FIELDS = [
   ["METAMOD", "Metamod", "metamodVersion"],
   ["MATCHZY", "MatchZy", "matchZyVersion"],
   ["COUNTERSTRIKESHARP", "CounterStrikeSharp", "counterStrikeSharpVersion"],
-  ["FAKE_RCON", "Fake RCON", "fakeRconVersion"],
   ["WEAPONPAINTS", "WeaponPaints", "weaponPaintsVersion"],
   ["PLAYERSETTINGS", "PlayerSettings", "playerSettingsVersion"],
   ["ANYBASELIB", "AnyBaseLib", "anyBaseLibVersion"],
   ["MENUMANAGER", "MenuManager", "menuManagerVersion"],
-  ["SIMPLEADMIN", "SimpleAdmin", "simpleAdminVersion"],
   ["MULTIADDONMANAGER", "MultiAddonManager", "multiAddonManagerVersion"],
   ["RAYTRACE", "Ray-Trace", "rayTraceVersion"],
   ["FORTNITE_EMOTES", "Fortnite Emotes", "fortniteEmotesVersion"]
 ];
 
 const OPTIONAL_PLUGIN_FILES = [
-  { id: "fake-rcon", label: "Fake RCON", enabled: (settings) => settings.fakeRconEnabled, files: ["fakeRcon"] },
   { id: "weaponpaints", label: "WeaponPaints", enabled: (settings) => settings.weaponPaintsEnabled, files: ["weaponPaints", "playerSettings", "anyBaseLib", "menuManager"] },
-  { id: "simpleadmin", label: "SimpleAdmin", enabled: (settings) => settings.simpleAdminEnabled, files: ["simpleAdmin", "playerSettings", "anyBaseLib", "menuManager"] },
   { id: "fortnite-emotes", label: "Fortnite Emotes", enabled: (settings) => settings.fortniteEmotesEnabled, files: ["fortniteEmotes", "multiAddonManager", "rayTrace"] }
 ];
 
@@ -122,10 +118,8 @@ function check(id, label, status, detail) {
 
 function isVersionRelevant(key, settings) {
   if (key === "MATCHZY") return ["matchzy", "nades"].includes(settings.serverMode);
-  if (key === "FAKE_RCON") return settings.fakeRconEnabled;
   if (key === "WEAPONPAINTS") return settings.weaponPaintsEnabled;
-  if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return settings.weaponPaintsEnabled || settings.simpleAdminEnabled;
-  if (key === "SIMPLEADMIN") return settings.simpleAdminEnabled;
+  if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return settings.weaponPaintsEnabled;
   if (key === "MULTIADDONMANAGER") return settings.fortniteEmotesEnabled || settings.workshopMapsEnabled || (settings.trainingHudEnabled && settings.trainingHudWorkshopEnabled);
   if (["RAYTRACE", "FORTNITE_EMOTES"].includes(key)) return settings.fortniteEmotesEnabled;
   return true;

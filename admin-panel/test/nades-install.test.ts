@@ -54,7 +54,7 @@ printf '%s' "$MATCHZY_TRAINING_HUD_READY"
   await assert.rejects(execFileAsync("bash", ["-c", script]));
 });
 
-test("bootstrap installs the menu for both MatchZy and Nades, removes only its DLL in other modes", async (t) => {
+test("bootstrap installs the role guard in every mode and preserves its data", async (t) => {
   const fixture = await mkdtemp(join(tmpdir(), "matchzy-nades-install-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));
   const bundle = join(fixture, "bundled.dll");
@@ -79,7 +79,7 @@ install_matchzy_nades "$1"
     if (["matchzy", "nades"].includes(mode))
       assert.equal(await readFile(join(plugin, "MatchZyNades.dll"), "utf8"), "bundled plugin");
     else
-      await assert.rejects(access(join(plugin, "MatchZyNades.dll")));
+      assert.equal(await readFile(join(plugin, "MatchZyNades.dll"), "utf8"), "bundled plugin");
     assert.equal(await readFile(join(plugin, "data", "keep.json"), "utf8"), "keep");
   }
 });

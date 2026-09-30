@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeServerRuntimeFiles } from "../src/runtime-files.js";
+import { writeAdminRuntimeFiles, writeServerRuntimeFiles } from "../src/runtime-files.js";
 
 test("runtime files use the typed JSON settings contract", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "matchzy-runtime-"));
@@ -19,7 +19,7 @@ test("runtime files use the typed JSON settings contract", async (t) => {
   await writeServerRuntimeFiles(
     config,
     { writeFromMongo: async (entries) => { synchronizedNades = entries; } },
-    { steamToken: "token", rconPassword: "secret", maxPlayers: 12, fakeRconEnabled: true },
+    { steamToken: "token", rconPassword: "secret", maxPlayers: 12, weaponPaintsEnabled: true },
     [],
     []
   );
@@ -29,9 +29,26 @@ test("runtime files use the typed JSON settings contract", async (t) => {
   assert.equal(settings.steamToken, "token");
   assert.equal(settings.rconPassword, "secret");
   assert.equal(settings.maxPlayers, 12);
-  assert.equal(settings.fakeRconEnabled, true);
-  assert.equal(typeof settings.fakeRconEnabled, "boolean");
+  assert.equal(settings.weaponPaintsEnabled, true);
+  assert.equal(typeof settings.weaponPaintsEnabled, "boolean");
   assert.deepEqual(synchronizedNades, []);
   assert.deepEqual(JSON.parse(await readFile(config.runtimeAdminsFile, "utf8")), {});
   assert.deepEqual(JSON.parse(await readFile(config.runtimeMatchZyAdminsFile, "utf8")), {});
+});
+
+test("concurrent runtime publication reads the latest role after a demotion", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "matchzy-role-sync-"));
+  const config = { runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json") };
+  let release: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let role = "admin";
+  const first = writeAdminRuntimeFiles(config, async () => { await gate; return [{ identitySteam64: "76561198000000001", role }]; });
+  const second = writeAdminRuntimeFiles(config, async () => [{ identitySteam64: "76561198000000001", role }]);
+  role = "player";
+  release();
+  try {
+    await Promise.all([first, second]);
+    assert.deepEqual(JSON.parse(await readFile(config.runtimeAdminsFile, "utf8")), {});
+    assert.deepEqual(JSON.parse(await readFile(join(directory, "platform-roles.json"), "utf8")), { "76561198000000001": "player" });
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

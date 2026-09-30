@@ -35,7 +35,7 @@ test("new installations receive complete typed defaults", () => {
   assert.equal(settings.rconPassword, "");
   assert.equal(settings.matchZyVersion, "latest");
   assert.equal(settings.maxPlayers, 10);
-  assert.equal(settings.fakeRconEnabled, false);
+  assert.equal("fakeRconEnabled" in settings, false);
   assert.equal(settings.workshopMapCatalog, "[]");
 });
 
@@ -66,7 +66,7 @@ test("save validation rejects invalid mode and maintenance settings", () => {
   assert.throws(() => validateSettings({ restartTime: "25:00" }), /HH:mm/);
   assert.throws(() => validateSettings({ restartTimezone: "Vienna" }), /IANA/);
   assert.throws(() => validateSettings({ maxPlayers: 0 }), /between 1 and 64/);
-  assert.throws(() => validateSettings({ fakeRconEnabled: "true" }), /must be a boolean/);
+  assert.throws(() => validateSettings({ weaponPaintsEnabled: "true" }), /must be a boolean/);
 });
 
 test("apply validation requires platform-managed Steam and RCON secrets", () => {

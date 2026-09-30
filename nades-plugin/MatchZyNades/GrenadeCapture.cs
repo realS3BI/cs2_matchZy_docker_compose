@@ -90,6 +90,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private void ArmNewLineupCapture(CCSPlayerController player)
     {
+        if (!CanWriteNades(player)) return;
         ReleaseControl(player.Slot);
         if (_draftNameRequests.ContainsKey(player.Slot))
         { Tell(player, "Es gibt eine ungespeicherte Aufnahme. Zuerst Aufnahme speichern oder verwerfen wählen."); return; }
@@ -122,6 +123,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private bool TrySaveNameFromChat(CCSPlayerController? player, string rawText)
     {
+        if (!CanWriteNades(player)) return false;
         if (!TrainingEnabled || player is not { IsValid: true } || !_draftNameRequests.TryGetValue(player.Slot, out var request)) return false;
         var displayName = rawText.Trim().Trim('"').Trim();
         if (displayName.Equals("cancel", StringComparison.OrdinalIgnoreCase) || displayName.Equals("abbrechen", StringComparison.OrdinalIgnoreCase) ||
@@ -176,14 +178,14 @@ public sealed partial class MatchZyNadesPlugin
 
     private void ArmCapture(CCSPlayerController player, NadeLineup lineup)
     {
-        if (!TrainingEnabled || lineup.Owner != player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture) || lineup.Official || lineup.Kind is NadeKind.Fire or NadeKind.Other) { _capture.Forget(player.Slot); return; }
+        if (!CanWriteNades(player) || !TrainingEnabled || lineup.Owner != player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture) || lineup.Official || lineup.Kind is NadeKind.Fire or NadeKind.Other) { _capture.Forget(player.Slot); return; }
         _capture.Arm(player.Slot, player.SteamID, lineup, Server.CurrentTime);
         Tell(player, "Der nächste Wurf erfasst das Ziel automatisch (gleicher Typ, innerhalb 2 Minuten). Danach Dashboard aktualisieren.");
     }
 
     private void ArmAfterCommand(CCSPlayerController? player, string name)
     {
-        if (!Alive(player) || !TrainingEnabled) return;
+        if (!CanWriteNades(player) || !Alive(player) || !TrainingEnabled) return;
         var steamId = player!.SteamID;
         var map = Server.MapName;
         Server.NextFrame(() =>
@@ -228,6 +230,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private HookResult CompleteNamedCapture(CCSPlayerController player, NadeLineup lineup, Coordinates target)
     {
+        if (!CanWriteNades(player)) return HookResult.Continue;
         if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z)) return HookResult.Continue;
         if (lineup.Name.StartsWith("capture_", StringComparison.Ordinal))
         {

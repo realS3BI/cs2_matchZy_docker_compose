@@ -216,8 +216,8 @@ test("buildDiagnostics treats nades as a MatchZy-backed mode", () => {
 });
 
 test("buildDiagnostics reports incomplete enabled optional plugins", () => {
-  const report = buildDiagnostics(input({ desired: { serverMode: "matchzy", simpleAdminEnabled: true } }));
+  const report = buildDiagnostics(input({ desired: { serverMode: "matchzy", weaponPaintsEnabled: true } }));
   assert.equal(report.overall, "critical");
-  assert.equal(report.plugins[0].id, "simpleadmin");
-  assert.match(report.findings[0].title, /SimpleAdmin/);
+  assert.equal(report.plugins[0].id, "weaponpaints");
+  assert.match(report.findings[0].title, /WeaponPaints/);
 });

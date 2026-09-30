@@ -1,5 +1,4 @@
-import { FLAG_PRESETS } from "./defaults.js";
-import { flagsForRole, roleForFlags, SETTING_KEYS } from "./policy.js";
+import { flagsForRole, SETTING_KEYS } from "./policy.js";
 
 const STEAM64_RE = /^[0-9]{17}$/;
 const NAMES_WITHOUT_SLASHES_RE = /^[^\\/]+$/;
@@ -30,10 +29,10 @@ export function sanitizeAdmins(entries) {
   const seen = new Set();
   return entries.map((entry) => {
     const name = String(entry.name ?? "").trim();
+    if (name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("Der Benutzername darf höchstens 100 Zeichen ohne Steuerzeichen enthalten.");
     const identitySteam64 = String(entry.identitySteam64 ?? "").trim();
-    const inputFlags = Array.isArray(entry.flags) ? entry.flags.map((flag) => String(flag).trim()).filter(Boolean) : [];
-    const role = String(entry.role || roleForFlags(inputFlags.length > 0 ? inputFlags : ["@css/root"]));
-    const flags = [...new Set(flagsForRole(role, inputFlags))];
+    const role = String(entry.role || "player");
+    const flags = [...new Set(flagsForRole(role))];
 
     if (!STEAM64_RE.test(identitySteam64)) {
       throw new Error(`Invalid Steam64 ID: ${identitySteam64 || "(empty)"}`);
@@ -42,14 +41,6 @@ export function sanitizeAdmins(entries) {
       throw new Error(`Duplicate Steam64 ID: ${identitySteam64}`);
     }
     seen.add(identitySteam64);
-    for (const flag of flags) {
-      if (!FLAG_PRESETS.includes(flag) && !flag.startsWith("@custom/")) {
-        throw new Error(`Invalid admin flag: ${flag}`);
-      }
-    }
-    if (role === "custom" && flags.length === 0) {
-      throw new Error("Custom admin role requires at least one permission");
-    }
 
     return {
       name,
@@ -63,6 +54,7 @@ export function sanitizeAdmins(entries) {
 export function adminsToCssConfig(entries) {
   const config = {};
   for (const entry of sanitizeAdmins(entries)) {
+    if (entry.role === "player") continue;
     config[entry.identitySteam64] = {
       identity: entry.identitySteam64,
       flags: entry.flags

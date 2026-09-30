@@ -1,3 +1,6 @@
+import { UserManagement } from "./components/user-management";
+import { RconChat } from "./components/rcon-chat";
+import { NadeLibrary } from "./components/nade-library";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -95,6 +98,7 @@ const routePaths = {
   nades: "/nades",
   diagnostics: "/diagnostics",
   logs: "/logs",
+  console: "/console",
   links: "/links"
 };
 
@@ -102,7 +106,8 @@ const tabs = [
   { id: "overview", path: routePaths.overview, label: "Overview", icon: LayoutDashboard, group: "Control" },
   { id: "server", path: routePaths.server, label: "Server settings", icon: Server, group: "Control" },
   { id: "plugins", path: routePaths.plugins, label: "Plugins", icon: Boxes, group: "Control" },
-  { id: "access", path: routePaths.access, label: "Access", icon: Shield, group: "Control" },
+  { id: "console", path: routePaths.console, label: "Server-Konsole", icon: Terminal, group: "Control" },
+  { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Control" },
   { id: "maps", path: routePaths.maps, label: "Maps & Nades", icon: MapPinned, group: "Content" },
   { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnostics", icon: Activity, group: "Monitor" },
   { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Monitor" },
@@ -111,6 +116,8 @@ const tabs = [
 ];
 
 const defaultRoute = routePaths.overview;
+function allowedTabs(role) { return tabs.filter(tab => role === "admin" || (role === "match_admin" ? ["overview", "plugins", "maps", "console"].includes(tab.id) : tab.id === "maps")); }
+
 
 function routeFromLoginSearch(search) {
   const requestedRoute = new URLSearchParams(search).get("redirect");
@@ -206,82 +213,23 @@ function OperationDialog({ operation }) {
   );
 }
 
-function Login({ error, onLogin }) {
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await onLogin(password);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="login-shell login-grid grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
-      <section className="hidden flex-col justify-between border-r border-sidebar-border p-12 text-sidebar-accent-foreground lg:flex xl:p-16">
-        <div className="flex items-center gap-3">
-          <span className="control-brand-mark"><Crosshair aria-hidden="true" /></span>
-          <div>
-            <p className="font-semibold">MatchZy Control</p>
-            <p className="font-mono text-[11px] text-sidebar-foreground/45">CS2 / COOLIFY</p>
-          </div>
-        </div>
-        <div className="max-w-xl">
-          <p className="mb-5 font-mono text-xs uppercase tracking-[0.14em] text-sidebar-foreground/45">Private operations</p>
-          <h1 className="control-title text-5xl leading-[1.02] xl:text-6xl">One place to run your match server.</h1>
-          <p className="mt-6 max-w-lg text-base leading-7 text-sidebar-foreground/60">Configure game modes, manage access and follow the container from one focused workspace.</p>
-        </div>
-        <p className="font-mono text-xs text-sidebar-foreground/35">MATCHZY ADMIN PANEL</p>
-      </section>
-      <section className="flex min-h-screen flex-col items-center justify-center gap-10 p-4 sm:p-8">
-        <div className="flex items-center gap-3 lg:hidden"><span className="control-brand-mark"><Crosshair aria-hidden="true" /></span><div><p className="font-semibold text-foreground">MatchZy Control</p><p className="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">CS2 SERVER OPERATIONS</p></div></div>
-        <h1 className="sr-only lg:hidden">Sign in to MatchZy Control</h1>
-        <Card className="w-full max-w-[430px] shadow-2xl">
-          <CardHeader className="gap-4">
-            <span className="metric-icon"><LockKeyhole aria-hidden="true" /></span>
-            <div className="grid gap-1.5">
-              <CardTitle className="control-title text-2xl">Sign in</CardTitle>
-              <CardDescription>Use the admin password for this Coolify deployment.</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Message error={error} />
-            <form onSubmit={submit}>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel>Password</FieldLabel>
-                  <Input
-                    autoFocus
-                    autoComplete="current-password"
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                </Field>
-                <Button className="w-full" disabled={busy}>{busy ? "Logging in..." : "Open control room"}</Button>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
-      </section>
-    </main>
-  );
+function Login({ error }) {
+  const failed = new URLSearchParams(window.location.search).has("error");
+  return <main className="login-shell login-grid grid min-h-screen place-items-center p-6">
+    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">MATCHZY CONTROL</span></div><CardTitle className="control-title text-3xl">Dein Server. Deine Lineups.</CardTitle><CardDescription>Melde dich mit Steam an, um die offiziellen Nades anzusehen. Deine Rolle bestimmt den Zugriff auf die Serversteuerung.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : error} /><Button asChild><a href="/api/auth/steam">Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler erhalten die Rolle Player. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
+  </main>;
 }
 
 const tabGroups = ["Control", "Content", "Monitor", "Support"];
 
-function Navigation({ onNavigate, onLogout, serviceState }) {
+function Navigation({ onNavigate, onLogout, serviceState, user }) {
   return (
     <>
       <nav className="control-nav" aria-label="Control room sections">
-        {tabGroups.map((group) => (
+        {tabGroups.filter(group => allowedTabs(user.role).some(item => item.group === group)).map((group) => (
           <div key={group} className="control-nav-group">
             <p className="control-nav-label">{group}</p>
-            {tabs.filter((item) => item.group === group).map((item) => {
+            {allowedTabs(user.role).filter((item) => item.group === group).map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink key={item.id} to={item.path} end className={({ isActive }) => cn("control-nav-item", isActive && "control-nav-item-active")} onClick={onNavigate}>
@@ -297,9 +245,9 @@ function Navigation({ onNavigate, onLogout, serviceState }) {
       <footer className="control-sidebar-footer">
         <div className="sidebar-session">
           <span className={cn("server-status-dot", serviceState === "running" ? "text-success" : "text-muted-foreground")} />
-          <span>CS2 {serviceState || "status unknown"}</span>
+          <span>{user.name || user.identitySteam64} · {user.role === "admin" ? "Admin" : user.role === "match_admin" ? "Match Admin" : "Player"}</span>
         </div>
-        <Button className="w-full justify-start" variant="sidebar" onClick={onLogout}><LogOut data-icon="inline-start" />Log out</Button>
+        <Button className="w-full justify-start" variant="sidebar" onClick={onLogout}><LogOut data-icon="inline-start" />Abmelden</Button>
       </footer>
     </>
   );
@@ -317,17 +265,17 @@ function Brand() {
   );
 }
 
-function Shell({ children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
+function Shell({ user, children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigateFromMenu = () => { setMobileMenuOpen(false); onNavigate(); };
 
   return (
     <div className="control-shell">
-      <a className="skip-link" href="#main-content">Skip to content</a>
+      <a className="skip-link" href="#main-content">Zum Inhalt</a>
       <aside className="control-sidebar hidden min-w-0 flex-col lg:flex">
         <header className="control-sidebar-header"><Brand /></header>
-        <Navigation onNavigate={onNavigate} onLogout={onLogout} serviceState={serviceState} />
+        <Navigation onNavigate={onNavigate} onLogout={onLogout} serviceState={serviceState} user={user} />
       </aside>
       <div className="min-w-0">
         <header className="control-topbar sticky top-0 z-30">
@@ -337,7 +285,7 @@ function Shell({ children, tab, onNavigate, message, error, onLogout, dirty, bus
               <DialogContent className="mobile-nav-dialog lg:hidden" showCloseButton>
                 <DialogTitle className="sr-only">Navigation</DialogTitle>
                 <Brand />
-                <Navigation onNavigate={navigateFromMenu} onLogout={onLogout} serviceState={serviceState} />
+                <Navigation onNavigate={navigateFromMenu} onLogout={onLogout} serviceState={serviceState} user={user} />
               </DialogContent>
             </Dialog>
             <div className="topbar-context">
@@ -346,16 +294,16 @@ function Shell({ children, tab, onNavigate, message, error, onLogout, dirty, bus
               <span className="font-medium text-foreground">{activeTab.label}</span>
             </div>
             <div className="topbar-status">
-              <Badge variant={serviceState === "running" ? "success" : "outline"}><span className="server-status-dot" />{serviceState || "unknown"}</Badge>
+              <Badge variant="outline">{user.role === "admin" ? "Admin" : user.role === "match_admin" ? "Match Admin" : "Player"}</Badge>
               {dirty ? <Badge variant="warning">Unsaved changes</Badge> : null}
             </div>
-            <div className="topbar-actions">
+            {user.role === "admin" && !["access", "console"].includes(tab) && <div className="topbar-actions">
               <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}><Save data-icon="inline-start" />Save draft</Button>
               <Button onClick={onApply} disabled={busy}>
                 {operation?.kind === "apply" ? <Spinner data-icon="inline-start" /> : <UploadCloud data-icon="inline-start" />}
                 {operation?.kind === "apply" ? "Applying..." : "Apply & restart"}
               </Button>
-            </div>
+            </div>}
           </div>
         </header>
         <main id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
@@ -397,7 +345,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
   const metrics = [
     { label: "Player slots", value: settings.maxPlayers || "Not set", detail: "Configured capacity", icon: UsersRound },
     { label: "Plugins", value: enabledPlugins, detail: "Enabled components", icon: Boxes },
-    { label: "Server access", value: admins.length, detail: admins.length === 1 ? "Authorized person" : "Authorized people", icon: Shield },
+    { label: "Benutzer", value: admins.length, detail: "Registrierte Steam-Konten", icon: Shield },
     { label: "Nade library", value: nades.length, detail: nades.length === 1 ? "Saved lineup" : "Saved lineups", icon: Crosshair }
   ];
 
@@ -610,7 +558,7 @@ function Links() {
   );
 }
 
-function Plugins({ settings, setSettings, policy }) {
+function Plugins({ settings, setSettings, policy, showDiagnostics = true }) {
   const mode = settings.serverMode || "matchzy";
   return (
     <>
@@ -632,7 +580,7 @@ function Plugins({ settings, setSettings, policy }) {
           </RadioGroup>
         </CardContent>
       </Card>
-      <NadesMenuStatus selectedMode={mode} />
+      {showDiagnostics && <NadesMenuStatus selectedMode={mode} />}
       <Card>
         <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
@@ -645,51 +593,6 @@ function Plugins({ settings, setSettings, policy }) {
               </div>
             );
           })}
-        </CardContent>
-      </Card>
-    </>
-  );
-}
-
-function Admins({ admins, setAdmins, flagPresets, roles }) {
-  function updateAdmin(index, patch) {
-    setAdmins((current) => current.map((admin, itemIndex) => (itemIndex === index ? { ...admin, ...patch } : admin)));
-  }
-
-  function toggleFlag(index, flag, checked) {
-    const currentFlags = admins[index].flags || [];
-    const flags = checked ? [...new Set([...currentFlags, flag])] : currentFlags.filter((item) => item !== flag);
-    updateAdmin(index, { flags });
-  }
-
-  return (
-    <>
-      <PageHeader eyebrow="One permission system" title="Access" description="Every person gets one role. CounterStrikeSharp enforces it for the server and MatchZy." actions={<Button variant="secondary" onClick={() => setAdmins((current) => [...current, { name: "", identitySteam64: "", role: "match_operator", flags: [] }])}><Plus data-icon="inline-start" /> Add person</Button>} />
-      <Alert className="mb-4"><AlertTitle>Single source of truth</AlertTitle><AlertDescription>MatchZy's own admins.json stays empty. Roles below generate CounterStrikeSharp permissions only.</AlertDescription></Alert>
-      <Card>
-        <CardHeader><CardTitle>People with server access</CardTitle><CardDescription>Use Custom only when the predefined roles are not precise enough.</CardDescription></CardHeader>
-        <CardContent className="grid gap-3">
-          {admins.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No one has panel-managed in-game permissions. Add a person to assign a role.</div> : null}
-          {admins.map((admin, index) => (
-            <div key={index} className="grid gap-3 rounded-lg border border-border bg-muted/25 p-4 xl:grid-cols-[1fr_1.2fr_220px_44px]">
-              <Field><FieldLabel>Name</FieldLabel><Input value={admin.name || ""} placeholder="Display name" onChange={(event) => updateAdmin(index, { name: event.target.value })} /></Field>
-              <Field><FieldLabel>Steam64 ID</FieldLabel><Input value={admin.identitySteam64 || ""} placeholder="7656119…" onChange={(event) => updateAdmin(index, { identitySteam64: event.target.value })} /></Field>
-              <Field><FieldLabel>Role</FieldLabel><Select value={admin.role || "owner"} onValueChange={(value) => updateAdmin(index, { role: value })}><SelectTrigger aria-label="Admin role"><SelectValue placeholder="Choose a role" /></SelectTrigger><SelectContent>{(roles || []).map((role) => <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>)}</SelectContent></Select></Field>
-              <Button className="self-end" variant="secondary" size="icon" aria-label={`Remove ${admin.name || "person"}`} onClick={() => setAdmins((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
-              {admin.role === "custom" ? <FieldGroup className="flex-row flex-wrap gap-3 rounded-md border border-border bg-card p-3 xl:col-span-4">
-                {flagPresets.map((flag) => (
-                  <Field key={flag} className="flex grid-cols-[auto_1fr] items-center gap-2">
-                    <Checkbox
-                      aria-label={`${flag} for ${admin.name || "person"}`}
-                      checked={(admin.flags || []).includes(flag)}
-                      onCheckedChange={(checked) => toggleFlag(index, flag, checked === true)}
-                    />
-                    <FieldLabel className="font-mono text-xs text-muted-foreground">{flag}</FieldLabel>
-                  </Field>
-                ))}
-              </FieldGroup> : <p className="text-xs text-muted-foreground xl:col-span-4">{(roles || []).find((role) => role.id === (admin.role || "owner"))?.description}</p>}
-            </div>
-          ))}
         </CardContent>
       </Card>
     </>
@@ -1980,10 +1883,11 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const [authenticated, setAuthenticated] = useState(null);
-  const [settings, setSettings] = useState({});
+  const [user, setUser] = useState(null);
+  const [workshopOpen, setWorkshopOpen] = useState(false);
+  const [settings, setSettings] = useState<any>({});
   const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
-  const [flagPresets, setFlagPresets] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
   const [savedSignature, setSavedSignature] = useState("");
@@ -1996,13 +1900,13 @@ function App() {
   async function loadAll() {
     const control = await api("/api/control");
     setAuthenticated(true);
+    setUser(control.user);
     setSettings(control.settings || {});
     setAdmins(control.admins || []);
     setNades(control.nades || []);
-    setFlagPresets(control.flagPresets || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
-    setSavedSignature(JSON.stringify({ settings: control.settings || {}, admins: control.admins || [] }));
+    setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
     setSavedNadesSignature(JSON.stringify(control.nades || []));
   }
 
@@ -2036,7 +1940,7 @@ function App() {
 
   useEffect(() => {
     document.title = authenticated === false
-      ? "Sign in | MatchZy Control"
+      ? "Anmelden | MatchZy Control"
       : `${activeTab.label} | MatchZy Control`;
   }, [activeTab.label, authenticated]);
 
@@ -2046,11 +1950,11 @@ function App() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings, admins });
+  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings });
   const nadesDirty = savedNadesSignature !== "" && savedNadesSignature !== JSON.stringify(nades);
 
   function applyControl() {
-    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings, admins }) }), "apply");
+    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings }) }), "apply");
   }
 
   useEffect(() => {
@@ -2077,25 +1981,17 @@ function App() {
       return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
     }
 
-    return (
-      <Login
-        error={error}
-        onLogin={async (password) => {
-          try {
-            await api("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
-            setError("");
-            await loadAll();
-            navigate(routeFromLoginSearch(location.search), { replace: true });
-          } catch (loginError) {
-            setError(loginError.message);
-          }
-        }}
-      />
-    );
+    return <Login error={error} />;
   }
+
+  const roleHome = user.role === "player" ? routePaths.maps : defaultRoute;
+  if (location.pathname !== "/" && !allowedTabs(user.role).some(tab => tab.path === location.pathname))
+    return <Navigate to={roleHome} replace />;
+
 
   return (
     <Shell
+      user={user}
       tab={activeTab.id}
       onNavigate={() => {
         setMessage("");
@@ -2108,7 +2004,7 @@ function App() {
       operation={operation}
       serviceState={status?.service?.state}
       onSave={() => runAction(async () => {
-        await api("/api/control", { method: "PUT", body: JSON.stringify({ settings, admins }) });
+        await api("/api/control", { method: "PUT", body: JSON.stringify({ settings }) });
         return { message: "Draft saved. Apply it when you are ready to restart CS2." };
       })}
       onApply={applyControl}
@@ -2119,11 +2015,11 @@ function App() {
       }}
     >
       <Routes>
-        <Route path="/" element={<Navigate to={defaultRoute} replace />} />
+        <Route path="/" element={<Navigate to={roleHome} replace />} />
         <Route
           path={routePaths.overview}
           element={(
-            <Overview
+            user.role === "match_admin" ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field><Button onClick={applyControl} disabled={busy}>Änderungen übernehmen & neu starten</Button></> : <Overview
               settings={settings}
               setSettings={setSettings}
               onApply={applyControl}
@@ -2150,10 +2046,10 @@ function App() {
           )}
         />
         <Route path={routePaths.server} element={<Settings settings={settings} setSettings={setSettings} policy={policy} />} />
-        <Route path={routePaths.plugins} element={<Plugins settings={settings} setSettings={setSettings} policy={policy} />} />
+        <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={user.role === "admin"} />{user.role === "match_admin" && <Button onClick={applyControl} disabled={busy}>Änderungen übernehmen & neu starten</Button>}</>} />
         <Route
           path={routePaths.access}
-          element={<Admins admins={admins} setAdmins={setAdmins} flagPresets={flagPresets} roles={policy?.adminRoles || []} />}
+          element={<UserManagement currentSteamId={user.identitySteam64} />}
         />
         <Route
           path={routePaths.maintenance}
@@ -2162,7 +2058,11 @@ function App() {
         <Route
           path={routePaths.maps}
           element={(
-            <MapsAndNades
+            user.role !== "admin" ? <>
+              {user.role === "match_admin" && <div className="mb-5 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}>Workshop-Map hinzufügen</Button><Button onClick={applyControl} disabled={busy}>Änderungen übernehmen & neu starten</Button></div>}
+              <NadeLibrary nades={nades} settings={settings} status={status} role={user.role} />
+              <WorkshopMapDialog open={workshopOpen} onOpenChange={setWorkshopOpen} onAdd={input => { const patch = addWorkshopMap(settings, input); setSettings(current => ({ ...current, ...patch, workshopMapsEnabled: true })); }} />
+            </> : <MapsAndNades
               settings={settings}
               setSettings={setSettings}
               nades={nades}
@@ -2182,10 +2082,11 @@ function App() {
           )}
         />
         <Route path={routePaths.nades} element={<Navigate to={`${routePaths.maps}?view=library`} replace />} />
+        <Route path={routePaths.console} element={<RconChat />} />
         <Route path={routePaths.logs} element={<DockerLogs active />} />
         <Route path={routePaths.links} element={<Links />} />
         <Route path={routePaths.login} element={<Navigate to={routeFromLoginSearch(location.search)} replace />} />
-        <Route path="*" element={<Navigate to={defaultRoute} replace />} />
+        <Route path="*" element={<Navigate to={roleHome} replace />} />
       </Routes>
       <OperationDialog operation={operation} />
     </Shell>
