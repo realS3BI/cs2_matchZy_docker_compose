@@ -157,7 +157,7 @@ _matchzy_bootstrap_main() (
 
     prefix_value="$(strip_wrapping_quotes "$chat_prefix_raw")"
     if [[ -z "$prefix_value" ]]; then
-      prefix_value="[{Green}MatchZy{Default}]"
+      prefix_value="[{Green}Playbook{Default}]"
       prefix_source="default"
     elif ! is_valid_matchzy_chat_prefix "$prefix_value"; then
       return 1
@@ -667,10 +667,10 @@ _matchzy_bootstrap_main() (
     local mode="$1"
     local source_file="/opt/matchzy-nades/MatchZyNades.dll"
     local destination_dir="$CSS_DIR/plugins/MatchZyNades"
-    [[ -f "$source_file" ]] || fail "Bundled MatchZy Nades plugin not found: $source_file"
+    [[ -f "$source_file" ]] || fail "Bundled Playbook plugin not found: $source_file"
     mkdir -p "$destination_dir"
     copy_file_atomic "$source_file" "$destination_dir/MatchZyNades.dll"
-    log "Installed bundled MatchZy Nades plugin (.nades menu)"
+    log "Installed bundled Playbook plugin (.nades menu)"
   }
 
   patch_gameinfo_for_metamod() {
@@ -751,7 +751,7 @@ _matchzy_bootstrap_main() (
     fi
 
     chat_prefix_resolved="$(resolve_matchzy_chat_prefix "$chat_prefix_raw")" \
-      || fail "matchzy_chat_prefix must use syntax like '[{Green}MatchZy{Default}]'"
+      || fail "matchzy_chat_prefix must use syntax like '[{Green}Playbook{Default}]'"
     IFS=$'\t' read -r chat_prefix chat_prefix_source <<< "$chat_prefix_resolved"
 
     tmp_file="$(mktemp)"
@@ -760,6 +760,7 @@ _matchzy_bootstrap_main() (
       printf 'matchzy_smoke_color_enabled %s\n' "$smoke_color_value"
       printf 'matchzy_save_nades_as_global_enabled "%s"\n' "$save_nades_as_global_value"
       printf 'matchzy_chat_prefix "%s"\n' "$chat_prefix"
+      printf 'matchzy_admin_chat_prefix "%s"\n' "$chat_prefix"
       printf 'matchzy_autostart_mode %s\n' "$autostart_mode"
     } > "$tmp_file"
 
@@ -855,8 +856,7 @@ _matchzy_bootstrap_main() (
       matchzy_autostart_mode=1
       ;;
     nades)
-      matchzy_enabled=1
-      matchzy_autostart_mode=2
+      matchzy_enabled=0
       ;;
     warmup)
       matchzy_enabled=0
@@ -1230,6 +1230,8 @@ _matchzy_bootstrap_main() (
       "$matchzy_save_nades_as_global" \
       "$matchzy_config_file" \
       "$matchzy_autostart_mode"
+  fi
+  if [[ "$server_mode" == "nades" || "$server_mode" == "matchzy" ]]; then
     write_matchzy_savednades_file_from_runtime "$runtime_matchzy_savednades_file" "$matchzy_savednades_file"
   fi
 

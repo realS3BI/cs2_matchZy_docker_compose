@@ -39,7 +39,7 @@ public sealed partial class MatchZyNadesPlugin
     public void OnBindPanelKey(CCSPlayerController? player, CommandInfo command)
     {
         if (player is not { IsValid: true, IsBot: false } || player.SteamID == 0) return;
-        command.ReplyToCommand("Freie Tastenzuweisungen wurden entfernt. Feste Belegung: css_training_binds.");
+        Tell(player, "Freie Tastenzuweisungen wurden entfernt. Feste Belegung: css_training_binds.");
     }
 
     [ConsoleCommand("css_training_binds", "Print the fixed panel binds for a local CFG")]

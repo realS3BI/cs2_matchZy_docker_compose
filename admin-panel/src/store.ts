@@ -51,6 +51,9 @@ export class Store {
       await this.users.updateOne({ _id: this.config.bootstrapAdminSteamId }, {
         $setOnInsert: { identitySteam64: this.config.bootstrapAdminSteamId, name: "", role: "admin", createdAt: new Date() }
       }, { upsert: true });
+      if (this.config.promoteBootstrapAdmin) {
+        await this.users.updateOne({ _id: this.config.bootstrapAdminSteamId }, { $set: { role: "admin" } });
+      }
     }
     await this.actions.createIndex({ createdAt: -1 });
     await this.maintenance.updateOne(

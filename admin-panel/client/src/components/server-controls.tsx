@@ -2,20 +2,18 @@ import { useEffect, useState } from "react";
 import { ArrowLeftRight, MapPinned, RefreshCw, UploadCloud } from "lucide-react";
 import { api } from "../lib/api";
 import { BUILT_IN_MAPS, workshopMapsFromSettings } from "../lib/maps";
-import { Alert, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { ActionButton } from "./action-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Field, FieldDescription, FieldLabel } from "./ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
-import { Spinner } from "./ui/spinner";
 
 export function ServerControls({ settings, setSettings, policy, busy, running, onApply }) {
   const [game, setGame] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [selectedMap, setSelectedMap] = useState(settings.startMap || "de_mirage");
   const maps = BUILT_IN_MAPS.filter((map) => map.category !== "community");
   const workshops = workshopMapsFromSettings(settings);
@@ -30,7 +28,7 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
       setGame(await api("/api/server/game"));
     } catch (error) {
       setGame(null);
-      setError(error.message);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -50,18 +48,14 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
 
   async function changeMap() {
     setSwitching(true);
-    setMessage("");
     setError("");
     try {
       const workshop = workshops.find((map) => map.key === selectedMap);
-      const result = await api("/api/server/map", {
+      await api("/api/server/map", {
         method: "POST",
         body: JSON.stringify(workshop ? { workshopId: workshop.workshopId } : { map: selectedMap })
       });
       setGame(null);
-      setMessage(result.message);
-    } catch (error) {
-      setError(error.message);
     } finally {
       setSwitching(false);
     }
@@ -73,7 +67,8 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
         <div className="grid gap-1.5"><CardTitle>Quick controls</CardTitle><CardDescription>Choose how and where to play.</CardDescription></div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={game?.map ? "success" : "outline"}><MapPinned className="size-3" />Live map: {game?.map || (loading ? "Checking…" : "Unavailable")}</Badge>
-          <Button variant="ghost" size="sm" onClick={refreshGame} disabled={disabled || loading || !running}><RefreshCw className="size-4" />Refresh live map</Button>
+          <ActionButton variant="ghost" size="sm" onClick={refreshGame} disabled={disabled || loading || !running} icon={RefreshCw} pendingLabel="Wird aktualisiert …" successLabel="Aktualisiert">Live-Map aktualisieren</ActionButton>
+          {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
         </div>
       </CardHeader>
       <CardContent className="grid gap-5">
@@ -88,7 +83,7 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
               <FieldDescription>{mode?.description}</FieldDescription>
             </Field>
             <p className="text-xs text-muted-foreground">Applied mode: {policy?.modes?.find((mode) => mode.id === game?.mode)?.name || "Unavailable"}. Applying saves all configuration edits and restarts CS2.</p>
-            <Button className="mt-auto self-start" variant="secondary" onClick={onApply} disabled={disabled}><UploadCloud data-icon="inline-start" />Apply &amp; restart</Button>
+            <ActionButton variant="secondary" onClick={onApply} disabled={disabled} icon={UploadCloud} pendingLabel="Wird übernommen …" successLabel="Übernommen">Übernehmen & neu starten</ActionButton>
           </div>
           <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
             <Field>
@@ -105,15 +100,12 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
             </Field>
             <p className="text-xs text-muted-foreground">Start map: {settings.startMap}. Workshop maps must be applied first.</p>
             <div className="mt-auto flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={changeMap} disabled={disabled || loading || !running || liveMapSelected}>{switching ? <Spinner /> : <ArrowLeftRight data-icon="inline-start" />}{switching ? "Switching…" : "Switch map"}</Button>
+              <ActionButton variant="secondary" onClick={changeMap} disabled={disabled || loading || !running || liveMapSelected} icon={ArrowLeftRight} pendingLabel="Map wird gewechselt …" successLabel="Map-Wechsel gestartet">Map wechseln</ActionButton>
               <Button variant="secondary" disabled={disabled || selectedMap.startsWith("workshop-") || settings.startMap === selectedMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap }))}>Use as start map</Button>
             </div>
           </div>
         </div>
         {!running ? <p className="text-sm text-muted-foreground">Start the server to use the live map controls.</p> : null}
-        <div aria-live="polite">
-          {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : message ? <Alert variant="success"><AlertDescription>{message}</AlertDescription></Alert> : null}
-        </div>
       </CardContent>
     </Card>
   );

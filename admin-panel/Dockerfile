@@ -9,6 +9,7 @@ COPY admin-panel/package.json admin-panel/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY admin-panel/src ./src
+COPY admin-panel/shared ./shared
 COPY admin-panel/test ./test
 COPY admin-panel/client ./client
 COPY admin-panel/tsconfig*.json ./

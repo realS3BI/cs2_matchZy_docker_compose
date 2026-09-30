@@ -1,3 +1,4 @@
+import { NadesMenuStatus } from "./components/nades-menu-status";
 import { AppSidebar } from "./components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -15,28 +16,19 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
-  ArrowLeftRight,
   BookOpen,
   Boxes,
   CalendarClock,
   Check,
   ChevronRight,
   CircleDot,
-  Copy,
   Crosshair,
-  Database,
-  Download,
   ExternalLink,
-  FileInput,
-  FileJson,
-  Globe2,
   LayoutDashboard,
-  LockKeyhole,
   MapPinned,
   PackagePlus,
   Pause,
   Play,
-  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -51,6 +43,7 @@ import { api } from "./lib/api";
 import { cn } from "./lib/utils";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
+import { ActionButton } from "./components/action-button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
@@ -66,29 +59,21 @@ import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "./components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "./components/ui/switch";
-import { parseSetpos, parseSetposSetang } from "./lib/nades";
-import { inferRadarCalibration } from "./lib/nade-radar";
 import {
   mapsForInventory,
-  BUILT_IN_MAPS,
   addWorkshopMap,
-  mapMatchesNade,
   removeWorkshopMap,
-  workshopMapsFromSettings,
-  type MapDefinition
+  workshopMapsFromSettings
 } from "./lib/maps";
-import { NadePlacementEditor } from "./components/map-radar";
 import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
 import { Diagnostics } from "./diagnostics";
-import { NadesMenuStatus } from "./components/nades-menu-status";
 import { ServerControls } from "./components/server-controls";
 
 const routePaths = {
@@ -133,115 +118,31 @@ function routeFromLoginSearch(search) {
   return (tabs.some(item => item.path === pathname) || isMapRoute(pathname)) ? requestedRoute : defaultRoute;
 }
 
-function Message({ message = "", error = "" }: { message?: string; error?: string }) {
-  if (!message && !error) return null;
-  return (
-    <Alert className="mb-4" variant={error ? "destructive" : "success"}>
-      <AlertTitle>{error ? "Aktion fehlgeschlagen" : "Aktualisiert"}</AlertTitle>
-      <AlertDescription className="whitespace-pre-wrap">{error || message}</AlertDescription>
-    </Alert>
-  );
+function Message({ error = "" }: { error?: string }) {
+  return error ? <p role="alert" className="text-sm whitespace-pre-wrap text-destructive">{error}</p> : null;
 }
 
-const operationCopy = {
-  apply: {
-    title: "Applying changes",
-    working: "Saving the platform settings and restarting the CS2 container.",
-    refreshing: "The restart finished. Loading the new server status.",
-    workingStep: "Apply settings and restart CS2"
-  },
-  restart: {
-    title: "Restarting CS2",
-    working: "Waiting for Docker to stop and start the CS2 container.",
-    refreshing: "The restart finished. Loading the new server status.",
-    workingStep: "Restart the CS2 container"
-  }
-};
-
-function formatElapsed(seconds) {
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-}
-
-function OperationDialog({ operation }) {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (!operation) return undefined;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [operation?.startedAt]);
-
-  if (!operation) return null;
-
-  const copy = operationCopy[operation.kind];
-  const refreshing = operation.phase === "refreshing";
-  const elapsed = Math.max(0, Math.floor((now - operation.startedAt) / 1000));
-
-  return (
-    <Dialog open onOpenChange={() => undefined}>
-      <DialogContent
-        className="max-w-lg"
-        showCloseButton={false}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
-        <DialogHeader className="pr-0">
-          <div className="mb-2 flex items-center gap-3">
-            <span className="metric-icon"><Spinner aria-hidden="true" /></span>
-            <Badge variant="warning">Server action running</Badge>
-          </div>
-          <DialogTitle className="control-title text-xl">{copy.title}</DialogTitle>
-          <DialogDescription>{refreshing ? copy.refreshing : copy.working}</DialogDescription>
-          <span className="sr-only" aria-live="polite">{refreshing ? "Refreshing server status" : copy.workingStep}</span>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <Progress
-            value={refreshing ? 92 : 58}
-            aria-label={refreshing ? "Refreshing server status" : copy.workingStep}
-          />
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1">
-              <dt className="text-xs text-muted-foreground">Current step</dt>
-              <dd className="text-sm font-medium">{refreshing ? "Refresh dashboard status" : copy.workingStep}</dd>
-            </div>
-            <div className="grid gap-1">
-              <dt className="text-xs text-muted-foreground">Elapsed time</dt>
-              <dd className="font-mono text-sm font-medium">{formatElapsed(elapsed)}</dd>
-            </div>
-          </dl>
-          <Alert>
-            <AlertTitle>Keep this tab open</AlertTitle>
-            <AlertDescription>The panel is still working. This window closes as soon as the updated status is available.</AlertDescription>
-          </Alert>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function Login({ error }) {
+function Login() {
   const failed = new URLSearchParams(window.location.search).has("error");
   return <main className="login-shell login-grid grid min-h-screen place-items-center p-6">
-    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">MATCHZY CONTROL</span></div><CardTitle className="control-title text-3xl">Deine Maps. Deine Nades.</CardTitle><CardDescription>Entdecke Lineups, lerne Wurfwege und bereite deine nächste Runde vor. Melde dich mit Steam an.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : error} /><Button asChild><a href="/api/auth/steam">Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler erhalten die Rolle Player. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
+    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">PLAYBOOK</span></div><CardTitle className="control-title text-3xl">Deine Maps. Deine Nades.</CardTitle><CardDescription>Entdecke Lineups, lerne Wurfwege und bereite deine nächste Runde vor. Melde dich mit Steam an.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : ""} /><Button asChild><a href="/api/auth/steam">Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler erhalten die Rolle Player. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
   </main>;
 }
 
-function Shell({ user, children, tab, onNavigate, message, error, onLogout, dirty, busy, operation, onSave, onApply, serviceState, selectedMap, selectedNade }) {
+function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, serviceState, selectedMap, selectedNade }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
-  const currentPage = selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "All Maps" : activeTab.label);
+  const currentPage = selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label);
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <a className="skip-link" href="#main-content">Zum Inhalt</a>
-        <AppSidebar user={user} serverItems={allowedTabs(user.role).filter(item => item.group === "Server")} onNavigate={onNavigate} onLogout={onLogout} dirty={dirty} serviceState={serviceState} />
+        <AppSidebar user={user} serverItems={allowedTabs(user.role).filter(item => item.group === "Server")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} serviceState={serviceState} />
         <SidebarInset className="workspace-inset min-w-0">
-          <header className="control-topbar sticky top-0 z-30 md:rounded-t-xl">
-            <div className="control-content topbar-inner">
+          <header className="control-topbar sticky top-0 z-30">
+            <div className="topbar-inner">
               <SidebarTrigger />
-              <Separator orientation="vertical" className="h-4 self-center" />
+              <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem>
@@ -256,13 +157,12 @@ function Shell({ user, children, tab, onNavigate, message, error, onLogout, dirt
             </div>
           </header>
         <div id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
-          <Message message={message} error={error} />
           <NadeFavoritesProvider key={user.identitySteam64}>{children}</NadeFavoritesProvider>
           {user.role !== "player" && ["overview", "server", "plugins", "maintenance"].includes(tab) && <section className="server-save-panel" aria-label="Servereinstellungen speichern">
             <div><h2>Servereinstellungen übernehmen</h2><p>{dirty ? "Du hast ungespeicherte Änderungen." : "Der aktuelle Entwurf ist gespeichert."} Ein Neustart trennt verbundene Spieler.</p></div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={onSave} disabled={!dirty || busy}><Save data-icon="inline-start" />Entwurf speichern</Button>
-              <Button onClick={onApply} disabled={busy}>{operation?.kind === "apply" ? <Spinner data-icon="inline-start" /> : <RotateCcw data-icon="inline-start" />}Übernehmen & neu starten</Button>
+              <ActionButton variant="secondary" onClick={onSave} disabled={!dirty || busy} icon={Save} pendingLabel="Wird gespeichert …" successLabel="Gespeichert">Entwurf speichern</ActionButton>
+              <ActionButton onClick={onApply} disabled={busy} icon={RotateCcw} pendingLabel="Wird übernommen …" successLabel="Übernommen">Übernehmen & neu starten</ActionButton>
             </div>
           </section>}
         </div>
@@ -312,7 +212,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
         eyebrow="Serververwaltung"
         title={settings.serverName || "CS2 server"}
         description="Verwalte deinen CS2-Server, wechsle den Modus und bereite die nächste Session vor."
-        actions={<div className="flex gap-2"><Button variant="secondary" onClick={onRefresh} disabled={busy}><RefreshCw data-icon="inline-start" className={cn(busy && "animate-spin")} /> Refresh</Button><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
+        actions={<div className="flex gap-2"><ActionButton variant="secondary" onClick={onRefresh} disabled={busy} icon={RefreshCw} pendingLabel="Wird aktualisiert …" successLabel="Aktualisiert">Aktualisieren</ActionButton><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
       />
       {setupRequired ? (
         <Alert className="mb-4" variant="warning">
@@ -403,7 +303,7 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
       <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. The last saved settings will be applied; unsaved edits will not.</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><Button variant="destructive" onClick={() => { setRestartOpen(false); onRestart(); }}><RotateCcw data-icon="inline-start" /> Restart server</Button></DialogFooter>
+          <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -419,11 +319,11 @@ function Settings({ settings, setSettings, policy }) {
     <>
       <PageHeader eyebrow="Configuration" title="Servereinstellungen" description="Verbindung, Spielbetrieb und Zugangsdaten für deinen CS2-Server." />
       <div className="grid gap-4">
-        {(policy?.settingsGroups || []).filter((group) => group.id !== "workshop" && (group.id !== "matchzy" || ["matchzy", "nades"].includes(settings.serverMode))).map((group) => (
+        {(policy?.settingsGroups || []).filter((group) => group.id !== "workshop" && (group.id !== "matchzy" || settings.serverMode === "matchzy")).map((group) => (
           <Card key={group.id}>
             <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {group.fields.filter((field) => !["matchZySaveNadesGlobally", "startMap"].includes(field.key)).map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
+              {group.fields.filter((field) => !["matchZySaveNadesGlobally", "startMap"].includes(field.key) && (field.key !== "matchZyVersion" || settings.serverMode === "matchzy")).map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
             </CardContent>
           </Card>
         ))}
@@ -583,12 +483,10 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
           </CardContent>
         </Card>
       </div>
-      <Dialog open={restartOpen} onOpenChange={setRestartOpen}><DialogContent><DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. This does not apply unsaved draft changes.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><Button variant="destructive" onClick={() => { setRestartOpen(false); onRestart(); }}><RotateCcw data-icon="inline-start" /> Restart server</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={restartOpen} onOpenChange={setRestartOpen}><DialogContent><DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. This does not apply unsaved draft changes.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter></DialogContent></Dialog>
     </>
   );
 }
-
-const nadeTypes = ["", "Smoke", "Flash", "HE", "Molly", "Decoy"];
 
 function LineupImageUpload({ onUploaded, onError, label = "Upload lineup images", multiple = true }) {
   const inputRef = useRef(null);
@@ -634,276 +532,6 @@ function LineupImageUpload({ onUploaded, onError, label = "Upload lineup images"
         {uploading ? "Uploading..." : label}
       </Button>
       <span className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF · 4 MB each</span>
-    </div>
-  );
-}
-
-function createNade(settings, initialMap = "") {
-  return {
-    id: window.crypto?.randomUUID?.() || String(Date.now()),
-    name: "",
-    displayName: "",
-    mustKnow: false,
-    map: initialMap || settings.startMap || "",
-    type: "Smoke",
-    desc: "",
-    lineupPos: "0 0 0",
-    lineupAng: "0 0 0",
-    landingPos: "",
-    throwFromTitle: "",
-    throwToTitle: "",
-    radarFrom: null,
-    radarTo: null,
-    lineupImages: [],
-    owner: "default"
-  };
-}
-
-function NadeReviewFields({ nade, onChange }) {
-  return <div className="col-span-full grid gap-3 rounded-lg border border-border p-3">
-    <div className="flex flex-wrap items-center gap-2">
-      <Badge variant={nade.official ? "success" : nade.reviewStatus === "pending" ? "warning" : "secondary"}>{nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review angefragt" : nade.reviewStatus === "rejected" ? "Review abgelehnt" : "Ungeprüfte Aufnahme"}</Badge>
-      <span className="text-xs text-muted-foreground">Für alle unter „Alle“ sichtbar. Freigaben werden mit „Nades speichern“ gespeichert.</span>
-    </div>
-    <Field><FieldLabel>Offiziell freigeben</FieldLabel><Switch aria-label={`Offiziell: ${nade.displayName || nade.name || "Neue Granate"}`} checked={nade.official === true} onCheckedChange={(official) => onChange({ official, reviewStatus: official ? "approved" : "", ...(!official ? { mustKnow: false } : {}) })} /><FieldDescription>Nur als Plattform-Admin nach Prüfung von Abwurfpunkt, Beschreibung und Wirkung freigeben. Der Ersteller kann offizielle Granaten nicht mehr ändern.</FieldDescription></Field>
-    <Field><FieldLabel>Must Know</FieldLabel><Switch aria-label={`Must Know: ${nade.displayName || nade.name || "Neue Granate"}`} checked={nade.mustKnow === true} onCheckedChange={(mustKnow) => onChange({ mustKnow, ...(mustKnow ? { official: true, reviewStatus: "approved" } : {}) })} /><FieldDescription>Markiert ein geprüftes Grundlagen-Lineup und zeigt es im Must-Know-Shortcut auf Home. Aktivieren gibt die Granate zugleich offiziell frei.</FieldDescription></Field>
-    {nade.reviewStatus === "pending" && !nade.official ? <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => onChange({ official: true, reviewStatus: "approved" })}>Review freigeben</Button><Button variant="outline" onClick={() => onChange({ official: false, mustKnow: false, reviewStatus: "rejected" })}>Review ablehnen</Button></div> : null}
-  </div>;
-}
-
-function NadeDialog({ settings, nades = [], initialMap = "", initialNade = null, open, onOpenChange, onAdd }) {
-  const [draft, setDraft] = useState(() => ({ ...createNade(settings, initialMap), ...(initialNade || {}) }));
-  const [setposText, setSetposText] = useState("");
-  const [landingSetposText, setLandingSetposText] = useState("");
-  const [dialogError, setDialogError] = useState("");
-  const availableMaps = useMemo(() => [...BUILT_IN_MAPS, ...workshopMapsFromSettings(settings)], [settings.workshopMaps, settings.workshopMapCatalog]);
-  const draftMap = availableMaps.find((map) => mapMatchesNade(map, draft.map));
-  const calibration = draftMap ? inferRadarCalibration(draftMap, nades) : null;
-
-  useEffect(() => {
-    if (!open) return;
-    setDraft({ ...createNade(settings, initialMap), ...(initialNade || {}) });
-    setSetposText("");
-    setLandingSetposText("");
-    setDialogError("");
-  }, [open, settings, initialMap, initialNade]);
-
-  function updateDraft(patch) {
-    setDraft((current) => ({ ...current, ...patch }));
-  }
-
-  function applyPosition() {
-    setDialogError("");
-    const parsed = parseSetposSetang(setposText);
-    if (!parsed) {
-      setDialogError("setpos/setang format is invalid.");
-      return;
-    }
-    updateDraft(parsed);
-  }
-
-  function applyLandingPosition() {
-    setDialogError("");
-    const parsed = parseSetpos(landingSetposText);
-    if (!parsed) {
-      setDialogError("Landing setpos format is invalid.");
-      return;
-    }
-    updateDraft({ landingPos: parsed });
-  }
-
-  function addImage(image) {
-    const serverData = image.serverData || {};
-    const nextImage = {
-      key: String(serverData.key || image.key || ""),
-      url: String(serverData.url || image.url || ""),
-      name: String(serverData.name || image.name || "lineup-image"),
-      size: Number(serverData.size ?? image.size ?? 0),
-      uploadedAt: String(serverData.uploadedAt || new Date().toISOString())
-    };
-    if (!nextImage.key || !nextImage.url) return;
-    setDraft((current) => ({
-      ...current,
-      lineupImages: [...(current.lineupImages || []), nextImage].slice(0, 10)
-    }));
-  }
-
-  function removeImage(key) {
-    setDraft((current) => ({
-      ...current,
-      lineupImages: (current.lineupImages || []).filter((image) => image.key !== key)
-    }));
-  }
-
-  function submit() {
-    setDialogError("");
-    if (!String(draft.name || "").trim()) {
-      setDialogError("Name is required.");
-      return;
-    }
-    if (!String(draft.map || "").trim()) {
-      setDialogError("Map is required.");
-      return;
-    }
-    onAdd({
-      ...draft,
-      id: draft.id || window.crypto?.randomUUID?.() || String(Date.now()),
-      lineupImages: draft.lineupImages || []
-    });
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(1120px,calc(100vw-24px))]">
-        <DialogHeader>
-          <DialogTitle>{initialNade ? "Edit nade route" : "Add nade"}</DialogTitle>
-          <DialogDescription>Set a readable title. Save with .savenade or load through .nades, then throw to capture the target automatically.</DialogDescription>
-        </DialogHeader>
-        {dialogError ? <Message error={dialogError} /> : null}
-        <div className="nade-dialog-layout">
-          <FieldGroup className="grid content-start gap-4 md:grid-cols-2">
-            <Field>
-              <FieldLabel>Display name</FieldLabel>
-              <Input id="nade-display-name" maxLength={120} value={draft.displayName || ""} placeholder="Window smoke from T spawn" onChange={(event) => updateDraft({ displayName: event.target.value })} />
-              <FieldDescription>Shown on the website and in the .nades menu. Empty uses the technical name.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel>Technical name</FieldLabel>
-              <Input id="nade-technical-name" readOnly={Boolean(initialNade)} value={draft.name || ""} placeholder="window_smoke" onChange={(event) => updateDraft({ name: event.target.value })} />
-              <FieldDescription>Stable key for .loadnade; changing the display name keeps this and the ID intact.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel>Map</FieldLabel>
-              <Select value={draft.map || undefined} onValueChange={(value) => updateDraft({ map: value, radarFrom: null, radarTo: null })}>
-                <SelectTrigger aria-label="Nade map"><SelectValue placeholder="Choose a map" /></SelectTrigger>
-                <SelectContent>
-                  {!availableMaps.some((map) => mapMatchesNade(map, draft.map)) && draft.map ? <SelectItem value={draft.map}>{draft.map}</SelectItem> : null}
-                  {availableMaps.map((map) => <SelectItem key={map.key} value={map.mapName}>{map.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel>Type</FieldLabel>
-              <Select value={draft.type || "__none__"} onValueChange={(value) => updateDraft({ type: value === "__none__" ? "" : value })}>
-                <SelectTrigger aria-label="Nade type"><SelectValue /></SelectTrigger>
-                <SelectContent>{nadeTypes.map((type) => <SelectItem key={type || "empty"} value={type || "__none__"}>{type || "No type"}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel>Owner</FieldLabel>
-              <Input value={draft.owner || ""} onChange={(event) => updateDraft({ owner: event.target.value })} />
-              <FieldDescription>Ersteller-ID bleibt für Bearbeitungsrechte erhalten. Alle Aufnahmen sind im Panel sichtbar.</FieldDescription>
-            </Field>
-            <NadeReviewFields nade={draft} onChange={updateDraft} />
-            <Field className="md:col-span-2">
-              <FieldLabel>Description</FieldLabel>
-              <Input value={draft.desc || ""} placeholder="Jumpthrow from T spawn" onChange={(event) => updateDraft({ desc: event.target.value })} />
-            </Field>
-
-            <div className="nade-position-section md:col-span-2">
-              <div className="nade-position-heading">
-                <span className="nade-position-number">01</span>
-                <div><strong>Throw position</strong><span>Captured by <code>.savenade</code>. You can also paste <code>getpos</code> manually.</span></div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field>
-                  <FieldLabel>Start label</FieldLabel>
-                  <Input value={draft.throwFromTitle || ""} placeholder="T Spawn" onChange={(event) => updateDraft({ throwFromTitle: event.target.value })} />
-                </Field>
-                <Field>
-                  <FieldLabel>Lineup position</FieldLabel>
-                  <Input value={draft.lineupPos || ""} onChange={(event) => updateDraft({ lineupPos: event.target.value })} />
-                </Field>
-                <Field className="md:col-span-2">
-                  <FieldLabel>Lineup angle</FieldLabel>
-                  <Input value={draft.lineupAng || ""} onChange={(event) => updateDraft({ lineupAng: event.target.value })} />
-                </Field>
-                <Field className="md:col-span-2">
-                  <FieldLabel>getpos output</FieldLabel>
-                  <Textarea value={setposText} onChange={(event) => setSetposText(event.target.value)} placeholder="setpos 1422.968750 34.830574 -103.968750;setang -24.193808 -166.485611 0.000000" />
-                  <Button type="button" size="sm" variant="secondary" onClick={applyPosition}>Apply start position</Button>
-                </Field>
-              </div>
-            </div>
-
-            <div className="nade-position-section md:col-span-2">
-              <div className="nade-position-heading">
-                <span className="nade-position-number">02</span>
-                <div><strong>Effect position</strong><span>Smoke, flash, HE and decoy targets are captured on the next throw after saving or loading a lineup. Refresh the library afterwards.</span></div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field>
-                  <FieldLabel>Target label</FieldLabel>
-                  <Input value={draft.throwToTitle || ""} placeholder="Window" onChange={(event) => updateDraft({ throwToTitle: event.target.value })} />
-                </Field>
-                <Field>
-                  <FieldLabel>Landing position</FieldLabel>
-                  <Input value={draft.landingPos || ""} placeholder="Optional until captured in-game" onChange={(event) => updateDraft({ landingPos: event.target.value })} />
-                </Field>
-                <Field className="md:col-span-2">
-                  <FieldLabel>Landing getpos output</FieldLabel>
-                  <Textarea value={landingSetposText} onChange={(event) => setLandingSetposText(event.target.value)} placeholder="setpos -1175.20 -48.14 -167.97;setang 0 0 0" />
-                  <Button type="button" size="sm" variant="secondary" onClick={applyLandingPosition}>Apply landing position</Button>
-                </Field>
-              </div>
-            </div>
-          </FieldGroup>
-
-          <div className="nade-radar-editor">
-            <div>
-              <p className="control-kicker">Route placement</p>
-              <h3 className="mt-1 font-semibold">{draftMap?.name || "Unknown map"}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{calibration
-                ? "Automatic placement uses saved reference points on this map. Manual markers override it. Points outside the image stay unplaced."
-                : draftMap?.mapName === "de_nuke"
-                  ? "This radar combines multiple floors. World positions are captured, but markers need manual placement on the correct floor."
-                  : "One-time map calibration: save at least two accurate manual markers with world positions, separated across both map axes. Future lineups are placed automatically. Inconsistent references must be corrected."}</p>
-            </div>
-            <NadePlacementEditor map={draftMap} value={draft} calibration={calibration} onChange={updateDraft} />
-          </div>
-        </div>
-        <div className="grid gap-3">
-          <LineupImageUpload onUploaded={addImage} onError={setDialogError} />
-          {(draft.lineupImages || []).length > 0 ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(draft.lineupImages || []).map((image) => (
-                <div key={image.key} className="grid grid-cols-[72px_1fr_40px] items-center gap-3 rounded-md border border-border bg-background p-2">
-                  <img className="h-14 w-[72px] rounded-sm object-cover" src={image.url} alt={image.name} />
-                  <a className="truncate text-sm font-semibold text-primary hover:underline" href={image.url} target="_blank" rel="noreferrer">
-                    {image.name}
-                  </a>
-                  <Button variant="secondary" size="icon" title="Remove image" onClick={() => removeImage(image.key)}>
-                    <Trash2 />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit}>{initialNade ? "Save route" : "Add nade"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CopyCommand({ value, label = "Copy" }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    await navigator.clipboard?.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
-  return (
-    <div className="command-block">
-      <code>{value}</code>
-      <Button type="button" variant="secondary" size="sm" onClick={copy}>
-        {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
-        {copied ? "Copied" : label}
-      </Button>
     </div>
   );
 }
@@ -991,118 +619,6 @@ function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
   );
 }
 
-function AnnotationGuide({ map }: { map: MapDefinition }) {
-  const fileName = `matchzy_${map.key.replace(/[^a-z0-9_]/gi, "_")}_01`;
-  const practiceCommands = `map ${map.mapName}\nsv_cheats 1\nsv_allow_annotations_access_level 2\nsv_infinite_ammo 1\nammo_grenade_limit_total 6\nmp_warmup_end`;
-  return (
-    <Card id="annotation-guide">
-      <CardHeader className="border-b border-border">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="grid gap-1.5">
-            <CardTitle className="flex items-center gap-2"><BookOpen className="size-4 text-primary" aria-hidden="true" />Build the {map.name} map guide</CardTitle>
-            <CardDescription>Create the landing point in CS2, save the guide locally, then publish it to the Workshop if other players should use it.</CardDescription>
-          </div>
-          <Badge variant="secondary">{map.mapName}</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-6 pt-5 sm:pt-6">
-        <Alert variant="warning">
-          <AlertTitle>MatchZy lineups and Valve map guides are two formats</AlertTitle>
-          <AlertDescription>MatchZy stores the standing position and view angle on the server. A grenade annotation also needs the grenade's landing point, which CS2 records after your throw. The panel can keep both workflows together, but it cannot safely convert savednades.json into a complete guide file.</AlertDescription>
-        </Alert>
-        <ol className="annotation-steps">
-          <li>
-            <span className="annotation-step-number">1</span>
-            <div className="grid gap-2">
-              <h4 className="font-semibold">Open a local practice match</h4>
-              <p>In CS2 choose Play, Practice, Casual and {map.name}. Enable the developer console, then paste this setup.</p>
-              <CopyCommand value={practiceCommands} label="Copy setup" />
-            </div>
-          </li>
-          <li>
-            <span className="annotation-step-number">2</span>
-            <div className="grid gap-2">
-              <h4 className="font-semibold">Throw the nade, then capture it</h4>
-              <p>Stand on the lineup, aim and throw. Run the matching command only after the grenade lands. CS2 creates the standing, aim and destination nodes as one set.</p>
-              <div className="grid gap-2 lg:grid-cols-2">
-                <CopyCommand value={'annotation_create grenade smoke "Window smoke"'} />
-                <CopyCommand value={'annotation_create grenade flash "A site pop flash"'} />
-                <CopyCommand value={'annotation_create grenade he "Default HE"'} />
-                <CopyCommand value={'annotation_create grenade molotov "Close corner molly"'} />
-              </div>
-            </div>
-          </li>
-          <li>
-            <span className="annotation-step-number">3</span>
-            <div className="grid gap-2">
-              <h4 className="font-semibold">Save after every useful lineup</h4>
-              <p>The current format stores the guide in its own folder under <code>game/csgo/annotations/local</code>.</p>
-              <CopyCommand value={`annotation_save ${fileName}`} label="Copy save command" />
-              <p className="font-mono text-xs text-muted-foreground">...\Counter-Strike Global Offensive\game\csgo\annotations\local\{fileName}\{fileName}.txt</p>
-            </div>
-          </li>
-          <li>
-            <span className="annotation-step-number">4</span>
-            <div className="grid gap-2">
-              <h4 className="font-semibold">Edit, reload and split large guides</h4>
-              <p>Edit labels, instructions, colors or text offsets in the KV3 file. Reload the open file after saving. Use append when a second file should remain loaded beside the first.</p>
-              <div className="grid gap-2 lg:grid-cols-3">
-                <CopyCommand value="annotation_reload" />
-                <CopyCommand value={`annotation_load ${fileName}`} />
-                <CopyCommand value={`annotation_append ${fileName.replace(/_01$/, "_02")}`} />
-              </div>
-              <p>Undo the last created set with <code>annotation_delete_previous_node_set</code>. Clear everything in memory with <code>annotation_clear</code>.</p>
-            </div>
-          </li>
-          <li>
-            <span className="annotation-step-number">5</span>
-            <div className="grid gap-2">
-              <h4 className="font-semibold">Publish the guide</h4>
-              <p>Save once so CS2 creates the guide folder and preview. Submit a new Workshop item without an ID. For an update, pass the item ID from its Workshop URL.</p>
-              <div className="grid gap-2 lg:grid-cols-2">
-                <CopyCommand value="workshop_annotation_submit" />
-                <CopyCommand value="workshop_annotation_submit 1234567890" />
-              </div>
-            </div>
-          </li>
-        </ol>
-        <Alert>
-          <AlertTitle>Limits in current CS2 builds</AlertTitle>
-          <AlertDescription>Local and offline sessions can load up to 300 nodes. Competitive and Retakes allow up to 30 nodes during the first five rounds of each half by default. In a live match, players choose a subscribed guide from the pause menu.</AlertDescription>
-        </Alert>
-      </CardContent>
-      <CardFooter className="flex-wrap border-t border-border pt-5 sm:pt-6">
-        <Button variant="secondary" asChild>
-          <a href="https://www.counter-strike.net/newsentry/532126482488623353" target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Valve map guide update</a>
-        </Button>
-        <Button variant="secondary" asChild>
-          <a href="https://csnades.gg/maps" target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />CSNADES map index</a>
-        </Button>
-        <Button variant="secondary" asChild>
-          <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3367125162" target="_blank" rel="noreferrer"><ExternalLink data-icon="inline-start" />Annotation file reference</a>
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-}
-
-function DeleteNadeButton({ nade, onDelete, disabled = false }) {
-  const [open, setOpen] = useState(false);
-  const name = nade.displayName || nade.name || "Untitled lineup";
-  return <>
-    <Button variant="secondary" size="sm" disabled={disabled} aria-label={`Delete ${name}`} onClick={() => setOpen(true)}><Trash2 data-icon="inline-start" />Delete</Button>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Delete lineup?</DialogTitle><DialogDescription>Remove “{name}” from {nade.map}? The deletion takes effect on the server when you save your lineups.</DialogDescription></DialogHeader>
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="destructive" disabled={disabled} onClick={() => { onDelete(); setOpen(false); }}>Delete lineup</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  </>;
-}
-
 function ServerMapSettings({ settings, setSettings, status, busy }) {
   const [workshopOpen, setWorkshopOpen] = useState(false);
   const maps = mapsForInventory(settings, status?.mapInventory);
@@ -1133,343 +649,6 @@ function ServerMapSettings({ settings, setSettings, status, busy }) {
     <CardFooter><Button variant="secondary" disabled={busy} onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></CardFooter>
     <WorkshopMapDialog open={workshopOpen} onOpenChange={setWorkshopOpen} onAdd={input => setSettings(current => ({ ...current, ...addWorkshopMap(current, input), workshopMapsEnabled: true }))} />
   </Card>;
-}
-
-function nadesSyncPresentation(sync) {
-  if (sync?.state === "healthy") return { label: "Sync healthy", variant: "success" as const };
-  if (sync?.state === "error") return { label: "Sync error", variant: "destructive" as const };
-  if (sync?.state === "waiting") return { label: "Waiting for files", variant: "warning" as const };
-  if (sync?.state === "stopped") return { label: "Sync stopped", variant: "destructive" as const };
-  return { label: "Sync disabled", variant: "outline" as const };
-}
-
-function syncDirectionLabel(direction) {
-  if (direction === "matchzy-to-panel") return "MatchZy → Dashboard";
-  if (direction === "panel-to-matchzy") return "Dashboard → MatchZy";
-  return "No transfer yet";
-}
-
-function Nades({ settings, setSettings, nades, setNades, status, busy, nadesDirty, onApply, onRefresh, onReload, onSave, viewNav }) {
-  const [mapFilter, setMapFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [reviewFilter, setReviewFilter] = useState("all");
-  const [query, setQuery] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [editingNade, setEditingNade] = useState<any>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importJson, setImportJson] = useState("");
-  const [exportJson, setExportJson] = useState("");
-  const [localError, setLocalError] = useState("");
-  const [liveStatus, setLiveStatus] = useState({
-    sync: status?.nadesSync || { enabled: false, state: "disabled" },
-    library: status?.nadesLibrary || { count: nades.length, updatedAt: null }
-  });
-  const [statusError, setStatusError] = useState("");
-
-  useEffect(() => {
-    setLiveStatus({
-      sync: status?.nadesSync || { enabled: false, state: "disabled" },
-      library: status?.nadesLibrary || { count: nades.length, updatedAt: null }
-    });
-  }, [status?.nadesSync, status?.nadesLibrary, nades.length]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function refreshSyncStatus() {
-      try {
-        const result = await api("/api/nades/status");
-        if (cancelled) return;
-        setLiveStatus(result);
-        setStatusError("");
-      } catch (error) {
-        if (!cancelled) setStatusError(error.message);
-      }
-    }
-    void refreshSyncStatus();
-    const timer = window.setInterval(refreshSyncStatus, 2500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const maps = useMemo<string[]>(() => [...new Set<string>(nades.map((nade) => String(nade.map || "")).filter(Boolean))].sort(), [nades]);
-  const syncPresentation = nadesSyncPresentation(statusError ? { state: "error" } : liveStatus.sync);
-  const matchZyModeActive = ["matchzy", "nades"].includes(settings.serverMode);
-  const loadedLibraryVersion = status?.nadesLibrary?.updatedAt || null;
-  const observedLibraryVersion = liveStatus.library?.updatedAt || null;
-  const libraryChanged = Boolean(observedLibraryVersion && observedLibraryVersion !== loadedLibraryVersion);
-  const filteredNades = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return nades.filter((nade) => {
-      if (mapFilter && nade.map !== mapFilter) return false;
-      if (typeFilter && nade.type !== typeFilter) return false;
-      if (reviewFilter === "pending" && nade.reviewStatus !== "pending") return false;
-      if (reviewFilter === "official" && !nade.official) return false;
-      if (reviewFilter === "mustKnow" && !nade.mustKnow) return false;
-      if (!normalizedQuery) return true;
-      return `${nade.displayName || ""} ${nade.name} ${nade.desc}`.toLowerCase().includes(normalizedQuery);
-    });
-  }, [nades, mapFilter, typeFilter, query, reviewFilter]);
-  const groupedNades = useMemo(() => {
-    const groups = new Map();
-    for (const nade of filteredNades) {
-      const map = nade.map || "(no map)";
-      if (!groups.has(map)) groups.set(map, []);
-      groups.get(map).push(nade);
-    }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredNades]);
-
-  function updateNade(id, patch) {
-    setNades((current) => current.map((nade) => (nade.id === id ? { ...nade, ...patch } : nade)));
-  }
-
-  async function importNades() {
-    setLocalError("");
-    try {
-      const matchzyConfig = JSON.parse(importJson);
-      const result = await api("/api/nades/import", {
-        method: "POST",
-        body: JSON.stringify({ matchzyConfig, mode: "replace" })
-      });
-      setNades(result.entries || []);
-      await onReload();
-      setImportOpen(false);
-      setImportJson("");
-    } catch (error) {
-      setLocalError(error.message);
-    }
-  }
-
-  async function exportNades() {
-    setLocalError("");
-    try {
-      const result = await api("/api/nades/export");
-      setExportJson(JSON.stringify(result, null, 2));
-    } catch (error) {
-      setLocalError(error.message);
-    }
-  }
-
-  async function copyExport() {
-    if (!exportJson) return;
-    await navigator.clipboard?.writeText(exportJson);
-  }
-
-  function downloadExport() {
-    if (!exportJson) return;
-    const blob = new Blob([`${exportJson}\n`], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "matchzy-savednades.json";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="Match library"
-        title="Bibliothek verwalten"
-        description="Prüfe Aufnahmen und verwalte den Import und Export deiner Lineups."
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={onRefresh} disabled={busy || nadesDirty} title={nadesDirty ? "Save or discard your local edits before refreshing" : "Load the latest library from MongoDB"}>
-              <RefreshCw data-icon="inline-start" />
-              Refresh library
-            </Button>
-            <Button variant="secondary" onClick={() => setImportOpen((current) => !current)}>
-              <FileInput data-icon="inline-start" />
-              Import
-            </Button>
-            <Button variant="secondary" onClick={exportNades}>
-              <Download data-icon="inline-start" />
-              Export
-            </Button>
-            <Button variant="secondary" onClick={() => setAddOpen(true)}>
-              <Plus data-icon="inline-start" />
-              Add nade
-            </Button>
-            <Button onClick={onSave} disabled={busy}>
-              <Save data-icon="inline-start" />
-              Nades speichern
-            </Button>
-          </div>
-        )}
-      />
-      {viewNav}
-      <NadeDialog
-        settings={settings}
-        open={addOpen || Boolean(editingNade)}
-        initialNade={editingNade}
-        nades={nades}
-        onOpenChange={open => { setAddOpen(open); if (!open) setEditingNade(null); }}
-        onAdd={entry => setNades(current => editingNade ? current.map(nade => nade.id === editingNade.id ? entry : nade) : [...current, entry])}
-      />
-      {localError ? <Message error={localError} /> : null}
-      <details className="disclosure-panel mb-4">
-        <summary><ArrowLeftRight className="size-4" aria-hidden="true" /><span>Sharing &amp; synchronization</span><Badge variant={syncPresentation.variant}>{syncPresentation.label}</Badge><ChevronRight className="disclosure-chevron ml-auto size-4" aria-hidden="true" /></summary>
-        <div className="p-3 sm:p-4">
-          <NadesMenuStatus selectedMode={settings.serverMode || "matchzy"} />
-          <Card className="overflow-hidden">
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div className="grid gap-1.5">
-                <CardTitle>Aufnahmen und Review</CardTitle>
-                <CardDescription>Alle Aufnahmen sind für alle Spieler sichtbar. Der Ersteller bearbeitet seine ungeprüften Aufnahmen; Plattform-Admins vergeben Offiziell und Must Know.</CardDescription>
-              </div>
-
-            </CardHeader>
-            <CardContent className="grid gap-5">
-              <div className="grid items-center gap-3 rounded-lg border border-border bg-muted/25 p-4 sm:grid-cols-[1fr_auto_1fr]">
-                <div className="flex items-center gap-3">
-                  <span className="metric-icon"><Database aria-hidden="true" /></span>
-                  <span><strong className="block text-sm">Dashboard library</strong><span className="text-xs text-muted-foreground">{liveStatus.library?.count ?? nades.length} lineups in MongoDB</span></span>
-                </div>
-                <div className="flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
-                  <ArrowLeftRight className="size-4" aria-hidden="true" />
-                  {Math.round((liveStatus.sync?.intervalMs || 2000) / 1000)}s
-                </div>
-                <div className="flex items-center gap-3 sm:justify-end">
-                  <span className="metric-icon"><FileJson aria-hidden="true" /></span>
-                  <span><strong className="block text-sm">MatchZy savednades.json</strong><span className="text-xs text-muted-foreground">{liveStatus.sync?.liveFilePresent ? "File reachable" : "File not found"}</span></span>
-                </div>
-              </div>
-
-              <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Sync status</dt><dd><Badge variant={syncPresentation.variant}><span className="server-status-dot" />{syncPresentation.label}</Badge></dd></div>
-                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last confirmed</dt><dd className="text-sm font-medium">{formatDate(liveStatus.sync?.lastConfirmedAt)}</dd></div>
-                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Last transfer</dt><dd className="text-sm font-medium">{syncDirectionLabel(liveStatus.sync?.lastDirection)}</dd></div>
-                <div className="grid gap-1 rounded-lg border border-border p-3"><dt className="text-xs text-muted-foreground">Visibility</dt><dd className="flex flex-wrap gap-2"><Badge variant="success">{nades.length} für alle sichtbar</Badge></dd></div>
-              </dl>
-
-              {statusError || liveStatus.sync?.lastError ? <Alert variant="destructive"><AlertTitle>Nade sync cannot confirm the connection</AlertTitle><AlertDescription>{statusError || liveStatus.sync.lastError}</AlertDescription></Alert> : null}
-              {!matchZyModeActive ? <Alert variant="warning"><AlertTitle>MatchZy is not the active server mode</AlertTitle><AlertDescription>The files can stay synchronized, but players cannot use MatchZy's nade commands until MatchZy or Nades mode is active.</AlertDescription></Alert> : null}
-
-
-            </CardContent>
-          </Card>
-        </div>
-      </details>
-      {libraryChanged ? <Alert className="mb-4" variant="warning"><AlertTitle>The shared library changed</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>New lineups are available from MatchZy.</span><Button variant="secondary" disabled={busy} onClick={onRefresh}>{nadesDirty ? "Discard edits & load latest" : "Load latest"}</Button></AlertDescription></Alert> : null}
-      {importOpen ? (
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>Import MatchZy savednades.json</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <Textarea value={importJson} onChange={(event) => setImportJson(event.target.value)} placeholder='{"default":{}}' />
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={importNades}>
-                <FileInput data-icon="inline-start" />
-                Replace nades
-              </Button>
-              <Button variant="secondary" onClick={() => setImportOpen(false)}>Cancel</Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-      {exportJson ? (
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>Export</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <Textarea readOnly value={exportJson} />
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={copyExport}>
-                <Copy data-icon="inline-start" />
-                Copy
-              </Button>
-              <Button variant="secondary" onClick={downloadExport}>
-                <Download data-icon="inline-start" />
-                Download
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div className="grid gap-1.5">
-              <CardTitle>Saved lineups</CardTitle>
-              <CardDescription>Filter and edit the lineups that MatchZy can load.</CardDescription>
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">{nadesDirty ? <Badge variant="warning">Unsaved edits</Badge> : null}<Badge variant="secondary">{filteredNades.length} shown</Badge></div>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <FieldGroup className="grid gap-2 rounded-lg border border-border bg-muted/25 p-3 md:grid-cols-[1fr_180px_180px_180px]">
-            <Field>
-              <FieldLabel className="sr-only">Search lineups</FieldLabel>
-              <Input value={query} placeholder="Search name or description" onChange={(event) => setQuery(event.target.value)} />
-            </Field>
-            <Field>
-              <FieldLabel className="sr-only">Map</FieldLabel>
-              <Select value={mapFilter || "__all__"} onValueChange={(value) => setMapFilter(value === "__all__" ? "" : value)}>
-                <SelectTrigger aria-label="Filter by map"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="__all__">All maps</SelectItem>{maps.map((map) => <SelectItem key={map} value={map}>{map}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel className="sr-only">Nade type</FieldLabel>
-              <Select value={typeFilter || "__all__"} onValueChange={(value) => setTypeFilter(value === "__all__" ? "" : value)}>
-                <SelectTrigger aria-label="Filter by nade type"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="__all__">All types</SelectItem>{nadeTypes.filter(Boolean).map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
-              </Select>
-            </Field>
-            <Field><FieldLabel className="sr-only">Review-Status</FieldLabel><Select value={reviewFilter} onValueChange={setReviewFilter}><SelectTrigger aria-label="Review-Status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Alle Aufnahmen</SelectItem><SelectItem value="pending">Review angefragt</SelectItem><SelectItem value="official">Offiziell</SelectItem><SelectItem value="mustKnow">Must Know</SelectItem></SelectContent></Select></Field>
-          </FieldGroup>
-          {nades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No nades configured. Add the first lineup to this library.</div> : null}
-          {nades.length > 0 && filteredNades.length === 0 ? <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No lineups match the current filters.</div> : null}
-          {groupedNades.map(([map, mapNades]) => (
-            <section key={map} className="grid gap-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">{map} <Badge>{mapNades.length}</Badge></h3>
-              <div className="lineup-editor-grid">
-                {mapNades.map((nade) => (
-                  <div key={nade.id} className="lineup-editor-card">
-                    <div className="lineup-editor-header">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">{nade.displayName || nade.name || "Untitled lineup"}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{nade.map || "No map"}</p>
-                      </div>
-                      <Badge variant={String(nade.owner || "default") === "default" ? "success" : "warning"} title={`Ersteller: ${nade.owner}`}>
-                        {nade.official ? "Offiziell" : nade.reviewStatus === "pending" ? "Review" : "Aufnahme"}
-                      </Badge>
-                    </div>
-                    <div className="lineup-editor-fields">
-                      <Field><FieldLabel>Display name</FieldLabel><Input id={`display-${nade.id}`} maxLength={120} value={nade.displayName || ""} placeholder={nade.name} onChange={(event) => updateNade(nade.id, { displayName: event.target.value })} /><FieldDescription>Technical name: <code>{nade.name}</code></FieldDescription></Field>
-                      <Field><FieldLabel>Map</FieldLabel><Input value={nade.map || ""} onChange={(event) => updateNade(nade.id, { map: event.target.value })} /></Field>
-                      <Field><FieldLabel>Type</FieldLabel><Select value={nade.type || "__none__"} onValueChange={(value) => updateNade(nade.id, { type: value === "__none__" ? "" : value })}>
-                        <SelectTrigger aria-label={`Type for ${nade.name || "lineup"}`}><SelectValue /></SelectTrigger>
-                        <SelectContent>{nadeTypes.map((type) => <SelectItem key={type || "empty"} value={type || "__none__"}>{type || "No type"}</SelectItem>)}</SelectContent>
-                      </Select></Field>
-                      <Field><FieldLabel>Description</FieldLabel><Input value={nade.desc || ""} onChange={(event) => updateNade(nade.id, { desc: event.target.value })} /></Field>
-                      <NadeReviewFields nade={nade} onChange={(patch) => updateNade(nade.id, patch)} />
-                      <Field><FieldLabel>Lineup position</FieldLabel><Input value={nade.lineupPos || ""} onChange={(event) => updateNade(nade.id, { lineupPos: event.target.value })} /></Field>
-                      <Field><FieldLabel>Lineup angle</FieldLabel><Input value={nade.lineupAng || ""} onChange={(event) => updateNade(nade.id, { lineupAng: event.target.value })} /></Field>
-                    </div>
-                    <div className="lineup-editor-footer">
-                      {(nade.lineupImages || []).length > 0 ? (
-                        <a className="lineup-editor-image" href={nade.lineupImages[0].url} target="_blank" rel="noreferrer" title={`${nade.lineupImages.length} image(s)`}>
-                          <img src={nade.lineupImages[0].url} alt={nade.lineupImages[0].name || "Lineup"} />
-                          <span>{nade.lineupImages.length} image{nade.lineupImages.length === 1 ? "" : "s"}</span>
-                        </a>
-                      ) : <span className="text-xs text-muted-foreground">No image attached</span>}
-                      <Button variant="secondary" size="sm" onClick={() => setEditingNade(nade)}><MapPinned data-icon="inline-start" />Wurfweg & Bilder</Button>
-                      <DeleteNadeButton nade={nade} disabled={busy} onDelete={() => setNades((current) => current.filter((item) => item.id !== nade.id))} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </CardContent>
-      </Card>
-    </>
-  );
 }
 
 function DockerLogs({ active }) {
@@ -1560,43 +739,26 @@ function App() {
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
   const [savedSignature, setSavedSignature] = useState("");
-  const [savedNadesSignature, setSavedNadesSignature] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [operation, setOperation] = useState(null);
 
-  async function loadAll({ preserveSettings = false, preserveNades = false } = {}) {
+  async function loadAll({ preserveSettings = false } = {}) {
     const control = await api("/api/control");
     setAuthenticated(true);
     setUser(control.user);
     if (!preserveSettings) setSettings(control.settings || {});
     setAdmins(control.admins || []);
-    if (!preserveNades) setNades(control.nades || []);
+    setNades(control.nades || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
     if (!preserveSettings) setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
-    if (!preserveNades) setSavedNadesSignature(JSON.stringify(control.nades || []));
   }
 
-  async function runAction(action, operationKind = null, scope = "server") {
+  async function runAction(action, scope = "server") {
     setBusy(true);
-    setMessage("");
-    setError("");
-    if (operationKind) {
-      setOperation({ kind: operationKind, phase: "working", startedAt: Date.now() });
-    }
     try {
-      const result = await action();
-      if (operationKind) {
-        setOperation((current) => current ? { ...current, phase: "refreshing" } : current);
-      }
-      await loadAll({ preserveSettings: scope === "library" && dirty, preserveNades: scope === "server" && nadesDirty });
-      setMessage(result?.message || "Done.");
-    } catch (actionError) {
-      setError(actionError.message);
+      await action();
+      await loadAll({ preserveSettings: scope === "library" && dirty });
     } finally {
-      setOperation(null);
       setBusy(false);
     }
   }
@@ -1614,44 +776,33 @@ function App() {
 
   useEffect(() => {
     document.title = authenticated === false
-      ? "Anmelden | MatchZy"
-      : `${selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | MatchZy`;
+      ? "Anmelden | Playbook"
+      : `${selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | Playbook`;
   }, [activeTab.label, authenticated, selectedMap?.name, selectedNade]);
 
   useEffect(() => {
-    setMessage("");
-    setError("");
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
   const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings });
-  const nadesDirty = savedNadesSignature !== "" && savedNadesSignature !== JSON.stringify(nades);
 
   function refreshLibrary() {
-    return runAction(async () => ({ message: "Nades aktualisiert." }), null, "library");
-  }
-
-  function saveNades() {
-    return runAction(async () => {
-      const result = await api("/api/nades", { method: "PUT", body: JSON.stringify({ entries: nades }) });
-      setNades(result.entries);
-      return { message: "Nades gespeichert." };
-    }, null, "library");
+    return runAction(async () => {}, "library");
   }
 
   function applyControl() {
-    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings }) }), "apply");
+    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings }) }));
   }
 
   useEffect(() => {
     function warnBeforeLeave(event) {
-      if (!dirty && !nadesDirty) return;
+      if (!dirty) return;
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", warnBeforeLeave);
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
-  }, [dirty, nadesDirty]);
+  }, [dirty]);
 
   if (authenticated === null) {
     return (
@@ -1667,7 +818,7 @@ function App() {
       return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
     }
 
-    return <Login error={error} />;
+    return <Login />;
   }
 
   const roleHome = defaultRoute;
@@ -1681,19 +832,11 @@ function App() {
       tab={activeTab.id}
       selectedMap={selectedMap}
       selectedNade={selectedNade}
-      onNavigate={() => {
-        setMessage("");
-        setError("");
-      }}
-      message={message}
-      error={error}
       dirty={dirty}
       busy={busy}
-      operation={operation}
       serviceState={status?.service?.state}
       onSave={() => runAction(async () => {
         await api("/api/control", { method: "PUT", body: JSON.stringify({ settings }) });
-        return { message: "Serverentwurf gespeichert. Du kannst ihn in der Serververwaltung übernehmen." };
       })}
       onApply={applyControl}
       onLogout={async () => {
@@ -1707,7 +850,7 @@ function App() {
         <Route
           path={routePaths.overview}
           element={(
-            user.role === "match_admin" ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><div className="my-5"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></div><Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field></> : <Overview
+            user.role === "match_admin" ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><div className="my-5"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></div>{settings.serverMode === "matchzy" && <Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field>}</> : <Overview
               settings={settings}
               setSettings={setSettings}
               onApply={applyControl}
@@ -1716,10 +859,8 @@ function App() {
               status={status}
               policy={policy}
               busy={busy}
-              onRefresh={() => runAction(async () => {
-                return { message: "Serverstatus aktualisiert." };
-              })}
-              onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")}
+              onRefresh={() => runAction(async () => {})}
+              onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))}
             />
           )}
         />
@@ -1743,16 +884,14 @@ function App() {
         />
         <Route
           path={routePaths.maintenance}
-          element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "restart")} />}
+          element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))} />}
         />
         <Route path={routePaths.maps} element={new URLSearchParams(location.search).has("map") || new URLSearchParams(location.search).get("view") === "library"
           ? <LegacyLibraryRedirect maps={libraryMaps} />
-          : <MapAtlas nades={nades} maps={libraryMaps} />} />
-        <Route path="/maps/:mapSlug" element={<NadeLibrary nades={nades} maps={libraryMaps} role={user.role} onRefresh={refreshLibrary} busy={busy} nadesDirty={nadesDirty} renderGuide={map => <AnnotationGuide map={map} />} />} />
-        <Route path="/maps/:mapSlug/lineups/:lineupId" element={<LineupPage maps={libraryMaps} nades={nades} />} />
-        <Route path={routePaths.nades} element={user.role === "admin" && new URLSearchParams(location.search).get("view") === "manage"
-          ? <Nades settings={settings} setSettings={setSettings} nades={nades} setNades={setNades} status={status} busy={busy} nadesDirty={nadesDirty} onApply={applyControl} onRefresh={refreshLibrary} onReload={() => loadAll({ preserveSettings: true })} onSave={saveNades} viewNav={<Button className="mb-5" variant="secondary" asChild><NavLink to={routePaths.maps}>Zurück zu den Maps</NavLink></Button>} />
-          : <LegacyLibraryRedirect maps={libraryMaps} />} />
+          : <MapAtlas maps={libraryMaps} />} />
+        <Route path="/maps/:mapSlug" element={<NadeLibrary nades={nades} maps={libraryMaps} />} />
+        <Route path="/maps/:mapSlug/lineups/:lineupId" element={<LineupPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} onRefresh={refreshLibrary} />} />
+        <Route path={routePaths.nades} element={<LegacyLibraryRedirect maps={libraryMaps} />} />
         <Route path={routePaths.console} element={<RconChat />} />
         <Route path={routePaths.logs} element={<DockerLogs active />} />
         <Route path={routePaths.links} element={<Links />} />
@@ -1760,7 +899,6 @@ function App() {
         <Route path="*" element={<Navigate to={roleHome} replace />} />
       </Routes>
       <WorkshopMapDialog open={workshopOpen} onOpenChange={setWorkshopOpen} onAdd={input => { const patch = addWorkshopMap(settings, input); setSettings(current => ({ ...current, ...patch, workshopMapsEnabled: true })); }} />
-      <OperationDialog operation={operation} />
     </Shell>
   );
 }

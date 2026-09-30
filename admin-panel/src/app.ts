@@ -7,16 +7,15 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { installAuth } from "./auth.js";
 import {
-  matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
   sanitizeAdmins,
-  sanitizeSettings,
-  sanitizeNades
+  sanitizeSettings
 } from "./validators.js";
 import { buildDiagnostics } from "./diagnostics.js";
 import { ADMIN_ROLES, MATCH_ADMIN_SETTINGS, settingsForRole, buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
 import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
 import { currentMapFromStatus, executeRcon, mapChangeCommand } from "./rcon.js";
+import { applyWebNadeAction } from "./nade-review.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -71,14 +70,14 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     legacyHeaders: false
   });
 
-  app.get("/healthz", (req, res) => res.json({ ok: true, service: "cs2-matchzy-admin" }));
+  app.get("/healthz", (req, res) => res.json({ ok: true, service: "playbook" }));
   installAuth(app, { config, store, loginLimiter, steamVerifier });
 
   // Deny by default. Content writes, users, credentials and diagnostics stay admin-only.
   app.use("/api", (req, res, next) => {
     const role = res.locals.user.role;
     const route = `${req.method} ${req.path}`;
-    const shared = ["GET /control", "GET /nades", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites"];
+    const shared = ["GET /control", "GET /nades", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites", "POST /nades/entry"];
     const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
     if (role === "admin" || shared.includes(route) ||
         (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
@@ -233,33 +232,26 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     } catch (error) { next(error); }
   });
 
-  app.put("/api/nades", async (req, res) => {
-    const entries = sanitizeNades(req.body?.entries);
-    const savedEntries = nadesSync ? await nadesSync.saveFromPanel(entries) : await store.saveNades(entries);
-    res.json({ entries: savedEntries });
-  });
+  // Retired bulk writes bypassed per-lineup ownership and revision checks.
+  const retiredNadeWrite = (_req, res) => res.status(410).json({ error: "Bitte bearbeite und prüfe Aufnahmen direkt auf der jeweiligen Lineup-Seite." });
+  app.put("/api/nades", retiredNadeWrite);
+  app.post("/api/nades/import", retiredNadeWrite);
 
-  app.post("/api/nades/import", async (req, res) => {
-    const importedEntries = matchZySavedNadesConfigToNades(req.body?.matchzyConfig);
-    const mode = req.body?.mode === "merge" ? "merge" : "replace";
-    if (nadesSync) {
-      res.json({ entries: await nadesSync.saveFromPanel(importedEntries, mode) });
-      return;
-    }
-    if (mode === "merge") {
-      const mergedByKey = new Map();
-      for (const entry of [...(await store.getNades()), ...importedEntries]) {
-        mergedByKey.set(`${entry.owner}\u0000${entry.map}\u0000${entry.name}`.toLowerCase(), entry);
+  // Use the sync queue so web edits cannot race an ingame capture or approval.
+  // The local queue also serializes requests in installations without file sync.
+  let lineupWrites: Promise<unknown> = Promise.resolve();
+  app.post("/api/nades/entry", async (req, res) => {
+    try {
+      const change = entries => applyWebNadeAction(entries, req.body, res.locals.user);
+      let entries;
+      if (nadesSync) entries = await nadesSync.changeFromPanel(change);
+      else {
+        const pending = lineupWrites.then(async () => store.saveNades(change(await store.getNades())));
+        lineupWrites = pending.catch(() => {});
+        entries = await pending;
       }
-      const merged = [...mergedByKey.values()];
-      const savedEntries = await store.saveNades(merged);
-      await nadesSync?.writeFromMongo(savedEntries);
-      res.json({ entries: savedEntries });
-      return;
-    }
-    const savedEntries = await store.saveNades(importedEntries);
-    await nadesSync?.writeFromMongo(savedEntries);
-    res.json({ entries: savedEntries });
+      res.json({ entries });
+    } catch (error) { res.status(error.status || 400).json({ error: error.message }); }
   });
 
   app.get("/api/nades/export", async (req, res) => {

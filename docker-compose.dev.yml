@@ -1,0 +1,81 @@
+name: cs2-matchzy-dev
+
+services:
+  mongodb:
+    image: mongo:7
+    volumes:
+      - mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile.dev
+    init: true
+    environment:
+      NODE_ENV: development
+      ADMIN_PANEL_PUBLIC_URL: ${ADMIN_PANEL_PUBLIC_URL:?}
+      ADMIN_PANEL_SESSION_SECRET: ${ADMIN_PANEL_SESSION_SECRET:?}
+      ADMIN_PANEL_ADMIN_STEAM_ID: ${ADMIN_PANEL_ADMIN_STEAM_ID:-}
+    volumes:
+      - runtime:/runtime
+      - uploads:/uploads
+      - cs2_data:/cs2-data
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    develop:
+      watch:
+        - action: rebuild
+          path: ./admin-panel/src
+        - action: rebuild
+          path: ./admin-panel/shared
+        - action: rebuild
+          path: ./admin-panel/test
+        - action: rebuild
+          path: ./admin-panel/tsconfig.server.json
+        - action: rebuild
+          path: ./admin-panel/package.json
+        - action: rebuild
+          path: ./admin-panel/pnpm-lock.yaml
+
+  web:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile.dev
+    init: true
+    command: ["pnpm", "dev:client"]
+    environment:
+      DEV_API_URL: http://api:8080
+      DEV_PUBLIC_URL: ${ADMIN_PANEL_PUBLIC_URL:?}
+      DEV_PORT: ${DEV_PORT:-5173}
+      DEV_USE_POLLING: "1"
+    ports:
+      - "${DEV_PORT:-5173}:${DEV_PORT:-5173}"
+    volumes:
+      - ./admin-panel/client:/app/client:ro
+      - ./admin-panel/shared:/app/shared:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: rebuild
+          path: ./admin-panel/package.json
+        - action: rebuild
+          path: ./admin-panel/pnpm-lock.yaml
+
+volumes:
+  mongodb:
+  runtime:
+  uploads:
+  cs2_data:

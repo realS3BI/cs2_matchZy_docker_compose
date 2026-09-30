@@ -1,4 +1,57 @@
 import { sanitizeNades } from "./validators.js";
+import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
+
+function reject(status: number, message: string): never {
+  throw Object.assign(new Error(message), { status });
+}
+
+// The actor always comes from the authenticated session, never the request body.
+export function applyWebNadeAction(entries, request, user) {
+  if (!request || ![request.owner, request.map, request.name].every(value => typeof value === "string" && value.length > 0 && value.length <= 500))
+    reject(400, "Ungültiges Lineup.");
+  const index = entries.findIndex(n => n.owner === request.owner && n.map === request.map && n.name === request.name);
+  if (index < 0) reject(404, "Dieses Lineup ist nicht mehr verfügbar.");
+  const entry = entries[index];
+  const permissions = lineupPermissions(entry, user);
+  const ownerAction = ["edit", "delete", "submit"].includes(request.action);
+  const adminAction = ["approve", "reject", "revoke", "mustKnow"].includes(request.action);
+  if (!ownerAction && !adminAction) reject(400, "Unbekannte Lineup-Aktion.");
+  if (ownerAction ? !permissions.edit : !permissions.moderate)
+    reject(403, ownerAction ? "Nur der Ersteller darf seine noch nicht offiziellen Aufnahmen ändern." : "Nur Plattform-Admins dürfen Lineups freigeben.");
+  if (typeof request.revision !== "string" || request.revision !== (entry.updatedAt || ""))
+    reject(409, "Das Lineup wurde inzwischen geändert. Lade es erneut, bevor du fortfährst.");
+  const next = [...entries];
+  if (request.action === "delete") { next.splice(index, 1); return next; }
+  let patch;
+  if (request.action === "edit") {
+    if (!request.patch || typeof request.patch !== "object" || Array.isArray(request.patch) ||
+        Object.keys(request.patch).some(key => !LINEUP_EDIT_FIELDS.includes(key as any)))
+      reject(400, "Diese Felder dürfen nicht geändert werden.");
+    for (const [key, value] of Object.entries(request.patch)) {
+      if (["radarFrom", "radarTo"].includes(key)) continue;
+      const limit = key === "desc" ? 4000 : key === "throwTechnique" ? 500 : 120;
+      if (typeof value !== "string" || value.length > limit) reject(400, "Ein Textfeld ist ungültig oder zu lang.");
+    }
+    patch = { ...request.patch, reviewStatus: "" };
+  } else if (request.action === "submit") patch = { reviewStatus: "pending" };
+  else if (request.action === "approve") patch = { official: true, reviewStatus: "approved" };
+  else if (request.action === "reject") {
+    if (entry.official || entry.reviewStatus !== "pending") reject(400, "Nur eingereichte Aufnahmen können abgelehnt werden.");
+    patch = { official: false, mustKnow: false, reviewStatus: "rejected" };
+  } else if (request.action === "revoke") patch = { official: false, mustKnow: false, reviewStatus: "" };
+  else {
+    if (!entry.official || typeof request.value !== "boolean") reject(400, "Must Know setzt ein offiziell freigegebenes Lineup voraus.");
+    patch = { mustKnow: request.value };
+  }
+  try {
+    [next[index]] = sanitizeNades([{ ...entry, ...patch,
+      updatedAt: new Date(Math.max(Date.now(), Date.parse(entry.updatedAt) + 1 || 0)).toISOString(),
+    }]);
+  } catch {
+    reject(400, "Ungültige Wurfdaten. Prüfe Name, Seite, Granatentyp, Koordinaten (je drei Zahlen) und Radarpositionen.");
+  }
+  return next;
+}
 
 // Requests originate from the game plugin, which supplies the authenticated Steam ID.
 // Never let a game request set ownership, official status, Must Know or coordinates.

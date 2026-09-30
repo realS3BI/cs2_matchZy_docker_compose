@@ -57,7 +57,7 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
     typeof heartbeat?.practice === "boolean" && typeof heartbeat?.version === "string";
   const loadFailure = lastPluginLog(logs, "failed to load plugin|could not load plugin", "matchzynades");
   const loadSuccess = Math.max(lastPluginLog(logs, "finished loading plugin", "matchzynades"),
-    lastIndexOfAny(logs, ["nade training menu loaded"]), lastPluginLog(logs, "matchzy nades \\S+", "loaded"));
+    lastIndexOfAny(logs, ["nade training menu loaded"]), lastPluginLog(logs, "matchzy nades \\S+", "loaded"), lastPluginLog(logs, "playbook \\S+", "loaded"));
   let state: string;
   let status: string;
   let detail: string;
@@ -75,6 +75,7 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
   } else if (fresh && heartbeat?.state === "loaded") {
     state = "loaded"; status = "pass";
     detail = heartbeat.practice === true ? "The running plugin confirms practice is active. Join a team, spawn and type .nades."
+      : settings.serverMode === "nades" ? "Playbook ist geladen; das eigenständige Training ist noch nicht bereit."
       : "The running plugin is loaded. Start practice with .prac, then open .nades.";
   } else if (current && heartbeat?.state === "unloaded") {
     state = "unloaded"; status = "fail"; detail = "The plugin reported that it was unloaded. Apply & restart, then check Diagnostics.";
@@ -117,7 +118,7 @@ function check(id, label, status, detail) {
 }
 
 function isVersionRelevant(key, settings) {
-  if (key === "MATCHZY") return ["matchzy", "nades"].includes(settings.serverMode);
+  if (key === "MATCHZY") return settings.serverMode === "matchzy";
   if (key === "WEAPONPAINTS") return settings.weaponPaintsEnabled;
   if (["PLAYERSETTINGS", "ANYBASELIB", "MENUMANAGER"].includes(key)) return settings.weaponPaintsEnabled;
   if (key === "MULTIADDONMANAGER") return settings.fortniteEmotesEnabled || settings.workshopMapsEnabled || (settings.trainingHudEnabled && settings.trainingHudWorkshopEnabled);
@@ -172,10 +173,12 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         ? "warn"
         : "fail";
 
-  const modeCheck = ["matchzy", "nades"].includes(settings.serverMode)
+  const modeCheck = settings.serverMode === "nades"
+    ? check("nades", "Playbook Nades", nadeMenu.status === "pass" && nadeMenu.practice !== true ? "warn" : nadeMenu.status, nadeMenu.detail)
+    : settings.serverMode === "matchzy"
     ? check(
       settings.serverMode,
-      settings.serverMode === "nades" ? "Nades" : "MatchZy",
+      "MatchZy",
       matchZyRuntimeStatus,
       matchZyRuntimeStatus === "pass"
         ? "MatchZy reported a successful load."
@@ -230,7 +233,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
           ? "The host rejected CounterStrikeSharp because its native module requested an executable stack. Rebuild the CS2 image to apply the compatibility patch."
           : "Native loader or API assembly is missing."
     ),
-    ...(nadeMenu.expected ? [check("matchzy-nades", "MatchZy Nades menu", nadeMenu.status, nadeMenu.detail)] : []),
+    ...(nadeMenu.expected ? [check("matchzy-nades", "Playbook Ingame-Panel", nadeMenu.status, nadeMenu.detail)] : []),
     modeCheck
   ];
 
@@ -284,7 +287,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
         : "This CounterStrikeSharp release uses interface 17. Pin Metamod to compatible (build 1411), or update CounterStrikeSharp and Metamod together."
     });
   }
-  if (["matchzy", "nades"].includes(settings.serverMode) && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
+  if (settings.serverMode === "matchzy" && matchZyRuntimeStatus === "fail" && matchZyInstalled) {
     findings.push({
       severity: "error",
       title: "MatchZy did not enter the loaded state",

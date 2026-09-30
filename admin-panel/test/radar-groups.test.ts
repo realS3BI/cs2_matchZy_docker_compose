@@ -1,0 +1,50 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { groupRadarNades, findRadarGroup } from "../client/src/lib/radar-groups.js";
+import { lineupId } from "../client/src/lib/lineups.js";
+import { ACTIVE_DUTY_MAPS } from "../client/src/lib/maps.js";
+
+const map = ACTIVE_DUTY_MAPS.find(map => map.key === "anubis")!;
+const nade = (name: string, from = { x: 0.2, y: 0.3 }, to = { x: 0.7, y: 0.6 }) => ({
+  owner: "player", map: map.mapName, name, radarFrom: from, radarTo: to,
+});
+
+test("targets group first, then identical starts retain every individual lineup", () => {
+  const nades = [nade("a"), nade("b"), nade("c", { x: 0.5, y: 0.8 }), nade("d", undefined, { x: 0.1, y: 0.9 })];
+  const targets = groupRadarNades(nades, "to", map, null);
+  assert.deepEqual(targets.map(g => g.nades.length), [3, 1]);
+  const selected = findRadarGroup(targets, lineupId(nades[1]))!;
+  const starts = groupRadarNades(selected.nades, "from", map, null);
+  assert.deepEqual(starts.map(g => g.nades.map(n => n.name)), [["a", "b"], ["c"]]);
+  const reverse = groupRadarNades(nades, "from", map, null);
+  const destinations = groupRadarNades(findRadarGroup(reverse, lineupId(nades[0]))!.nades, "to", map, null);
+  assert.deepEqual(destinations.map(g => g.nades.length), [2, 1]);
+});
+
+test("grouping is stable across input order and keeps owners with the same name distinct", () => {
+  const entries = [nade("same"), { ...nade("same"), owner: "other" }, nade("far", { x: 0.9, y: 0.9 })];
+  const groups = groupRadarNades(entries, "from", map, null);
+  assert.deepEqual(groups, groupRadarNades([...entries].reverse(), "from", map, null));
+  assert.equal(groups.find(g => g.nades.length === 2)?.nades.length, 2);
+  assert.notEqual(lineupId(entries[0]), lineupId(entries[1]));
+  assert.equal(findRadarGroup(groups, "stale-id"), undefined);
+  assert.equal(findRadarGroup(groups, null), undefined);
+});
+
+test("nearby points stack without collapsing a chain of distant positions", () => {
+  const entries = [nade("a", { x: 0.1, y: 0.1 }), nade("b", { x: 0.13, y: 0.1 }), nade("c", { x: 0.16, y: 0.1 })];
+  assert.deepEqual(groupRadarNades(entries, "from", map, null).map(g => g.nades.length), [2, 1]);
+  const wide = { ...map, radarWidth: 2000, radarHeight: 1000 };
+  assert.equal(groupRadarNades([nade("a", { x: 0.1, y: 0.1 }), nade("b", { x: 0.1, y: 0.16 })], "from", wide, null).length, 1);
+});
+
+test("missing and invalid positions are omitted only from the relevant side; calibration works", () => {
+  const entries = [{ ...nade("partial"), radarTo: null }, { ...nade("invalid"), radarFrom: { x: 2, y: 0 } }];
+  assert.deepEqual(groupRadarNades(entries, "to", map, null).flatMap(g => g.nades.map(n => n.name)), ["invalid"]);
+  assert.deepEqual(groupRadarNades(entries, "from", map, null).flatMap(g => g.nades.map(n => n.name)), ["partial"]);
+  const calibration = { xScale: 0.001, xOffset: 0.5, yScale: -0.001, yOffset: 0.5 };
+  const projected = { ...nade("world"), radarFrom: null, lineupPos: "0 0 0" };
+  assert.deepEqual(groupRadarNades([projected], "from", map, calibration)[0].point, { x: 0.5, y: 0.5 });
+  assert.equal(groupRadarNades([projected], "from", map, null).length, 0);
+  assert.deepEqual(groupRadarNades([], "to", map, null), []);
+});

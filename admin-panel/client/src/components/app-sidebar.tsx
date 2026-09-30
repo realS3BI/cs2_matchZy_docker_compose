@@ -16,7 +16,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// Adapted from shadcn sidebar-08: inset layout, nested navigation and account menu.
+// Adapted from shadcn sidebar-08: nested navigation and account menu.
 export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, serviceState }: {
   user: SidebarUser;
   serverItems: { label: string; path: string; icon: LucideIcon }[];
@@ -40,7 +40,6 @@ export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, ser
         url: mapPath(map),
         isActive: location.pathname === mapPath(map) || location.pathname.startsWith(`${mapPath(map)}/`),
       })),
-      { title: "All Maps", url: "/maps", isActive: location.pathname === "/maps" },
     ],
   }];
   if (serverItems.length) sections.push({
@@ -48,7 +47,7 @@ export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, ser
     url: "/overview",
     icon: Server,
     isActive: serverItems.some(item => location.pathname === item.path),
-    items: serverItems.map(item => ({
+    items: serverItems.filter(item => item.path !== "/overview").map(item => ({
       title: item.label,
       url: item.path,
       icon: item.icon,
@@ -62,18 +61,18 @@ export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, ser
   }
 
   return (
-    <Sidebar variant="inset" collapsible="offcanvas">
+    <Sidebar variant="sidebar" collapsible="offcanvas">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link to="/maps" onClick={navigate} aria-label="MatchZy Nade-Bibliothek">
+              <Link to="/maps" onClick={navigate} aria-label="Playbook">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <Crosshair aria-hidden="true" />
                 </div>
                 <div className="grid flex-1 gap-0.5 text-left leading-tight">
-                  <span className="truncate font-semibold">MatchZy</span>
-                  <span className="truncate text-xs">Nades & Maps</span>
+                  <span className="truncate font-semibold">Playbook</span>
+                  <span className="truncate text-xs">Nades & Server</span>
                 </div>
               </Link>
             </SidebarMenuButton>

@@ -1,17 +1,18 @@
-import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, MapPinned } from "lucide-react";
-import { mapMatchesNade, mapPath, mapSlug, type MapDefinition } from "../lib/maps";
-import { Badge } from "./ui/badge";
-import { Field, FieldLabel } from "./ui/field";
-import { Input } from "./ui/input";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { ChevronDown, MapPinned } from "lucide-react";
+import { mapPath, mapSlug, type MapDefinition } from "../lib/maps";
+import { MAP_CARD_ART } from "../lib/map-card-art";
+import { Button } from "./ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "./ui/empty";
 
 const groups = [
-  { key: "active", title: "Active Duty", description: "Die Maps im aktuellen Wettkampf-Pool." },
-  { key: "reserve", title: "Reserve-Pool", description: "Weitere Maps für deine nächste Runde." },
-  { key: "inactive", title: "Inaktive Maps", description: "Lineups für Maps außerhalb der aktuellen Pools bleiben verfügbar." },
-  { key: "other", title: "Weitere Maps", description: "Arms Race, Training und weitere Spielmodi." },
-  { key: "workshop", title: "Workshop", description: "Die Workshop-Maps deiner Bibliothek." },
+  { key: "active", title: "Active Duty" },
+  { key: "reserve", title: "Reserve-Pool" },
+  { key: "inactive", title: "Inaktive Maps" },
+  { key: "other", title: "Weitere Maps" },
+  { key: "workshop", title: "Workshop" },
 ];
 function groupFor(map: MapDefinition) {
   if (map.workshopId || map.category === "workshop") return "workshop";
@@ -19,28 +20,48 @@ function groupFor(map: MapDefinition) {
   return map.category;
 }
 
-export function MapAtlas({ nades, maps }: { nades: any[]; maps: MapDefinition[] }) {
-  const [search, setSearch] = useSearchParams();
-  const query = search.get("q") || "";
-  const visible = maps.filter(map => `${map.name} ${map.mapName} ${map.workshopId || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
-  return <div className="playbook-page">
-    <header className="playbook-heading"><div><p className="control-kicker">Map-Bibliothek</p><h1>All Maps</h1><p>Wähle deine Map und entdecke die Lineups.</p></div><div className="atlas-search"><Field htmlFor="atlas-search"><FieldLabel>Map finden</FieldLabel><Input id="atlas-search" value={query} onChange={event => setSearch(event.target.value ? { q: event.target.value } : {}, { replace: true })} placeholder="Name oder Workshop-ID …" /></Field></div></header>
-    {visible.length === 0 && <Empty><EmptyHeader><EmptyTitle>Keine Map gefunden</EmptyTitle><EmptyDescription>Versuche einen anderen Namen oder eine Workshop-ID.</EmptyDescription></EmptyHeader></Empty>}
+function MapCard({ map }: { map: MapDefinition }) {
+  const art = map.workshopId ? undefined : MAP_CARD_ART[map.mapName];
+  const [imageFailed, setImageFailed] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  return <Link to={mapPath(map)} className="map-atlas-card">
+    {art?.imageUrl && !imageFailed && <img className="map-atlas-card-background" src={art.imageUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />}
+    <div className="map-atlas-card-emblem" aria-hidden="true">
+      {art?.logoUrl && !logoFailed
+        ? <img src={art.logoUrl} alt="" loading="lazy" onError={() => setLogoFailed(true)} />
+        : <MapPinned className="map-atlas-card-placeholder" />}
+    </div>
+    <strong className="map-atlas-card-name">{map.name}</strong>
+  </Link>;
+}
+
+export function MapAtlas({ maps }: { maps: MapDefinition[] }) {
+  return <div className="playbook-page map-atlas-page">
+    <header className="playbook-heading"><h1>Alle Maps</h1></header>
+    {maps.length === 0 && <Empty><EmptyHeader><EmptyTitle>Noch keine Maps</EmptyTitle><EmptyDescription>Verfügbare Maps erscheinen hier.</EmptyDescription></EmptyHeader></Empty>}
     {groups.map(group => {
-      const entries = visible.filter(map => groupFor(map) === group.key);
-      if (!entries.length && (query || group.key !== "workshop")) return null;
-      return <section key={group.key} aria-labelledby={`maps-${group.key}`}>
-        <div className="section-heading"><div><h2 id={`maps-${group.key}`}>{group.title}</h2><p className="mt-1 text-sm text-muted-foreground">{group.description}</p></div><Badge variant="outline">{entries.length}</Badge></div>
-        <div className="map-catalog-grid">{entries.map(map => {
-          const count = nades.filter(nade => mapMatchesNade(map, nade.map)).length;
-          return <Link key={mapSlug(map)} to={mapPath(map)} className="map-postcard">
-            <div className="map-postcard-image">{map.radarUrl ? <img src={map.radarUrl} alt="" loading="lazy" /> : <MapPinned aria-hidden="true" />}</div>
-            <div className="map-catalog-label"><strong>{map.name}</strong><ArrowRight aria-hidden="true" /></div>
-            <span>{count} {count === 1 ? "Lineup" : "Lineups"}</span>
-          </Link>;
-        })}</div>
+      const entries = maps.filter(map => groupFor(map) === group.key);
+      if (!entries.length && group.key !== "workshop") return null;
+      const content = <>
+        <div className="map-catalog-grid">{entries.map(map => <MapCard key={mapSlug(map)} map={map} />)}</div>
         {!entries.length && <Empty className="border"><EmptyHeader><EmptyTitle>Noch keine Workshop-Maps</EmptyTitle><EmptyDescription>Maps aus dem Server-Workshop erscheinen hier, sobald sie hinzugefügt wurden.</EmptyDescription></EmptyHeader></Empty>}
+      </>;
+      if (group.key === "active") return <section key={group.key} aria-labelledby={`maps-${group.key}`}>
+        <div className="section-heading"><h2 id={`maps-${group.key}`}>{group.title}</h2></div>
+        {content}
       </section>;
+      return <Collapsible key={group.key} asChild>
+        <section aria-labelledby={`maps-${group.key}`}>
+          <h2 id={`maps-${group.key}`}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between">
+                {group.title}<ChevronDown data-icon="inline-end" aria-hidden="true" className="map-category-chevron" />
+              </Button>
+            </CollapsibleTrigger>
+          </h2>
+          <CollapsibleContent className="pt-4">{content}</CollapsibleContent>
+        </section>
+      </Collapsible>;
     })}
   </div>;
 }

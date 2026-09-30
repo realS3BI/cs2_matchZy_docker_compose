@@ -11,6 +11,7 @@ export function getConfig() {
     port: 8080,
     publicUrl: publicOrigin(requireEnv("ADMIN_PANEL_PUBLIC_URL")),
     bootstrapAdminSteamId: process.env.ADMIN_PANEL_ADMIN_STEAM_ID || "",
+    promoteBootstrapAdmin: process.env.NODE_ENV === "development",
     sessionSecret: requireEnv("ADMIN_PANEL_SESSION_SECRET"),
     mongodbUri: "mongodb://mongodb:27017/cs2_admin_panel",
     mongoDbName: "cs2_admin_panel",

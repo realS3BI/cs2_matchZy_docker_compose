@@ -76,12 +76,12 @@ export function NadeFlightMap({
 
   function handleMapClick(event: React.MouseEvent<SVGSVGElement>) {
     if (!onMapClick) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    onMapClick({
-      x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
-      y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
-    });
+    const matrix = event.currentTarget.getScreenCTM();
+    if (!matrix) return;
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+    // SVG may letterbox a radar when the viewport limits its height.
+    if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) return;
+    onMapClick({ x: point.x / width, y: point.y / height });
   }
 
   if (!map.radarUrl) {
@@ -128,7 +128,7 @@ export function NadeFlightMap({
             const to = points.radarTo ? pixelPoint(points.radarTo, width, height) : null;
             const color = colorForType(nade.type);
             const markerId = TYPE_COLORS[nade.type || ""] ? `${markerPrefix}-${String(nade.type).toLowerCase()}` : `${markerPrefix}-other`;
-            const title = `${nade.displayName || nade.name || `Nade ${index + 1}`}: ${nade.throwFromTitle || "start"} → ${nade.throwToTitle || "target"}`;
+            const title = `${nade.displayName || nade.name || `Nade ${index + 1}`}: ${nade.throwFromTitle || "Start"} → ${nade.throwToTitle || "Ziel"}`;
             return (
               <g
                 key={nade.id || `${nade.name}-${index}`}
@@ -211,7 +211,7 @@ export function NadePlacementEditor({ map, value, onChange, calibration = null }
   }
 
   if (!map) {
-    return <div className="radar-placement-empty">Choose a known map to place the throw.</div>;
+    return <div className="radar-placement-empty">Wähle eine bekannte Map, um den Wurf zu platzieren.</div>;
   }
 
   return (
@@ -219,21 +219,21 @@ export function NadePlacementEditor({ map, value, onChange, calibration = null }
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant={mode === "from" ? "default" : "secondary"} onClick={() => setMode("from")}>
-            <Crosshair data-icon="inline-start" />Set start
+            <Crosshair data-icon="inline-start" />Start setzen
           </Button>
           <Button type="button" size="sm" variant={mode === "to" ? "default" : "secondary"} onClick={() => setMode("to")}>
-            <Target data-icon="inline-start" />Set target
+            <Target data-icon="inline-start" />Ziel setzen
           </Button>
         </div>
         <Button type="button" size="sm" variant="ghost" onClick={() => onChange({ radarFrom: null, radarTo: null })}>
-          <RotateCcw data-icon="inline-start" />{calibration ? "Use automatic positions" : "Clear markers"}
+          <RotateCcw data-icon="inline-start" />{calibration ? "Automatische Positionen" : "Markierungen entfernen"}
         </Button>
       </div>
       <NadeFlightMap map={map} nades={[value]} calibration={calibration} onMapClick={place} />
       <div className="radar-placement-status">
-        <span><i className={cn("radar-status-dot", points.radarFrom && "radar-status-dot-ready")} />Start {value.radarFrom ? "manual" : points.radarFrom ? "automatic" : "missing"}</span>
-        <span><i className={cn("radar-status-diamond", points.radarTo && "radar-status-dot-ready")} />Target {value.radarTo ? "manual" : points.radarTo ? "automatic" : "missing"}</span>
-        <Badge variant="outline">Click map to set {mode === "from" ? "start" : "target"}</Badge>
+        <span><i className={cn("radar-status-dot", points.radarFrom && "radar-status-dot-ready")} />Start {value.radarFrom ? "manuell" : points.radarFrom ? "automatisch" : "fehlt"}</span>
+        <span><i className={cn("radar-status-diamond", points.radarTo && "radar-status-dot-ready")} />Ziel {value.radarTo ? "manuell" : points.radarTo ? "automatisch" : "fehlt"}</span>
+        <Badge variant="outline">{mode === "from" ? "Start" : "Ziel"} per Klick auf die Karte setzen</Badge>
       </div>
     </div>
   );

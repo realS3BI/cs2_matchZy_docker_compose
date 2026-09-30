@@ -1,12 +1,12 @@
-# Festes Trainings-HUD
+# Playbook Trainings-HUD
 
 Das Layout ist ein einziges Panorama-Panel, rechts und vertikal mittig am Bildschirm. Es wird vom Client gerendert und hat keine Verbindung zu Weltposition oder Kamerabewegung. `ScreenPanel` überträgt ausschließlich Inhalte, Auswahl und Fokus. Navigation ist per Maus sowie festen Console-Binds möglich.
 
 ## Aufbau ab Plugin 1.8.0
 
-Mittige Überschrift, engere Breadcrumb und neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home sowie drei Beschreibungszeilen. Footer-Hinweise und Modusindikator sind entfernt. Die Bibliothek und Zustände werden alle zwei Sekunden aktualisiert. Die ausgewählte Granate bleibt bei Änderungen möglichst erhalten. Das Panel ist ausschließlich im tatsächlichen MatchZy-Practice-Modus verfügbar.
+Mittige Überschrift, engere Breadcrumb und neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home sowie drei Beschreibungszeilen. Footer-Hinweise und Modusindikator sind entfernt. Die Bibliothek und Zustände werden alle zwei Sekunden aktualisiert. Die ausgewählte Granate bleibt bei Änderungen möglichst erhalten. Das Panel ist im eigenständigen Nades-Training und im tatsächlichen MatchZy-Practice-Modus verfügbar.
 
-Die neuen Assets sind kompiliert. Plugin und Workshop-Addon gemeinsam aktualisieren und CS2 danach ganz neu starten. Ein erneuter Ingame-Test dieses Layouts steht noch aus.
+Für die Playbook-Überschrift die Assets neu kompilieren. Plugin und Workshop-Addon gemeinsam aktualisieren und CS2 danach ganz neu starten. Die Ingame-Abnahme der eigenständigen Trainingsfunktionen steht noch aus.
 
 ## Stand und Voraussetzungen
 
@@ -24,7 +24,7 @@ Quellen und Serveranbindung sind vorhanden. Die Workshop Tools wurden installier
 
 Das Skript kopiert ausschließlich die zwei Projektquellen in `content/csgo_addons/matchzy_training_hud`, ruft Valves Compiler auf und legt die kompilierten Dateien direkt im zuvor mit den Workshop Tools angelegten Addon `game/csgo_addons/matchzy_training_hud` sowie unter `training-hud/dist` ab. Es verändert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veröffentlicht nichts.
 
-Für einen lokalen Entwicklungstest die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama` installieren und CS2 normal über Steam neu starten. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das Plugin und aktiviertes Trainings-HUD in den Servereinstellungen von MatchZy Control. Für Mitspieler das Addon über die Workshop Tools veröffentlichen. Vor dem anschließenden Download-Test die lokalen Testdateien aus `game/csgo/panorama` in eine Sicherung verschieben, damit sie das Workshop-Addon nicht überdecken.
+Für einen lokalen Entwicklungstest die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama` installieren und CS2 normal über Steam neu starten. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das Plugin und aktiviertes Trainings-HUD in den Servereinstellungen von Playbook. Für Mitspieler das Addon über die Workshop Tools veröffentlichen. Vor dem anschließenden Download-Test die lokalen Testdateien aus `game/csgo/panorama` in eine Sicherung verschieben, damit sie das Workshop-Addon nicht überdecken.
 
 In der Webübersicht unter **Server → Trainings-HUD** einstellen und mit **Apply & restart** übernehmen:
 
@@ -36,7 +36,7 @@ In der Webübersicht unter **Server → Trainings-HUD** einstellen und mit **App
 
 Die Einstellung gilt für den gesamten Server. Ohne Workshop-Auslieferung werden keine HUD-Dateien an Spieler verteilt; jeder Testclient braucht die lokalen Dateien. Die lokale Arbeitskopie wird nicht direkt gelesen: `panel-source.ps1 local` kompiliert und installiert XML/CSS, danach CS2 vollständig neu starten und erneut verbinden. Lokale Overrides können auch eine ausgelieferte Workshop-Version überdecken; für einen Live-Test zusätzlich `panel-source.ps1 live` ausführen.
 
-Die HUD-Konfiguration erfolgt über die Servereinstellungen in MatchZy Control. Bei der ersten Übernahme **Trainings-HUD aktivieren** ausdrücklich setzen; die Voreinstellung ist aus. Für Workshop-Auslieferung zusätzlich **HUD über Workshop ausliefern** aktivieren und die eigene Workshop-ID eintragen.
+Die HUD-Konfiguration erfolgt über die Servereinstellungen in Playbook. Bei der ersten Übernahme **Trainings-HUD aktivieren** ausdrücklich setzen; die Voreinstellung ist aus. Für Workshop-Auslieferung zusätzlich **HUD über Workshop ausliefern** aktivieren und die eigene Workshop-ID eintragen.
 
 Der Bootstrap installiert den bereits verwendeten MultiAddonManager bei Bedarf und schreibt die HUD-ID nach `mm_client_extra_addons`. Vorhandene Server-/Map-Addons bleiben in `mm_extra_addons`. Die aktivierte Panel-Einstellung schaltet das Ingame-Panel frei. Bei rein lokalen Tests wird keine Addon-ID benötigt, aber der Testclient muss die Dateien installiert haben. Ohne Assets erscheint sonst trotz erfolgreich erstellter Server-Entity kein HUD. Für API/Metamod/AddonManager eine zusammen kompatible Version benutzen; keine ungetestete pauschale Versionserhöhung des gesamten Servers.
 

@@ -46,7 +46,7 @@ const app = createApp({
 });
 
 const server = app.listen(config.port, "0.0.0.0", () => {
-  console.log(`admin-panel listening on ${config.port}`);
+  console.log(`API bereit unter ${config.publicUrl}/api, interner Port ${config.port}.`);
 });
 
 async function shutdown() {

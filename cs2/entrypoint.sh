@@ -22,7 +22,7 @@ wait_for_platform_configuration() {
       return 0
     fi
     if (( announced == 0 )); then
-      echo "[entrypoint] Waiting for Steam token and RCON password from MatchZy Control"
+      echo "[entrypoint] Waiting for Steam token and RCON password from Playbook"
       announced=1
     fi
     sleep 5
@@ -33,6 +33,8 @@ configure_upstream_process() {
   # cm2network/cs2 consumes these process variables directly. They are derived
   # exclusively from the platform-owned JSON file and are not deployment inputs.
   export SRCDS_TOKEN="$(read_setting '.steamToken')"
+  export PLAYBOOK_SERVER_MODE="$(read_setting '.serverMode')"
+  export PLAYBOOK_CHAT_PREFIX="$(read_setting '.matchZyChatPrefix')"
   export CS2_SERVERNAME="$(read_setting '.serverName')"
   export CS2_RCONPW="$(read_setting '.rconPassword')"
   export CS2_PW="$(read_setting '.joinPassword')"

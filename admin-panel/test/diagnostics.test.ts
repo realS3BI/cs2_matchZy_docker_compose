@@ -61,6 +61,25 @@ test("buildDiagnostics reports a healthy MatchZy load chain", () => {
   assert.equal(report.versions.find((item) => item.key === "MATCHZY").installed, "0.8.15");
 });
 
+test("standalone Nades is healthy without a MatchZy installation", () => {
+  const probe = healthyProbe.replace("FILE\tmatchZy\t1", "FILE\tmatchZy\t0")
+    .replace("FILE\tmatchZyConfig\t1", "FILE\tmatchZyConfig\t0");
+  const report = buildDiagnostics(input({
+    desired: { serverMode: "nades" },
+    probe: { ok: true, stdout: `${probe}\n${heartbeat({ version: "2.0.0" })}` },
+    logs: "[pre.sh] Mod bootstrap complete\nPlaybook 2.0.0 loaded: .nades"
+  }));
+  assert.equal(report.overall, "healthy");
+  assert.equal(report.checks.find(item => item.id === "nades").status, "pass");
+  assert.equal(report.versions.find(item => item.key === "MATCHZY").relevant, false);
+  const starting = buildDiagnostics(input({
+    desired: { serverMode: "nades" },
+    probe: { ok: true, stdout: `${probe}\n${heartbeat({ practice: false })}` },
+    logs: "[pre.sh] Mod bootstrap complete"
+  }));
+  assert.equal(starting.checks.find(item => item.id === "nades").status, "warn");
+});
+
 test("buildDiagnostics identifies release asset failures before MatchZy install", () => {
   const report = buildDiagnostics(input({
     probe: { ok: true, stdout: "FILE\tpreHook\t1", stderr: "" },
@@ -205,14 +224,14 @@ test("buildDiagnostics treats warmup as a dedicated Workshop map", () => {
   assert.equal(report.versions.find((item) => item.key === "MATCHZY").relevant, false);
 });
 
-test("buildDiagnostics treats nades as a MatchZy-backed mode", () => {
+test("buildDiagnostics treats nades as an independent mode", () => {
   const report = buildDiagnostics(input({ desired: { serverMode: "nades" } }));
 
   assert.equal(report.overall, "healthy");
   assert.equal(report.mode.id, "nades");
   assert.equal(report.checks.at(-1).id, "nades");
   assert.equal(report.nades.relevant, true);
-  assert.equal(report.versions.find((item) => item.key === "MATCHZY").relevant, true);
+  assert.equal(report.versions.find((item) => item.key === "MATCHZY").relevant, false);
 });
 
 test("buildDiagnostics reports incomplete enabled optional plugins", () => {

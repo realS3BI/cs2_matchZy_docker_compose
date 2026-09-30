@@ -36,6 +36,7 @@ public static class MatchZyState
 
     public static bool IsPractice(object? plugin) => plugin != null &&
         Read(plugin, "isPractice") is true && Read(plugin, "matchStarted") is false;
+    public static string? ChatPrefix() => LoadedInstance() is { } plugin ? Read(plugin, "chatPrefix") as string : null;
     private static object? Read(object plugin, string name) => plugin.GetType().GetField(name)?.GetValue(plugin);
     public static TrainingToggles Toggles(CCSPlayerController player)
     {

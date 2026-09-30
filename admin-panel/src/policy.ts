@@ -56,7 +56,7 @@ type SettingsGroup = {
 
 export const GAME_MODES = [
   { id: "matchzy", name: "MatchZy", description: "Competitive matches with MatchZy." },
-  { id: "nades", name: "Nades", description: "Starts MatchZy in practice mode with the .nades in-game menu and saved lineups." },
+  { id: "nades", name: "Nades", description: "Eigenständiges Playbook-Granatentraining mit Lineups und Ingame-Panel, ohne MatchZy." },
   { id: "warmup", name: "Warmup / Aim Botz", description: "Solo aim training with bots on the Aim Botz Workshop map." },
   { id: "vanilla", name: "Vanilla + framework", description: "No match mode plugin; Metamod and CounterStrikeSharp remain available." }
 ];
@@ -78,6 +78,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     id: "identity", title: "Server identity", description: "The public name, slots and initial map.",
     fields: [
       { key: "serverName", label: "Server name", type: "text" },
+      { key: "matchZyChatPrefix", label: "Gemeinsamer Chat-Präfix", type: "text", placeholder: "[{Green}Playbook{Default}]", description: "Für Playbook und MatchZy. Leer verwendet Playbook." },
       { key: "maxPlayers", label: "Max players", type: "number" },
       { key: "startMap", label: "Start map", type: "text", description: "Used by MatchZy, Nades and Vanilla. Warmup always starts Aim Botz." },
       { key: "joinPassword", label: "Join password", type: "password" },
@@ -85,11 +86,10 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ]
   },
   {
-    id: "matchzy", title: "MatchZy behavior", description: "Used while MatchZy or Nades is active.", mode: "matchzy",
+    id: "matchzy", title: "MatchZy behavior", description: "Nur für den MatchZy-Modus.", mode: "matchzy",
     fields: [
       { key: "matchZySmokeColor", label: "Colored practice smokes", type: "boolean" },
-      { key: "matchZySaveNadesGlobally", label: "Share saved nades globally", type: "boolean" },
-      { key: "matchZyChatPrefix", label: "Chat prefix", type: "text", placeholder: "[{Green}MatchZy{Default}]" }
+      { key: "matchZySaveNadesGlobally", label: "Share saved nades globally", type: "boolean" }
     ]
   },
   {
@@ -134,7 +134,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
 const DEFAULTS: ServerSettings = {
   schemaVersion: 1,
   steamToken: "",
-  serverName: "CS2 MatchZy Server",
+  serverName: "Playbook",
   rconPassword: "",
   joinPassword: "",
   maxPlayers: 10,
@@ -243,6 +243,9 @@ export function normalizeSettings(input): ServerSettings {
   }
   if (Object.prototype.hasOwnProperty.call(source, "maxPlayers")) output.maxPlayers = Number(source.maxPlayers);
 
+  // Migrate only the old shipped branding; preserve custom server names/prefixes.
+  if (output.serverName === "CS2 MatchZy Server") output.serverName = "Playbook";
+  if (output.matchZyChatPrefix === "[{Green}MatchZy{Default}]") output.matchZyChatPrefix = "";
   output.schemaVersion = DEFAULTS.schemaVersion;
   output.serverMode = GAME_MODES.some((mode) => mode.id === output.serverMode) ? output.serverMode : DEFAULTS.serverMode;
   output.maxPlayers = Number.isInteger(output.maxPlayers) && output.maxPlayers >= 1 && output.maxPlayers <= 64 ? output.maxPlayers : DEFAULTS.maxPlayers;
@@ -271,7 +274,7 @@ export function buildControlModel(input) {
   }))];
   return {
     mode, modes: GAME_MODES, plugins, settingsGroups: SETTINGS_GROUPS, adminRoles: ADMIN_ROLES,
-    rules: ["Nades starts MatchZy practice mode automatically.", "Warmup starts Aim Botz as a dedicated Workshop map.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
+    rules: ["Nades startet das eigenständige Playbook-Training ohne MatchZy.", "Warmup starts Aim Botz as a dedicated Workshop map.", "CounterStrikeSharp is the single source of admin permissions.", "Plugin dependencies are installed and removed automatically."]
   };
 }
 

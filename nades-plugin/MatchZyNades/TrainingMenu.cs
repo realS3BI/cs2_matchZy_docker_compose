@@ -5,7 +5,7 @@ public static class TrainingMenu
     public static InGameMenu Create(IReadOnlyList<NadeLineup> library, string map, bool practice,
         NadeLineup? last, string libraryError = "", PlayerPanelSettings? settings = null,
         IReadOnlyList<CompetitiveSpawn>? spawns = null, TrainingToggles? toggles = null,
-        MenuPage? maps = null, string steamId = "", bool canWriteNades = true)
+        MenuPage? maps = null, string steamId = "", bool canWriteNades = true, bool standalone = false)
     {
         MenuItem Action(string title, TrainingAction action, string hint) => new(title, hint, Request: new(action));
         settings ??= new();
@@ -71,7 +71,7 @@ public static class TrainingMenu
             Toggle("Flugbahnvorschau", TrainingAction.Trajectory, toggles.Trajectory, "Zeigt die Vorschau der Granatenflugbahn. Gilt für den gesamten Server."),
             Toggle("Einschläge", TrainingAction.Impacts, toggles.Impacts, "Markiert Geschosseinschläge. Gilt für den gesamten Server."),
             Toggle("Flashschutz", TrainingAction.NoFlash, toggles.NoFlash, "Verhindert Blendung durch Flashbangs für dich."),
-            Toggle("God Mode", TrainingAction.God, toggles.God, "MatchZy setzt deine Lebenspunkte sehr hoch bzw. auf 100 zurück.")], Key: "toggles");
+            Toggle("God Mode", TrainingAction.God, toggles.God, "Schaltet deinen Schutz vor Schaden ein oder aus.")], Key: "toggles");
         var tools = new MenuPage("Trainingswerkzeuge", "Würfe wiederholen, Positionen merken und Trainingshilfen bedienen.", [
             Action("Letzten Wurf wiederholen", TrainingAction.Rethrow, "Wirft deine zuletzt geworfene Granate erneut mit derselben Flugbahn; du kannst die Wirkung von anderswo beobachten."),
             Action("Zum letzten Abwurfpunkt", TrainingAction.LastThrow, "Bringt dich an die Position deiner zuletzt geworfenen Granate zurück."),
@@ -81,10 +81,14 @@ public static class TrainingMenu
             new("Bots", "Stehenden oder duckenden Bot platzieren oder Trainingsbots entfernen.", Page: bots),
             new("Trainingshilfen", "Flugbahnvorschau, Einschläge, Flashschutz und God Mode ein- oder ausschalten.", Page: switches),
             Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt deine aktuellen Koordinaten und Blickwinkel im Beschreibungsbereich.")], Key: "tools");
+        if (standalone)
+            tools = tools with { Items = tools.Items.Where(item =>
+                item.Page?.Key != "bots" && item.Request?.Action != TrainingAction.Rethrow).ToArray(),
+                Description = "Positionen merken und Trainingshilfen bedienen." };
         var home = new List<MenuItem> {
             new("Granaten-Bibliothek", $"{library.Count} verfügbare Granaten auf {map}. Wähle zuerst den Granatentyp und danach deine Sammlung. {libraryError}", Page: new("Granaten-Bibliothek", "Granatentyp auswählen.", categories), Enabled: practice),
             new($"Must Know ({mustKnow.Length})", "Starte hier: wichtige Lineups für diese Map, vom Plattform-Admin ausgewählt.", Page: Lineups("Must Know", mustKnow, "must-know"), Enabled: practice),
-            new("Trainingswerkzeuge", "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
+            new("Trainingswerkzeuge", standalone ? "Positionen merken und Trainingshilfen einstellen." : "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
             new("Neue Nade aufnehmen", "Aufnahme starten, eine Granate werfen und nach ihrer Wirkung speichern. Sie erscheint unter Alle und ist noch nicht offiziell geprüft.",
                 Page: new("Nade aufnehmen", "Nach dem Wurf mit KP_0 zurück ins Panel wechseln und Aufnahme speichern wählen.", [
                     Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von drei Minuten eine Granate. Abwurfpunkt, Blickwinkel, Wurftechnik und Ziel werden erfasst."),
@@ -97,7 +101,7 @@ public static class TrainingMenu
             Action("Panel ausblenden", TrainingAction.Close, "Blendet das Panel aus und gibt die Spielsteuerung frei. KP_DEL zeigt es wieder an.")
         };
         if (!canWriteNades) home.RemoveAll(item => item.Label == "Neue Nade aufnehmen");
-        return new(new("Trainingszentrale", "Practice-Werkzeuge und Granaten für die aktuelle Map.", home), map);
+        return new(new("Playbook", "Practice-Werkzeuge und Granaten für die aktuelle Map.", home), map);
     }
 
     // Fixed allowlist only. Never execute labels, descriptions or library data as commands.

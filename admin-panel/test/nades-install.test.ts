@@ -10,6 +10,40 @@ import { normalizeSettings } from "../src/policy.js";
 const execFileAsync = promisify(execFile);
 const quote = (path: string) => `'${path.replaceAll("\\", "/").replaceAll("'", `'"'"'`)}'`;
 
+test("bootstrap enables MatchZy only for scrims and retires its plugin without deleting lineups", async (t) => {
+  const pre = await readFile(resolve("../cs2/pre.sh"), "utf8");
+  const modeSwitch = pre.match(/  case "\$server_mode" in[\s\S]*?\n  esac/)?.[0];
+  const remove = pre.match(/  remove_matchzy_component\(\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(modeSwitch);
+  assert.ok(remove);
+  const fixture = await mkdtemp(join(tmpdir(), "playbook-modes-"));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  const plugin = join(fixture, "plugins", "MatchZy");
+  const library = join(fixture, "cfg", "MatchZy", "savednades.json");
+  await mkdir(join(fixture, "cfg", "MatchZy"), { recursive: true });
+  await writeFile(library, "existing lineups");
+  const script = `set -eu
+CSS_DIR=${quote(fixture)}
+server_mode="$1"
+matchzy_enabled=0
+matchzy_autostart_mode=1
+log() { :; }
+fail() { exit 1; }
+${remove}
+${modeSwitch}
+if [[ "$matchzy_enabled" == 0 ]]; then remove_matchzy_component; fi
+printf '%s' "$matchzy_enabled"
+`;
+  for (const mode of ["matchzy", "nades", "vanilla", "warmup"]) {
+    await mkdir(plugin, { recursive: true });
+    await writeFile(join(plugin, "MatchZy.dll"), "old plugin");
+    assert.equal((await execFileAsync("bash", ["-c", script, "modes", mode])).stdout, mode === "matchzy" ? "1" : "0");
+    if (mode === "matchzy") await access(join(plugin, "MatchZy.dll"));
+    else await assert.rejects(access(plugin));
+    assert.equal(await readFile(library, "utf8"), "existing lineups");
+  }
+});
+
 test("panel HUD controls override legacy environment and clear only client addons", async (t) => {
   const fixture = await mkdtemp(join(tmpdir(), "matchzy-hud-settings-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));

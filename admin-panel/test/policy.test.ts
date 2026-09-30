@@ -15,11 +15,23 @@ test("warmup uses the dedicated Workshop map without a mode plugin", () => {
   assert.equal(model.plugins.some((plugin) => plugin.id === "warmup"), false);
 });
 
-test("nades is a MatchZy-backed server mode", () => {
+test("nades is an independent Playbook server mode", () => {
   const model: any = buildControlModel({ serverMode: "nades" });
   assert.equal(model.mode.id, "nades");
   assert.equal(model.plugins[0].id, "nades");
   assert.ok(model.plugins[0].dependencies.includes("CounterStrikeSharp"));
+  assert.match(model.mode.description, /ohne MatchZy/);
+  assert.equal(model.plugins.some(plugin => plugin.id === "matchzy"), false);
+});
+
+test("Playbook branding migrates shipped defaults and preserves custom names", () => {
+  assert.equal(normalizeSettings({}).serverName, "Playbook");
+  const migrated = normalizeSettings({ serverName: "CS2 MatchZy Server", matchZyChatPrefix: "[{Green}MatchZy{Default}]" });
+  assert.equal(migrated.serverName, "Playbook");
+  assert.equal(migrated.matchZyChatPrefix, "");
+  const custom = normalizeSettings({ serverName: "Unser Server", matchZyChatPrefix: "[{Red}Unser Team{Default}]" });
+  assert.equal(custom.serverName, "Unser Server");
+  assert.equal(custom.matchZyChatPrefix, "[{Red}Unser Team{Default}]");
 });
 
 test("normalizeSettings drops fields outside the application schema", () => {

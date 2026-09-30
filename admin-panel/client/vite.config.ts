@@ -4,7 +4,14 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   root: "client",
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), {
+    name: "development-browser-url",
+    configureServer(server) {
+      if (process.env.DEV_PUBLIC_URL) {
+        server.printUrls = () => server.config.logger.info(`  Browser: ${process.env.DEV_PUBLIC_URL}/`);
+      }
+    }
+  }],
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname
@@ -16,9 +23,11 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    port: 5173,
+    port: Number(process.env.DEV_PORT || 5173),
+    strictPort: true,
+    watch: process.env.DEV_USE_POLLING === "1" ? { usePolling: true } : undefined,
     proxy: {
-      "/api": "http://localhost:8080"
+      "/api": process.env.DEV_API_URL || "http://127.0.0.1:8080"
     }
   }
 });

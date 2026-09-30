@@ -1,0 +1,21 @@
+// Map posters and emblems from CSNADES.gg. Original URLs are in public/maps/cards/sources.json.
+export const MAP_CARD_ART: Record<string, { imageUrl?: string; logoUrl?: string }> = {
+  "cs_agency": { logoUrl: "/maps/cards/agency-icon.webp", imageUrl: "/maps/cards/agency-poster.webp" },
+  "de_ancient": { logoUrl: "/maps/cards/ancient-icon.webp", imageUrl: "/maps/cards/ancient-poster.webp" },
+  "de_anubis": { logoUrl: "/maps/cards/anubis-icon.webp", imageUrl: "/maps/cards/anubis-poster.webp" },
+  "de_cache": { logoUrl: "/maps/cards/cache-icon.webp", imageUrl: "/maps/cards/cache-poster.webp" },
+  "de_contact": { logoUrl: "/maps/cards/contact-icon.webp", imageUrl: "/maps/cards/contact-poster.webp" },
+  "de_dust2": { logoUrl: "/maps/cards/dust2-icon.webp", imageUrl: "/maps/cards/dust2-poster.webp" },
+  "de_grail": { logoUrl: "/maps/cards/grail-icon.webp", imageUrl: "/maps/cards/grail-poster.webp" },
+  "de_inferno": { logoUrl: "/maps/cards/inferno-icon.webp", imageUrl: "/maps/cards/inferno-poster.webp" },
+  "cs_italy": { imageUrl: "/maps/cards/italy-poster.webp" },
+  "de_jura": { logoUrl: "/maps/cards/jura-icon.webp", imageUrl: "/maps/cards/jura-poster.webp" },
+  "de_mills": { logoUrl: "/maps/cards/mills-icon.webp", imageUrl: "/maps/cards/mills-poster.webp" },
+  "de_mirage": { logoUrl: "/maps/cards/mirage-icon.webp", imageUrl: "/maps/cards/mirage-poster.webp" },
+  "de_nuke": { logoUrl: "/maps/cards/nuke-icon.webp", imageUrl: "/maps/cards/nuke-poster.webp" },
+  "cs_office": { logoUrl: "/maps/cards/office-icon.webp", imageUrl: "/maps/cards/office-poster.webp" },
+  "de_overpass": { logoUrl: "/maps/cards/overpass-icon.webp", imageUrl: "/maps/cards/overpass-poster.webp" },
+  "de_thera": { logoUrl: "/maps/cards/thera-icon.webp", imageUrl: "/maps/cards/thera-poster.webp" },
+  "de_train": { imageUrl: "/maps/cards/train-poster.webp" },
+  "de_vertigo": { logoUrl: "/maps/cards/vertigo-icon.webp", imageUrl: "/maps/cards/vertigo-poster.webp" },
+};

@@ -3,7 +3,7 @@
     <Panel class="training-screen" hittest="false">
         <Panel id="training_panel" class="training-panel" hittest="true">
             <Panel class="heading">
-                <Label class="title" text="Trainingszentrale" />
+                <Label class="title" text="Playbook" />
                 <Label id="training_breadcrumb" class="breadcrumb" text="{s:text}" />
             </Panel>
             <Panel class="rows">

@@ -74,8 +74,8 @@ public sealed partial class MatchZyNadesPlugin
         var vote = new ActiveMapVote(map, new(voters), Server.CurrentTime + 30);
         _mapVote = vote;
         _nextMapVote = Server.CurrentTime + 60;
-        Server.PrintToChatAll($" [Training] Mapwechsel zu {MenuRenderer.Plain(map.Title, 60)}? Chat: .y = Ja, .n = Nein. Alternativ im Panel unter Map wechseln. {vote.Ballot.Required} Ja-Stimmen nötig, 30 Sekunden.");
-        AddTimer(30, () => { if (_mapVote == vote) { Server.PrintToChatAll(" [Training] Mapwechsel abgelehnt: keine Mehrheit."); CancelMapVote(); } }, TimerFlags.STOP_ON_MAPCHANGE);
+        Server.PrintToChatAll(ChatMessage($"Mapwechsel zu {MenuRenderer.Plain(map.Title, 60)}? Chat: .y = Ja, .n = Nein. Alternativ im Panel unter Map wechseln. {vote.Ballot.Required} Ja-Stimmen nötig, 30 Sekunden."));
+        AddTimer(30, () => { if (_mapVote == vote) { Server.PrintToChatAll(ChatMessage("Mapwechsel abgelehnt: keine Mehrheit.")); CancelMapVote(); } }, TimerFlags.STOP_ON_MAPCHANGE);
         foreach (var voter in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV))
         {
             if (!Alive(voter)) continue; // Spectators can vote via chat or console.
@@ -93,10 +93,10 @@ public sealed partial class MatchZyNadesPlugin
     {
         if (!TrainingEnabled || _mapVote is not { } vote || Server.CurrentTime >= vote.EndsAt) return;
         if (!vote.Ballot.Cast(player.SteamID, yes)) { Tell(player, "Du hast bereits abgestimmt oder warst beim Start der Abstimmung noch nicht verbunden."); return; }
-        Server.PrintToChatAll($" [Training] Abstimmung: {vote.Ballot.Yes}/{vote.Ballot.Required} Ja, {vote.Ballot.No} Nein.");
+        Server.PrintToChatAll(ChatMessage($"Abstimmung: {vote.Ballot.Yes}/{vote.Ballot.Required} Ja, {vote.Ballot.No} Nein."));
         if (!vote.Ballot.Passed) return;
         _mapVote = null;
-        Server.PrintToChatAll($" [Training] Mehrheit erreicht. Wechsel zu {MenuRenderer.Plain(vote.Map.Title, 60)}.");
+        Server.PrintToChatAll(ChatMessage($"Mehrheit erreicht. Wechsel zu {MenuRenderer.Plain(vote.Map.Title, 60)}."));
         Server.NextFrame(() => {
             if (TrainingEnabled && MapChoices().Any(m => m.Available && m.Key == vote.Map.Key && m.Command == vote.Map.Command))
                 Server.ExecuteCommand(vote.Map.Command);

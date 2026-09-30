@@ -16,8 +16,7 @@ public sealed partial class MatchZyNadesPlugin
             var settings = session.Settings.ToggleFavorite(lineup);
             _settingsStore.Save(player.SteamID, settings);
             session.Settings = settings;
-            session.Menu.Refresh(TrainingMenu.Create(library, session.Menu.Map, TrainingEnabled,
-                _last.GetValueOrDefault(player.Slot), settings: settings, spawns: ReadCompetitiveSpawns()).Current);
+            session.Menu.Refresh(BuildMenu(player).Current);
             session.Library = library;
             Tell(player, settings.IsFavorite(lineup) ? "In deinen Favoriten gespeichert." : "Aus deinen Favoriten entfernt.");
         }

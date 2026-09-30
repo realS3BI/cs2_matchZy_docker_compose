@@ -27,6 +27,7 @@ function stableNades(entries) {
     throwTrace: entry.throwTrace,
     map: entry.map,
     type: entry.type,
+    team: entry.team,
     desc: entry.desc,
     lineupPos: entry.lineupPos,
     lineupAng: entry.lineupAng,
@@ -48,7 +49,7 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
-    for (const key of ["displayName", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+    for (const key of ["displayName", "team", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
       if (current[key] !== undefined) merged[key] = current[key];
     }
     if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
@@ -171,6 +172,17 @@ export class NadesSyncService {
         };
       });
       const saved = await this.store.saveNades(revised);
+      await this.writeFromMongoUnlocked(saved);
+      return saved;
+    });
+  }
+
+  async changeFromPanel(change: (entries: any[]) => any[]) {
+    return this.exclusive(async () => {
+      const current = await this.store.getNades();
+      const next = change(current);
+      if (this.enabled) await this.rememberCaptures(current);
+      const saved = await this.store.saveNades(next);
       await this.writeFromMongoUnlocked(saved);
       return saved;
     });
@@ -380,7 +392,7 @@ export class NadesSyncService {
   }
 
   async writeMetadata(entries) {
-    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName, mustKnow, official, reviewStatus, updatedAt }) => ({ owner, map, name, displayName: displayName || "", mustKnow: mustKnow === true, official: official === true, reviewStatus: reviewStatus || "", updatedAt })));
+    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName, team, mustKnow, official, reviewStatus, updatedAt }) => ({ owner, map, name, ...(team ? { team } : {}), displayName: displayName || "", mustKnow: mustKnow === true, official: official === true, reviewStatus: reviewStatus || "", updatedAt })));
   }
 
   async importCaptures() {

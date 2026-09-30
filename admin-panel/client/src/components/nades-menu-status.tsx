@@ -53,7 +53,7 @@ export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-1.5">
-            <CardTitle>MatchZy Nades · In-game menu</CardTitle>
+            <CardTitle>Playbook · Ingame-Panel</CardTitle>
             <CardDescription>Browse map lineups with .nades, choose a grenade and return to its throw position.</CardDescription>
           </div>
           <Badge variant={!report && loading ? "outline" : variant}>{!report && loading ? "Checking server…" : label}</Badge>
@@ -61,7 +61,7 @@ export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
       </CardHeader>
       <CardContent className="grid gap-4">
         <p className="text-sm text-muted-foreground">
-          {included ? "Included automatically with MatchZy and Nades. No separate plugin switch is needed."
+          {included ? "Im Nades-Modus läuft Playbook eigenständig. Im MatchZy-Modus ergänzt es das Practice-Training."
             : "To install the menu, select MatchZy or Nades and Apply & restart."}
           {modeChanged ? " Your mode selection has not been saved yet; the status below describes the server currently running." : ""}
         </p>
@@ -69,14 +69,14 @@ export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
           <p className="text-sm">{error || menu?.detail || (loading ? "Reading the plugin installation and its runtime confirmation…" : "Menu status is not available. Rebuild and redeploy both the dashboard and CS2 images.")}</p>
           {!error && menu?.state === "loaded" ? (
             <div className="flex flex-wrap gap-2">
-              <Badge variant={menu.practice ? "success" : "warning"}>{menu.practice ? "Practice active" : "Practice off · use .prac"}</Badge>
+              <Badge variant={menu.practice ? "success" : "warning"}>{menu.practice ? "Practice active" : "Training inaktiv"}</Badge>
               {menu.version ? <Badge variant="outline">v{menu.version}</Badge> : null}
             </div>
           ) : null}
         </div>
         <div className="grid gap-1 text-sm">
-          <p><code>.prac</code> starts practice in MatchZy; Nades mode starts it automatically.</p>
-          <p>Plugin 1.5 uses a fixed HUD with mouse controls and per-player hotkeys. Install the compiled HUD addon before enabling it; plugin status alone does not confirm client assets.</p>
+          <p>Der Nades-Modus startet das eigene Training automatisch. Im MatchZy-Modus aktiviert <code>.prac</code> das Training.</p>
+          <p>Playbook verwendet ein kompaktes HUD mit neun Listenplätzen und festen Tasten. Die kompilierten HUD-Dateien müssen auf dem Client installiert sein.</p>
           <p><code>css_training</code> opens the panel. Choose your keys in Settings, then apply the displayed client binds. <code>css_training_binds</code> prints your saved configuration.</p>
           <p><code>.nades last</code> reloads your last lineup. Type <code>.nades 1</code>–<code>.nades 9</code> for numbered selection.</p>
         </div>

@@ -1,3 +1,4 @@
+import { isLineupTeam } from "../shared/lineup-teams.js";
 import { flagsForRole, SETTING_KEYS } from "./policy.js";
 
 const STEAM64_RE = /^[0-9]{17}$/;
@@ -159,6 +160,7 @@ export function sanitizeNades(entries) {
     if (displayName.length > 120 || /[\u0000-\u001f\u007f]/.test(displayName)) {
       throw new Error("Display name must be at most 120 characters without control characters");
     }
+    if (entry.team !== undefined && entry.team !== "" && !isLineupTeam(entry.team)) throw new Error("Ungültige Seite. Erlaubt sind T, CT und beide Seiten.");
     const type = String(entry.type ?? "").trim();
     const desc = String(entry.desc ?? "");
     const owner = String(entry.owner ?? "default").trim() || "default";
@@ -201,6 +203,7 @@ export function sanitizeNades(entries) {
       owner,
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
+    if (isLineupTeam(entry.team)) cleanEntry.team = entry.team;
     if (throwTechnique) cleanEntry.throwTechnique = throwTechnique;
     if (throwTrace) cleanEntry.throwTrace = throwTrace;
     if (landingPos) cleanEntry.landingPos = landingPos;

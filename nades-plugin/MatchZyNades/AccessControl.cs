@@ -23,9 +23,8 @@ public sealed class PlatformRoles(string path)
 
     public static bool Blocks(string role, string command)
     {
-        command = command.Trim().Trim('"').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLowerInvariant() ?? "";
-        if (command.StartsWith('.') || command.StartsWith('!') || command.StartsWith('/')) command = "css_" + command[1..];
-        if (role == "player") return command.StartsWith("css_") || command == "noclip";
+        command = PlaybookCommands.Normalize(command);
+        if (role == "player") return command.StartsWith("css_") || command.StartsWith("matchzy_") || command.StartsWith("get5_") || command is "noclip" or "sm_pause" or "sm_unpause" or "reload_admins";
         // MatchZy's save/import commands bypass the panel's content checks.
         return role == "match_admin" && command is "css_savenade" or "css_sn" or "css_importnade" or "css_in" or "css_deletenade" or "css_delnade" or "css_dn" or "css_save_nades_as_global" or "css_globalnades";
     }
@@ -43,8 +42,10 @@ public sealed partial class MatchZyNadesPlugin
         if (player is not { IsValid: true }) return HookResult.Continue; // Server RCON remains authorized separately.
         var command = info.GetArg(0);
         if (command is "say" or "say_team") command = info.ArgString;
-        if (!PlatformRoles.Blocks(_roles.Role(player.SteamID), command)) return HookResult.Continue;
-        player.PrintToChat(" [MatchZy] Deine Rolle erlaubt diesen Befehl nicht.");
+        if (PlatformRoles.Blocks(_roles.Role(player.SteamID), command))
+        { player.PrintToChat(ChatMessage("Deine Rolle erlaubt diesen Befehl nicht.")); return HookResult.Stop; }
+        if (!PlaybookCommands.Blocks(_serverMode, TrainingEnabled, command)) return HookResult.Continue;
+        player.PrintToChat(ChatMessage("Dieser Befehl ist in diesem Spielmodus nicht verfügbar."));
         return HookResult.Stop;
     }
 
@@ -66,5 +67,17 @@ public sealed partial class MatchZyNadesPlugin
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { }
         foreach (var session in _menus.Values.ToArray())
             if (!CanControl(session.Player)) { ClearCapture(session.Player.Slot); Close(session.Player.Slot); }
+        if (StandaloneTraining)
+            foreach (var player in Utilities.GetPlayers())
+                if (player is { IsValid: true, IsBot: false } && !CanControl(player))
+                {
+                    ForgetTraining(player.SteamID);
+                    ApplyPlayerTraining(player);
+                    if (player.PlayerPawn.Value is { IsValid: true, MoveType: MoveType_t.MOVETYPE_NOCLIP } pawn)
+                    {
+                        pawn.MoveType = pawn.ActualMoveType = MoveType_t.MOVETYPE_WALK;
+                        Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
+                    }
+                }
     }
 }

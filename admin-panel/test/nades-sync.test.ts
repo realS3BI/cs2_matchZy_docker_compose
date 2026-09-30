@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as wait } from "node:timers/promises";
 import { mergeNadeCaptures, NadesSyncService } from "../src/nades-sync.js";
+import { applyWebNadeAction } from "../src/nade-review.js";
 import { sanitizeNades } from "../src/validators.js";
 
 test("game requests round-trip through sync and cannot undo a newer admin approval", async (t) => {
@@ -401,4 +402,46 @@ test("completed request is never reapplied after a lost unlink or service restar
   await restarted.poll();
   await assert.rejects(stat(resultFile), { code: "ENOENT" });
   assert.equal(store.entries[0].updatedAt, revision);
+});
+
+
+test("web edits share the sync queue and stale writes cannot replace a newer revision", async t => {
+  const owner = "76561198000000001";
+  const [entry, other] = sanitizeNades([sampleEntry({ owner }), sampleEntry({ name: "other" })]);
+  const { service, store } = await createHarness(t, [entry, other]);
+  await service.writeFromMongo([entry, other]);
+  const request = { owner, map: entry.map, name: entry.name, revision: entry.updatedAt, action: "edit", patch: { desc: "Im Web geändert" } };
+  const change = entries => applyWebNadeAction(entries, request, { identitySteam64: owner, role: "player" });
+  const results = await Promise.allSettled([service.changeFromPanel(change), service.changeFromPanel(change)]);
+  assert.equal(results[0].status, "fulfilled");
+  assert.equal(results[1].status, "rejected");
+  if (results[1].status === "rejected") assert.equal(results[1].reason.status, 409);
+  assert.equal(store.entries[0].desc, "Im Web geändert");
+  assert.deepEqual(store.entries[1], other);
+  const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata.find(n => n.owner === owner).updatedAt, store.entries[0].updatedAt);
+  await service.poll();
+  assert.equal(store.entries[0].desc, "Im Web geändert");
+});
+
+
+test("team assignments survive game sync, captures and web revisions", async t => {
+  const owner = "76561198000000001";
+  const [entry] = sanitizeNades([sampleEntry({ owner, team: "t" })]);
+  const { service, store } = await createHarness(t, [entry]);
+  await service.writeFromMongo([entry]);
+  await writeJson(service.liveFile, sampleConfig({ owner, desc: "Im Spiel geändert" }));
+  await service.poll();
+  assert.equal(store.entries[0].team, "t");
+  assert.equal(store.entries[0].desc, "Im Spiel geändert");
+  await service.changeFromPanel(entries => applyWebNadeAction(entries, {
+    owner, name: entry.name, map: entry.map, revision: entries[0].updatedAt, action: "edit", patch: { team: "both" },
+  }, { identitySteam64: owner, role: "player" }));
+  const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].team, "both");
+  await writeJson(service.liveFile, sampleConfig({ owner, desc: "Neue Beschreibung" }));
+  await service.poll();
+  assert.equal(store.entries[0].team, "both");
+  const merged = mergeNadeCaptures(store.entries, [{ ...store.entries[0], captureId: "new-capture", landingPos: "10 20 30", capturedAt: new Date().toISOString() }]);
+  assert.equal(merged[0].team, "both");
 });

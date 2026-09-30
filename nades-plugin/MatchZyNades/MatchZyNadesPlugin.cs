@@ -3,7 +3,6 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
-using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Menu;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -16,16 +15,14 @@ namespace MatchZyNades;
 [MinimumApiVersion(374)]
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
-    public override string ModuleName => "MatchZy Nades";
-    public override string ModuleVersion => "1.9.0";
-    public override string ModuleAuthor => "MatchZy Control";
+    public override string ModuleName => "Playbook";
+    public override string ModuleVersion => "2.0.0";
+    public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
     private readonly Dictionary<int, MenuSession> _menus = [];
     private readonly Dictionary<int, NadeLineup> _last = [];
     private string _libraryPath = "";
-    private ConVar? _cheats;
-    private ConVar? _saveNadesGlobally;
     private NadeRuntimeStatus? _runtimeStatus;
     private bool _statusWriteFailed;
     private PlayerPanelSettingsStore _settingsStore = null!;
@@ -54,11 +51,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         _libraryPath = Path.Combine(Server.GameDirectory, "csgo", "cfg", "MatchZy", "savednades.json");
         _settingsStore = new(Path.Combine(ModuleDirectory, "data", "players"));
-        _cheats = ConVar.Find("sv_cheats");
-        _saveNadesGlobally = ConVar.Find("matchzy_save_nades_as_global_enabled");
         AddCommandListener(null, GuardCommand, HookMode.Pre);
         SyncPermissions();
         AddTimer(2f, SyncPermissions, TimerFlags.REPEAT);
+        RegisterStandaloneTraining(hotReload);
         RegisterCapture();
         AddCommandListener("say", OnSay, HookMode.Pre);
         AddCommandListener("say_team", OnSay, HookMode.Pre);
@@ -79,14 +75,17 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         WriteRuntimeStatus(true);
         AddTimer(5f, () => WriteRuntimeStatus(true), TimerFlags.REPEAT);
         AddTimer(2f, SyncOpenLibraries, TimerFlags.REPEAT);
-        Logger.LogInformation("MatchZy Nades {Version} loaded: .nades / !nades / css_nades", ModuleVersion);
+        Logger.LogInformation("Playbook {Version} loaded: .nades / !nades / css_nades", ModuleVersion);
     }
 
     public override void Unload(bool hotReload)
     {
+        CloseAll();
+        StopStandaloneTraining();
         Reset();
+        _practiceReady = false;
         WriteRuntimeStatus(false);
-        Logger.LogInformation("MatchZy Nades unloaded");
+        Logger.LogInformation("Playbook unloaded");
     }
 
     private void WriteRuntimeStatus(bool loaded)
@@ -99,7 +98,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            if (!_statusWriteFailed) Logger.LogWarning(error, "Could not write MatchZy Nades runtime status");
+            if (!_statusWriteFailed) Logger.LogWarning(error, "Could not write Playbook runtime status");
             _statusWriteFailed = true;
         }
     }
@@ -111,6 +110,12 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (TryMapVoteFromChat(player, command.ArgString)) return HookResult.Stop;
         if (TrySaveNameFromChat(player, command.ArgString)) return HookResult.Stop;
         var words = command.ArgString.Trim().Trim('"').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (StandaloneTraining && words.Length > 0 && words[0].StartsWith('.') &&
+            PlaybookCommands.TrainingCommands.Contains(PlaybookCommands.Normalize(words[0])))
+        {
+            RunTrainingCommand(player, PlaybookCommands.Normalize(words[0]), string.Join(" ", words.Skip(1)));
+            return HookResult.Stop;
+        }
         if (words.Length > 1 && words[0].ToLowerInvariant() is ".savenade" or ".sn" or ".loadnade" or ".ln")
             ArmAfterCommand(player, words[1]);
         if (words.Length == 0 || !words[0].Equals(".nades", StringComparison.OrdinalIgnoreCase)) return HookResult.Continue;
@@ -128,7 +133,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void TogglePanelControl(CCSPlayerController? player)
     {
         if (!CanControl(player) || !Alive(player)) return;
-        if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar (.prac)."); return; }
+        if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
             session.Visible = true;
@@ -143,7 +148,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void TogglePanelVisible(CCSPlayerController? player)
     {
         if (!CanControl(player) || !Alive(player)) return;
-        if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar (.prac)."); return; }
+        if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
             if (session.Visible) Hide(session);
@@ -170,11 +175,11 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             session.Menu.Notice = message;
             session.NextDraw = 0;
         }
-        player.PrintToChat($" [Nades] {message}");
+        player.PrintToChat(ChatMessage(message));
     }
     private static bool Alive(CCSPlayerController? player) => player is { IsValid: true, IsBot: false, PawnIsAlive: true }
         && player.TeamNum is 2 or 3 && player.PlayerPawn.Value is { IsValid: true, MovementServices: not null, WeaponServices: not null };
-    private bool TrainingEnabled => MatchZyState.IsPractice(MatchZyState.LoadedInstance());
+    private bool TrainingEnabled => StandaloneTraining ? _practiceReady : _serverMode == "matchzy" && MatchZyState.IsPractice(MatchZyState.LoadedInstance());
 
     private void Handle(CCSPlayerController? player, string action)
     {
@@ -184,7 +189,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
         if (action.Length == 0) { Open(player); return; }
         if (int.TryParse(action, out var key)) { Select(player, key); return; }
-        if (!TrainingEnabled) { Tell(player, "Das Panel ist nur in MatchZy Practice verfügbar. Mit .prac aktivieren."); return; }
+        if (!TrainingEnabled) { Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (action.Equals("save", StringComparison.OrdinalIgnoreCase)) { ArmNewLineupCapture(player); return; }
         if (action.Equals("check", StringComparison.OrdinalIgnoreCase))
         {
@@ -219,8 +224,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             { metadata = null; /* Optional panel titles must not block the MatchZy library. */ }
             return NadeCatalog.Parse(File.ReadAllText(_libraryPath), Server.MapName, player.SteamID.ToString(CultureInfo.InvariantCulture), metadata);
         }
-        catch (FileNotFoundException) { if (!quiet) Tell(player, "Noch keine Bibliothek. Lineups im Dashboard oder mit .savenade speichern."); }
-        catch (DirectoryNotFoundException) { if (!quiet) Tell(player, "Noch keine Bibliothek. Lineups im Dashboard oder mit .savenade speichern."); }
+        catch (FileNotFoundException) { if (!quiet) Tell(player, "Noch keine Bibliothek. Lineups im Webpanel oder mit .nades save aufnehmen."); }
+        catch (DirectoryNotFoundException) { if (!quiet) Tell(player, "Noch keine Bibliothek. Lineups im Webpanel oder mit .nades save aufnehmen."); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
             Logger.LogWarning(error, "Could not read saved grenade library");
@@ -234,13 +239,13 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         var library = ReadLibrary(player, quiet: true);
         return TrainingMenu.Create(library ?? [], Server.MapName, TrainingEnabled,
             _last.GetValueOrDefault(player.Slot), library == null ? "Bibliothek nicht verfügbar; im Dashboard prüfen." : "",
-            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns(), MatchZyState.Toggles(player), MapMenu(), player.SteamID.ToString(CultureInfo.InvariantCulture), CanWriteNades(player));
+            _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player), ReadCompetitiveSpawns(), TrainingState(player), MapMenu(), player.SteamID.ToString(CultureInfo.InvariantCulture), CanWriteNades(player), StandaloneTraining);
     }
 
     private void Open(CCSPlayerController player, bool focus = true)
     {
         if (!CanControl(player)) return;
-        if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Das Panel ist nur im MatchZy-Practice-Modus verfügbar. Mit .prac aktivieren, sofern du dazu berechtigt bist."); return; }
+        if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (Environment.GetEnvironmentVariable("MATCHZY_TRAINING_HUD_READY") != "1")
         {
             Tell(player, "Trainings-HUD in den Servereinstellungen des Webpanels aktivieren und übernehmen. HUD-Dateien lokal installieren oder über Workshop ausliefern. Keybinds: css_training_binds.");
@@ -298,8 +303,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         }
         if (TrainingMenu.Command(request.Action) is { } command)
         {
-            Tell(player, "An MatchZy gesendet. " + TrainingMenu.ActionHint(request.Action));
-            player.ExecuteClientCommandFromServer(command);
+            if (StandaloneTraining) RunTrainingCommand(player, command == "noclip" ? "css_noclip" : command, "");
+            else player.ExecuteClientCommandFromServer(command);
         }
     }
 
@@ -479,10 +484,11 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (player is not { IsValid: true }) return;
         Close(player.Slot);
         _last.Remove(player.Slot);
+        ForgetTraining(player.SteamID);
         ClearCapture(player.Slot);
         _edits.Remove(player.Slot);
     }
 
     private void CloseAll() { foreach (var slot in _menus.Keys.ToArray()) Close(slot); }
-    private void Reset() { CloseAll(); _last.Clear(); ResetCapture(); _edits.Clear(); CancelMapVote(); _nextMapVote = 0; }
+    private void Reset() { ResetTraining(); CloseAll(); _last.Clear(); ResetCapture(); _edits.Clear(); CancelMapVote(); _nextMapVote = 0; }
 }

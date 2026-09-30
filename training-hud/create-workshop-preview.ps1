@@ -19,7 +19,7 @@ try {
     foreach ($resource in @($accent, $white, $muted, $surface, $large, $medium, $small)) { $resources.Add($resource) }
     $graphics.FillRectangle($accent, 40, 42, 64, 5)
     $graphics.DrawString('CS2 / COMMUNITY SERVER', $small, $muted, 40, 67)
-    $graphics.DrawString('MatchZy', $large, $white, 36, 116)
+    $graphics.DrawString('Playbook', $large, $white, 36, 116)
     $graphics.DrawString('TRAINING HUD', $medium, $accent, 40, 180)
     $graphics.FillRectangle($surface, 40, 252, 432, 130)
     $graphics.FillRectangle($accent, 40, 252, 4, 130)

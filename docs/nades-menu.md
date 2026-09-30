@@ -1,4 +1,4 @@
-# Trainingszentrale im Spiel (1.9.0)
+# Playbook im Spiel (2.0.0)
 
 Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und vier Beschreibungszeilen über die volle Breite. Längere Texte werden mit Auslassungspunkten gekürzt. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
 
@@ -6,7 +6,9 @@ Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige 
 
 CS2- und Dashboard-Image gemeinsam aktualisieren; CounterStrikeSharp API 374+ verwenden. Im Dashboard unter **Server → Trainings-HUD** aktivieren und mit **Apply & restart** übernehmen. Für lokale Entwicklung die Workshop-Auslieferung ausschalten und [lokale Assets bauen/installieren](../training-hud/README.md). Für Mitspieler das Workshop-Addon aktualisieren und ausliefern. Nach Layoutänderungen CS2 vollständig neu starten.
 
-Das Panel funktioniert nur, wenn die geladene MatchZy-Instanz `isPractice == true` und `matchStarted == false` meldet. `.prac` oder der automatische Start im Nades-Modus aktiviert Practice; bloßes `sv_cheats 1` reicht nicht. Bei `.exitprac`, Competitive-Start oder MatchZy-Unload werden Panel, Aufnahme und Map-Abstimmung geschlossen. Der Zugriff liest die öffentlichen MatchZy-Zustandsfelder über die Plugin-Verwaltung von CounterStrikeSharp. Ist diese Schnittstelle nicht verfügbar, bleibt das Panel gesperrt. Nach Updates von MatchZy/CSS ist dieser Übergang im Spiel zu prüfen.
+Im Nades-Modus startet Playbook sein eigenes Training ohne MatchZy. Im MatchZy-Modus funktioniert das Panel nur, wenn die geladene MatchZy-Instanz `isPractice == true` und `matchStarted == false` meldet. Dort aktiviert `.prac` das Training. Bloßes `sv_cheats 1` schaltet das Panel in anderen Modi nicht frei. Bei `.exitprac`, Competitive-Start oder MatchZy-Unload schließt es sich im MatchZy-Modus. [Modi, verfügbare Werkzeuge und Befehle](playbook.md).
+
+Im eigenständigen Nades-Modus fehlen bewusst Rethrow, Bot-Platzierung, Wurfhistorie und Colored Smokes. Diese MatchZy-Funktionen werden weder angeboten noch an ein fehlendes Plugin weitergeleitet.
 
 Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. Ohne installierte HUD-Dateien kann das Plugin keine sichtbare Oberfläche garantieren. Einmalige Bind-Einrichtung: [Feste Keybinds](../training-hud/README.md#feste-keybinds). Freie Tastenzuweisungen und Navigation über W/S/Use sind entfernt. Bestehende Favoriten werden beim Laden alter Profile erhalten.
 
@@ -22,7 +24,7 @@ Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. O
 8. **Keybinds:** die festen acht Tasten und die Bind-Befehle anzeigen.
 9. **Panel ausblenden:** mit KP_DEL wieder anzeigen. KP_0 wechselt zwischen Bedienung und freiem Spielen.
 
-**Bots** enthält stehenden Bot, duckenden Bot und Bots entfernen. **Trainingshilfen** enthält Flugbahnvorschau, Einschläge, Flashschutz und God Mode. Die Beschriftung zeigt „einschalten“ oder „ausschalten“ entsprechend dem tatsächlichen Zustand. MatchZys God Mode wird anhand seiner Lebenspunkte-Logik erkannt. Gemeinsame Trainingsaktionen werden sofort ausgeführt; die Beschreibung kennzeichnet ihre Wirkung auf alle Spieler. MatchZy behält seine Berechtigungsprüfung und meldet das Ergebnis im Chat.
+Im MatchZy-Practice-Modus enthält **Bots** stehenden Bot, duckenden Bot und Bots entfernen. **Trainingshilfen** enthält Flugbahnvorschau, Einschläge, Flashschutz und God Mode. Die Beschriftung zeigt „einschalten“ oder „ausschalten“ entsprechend dem tatsächlichen Zustand. MatchZys God Mode wird anhand seiner Lebenspunkte-Logik erkannt. Gemeinsame Trainingsaktionen werden sofort ausgeführt; die Beschreibung kennzeichnet ihre Wirkung auf alle Spieler. Im MatchZy-Modus behält MatchZy seine zusätzliche Berechtigungsprüfung. Beide Implementierungen verwenden denselben Playbook-Chat-Präfix.
 
 ## Aufnahme bearbeiten, löschen und prüfen lassen
 
@@ -42,13 +44,13 @@ Abstimmen im Chat mit `.y` für Ja und `.n` für Nein, im Panel unter **Map wech
 
 ## Abnahmestand
 
-Version 1.9.0 wird mit Unit-/Integrationstests, Web-Build und Valves Panorama-Compiler geprüft. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
+Version 2.0.0 wird mit Unit-/Integrationstests, Web-Build und Valves Panorama-Compiler geprüft. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
 
 ## Architektur
 
 `InGameMenu` verwaltet Seiten und History. `ScreenPanel` erstellt eine private `custom_hud_layout`-Entity pro offener Sitzung und setzt Texte, CSS-Klassen und Cursorzustand. `CheckTransmit` hält die Entity von anderen Spielern fern. Es gibt keine World-Text-Entities oder Kameratransformationen mehr. Eine neue Entity pro Sitzung verhindert das Wiederverwenden alter Slot-Texte in API 374. Die pro Spieler gespeicherten Werte liegen getrennt davon in `PlayerPanelSettingsStore`.
 
-`TrainingMenu` und `PanelSettingsMenu` definieren die Inhalte; `PanelControls` prüft die Tasten und routet Maus-/Tastaturaktionen. Texte werden niemals als beliebige Serverbefehle ausgeführt. MatchZy-Befehle laufen weiterhin im Spieler-Kontext. Native Eingaben, Layout-Compiler und Darstellung müssen im Spiel geprüft werden; die Unit-Tests prüfen Daten, Navigation und Persistenz.
+`TrainingMenu` und `PanelSettingsMenu` definieren die Inhalte; `PanelControls` prüft die Tasten und routet Maus-/Tastaturaktionen. Texte werden niemals als beliebige Serverbefehle ausgeführt. Im Nades-Modus führt Playbook die Trainingsaktionen selbst aus. Im MatchZy-Modus laufen MatchZy-Befehle weiterhin im Spieler-Kontext. Native Eingaben, Layout-Compiler und Darstellung müssen im Spiel geprüft werden; die Unit-Tests prüfen Daten, Navigation und Persistenz.
 
 ## Direkte Zifferntasten 1–9
 
@@ -91,7 +93,7 @@ Im Dashboard lässt sich **Display name** frei vergeben, beispielsweise `Fenster
 1. Practice einschalten, `.nades save` in den Chat eingeben und die Chat-Bestätigung abwarten.
 2. In den nächsten drei Minuten den gewünschten Wurf ausführen: Jumpthrow, Duckthrow, Duck-Setup mit anschließendem Aufstehen, Walkthrow oder Anlauf mit normalem Wurf.
 3. **Wurf erkannt** bestätigt Typ und Abwurf. Bei der Smoke-Entstehung, Flash-/HE-Explosion, Molotov-Zündung oder Decoy-Aktivierung meldet der Server **Ziel erfasst** und fragt danach im Chat nach einem Titel. Zum Abbrechen `abbrechen` schreiben.
-4. Den gewünschten lesbaren Titel eingeben, zum Beispiel `Mirage Fenster Smoke vom T Spawn`. Das Plugin erstellt daraus einen technischen `.loadnade`-Namen, wählt den MatchZy-Owner gemäß der Einstellung für globale Saves und legt den Eintrag in der Dashboard-Bibliothek ab. Der Dateisync stellt ihn auch MatchZy und dem Ingame-Menü bereit.
+4. Den gewünschten lesbaren Titel eingeben, zum Beispiel `Mirage Fenster Smoke vom T Spawn`. Das Plugin erstellt daraus einen technischen `.loadnade`-Namen, verwendet die Steam-ID des Erstellers als Owner und legt den Eintrag in der Dashboard-Bibliothek ab. Der Dateisync stellt ihn auch MatchZy und dem Ingame-Menü bereit.
 
 Während die Aufnahme bereit ist, protokolliert das Plugin maximal die letzten acht Sekunden vor dem Wurf: Abwurfposition, Winkel, Geschwindigkeit, Blickrichtung, Positionen und gedrückte Tasten je Server-Tick. Start und Landepunkt stammen aus den Spielereignissen. Jump-, Duck- und Walk-Merkmale werden aus dieser Eingabespur abgeleitet; Anlaufstrecke und Geschwindigkeit bleiben ebenfalls sichtbar. Im Dashboard zeigen die Lineup-Details die Zusammenfassung und unter **Show recorded throw inputs and movement** die vollständige Spur. Das macht Sequenzen nachvollziehbar, beweist aber bei komplexen Sprung-/Release-Timings nicht automatisch die perfekte Technik. Körperpose oder Sprunghöhe als echte Animation werden nicht aufgezeichnet.
 
@@ -143,7 +145,7 @@ Die Nummerierung folgt den Entity-Indizes der geladenen Map. Der Teleport prüft
 
 ## Map-Katalog und Abstimmung ab 1.9.0
 
-Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **MatchZy Nades 1.9.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
+Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.0.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
 
 Das Dashboard schreibt den gemeinsamen Katalog als `map-catalog.json` neben die angewendeten Einstellungen. Das Plugin ermittelt installierte VPK-Maps und aktivierte Workshop-IDs und veröffentlicht `savednades.maps.json` neben der Granatenbibliothek. Nach **Refresh** verwendet der Web-Atlas genau diese Kategorien und Verfügbarkeiten. Ohne Serverbestand kennzeichnet die Website die Ladbarkeit als unbestätigt.
 

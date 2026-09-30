@@ -43,7 +43,7 @@ test("healthz is public while diagnostics remain authenticated", async () => {
     const diagnostics = await fetch(`${baseUrl}/api/server/diagnostics`);
 
     assert.equal(health.status, 200);
-    assert.deepEqual(await health.json(), { ok: true, service: "cs2-matchzy-admin" });
+    assert.deepEqual(await health.json(), { ok: true, service: "playbook" });
     assert.equal(diagnostics.status, 401);
   } finally {
     await new Promise((resolve) => server.close(resolve));

@@ -165,7 +165,7 @@ function DiagnosticsReport({ diagnostics }) {
                 <dt className="text-muted-foreground">Control</dt>
                 <dd><Badge variant="outline">{diagnostics.service.controlMode}</Badge></dd>
               </div>
-              {diagnostics.nades.relevant ? <div className="flex items-center justify-between gap-4">
+              {diagnostics.mode?.id === "matchzy" ? <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">MatchZy config</dt>
                 <dd><Badge variant={diagnostics.nades.configPresent ? "success" : "warning"}>{diagnostics.nades.configPresent ? "present" : "missing"}</Badge></dd>
               </div> : null}
@@ -275,7 +275,7 @@ export function Diagnostics({ active, onOpenLogs }) {
         <Card>
           <CardHeader>
             <CardTitle>{loading ? "Inspecting the CS2 container" : "No diagnostic report yet"}</CardTitle>
-            <CardDescription>{loading ? "Reading startup logs and plugin markers." : "Run diagnostics to inspect the MatchZy load chain."}</CardDescription>
+            <CardDescription>{loading ? "Reading startup logs and plugin markers." : "Diagnose der Serverkomponenten starten."}</CardDescription>
           </CardHeader>
         </Card>
       )}
