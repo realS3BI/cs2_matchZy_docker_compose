@@ -3,6 +3,7 @@ import { Crosshair, MapPinned, Server, type LucideIcon } from "lucide-react";
 import { ACTIVE_DUTY_MAPS, mapPath } from "@/lib/maps";
 import { NavMain, type SidebarSection } from "@/components/nav-main";
 import { NavUser, type SidebarUser } from "@/components/nav-user";
+import { SidebarServerStatus, type SidebarServerStatusProps } from "@/components/sidebar-server-status";
 import {
   Sidebar,
   SidebarContent,
@@ -12,19 +13,16 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 
 // Adapted from shadcn sidebar-08: nested navigation and account menu.
-export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, serviceState }: {
+export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, status, operation, unavailable }: {
   user: SidebarUser;
   serverItems: { label: string; path: string; icon: LucideIcon }[];
   onNavigate: () => void;
   onLogout: () => void;
-  dirty: boolean;
-  serviceState?: string;
-}) {
+} & Pick<SidebarServerStatusProps, "dirty" | "status" | "operation" | "unavailable">) {
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
   const isLibrary = location.pathname === "/nades";
@@ -82,11 +80,8 @@ export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, ser
       <SidebarContent>
         <NavMain items={sections} onNavigate={navigate} />
       </SidebarContent>
-      <SidebarSeparator />
       <SidebarFooter>
-        {serverItems.length > 0 && <p className="px-2 pt-1 text-xs text-muted-foreground" role="status">
-          {dirty ? "Ungespeicherte Servereinstellungen" : serviceState === "running" ? "Server läuft" : serviceState ? "Server gestoppt" : "Serververwaltung verfügbar"}
-        </p>}
+        {serverItems.length > 0 && <SidebarServerStatus status={status} operation={operation} unavailable={unavailable} dirty={dirty} canMonitor={user.role === "admin"} onNavigate={navigate} />}
         <NavUser user={user} onLogout={onLogout} />
       </SidebarFooter>
       <SidebarRail />

@@ -24,6 +24,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private readonly Dictionary<int, NadeLineup> _last = [];
     private string _libraryPath = "";
     private NadeRuntimeStatus? _runtimeStatus;
+    private readonly PluginStartup _startup = new();
+    private string _runtimeMap = "";
     private bool _statusWriteFailed;
     private PlayerPanelSettingsStore _settingsStore = null!;
 
@@ -52,9 +54,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         _libraryPath = Path.Combine(Server.GameDirectory, "csgo", "cfg", "MatchZy", "savednades.json");
         _settingsStore = new(Path.Combine(ModuleDirectory, "data", "players"));
         AddCommandListener(null, GuardCommand, HookMode.Pre);
-        SyncPermissions();
-        AddTimer(2f, SyncPermissions, TimerFlags.REPEAT);
-        RegisterStandaloneTraining(hotReload);
         RegisterCapture();
         AddCommandListener("say", OnSay, HookMode.Pre);
         AddCommandListener("say_team", OnSay, HookMode.Pre);
@@ -72,6 +71,16 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         RegisterEventHandler<EventPlayerSpawn>((e, _) => { if (e.Userid is { } p) Close(p.Slot); return HookResult.Continue; });
         RegisterEventHandler<EventRoundStart>((_, _) => { CloseAll(); return HookResult.Continue; });
         _runtimeStatus = new NadeRuntimeStatus(Path.Combine(ModuleDirectory, "data", "status.json"), ModuleVersion);
+        // Player and map natives need CS2's global variables. World updates also
+        // run while hibernating and cover both a cold start and a plugin reload.
+        _startup.Schedule(Server.NextWorldUpdate, () => StartRuntime(hotReload));
+    }
+
+    private void StartRuntime(bool hotReload)
+    {
+        RegisterStandaloneTraining(hotReload);
+        SyncPermissions();
+        AddTimer(2f, SyncPermissions, TimerFlags.REPEAT);
         WriteRuntimeStatus(true);
         AddTimer(5f, () => WriteRuntimeStatus(true), TimerFlags.REPEAT);
         AddTimer(2f, SyncOpenLibraries, TimerFlags.REPEAT);
@@ -80,6 +89,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     public override void Unload(bool hotReload)
     {
+        _startup.Cancel();
         CloseAll();
         StopStandaloneTraining();
         Reset();
@@ -92,7 +102,9 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         try
         {
-            _runtimeStatus?.Write(loaded, TrainingEnabled, Server.MapName);
+            // Unload can run during a failed load, before globals are available.
+            if (loaded) _runtimeMap = Server.MapName;
+            _runtimeStatus?.Write(loaded, loaded && TrainingEnabled, _runtimeMap);
             if (loaded) WriteMapInventory();
             _statusWriteFailed = false;
         }

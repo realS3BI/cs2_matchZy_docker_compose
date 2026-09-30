@@ -40,6 +40,7 @@ import {
   UsersRound
 } from "lucide-react";
 import { api } from "./lib/api";
+import type { ServerOperation } from "./lib/server-status";
 import { cn } from "./lib/utils";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -129,7 +130,7 @@ function Login() {
   </main>;
 }
 
-function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, serviceState, selectedMap, selectedNade }) {
+function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, operation, status, statusUnavailable, selectedMap, selectedNade }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
   const currentPage = selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label);
 
@@ -137,7 +138,7 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, se
     <TooltipProvider>
       <SidebarProvider>
         <a className="skip-link" href="#main-content">Zum Inhalt</a>
-        <AppSidebar user={user} serverItems={allowedTabs(user.role).filter(item => item.group === "Server")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} serviceState={serviceState} />
+        <AppSidebar user={user} serverItems={allowedTabs(user.role).filter(item => item.group === "Server")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} status={status} operation={operation} unavailable={statusUnavailable} />
         <SidebarInset className="workspace-inset min-w-0">
           <header className="control-topbar sticky top-0 z-30">
             <div className="topbar-inner">
@@ -738,6 +739,8 @@ function App() {
   const [nades, setNades] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
+  const [statusUnavailable, setStatusUnavailable] = useState(false);
+  const [operation, setOperation] = useState<ServerOperation>(null);
   const [savedSignature, setSavedSignature] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -750,15 +753,19 @@ function App() {
     setNades(control.nades || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
+    setStatusUnavailable(false);
     if (!preserveSettings) setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
   }
 
-  async function runAction(action, scope = "server") {
+  async function runAction(action, scope = "server", kind?: "apply" | "restart") {
     setBusy(true);
+    if (kind) setOperation({ kind, phase: "requesting" });
     try {
       await action();
+      if (kind) setOperation({ kind, phase: "refreshing" });
       await loadAll({ preserveSettings: scope === "library" && dirty });
     } finally {
+      if (kind) setOperation(null);
       setBusy(false);
     }
   }
@@ -766,6 +773,33 @@ function App() {
   useEffect(() => {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
+
+  useEffect(() => {
+    if (!authenticated || user?.role !== "admin" || busy) return;
+    let cancelled = false;
+    let timer: number;
+    const controller = new AbortController();
+    async function refreshStatus() {
+      try {
+        const next = await api("/api/server/status", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
+        if (!next?.service || typeof next.service.state !== "string") throw new Error("Unvollständiger Serverstatus");
+        if (!cancelled) {
+          setStatus(current => ({ ...current, ...next }));
+          setStatusUnavailable(false);
+        }
+      } catch {
+        if (!cancelled) setStatusUnavailable(true);
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refreshStatus, 15000);
+      }
+    }
+    void refreshStatus();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [authenticated, user?.role, busy]);
 
   const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs[1];
   const libraryMaps = useMemo(() => mapsForLibrary(settings, status?.mapInventory, nades), [settings, status?.mapInventory, nades]);
@@ -791,7 +825,7 @@ function App() {
   }
 
   function applyControl() {
-    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings }) }));
+    return runAction(() => api("/api/control/apply", { method: "POST", body: JSON.stringify({ settings }) }), "server", "apply");
   }
 
   useEffect(() => {
@@ -834,7 +868,9 @@ function App() {
       selectedNade={selectedNade}
       dirty={dirty}
       busy={busy}
-      serviceState={status?.service?.state}
+      operation={operation}
+      status={status}
+      statusUnavailable={statusUnavailable}
       onSave={() => runAction(async () => {
         await api("/api/control", { method: "PUT", body: JSON.stringify({ settings }) });
       })}
@@ -860,7 +896,7 @@ function App() {
               policy={policy}
               busy={busy}
               onRefresh={() => runAction(async () => {})}
-              onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))}
+              onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "server", "restart")}
             />
           )}
         />
@@ -884,7 +920,7 @@ function App() {
         />
         <Route
           path={routePaths.maintenance}
-          element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }))} />}
+          element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "server", "restart")} />}
         />
         <Route path={routePaths.maps} element={new URLSearchParams(location.search).has("map") || new URLSearchParams(location.search).get("view") === "library"
           ? <LegacyLibraryRedirect maps={libraryMaps} />

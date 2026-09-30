@@ -8,6 +8,8 @@ Admin, Match Admin und Trainingsspieler dürfen das Panel öffnen. Trainingsspie
 
 CS2- und Dashboard-Image gemeinsam aktualisieren; CounterStrikeSharp API 374+ verwenden. Im Dashboard unter **Server → Trainings-HUD** aktivieren und mit **Apply & restart** übernehmen. Für lokale Entwicklung die Workshop-Auslieferung ausschalten und [lokale Assets bauen/installieren](../training-hud/README.md). Für Mitspieler das Workshop-Addon aktualisieren und ausliefern. Nach Layoutänderungen CS2 vollständig neu starten.
 
+In diesem Stand starten Berechtigungsabgleich und Statusmeldungen erst beim ersten World-Update von CS2. Damit greifen sie beim Serverstart nicht auf noch uninitialisierte globale Variablen zu. Das gilt auch beim Nachladen des Plugins und auf einem leeren Server. Wird das Plugin vorher entladen, wird die wartende Initialisierung verworfen. Für diese Korrektur muss das CS2-Image aus dem aktualisierten Quellstand neu gebaut und deployed werden.
+
 Im Nades-Modus startet Playbook sein eigenes Training ohne MatchZy. Im MatchZy-Modus funktioniert das Panel nur, wenn die geladene MatchZy-Instanz `isPractice == true` und `matchStarted == false` meldet. Dort aktiviert `.prac` das Training. Bloßes `sv_cheats 1` schaltet das Panel in anderen Modi nicht frei. Bei `.exitprac`, Competitive-Start oder MatchZy-Unload schließt es sich im MatchZy-Modus. [Modi, verfügbare Werkzeuge und Befehle](playbook.md).
 
 Im eigenständigen Nades-Modus fehlen bewusst Rethrow, Bot-Platzierung, Wurfhistorie und Colored Smokes. Diese MatchZy-Funktionen werden weder angeboten noch an ein fehlendes Plugin weitergeleitet.
@@ -46,7 +48,7 @@ Abstimmen im Chat mit `.y` für Ja und `.n` für Nein, im Panel unter **Map wech
 
 ## Abnahmestand
 
-Version 2.0.0 wird mit Unit-/Integrationstests, Web-Build und Valves Panorama-Compiler geprüft. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
+Dieser Stand ergänzt Regressionstests für verzögerte Initialisierung, Entladen vor dem ersten World-Update und erneutes Laden. Ein Test führt die verwaltete World-Update-Warteschlange von CounterStrikeSharp aus. Diese Tests ersetzen keinen Kaltstart auf einem echten CS2-Server. Valves Panorama-Compiler und die Workshop-Auslieferung müssen auf Windows geprüft werden. Die tatsächliche Darstellung, MatchZy-Zustandsanbindung, Mapwechsel und Mehrspielerabläufe müssen auf einem Entwicklungsserver im Spiel abgenommen werden. Ein lokaler Layout-Build aktualisiert keine Server-Plugin-Funktionen.
 
 ## Architektur
 

@@ -113,6 +113,68 @@ button:not(:disabled),
   background: var(--primary);
 }
 
+.sidebar-server-status {
+  --status-color: var(--muted-foreground);
+  margin: 0.25rem 0 0.5rem;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--sidebar-accent) 48%, var(--sidebar));
+}
+
+.sidebar-server-status[data-tone="success"] { --status-color: var(--success); }
+.sidebar-server-status[data-tone="warning"] { --status-color: var(--warning); }
+.sidebar-server-status[data-tone="destructive"] { --status-color: var(--destructive); }
+
+.sidebar-server-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border-radius: inherit;
+  transition: background 140ms ease;
+}
+
+.sidebar-server-link:hover { background: var(--sidebar-accent); }
+.sidebar-server-link:focus-visible,
+.sidebar-server-notice:focus-visible {
+  outline: 2px solid var(--sidebar-ring);
+  outline-offset: 2px;
+}
+
+.sidebar-server-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.625rem;
+  color: var(--status-color);
+  background: color-mix(in srgb, var(--status-color) 12%, transparent);
+}
+
+.sidebar-server-icon svg { width: 1rem; height: 1rem; }
+.sidebar-server-icon[data-spinning="true"] svg { animation: spin 1.5s linear infinite; }
+.sidebar-server-copy { display: grid; flex: 1; min-width: 0; gap: 0.125rem; }
+.sidebar-server-caption { color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1rem; }
+.sidebar-server-label { color: var(--status-color); font-size: 0.8125rem; font-weight: 500; line-height: 1.125rem; }
+.sidebar-server-chevron { flex: none; width: 0.875rem; height: 0.875rem; color: var(--muted-foreground); }
+.sidebar-server-notices { display: grid; gap: 0.25rem; }
+.sidebar-server-notices:not(:empty) { padding: 0 0.5rem 0.5rem; }
+.sidebar-server-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  color: var(--warning-foreground);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+.sidebar-server-notice[data-tone="destructive"] { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
+.sidebar-server-notice:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sidebar-server-notice span { flex: 1; }
+.sidebar-server-notice svg { flex: none; width: 0.75rem; height: 0.75rem; }
+
 .control-brand-mark {
   display: grid;
   flex: none;
@@ -210,6 +272,8 @@ button:not(:disabled),
 .disclosure-panel[open] > summary .disclosure-chevron { transform: rotate(90deg); }
 
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-server-icon[data-spinning="true"] svg { animation: none; }
+  .sidebar-server-link { transition: none; }
   .resource-link,
   .resource-link-arrow {
     transition: none;
