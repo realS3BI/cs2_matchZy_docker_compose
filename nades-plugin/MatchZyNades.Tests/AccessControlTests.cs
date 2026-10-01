@@ -18,6 +18,10 @@ public sealed class AccessControlTests
     [InlineData(".y")]
     [InlineData(".n")]
     [InlineData("css_training_vote yes")]
+    [InlineData(".bot")]
+    [InlineData("!cbot")]
+    [InlineData("/crouchbot")]
+    [InlineData("css_nobots")]
     public void TrainingPlayerCanUsePanelWithoutAdminRights(string command) =>
         Assert.False(PlatformRoles.Blocks("training_player", command));
 

@@ -15,7 +15,6 @@ public sealed class PlaybookTrainingTests
     [InlineData(".prac")]
     [InlineData(".savenade test")]
     [InlineData(".rethrow")]
-    [InlineData(".bot")]
     [InlineData("get5_loadmatch fixture.json")]
     [InlineData("matchzy_autostart_mode 1")]
     [InlineData("sm_pause")]
@@ -31,6 +30,10 @@ public sealed class PlaybookTrainingTests
     [InlineData(".nades save")]
     [InlineData("css_training_key KP_0")]
     [InlineData("css_training_vote yes")]
+    [InlineData(".bot")]
+    [InlineData("!cbot")]
+    [InlineData("/crouchbot")]
+    [InlineData("css_nobots")]
     public void NadesAllowsItsImplementedCommands(string command) =>
         Assert.False(PlaybookCommands.Blocks("nades", true, command));
 
@@ -55,7 +58,10 @@ public sealed class PlaybookTrainingTests
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null, standalone: true);
         var items = Descendants(menu.Current).ToArray();
-        Assert.DoesNotContain(items, item => item.Request?.Action is TrainingAction.Rethrow or TrainingAction.Bot or TrainingAction.CrouchBot);
+        Assert.DoesNotContain(items, item => item.Request?.Action is TrainingAction.Rethrow);
+        Assert.Contains(items, item => item.Request?.Action == TrainingAction.Bot);
+        Assert.Contains(items, item => item.Request?.Action == TrainingAction.CrouchBot);
+        Assert.Contains(items, item => item.Request?.Action == TrainingAction.RemoveBots);
         foreach (var item in items)
             if (item.Request is { } request && TrainingMenu.Command(request.Action) is { } command)
                 Assert.True(command == "noclip" || PlaybookCommands.TrainingCommands.Contains(command), command);
@@ -82,6 +88,39 @@ public sealed class PlaybookTrainingTests
         Assert.Equal("1", PlaybookCommands.PracticeSettings["mp_respawn_on_death_ct"]);
         Assert.Equal("1", PlaybookCommands.PracticeSettings["mp_respawn_on_death_t"]);
         Assert.Equal("1", PlaybookCommands.PracticeSettings["mp_ignore_round_win_conditions"]);
+    }
+
+    [Fact]
+    public void PracticeStartsAnUninterruptedHourWithoutAutomaticWarmup()
+    {
+        foreach (var name in new[] { "mp_warmup_online_enabled", "mp_warmup_offline_enabled", "mp_do_warmup_period", "mp_warmup_pausetimer", "mp_timelimit", "mp_maxrounds" })
+            Assert.Equal("0", PlaybookCommands.PracticeSettings[name]);
+        foreach (var name in new[] { "mp_roundtime", "mp_roundtime_defuse", "mp_roundtime_hostage" })
+            Assert.Equal("60", PlaybookCommands.PracticeSettings[name]);
+        Assert.Equal("1", PlaybookCommands.PracticeSettings["mp_ignore_round_win_conditions"]);
+    }
+
+    [Fact]
+    public void HumansTakeDamageButResetToFullHealthBeforeDeath()
+    {
+        Assert.Equal("1", PlaybookCommands.PracticeSettings["buddha"]);
+        Assert.Equal("1", PlaybookCommands.PracticeSettings["buddha_ignore_bots"]);
+        Assert.Equal("100", PlaybookCommands.PracticeSettings["buddha_reset_hp"]);
+    }
+
+    [Fact]
+    public void BothTeamsSpawnWithScoutDefaultPistolAndAllGrenades()
+    {
+        Assert.Equal("weapon_ssg08", PlaybookCommands.PracticeSettings["mp_ct_default_primary"]);
+        Assert.Equal("weapon_ssg08", PlaybookCommands.PracticeSettings["mp_t_default_primary"]);
+        Assert.Equal("weapon_hkp2000", PlaybookCommands.PracticeSettings["mp_ct_default_secondary"]);
+        Assert.Equal("weapon_glock", PlaybookCommands.PracticeSettings["mp_t_default_secondary"]);
+        foreach (var team in new[] { "ct", "t" })
+        {
+            var grenades = PlaybookCommands.PracticeSettings[$"mp_{team}_default_grenades"];
+            foreach (var name in new[] { "weapon_hegrenade", "weapon_smokegrenade", "weapon_flashbang", "weapon_decoy", team == "ct" ? "weapon_incgrenade" : "weapon_molotov" })
+                Assert.Contains(name, grenades);
+        }
     }
 
     [Fact]

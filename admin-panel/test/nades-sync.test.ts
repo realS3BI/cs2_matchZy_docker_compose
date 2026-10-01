@@ -57,6 +57,33 @@ function sampleEntry(patch: Record<string, any> = {}): any {
   };
 }
 
+test("throw settings and automatic flight seconds reach the panel metadata and survive a MatchZy rewrite", async t => {
+  const owner = "76561198000000001";
+  const [entry] = sanitizeNades([sampleEntry({ owner, team: "ct", throwFromTitle: "Über T-Spawn", throwToTitle: "Fenster",
+    is_jumpthrow: true, is_crouch: false, is_walking: false, is_running: false, is_stepping: true, click_type: "both" })]);
+  const { service, store } = await createHarness(t, [entry]);
+  await service.writeFromMongo([entry]);
+  const capture = { ...entry, newLineup: false, captureId: "measured-flight", landingPos: "10 20 30", flightDuration: 3.125, capturedAt: new Date().toISOString() };
+  await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [capture]);
+  await service.poll();
+  assert.equal(store.entries[0].flightDuration, 3.125);
+  let metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].flightDuration, 3.125);
+  assert.equal(metadata[0].click_type, "both");
+  assert.equal(metadata[0].throwFromTitle, "Über T-Spawn");
+  await writeJson(service.liveFile, sampleConfig({ owner }));
+  await service.poll();
+  assert.equal(store.entries[0].flightDuration, 3.125);
+  assert.equal(store.entries[0].is_jumpthrow, true);
+  assert.equal(store.entries[0].throwToTitle, "Fenster");
+  const request = { id: "e".repeat(32), actor: owner, owner, map: entry.map, name: entry.name, revision: store.entries[0].updatedAt, action: "is_crouch", value: true };
+  await writeJson(join(dirname(service.liveFile), "savednades.requests", request.id + ".json"), request);
+  await service.poll();
+  metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].is_crouch, true);
+  assert.equal(metadata[0].flightDuration, 3.125);
+});
+
 function sampleConfig(patch = {}) {
   const entry = sampleEntry(patch);
   return {

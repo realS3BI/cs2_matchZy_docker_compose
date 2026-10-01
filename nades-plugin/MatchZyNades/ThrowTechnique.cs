@@ -22,7 +22,7 @@ public static class ThrowTechnique
             float.TryParse(s.Velocity.Split(' ')[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var z) && z > 120))
             labels.Add("Jumpthrow");
         var crouchedDuringSetup = samples.Any(s => s.Buttons.Split(',', StringSplitOptions.TrimEntries).Contains(nameof(PlayerButtons.Duck), StringComparer.OrdinalIgnoreCase));
-        if (crouchedDuringSetup && !pressed.Contains(nameof(PlayerButtons.Duck))) labels.Add("crouched then stood up");
+        if (crouchedDuringSetup && !pressed.Contains(nameof(PlayerButtons.Duck))) labels.Add("zunächst geduckt, dann aufgestanden");
         else if (pressed.Contains(nameof(PlayerButtons.Duck))) labels.Add("Duckthrow");
         if (pressed.Contains(nameof(PlayerButtons.Walk))) labels.Add("Walkthrow");
         if (labels.Count == 0) labels.Add("normaler Wurf");

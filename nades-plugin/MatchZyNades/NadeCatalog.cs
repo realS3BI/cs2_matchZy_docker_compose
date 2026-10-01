@@ -22,7 +22,8 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
     string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "", bool MustKnow = false,
-    bool Official = false, string ReviewStatus = "", string Revision = "")
+    bool Official = false, string ReviewStatus = "", string Revision = "", string Team = "", string ThrowFromTitle = "",
+    string ThrowToTitle = "", string Technique = "", ThrowAttributes? Attributes = null, float? FlightDuration = null)
 {
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }
@@ -54,7 +55,9 @@ public static class NadeCatalog
                     !Coordinates.TryParse(Field(data, "LineupAng"), out var angles)) continue;
                 result.Add(new(owner.Name, entry.Name, entryMap, Kind(Field(data, "Type")),
                     Field(data, "Desc"), position, angles, Field(data, "DisplayName"), MustKnow: Flag(data, "MustKnow"),
-                    Official: Flag(data, "Official"), ReviewStatus: Field(data, "ReviewStatus")));
+                    Official: Flag(data, "Official"), ReviewStatus: Field(data, "ReviewStatus"), Team: Field(data, "team"),
+                    ThrowFromTitle: Field(data, "throwFromTitle"), ThrowToTitle: Field(data, "throwToTitle"),
+                    Technique: Field(data, "throwTechnique"), Attributes: Attributes(data), FlightDuration: Duration(data)));
             }
         }
         if (metadata != null)
@@ -67,7 +70,10 @@ public static class NadeCatalog
                     if (index >= 0) result[index] = result[index] with {
                         DisplayName = Field(title, "displayName"),
                         MustKnow = title.TryGetProperty("mustKnow", out _) ? Flag(title, "mustKnow") : result[index].MustKnow,
-                        Official = Flag(title, "official"), ReviewStatus = Field(title, "reviewStatus"), Revision = Field(title, "updatedAt")
+                        Official = Flag(title, "official"), ReviewStatus = Field(title, "reviewStatus"), Revision = Field(title, "updatedAt"),
+                        Team = Field(title, "team"), ThrowFromTitle = Field(title, "throwFromTitle"), ThrowToTitle = Field(title, "throwToTitle"),
+                        Technique = Field(title, "throwTechnique"), Attributes = Attributes(title) ?? result[index].Attributes,
+                        FlightDuration = Duration(title)
                     };
                 }
         }
@@ -77,6 +83,13 @@ public static class NadeCatalog
 
     private static bool Flag(JsonElement data, string name) => data.ValueKind == JsonValueKind.Object &&
         data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+
+    private static ThrowAttributes? Attributes(JsonElement data) => ThrowAttributes.Flags.Any(key => data.TryGetProperty(key, out _)) || data.TryGetProperty("click_type", out _)
+        ? new(Flag(data, "is_jumpthrow"), Flag(data, "is_crouch"), Flag(data, "is_walking"), Flag(data, "is_running"), Flag(data, "is_stepping"),
+            Field(data, "click_type") is "right" or "both" ? Field(data, "click_type") : "left") : null;
+
+    private static float? Duration(JsonElement data) => data.TryGetProperty("flightDuration", out var value) &&
+        value.ValueKind == JsonValueKind.Number && value.TryGetSingle(out var seconds) && float.IsFinite(seconds) && seconds >= 0 ? seconds : null;
 
     private static string Field(JsonElement data, string name) =>
         data.ValueKind == JsonValueKind.Object && data.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String

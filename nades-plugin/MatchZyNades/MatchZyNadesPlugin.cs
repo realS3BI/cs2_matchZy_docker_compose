@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.0.0";
+    public override string ModuleVersion => "2.1.0";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -496,8 +496,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (player is not { IsValid: true }) return;
         Close(player.Slot);
         _last.Remove(player.Slot);
+        _trainingBots.Remove(player.EntityHandle.Raw);
         ForgetTraining(player.SteamID);
         ClearCapture(player.Slot);
+        _flightTimes.Forget(player.Slot);
         _edits.Remove(player.Slot);
     }
 

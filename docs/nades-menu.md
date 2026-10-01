@@ -1,4 +1,4 @@
-# Playbook im Spiel (2.0.0)
+# Playbook im Spiel (2.1.0)
 
 Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und vier Beschreibungszeilen über die volle Breite. Längere Texte werden mit Auslassungspunkten gekürzt. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
 
@@ -28,11 +28,11 @@ Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. O
 8. **Keybinds:** die festen acht Tasten und die Bind-Befehle anzeigen.
 9. **Panel ausblenden:** mit KP_DEL wieder anzeigen. KP_0 wechselt zwischen Bedienung und freiem Spielen.
 
-Im MatchZy-Practice-Modus enthält **Bots** stehenden Bot, duckenden Bot und Bots entfernen. **Trainingshilfen** enthält Flugbahnvorschau, Einschläge, Flashschutz und God Mode. Die Beschriftung zeigt „einschalten“ oder „ausschalten“ entsprechend dem tatsächlichen Zustand. MatchZys God Mode wird anhand seiner Lebenspunkte-Logik erkannt. Gemeinsame Trainingsaktionen werden sofort ausgeführt; die Beschreibung kennzeichnet ihre Wirkung auf alle Spieler. Im MatchZy-Modus behält MatchZy seine zusätzliche Berechtigungsprüfung. Beide Implementierungen verwenden denselben Playbook-Chat-Präfix.
+Im Nades- und MatchZy-Practice-Modus enthält **Bots** stehenden Bot, duckenden Bot und Bots entfernen. Im Nades-Modus sind dafür auch `.bot`, `.crouchbot` / `.cbot` und `.nobots` verfügbar. Bots spawnen im gegnerischen Team und behalten beim Respawn ihre Position und ihren Duckzustand. **Trainingshilfen** enthält Flugbahnvorschau, Einschläge, Flashschutz und God Mode. Die Beschriftung zeigt „einschalten“ oder „ausschalten“ entsprechend dem tatsächlichen Zustand. MatchZys God Mode wird anhand seiner Lebenspunkte-Logik erkannt. Gemeinsame Trainingsaktionen werden sofort ausgeführt; die Beschreibung kennzeichnet ihre Wirkung auf alle Spieler. Im MatchZy-Modus behält MatchZy seine zusätzliche Berechtigungsprüfung. Beide Implementierungen verwenden denselben Playbook-Chat-Präfix.
 
 ## Aufnahme bearbeiten, löschen und prüfen lassen
 
-Alle Aufnahmen sind sofort für alle sichtbar. Nur der Ersteller einer noch nicht offiziellen Aufnahme sieht **Name bearbeiten**, **Beschreibung bearbeiten**, **Zum Review freigeben** und **Eigene Aufnahme löschen**. Beim Bearbeiten den Text im Chat eingeben (Name maximal 120, Beschreibung maximal 300 Zeichen); `abbrechen` beendet die Eingabe. Texteingabe läuft nach zwei Minuten ab. Löschen verlangt eine zusätzliche Bestätigung.
+Alle Aufnahmen sind sofort für alle sichtbar. Nur der Ersteller einer noch nicht offiziellen Aufnahme sieht im Ingame-Menü **Name bearbeiten**, **Beschreibung bearbeiten**, **Zum Review freigeben** und **Eigene Aufnahme löschen**. Plattform-Admins können auf der Website alle Aufnahmen löschen, auch importierte Aufnahmen mit Owner `default`, offizielle Aufnahmen und Must-Know-Lineups. Match-Admins haben diese zusätzliche Löschberechtigung nicht. Beim Bearbeiten den Text im Chat eingeben (Name maximal 120, Beschreibung maximal 300 Zeichen); `abbrechen` beendet die Eingabe. Texteingabe läuft nach zwei Minuten ab. Löschen verlangt eine zusätzliche Bestätigung.
 
 „Zum Review freigeben“ markiert die Aufnahme als **[Review]**. Plattform-Admins finden diese über **All lineups → Review-Status → Review angefragt** und können sie freigeben oder ablehnen. Änderungen mit **Save nades** speichern. **Offiziell** kennzeichnet geprüfte Lineups; **Must Know** ist die besonders wichtige Auswahl und schaltet zugleich Offiziell ein. Nach Freigabe kann der Ersteller die Granate nicht mehr verändern oder löschen. Änderungen an Name/Beschreibung vor einer Freigabe setzen einen alten Review-Antrag zurück; danach erneut einreichen.
 
@@ -88,7 +88,7 @@ Im Dashboard lässt sich **Display name** frei vergeben, beispielsweise `Fenster
 
 1. Im Practice-Modus an die gewünschte Position stellen, die Granate auswählen und `.savenade window_smoke Beschreibung` eingeben. Für eine eigene, noch nicht offizielle Aufnahme **Lineup laden & trainieren** im `.nades`-Menü benutzen. Auch `.nades last` und ein exaktes `.loadnade window_smoke` aktivieren die Erfassung.
 2. Auf die Chat-Bestätigung der Zielerfassung achten. Innerhalb von zwei Minuten die Granate selbst werfen. Der nächste Wurf muss denselben Granatentyp haben; ein anderer Typ verwirft die vorgemerkte Erfassung. Bei gleichnamigen Aufnahmen verschiedener Ersteller im Zweifel die eindeutige Auswahl im `.nades`-Menü verwenden.
-3. Das Plugin ordnet den echten Wurf einem Projektil zu und speichert beim Smoke-Effekt beziehungsweise der Flash-/HE-Explosion die Weltkoordinaten. Decoys werden beim Aktivieren erfasst. Eine Flash darf dabei in der Luft explodieren: Die Höhe bleibt gespeichert. Molly/Incendiary-Ziele sind vorerst manuell, da Flugende und entstehende Feuerfläche unterschiedliche Ereignisse sind.
+3. Das Plugin ordnet den echten Wurf einem Projektil zu und speichert beim Smoke-Effekt beziehungsweise der Flash-/HE-Explosion die Weltkoordinaten. Decoys werden beim Aktivieren erfasst. Eine Flash darf dabei in der Luft explodieren: Die Höhe bleibt gespeichert. Bei Molly/Incendiary wird der Zündpunkt erfasst, nicht die gesamte Feuerfläche.
 4. Nach der Bestätigung wenige Sekunden auf den Dateisync warten und im Dashboard **Refresh lineups** wählen. Vorhandene lokale Änderungen vorher speichern. Zum erneuten Erfassen das Lineup erneut laden und werfen.
 
 
@@ -105,6 +105,28 @@ Während die Aufnahme bereit ist, protokolliert das Plugin maximal die letzten a
 
 Die Startposition kommt weiterhin aus `.savenade` beziehungsweise dem gespeicherten Lineup; sie ist der Aufstellpunkt vor einem Jump-/Runthrow, nicht die Position der Granate in der Luft. Vorhandene Lineups ohne gemessenes Ziel müssen einmal geworfen werden. Ziele lassen sich aus Position und Blickwinkel allein nicht zuverlässig rekonstruieren. Tod, Disconnect, Runden-/Mapwechsel oder Practice-Ende verwerfen offene Erfassungen. Synthetische Rethrows ohne echtes `grenade_thrown` aktivieren keine Erfassung.
 
+### Einstellungen und Wurfattribute im Panel (2.1.0)
+
+Unter **Alle → Aufnahme → Lineup-Einstellungen** können Ersteller ihre noch nicht offiziellen Aufnahmen bearbeiten. Das Panel zeigt die aktuellen Werte. Ein Feld auswählen, den Chat öffnen und den neuen Wert senden. Die Panelsteuerung gibt während der Eingabe die Spielsteuerung frei. `abbrechen` beendet die Eingabe; nach zwei Minuten läuft sie ab. CT/T-Zuordnung und Positionsnamen sind unabhängig von den gemessenen Weltkoordinaten.
+
+| Einstellung | Chat-Eingabe |
+| --- | --- |
+| Seite | `ct`, `t` oder `beide` |
+| Startposition / Endposition | Freier Name, etwa `T-Spawn` oder `Fenster` |
+| Wurftechnik | Ergänzende Anleitung |
+| Jumpthrow, geduckt, Gehen, Laufen, Schrittwurf | `ja` oder `nein` |
+| Maustaste | `links`, `rechts` oder `beide` |
+| Granatentyp | `Smoke`, `Flash`, `HE`, `Molly` oder `Decoy` |
+| Koordinaten | Unter **Koordinaten bearbeiten** drei Zahlen mit Dezimalpunkt |
+
+Mit `-` lassen sich Beschreibung, Positionsnamen und Wurftechnik leeren. Anzeigename und interner Lineup-Name bleiben getrennt. Die kompakte Darstellung mit neun Listenplätzen pro Seite gilt auch für die Einstellungen. Andere Spieler dürfen Aufnahmen ansehen und favorisieren; nur der Ersteller darf eigene, noch nicht offizielle Aufnahmen ändern, löschen oder einreichen. Offiziell und Must Know bleiben Plattform-Admins vorbehalten.
+
+Neue Aufnahmen speichern `is_jumpthrow`, `is_crouch`, `is_walking`, `is_running` und `is_stepping` als Booleans sowie `click_type` als `left`, `right` oder `both`. Die Erkennung verwendet die Tastenfolge und Bewegung kurz vor dem Abwurf. Ein Schrittwurf wird bei 4 bis unter 24 Units Bewegung in den letzten 1,25 Sekunden erkannt; Gehen und Laufen benötigen mindestens 30 Units/s horizontale Bewegung. Für die Maustaste zählt die zuletzt gehaltene Angriffskombination vor dem Loslassen. Diese Erkennung kann im Panel und auf der Website korrigiert werden. Alte Aufnahmen ohne Attribute werden im Panel als offen angezeigt.
+
+`flightDuration` enthält automatisch gemessene Sekunden vom echten `grenade_thrown` bis zur Explosion, Smoke-Entstehung, Molotov-Zündung oder Decoy-Aktivierung. Gemessen wird mit der Server-Simulationszeit. Diese Zeit erscheint im Panel und in den Lineup-Details der Website und kann nicht manuell geändert werden. Bei geänderter Startkoordinate, Blickrichtung oder geändertem Granatentyp entfällt die alte Messung bis zum nächsten Wurf. Mehrere gleichzeitig fliegende Projektile werden über ihre Entity-ID getrennt. Fehlt eine eindeutige Zuordnung, wird keine Zeit erfunden. Bei Molotov-Ereignissen ohne Entity-ID bleibt die Zeit offen, wenn mehrere passende Würfe desselben Spielers in der Luft sind.
+
+Im eigenständigen Nades-Training meldet Playbook außerdem die Flugzeit, Blenddauer pro getroffenem Spieler sowie den tatsächlichen Granatenschaden und verbleibende HP im Chat. Das gilt auch für Trainingsbots als Ziele und für Schaden durch die Molotov-Feuerfläche. Blenddauer und Schaden sind Rückmeldungen des jeweiligen Versuchs und hängen von Position, Blickrichtung und Schutz der Ziele ab. Sie werden nicht als feste Lineup-Attribute gespeichert. In MatchZy Practice zeigt MatchZy diese Rückmeldungen bereits an; Playbook misst die Flugzeit weiter, ohne die Chatmeldungen zu verdoppeln. Verwendete Server-Events: [Blendung](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventPlayerBlind.html), [Schaden](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventPlayerHurt.html).
+
 ### Automatische Kartenmarker
 
 Die mitgelieferten CSNADES-Bilder sind unterschiedlich zugeschnitten. Deshalb verwendet das Dashboard die gespeicherten manuellen Marker mit zugehörigen Weltkoordinaten als Kartenreferenzen. Für jede Karte werden mindestens zwei genaue Referenzpunkte benötigt, die **in beiden Achsen** auseinanderliegen (mindestens 256 Welt-Units und 10 % der Bildbreite/-höhe). Am besten zwei weit auseinanderliegende **Startpositionen** von gespeicherten Lineups auf der Karte markieren. Alternativ kann eine Route mit bekanntem Start und gemessenem Ziel als Referenz dienen. Anschließend Lineups speichern.
@@ -117,7 +139,7 @@ Aus diesen Referenzen werden neue Start- und Zielmarker automatisch abgeleitet. 
 
 `savednades.json` behält MatchZys Owner-/Namensstruktur. `DisplayName` und `LandingPos` werden als optionale Strings exportiert; Kartenmarker und Bilder bleiben im Panel. Zusätzlich schreibt das Dashboard `cfg/MatchZy/savednades.metadata.json`, damit Anzeigenamen auch nach MatchZy-Schreibvorgängen erhalten bleiben. Das Plugin schreibt ausschließlich seine atomare `savednades.captures.json` mit den zuletzt gemessenen Zielen (bis zu 2000 Lineups), niemals MatchZys Bibliothek. Der Panel-Sync liest diese Datei auch dann, wenn `savednades.json` unverändert ist.
 
-Jede Messung enthält Owner, Map, technischen Namen, gespeicherte Startposition und Winkel. Nur ein passendes Lineup wird aktualisiert. Eine bereits importierte Messung überschreibt spätere manuelle Korrekturen nicht; ein neuer Wurf ersetzt ein altes Ziel und dessen manuellen Zielmarker. Aendert MatchZy Startposition oder Blickwinkel, verwirft der Sync die alte Zielmessung. Anzeigenamen, IDs und Bilder bleiben erhalten.
+Jede Messung enthält Owner, Map, technischen Namen, gespeicherte Startposition und Winkel sowie die gemessene Flugzeit. Nur ein passendes Lineup wird aktualisiert. Eine bereits importierte Messung überschreibt spätere manuelle Korrekturen nicht; ein neuer Wurf ersetzt ein altes Ziel und dessen manuellen Zielmarker. Ändert MatchZy Startposition oder Blickwinkel, verwirft der Sync die alte Zielmessung und Flugzeit. Anzeigenamen, IDs, Bilder und manuell korrigierte Wurfattribute bleiben erhalten. Die Metadatendatei stellt Seite, Positionsnamen, Wurfattribute und Flugzeit auch dann für das Panel bereit, wenn MatchZy zusätzliche JSON-Felder entfernt.
 
 Dashboard- und CS2-Image neu bauen und deployen. Ein Ingame-Test mit mindestens zwei Spielern, mehreren gleichzeitig fliegenden Granaten und einer in der Luft explodierenden Flash bleibt erforderlich; Unit-Tests ersetzen die nativen CS2-Ereignisse nicht. API-Referenzen: [Smoke-Effekt](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventSmokegrenadeDetonate.html), [Flash-Explosion](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventFlashbangDetonate.html), [echter Spielerwurf](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventGrenadeThrown.html).
 
@@ -149,7 +171,7 @@ Die Nummerierung folgt den Entity-Indizes der geladenen Map. Der Teleport prüft
 
 ## Map-Katalog und Abstimmung ab 1.9.0
 
-Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.0.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
+Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.1.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
 
 Das Dashboard schreibt den gemeinsamen Katalog als `map-catalog.json` neben die angewendeten Einstellungen. Das Plugin ermittelt installierte VPK-Maps und aktivierte Workshop-IDs und veröffentlicht `savednades.maps.json` neben der Granatenbibliothek. Nach **Refresh** verwendet der Web-Atlas genau diese Kategorien und Verfügbarkeiten. Ohne Serverbestand kennzeichnet die Website die Ladbarkeit als unbestätigt.
 

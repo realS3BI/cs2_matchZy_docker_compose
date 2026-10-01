@@ -12,17 +12,19 @@ public sealed partial class MatchZyNadesPlugin
     private readonly HashSet<string> _submittedLineupRequests = [];
     private bool HandleLineupAction(CCSPlayerController player, MenuRequest request)
     {
-        if (request.Action is not (TrainingAction.EditName or TrainingAction.EditDescription or TrainingAction.RequestReview or TrainingAction.DeleteLineup)) return false;
+        if (request.Action is not (TrainingAction.EditName or TrainingAction.EditDescription or TrainingAction.EditField or TrainingAction.RequestReview or TrainingAction.DeleteLineup)) return false;
         var selected = request.Lineup;
         var lineup = ReadLibrary(player)?.FirstOrDefault(n => n.Owner == selected?.Owner && n.Map == selected.Map && n.Name == selected.Name);
         if (lineup == null || lineup.Owner != player.SteamID.ToString() || lineup.Official)
         { Tell(player, "Du darfst nur deine eigenen, noch nicht offiziellen Aufnahmen bearbeiten oder löschen."); return true; }
-        if (request.Action is TrainingAction.EditName or TrainingAction.EditDescription)
+        if (request.Action is TrainingAction.EditName or TrainingAction.EditDescription or TrainingAction.EditField)
         {
             if (_draftNameRequests.ContainsKey(player.Slot)) { Tell(player, "Zuerst die laufende Aufnahme speichern oder verwerfen."); return true; }
-            _edits[player.Slot] = new(player.SteamID, lineup, request.Action == TrainingAction.EditName ? "displayName" : "desc", Server.CurrentTime + 120);
+            var field = request.Action == TrainingAction.EditName ? "displayName" : request.Action == TrainingAction.EditDescription ? "desc" : request.Setting;
+            if (!LineupEditFields.Allowed(field)) { Tell(player, "Dieses Feld kann nicht bearbeitet werden."); return true; }
+            _edits[player.Slot] = new(player.SteamID, lineup, field, Server.CurrentTime + 120);
             ReleaseControl(player.Slot);
-            Tell(player, request.Action == TrainingAction.EditName ? "Neuen Namen im Chat eingeben (max. 120 Zeichen). abbrechen beendet die Eingabe." : "Beschreibung im Chat eingeben (max. 300 Zeichen). abbrechen beendet die Eingabe.");
+            Tell(player, LineupEditFields.Prompt(field));
         }
         else QueueLineupRequest(player, lineup, request.Action == TrainingAction.DeleteLineup ? "delete" : "review", "");
         return true;
@@ -37,13 +39,12 @@ public sealed partial class MatchZyNadesPlugin
         { _edits.Remove(player.Slot); Tell(player, "Bearbeitung abgebrochen."); return true; }
         // Commands must never accidentally become descriptions, nor block .exitprac.
         if (text.StartsWith('.') || text.StartsWith('!')) return false;
-        var max = edit.Field == "displayName" ? 120 : 300;
-        if (string.IsNullOrWhiteSpace(text) || text.Length > max || text.Any(char.IsControl))
-        { Tell(player, $"Bitte 1 bis {max} Zeichen ohne Steuerzeichen eingeben."); return true; }
-        if (QueueLineupRequest(player, edit.Lineup, edit.Field, text)) _edits.Remove(player.Slot);
+        if (!LineupEditFields.TryParse(edit.Field, text, out var value))
+        { Tell(player, "Ungültige Eingabe. " + LineupEditFields.Prompt(edit.Field)); return true; }
+        if (QueueLineupRequest(player, edit.Lineup, edit.Field, value)) _edits.Remove(player.Slot);
         return true;
     }
-    private bool QueueLineupRequest(CCSPlayerController player, NadeLineup selected, string action, string value)
+    private bool QueueLineupRequest(CCSPlayerController player, NadeLineup selected, string action, object value)
     {
         var identity = JsonSerializer.Serialize(new { selected.Owner, selected.Map, selected.Name, selected.Revision, action, value });
         var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)))[..32].ToLowerInvariant();

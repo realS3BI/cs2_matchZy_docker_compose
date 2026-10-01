@@ -36,8 +36,22 @@ public sealed partial class MatchZyNadesPlugin
         RegisterListener<Listeners.OnMapEnd>(() => { _practiceGeneration++; _practiceReady = false; ResetTraining(); });
         RegisterEventHandler<EventPlayerSpawn>((e, _) =>
         {
-            if (TrainingEnabled && e.Userid is { IsValid: true } player)
-                Server.NextFrame(() => ApplyPlayerTraining(player));
+            if (e.Userid is { IsValid: true } player)
+                Server.NextFrame(() =>
+                {
+                    if (!TrainingEnabled) return;
+                    EndPracticeWarmup();
+                    ApplyPlayerTraining(player);
+                });
+            return HookResult.Continue;
+        });
+        RegisterEventHandler<EventRoundStart>((_, _) =>
+        {
+            if (TrainingEnabled)
+            {
+                ApplyPracticeSettings();
+                EndPracticeWarmup();
+            }
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerBlind>((e, _) =>
@@ -63,18 +77,38 @@ public sealed partial class MatchZyNadesPlugin
     {
         var generation = ++_practiceGeneration;
         _practiceReady = false;
-        AddTimer(1f, () =>
+        // World updates also run while the empty server is hibernating.
+        Server.NextWorldUpdate(() =>
         {
             if (generation != _practiceGeneration) return;
-            foreach (var (name, value) in PlaybookCommands.PracticeSettings)
-            {
-                if (ConVar.Find(name) is not { } variable) continue;
-                _practiceDefaults.TryAdd(name, variable.StringValue);
-                variable.StringValue = value.Trim('"');
-            }
+            ApplyPracticeSettings();
             Server.ExecuteCommand("bot_kick; mp_warmup_end; mp_restartgame 1");
             _practiceReady = true;
-        }, TimerFlags.STOP_ON_MAPCHANGE);
+            // Map configs may run after OnMapStart. Reapply once they have settled.
+            AddTimer(1f, () =>
+            {
+                if (generation != _practiceGeneration || !TrainingEnabled) return;
+                ApplyPracticeSettings();
+                EndPracticeWarmup();
+                foreach (var player in Utilities.GetPlayers().Where(p => !p.IsBot)) ApplyPlayerTraining(player);
+            }, TimerFlags.STOP_ON_MAPCHANGE);
+        });
+    }
+
+    private void ApplyPracticeSettings()
+    {
+        foreach (var (name, value) in PlaybookCommands.PracticeSettings)
+        {
+            if (ConVar.Find(name) is not { } variable) continue;
+            _practiceDefaults.TryAdd(name, variable.StringValue);
+            variable.StringValue = value.Trim('"');
+        }
+    }
+
+    private static void EndPracticeWarmup()
+    {
+        var rules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
+        if (rules?.WarmupPeriod == true) Server.ExecuteCommand("mp_warmup_end");
     }
 
     private static PracticePosition PositionOf(CCSPlayerController player)
@@ -102,6 +136,7 @@ public sealed partial class MatchZyNadesPlugin
     private void ApplyPlayerTraining(CCSPlayerController player)
     {
         if (!TrainingEnabled || player is not { IsValid: true } || player.PlayerPawn.Value is not { IsValid: true } pawn) return;
+        if (player.IsBot) { RestoreTrainingBot(player); return; }
         pawn.TakesDamage = !_god.Contains(player.SteamID);
         pawn.FlashMaxAlpha = _noFlash.Contains(player.SteamID) ? 0 : 255;
     }
@@ -118,7 +153,7 @@ public sealed partial class MatchZyNadesPlugin
         if (!TrainingEnabled) { Tell(player, "Training wird noch gestartet."); return; }
         if (command == "css_help")
         {
-            Tell(player, ".nades · .loadnade <Name> · .last · .savepos · .loadpos · .noclip · .clear · .traj · .impacts · .noflash · .god");
+            Tell(player, ".nades · .loadnade <Name> · .last · .savepos · .loadpos · .noclip · .bot · .crouchbot / .cbot · .nobots · .clear · .traj · .impacts · .noflash · .god");
             return;
         }
         if (command is "css_listnades" or "css_lin")
@@ -131,6 +166,9 @@ public sealed partial class MatchZyNadesPlugin
         ReleaseControl(player.Slot);
         switch (command)
         {
+            case "css_bot": AddTrainingBot(player, false); return;
+            case "css_cbot": case "css_crouchbot": AddTrainingBot(player, true); return;
+            case "css_nobots": RemoveTrainingBots(); Tell(player, "Alle Trainingsbots entfernt."); return;
             case "css_loadnade": case "css_ln":
                 var matches = (ReadLibrary(player) ?? []).Where(n => n.Name == arguments.Trim().Trim('"')).ToArray();
                 var own = matches.FirstOrDefault(n => n.Owner == player.SteamID.ToString());
@@ -175,11 +213,14 @@ public sealed partial class MatchZyNadesPlugin
     private void ResetTraining()
     {
         _positions.Clear(); _throwPositions.Clear(); _noFlash.Clear(); _god.Clear();
+        ResetTrainingBots();
     }
 
     private void StopStandaloneTraining()
     {
         if (!StandaloneTraining) return;
+        _practiceGeneration++;
+        RemoveTrainingBots();
         ResetTraining();
         foreach (var player in Utilities.GetPlayers())
         {

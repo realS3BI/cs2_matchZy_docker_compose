@@ -1,4 +1,5 @@
 import { isLineupTeam } from "../shared/lineup-teams.js";
+import { CLICK_TYPES, THROW_FLAGS, THROW_ATTRIBUTE_FIELDS } from "../shared/throw-attributes.js";
 import { flagsForRole, SETTING_KEYS } from "./policy.js";
 
 const STEAM64_RE = /^[0-9]{17}$/;
@@ -147,6 +148,12 @@ export function sanitizeNades(entries) {
     const name = String(entry.name ?? "").trim();
     const map = String(entry.map ?? "").trim();
     const displayName = String(entry.displayName ?? "").trim();
+    for (const key of THROW_FLAGS) {
+      if (entry[key] !== undefined && typeof entry[key] !== "boolean") throw new Error(`${key} muss ein Boolean sein.`);
+    }
+    if (entry.click_type !== undefined && !CLICK_TYPES.includes(entry.click_type)) throw new Error("Ungültige Maustaste. Erlaubt sind left, right und both.");
+    if (entry.flightDuration !== undefined && (typeof entry.flightDuration !== "number" || !Number.isFinite(entry.flightDuration) || entry.flightDuration < 0))
+      throw new Error("Die gemessene Flugzeit muss eine endliche, nicht negative Sekundenzahl sein.");
     if (entry.official !== undefined && typeof entry.official !== "boolean") throw new Error("Official must be a boolean");
     if (entry.reviewStatus !== undefined && !["", "pending", "approved", "rejected"].includes(entry.reviewStatus)) throw new Error("Invalid review status");
     if (entry.mustKnow !== undefined && typeof entry.mustKnow !== "boolean") {
@@ -171,6 +178,8 @@ export function sanitizeNades(entries) {
     const throwToTitle = String(entry.throwToTitle ?? "").trim();
     const radarFrom = sanitizeRadarPoint(entry.radarFrom, "Radar start");
     const radarTo = sanitizeRadarPoint(entry.radarTo, "Radar target");
+    if ([throwFromTitle, throwToTitle].some(title => title.length > 120 || /[\u0000-\u001f\u007f]/.test(title)))
+      throw new Error("Positionsnamen dürfen höchstens 120 Zeichen ohne Steuerzeichen enthalten.");
 
     if (!name) {
       throw new Error("Nade name is required");
@@ -204,6 +213,8 @@ export function sanitizeNades(entries) {
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
     if (isLineupTeam(entry.team)) cleanEntry.team = entry.team;
+    for (const key of THROW_ATTRIBUTE_FIELDS) if (entry[key] !== undefined) cleanEntry[key] = entry[key];
+    if (entry.flightDuration !== undefined) cleanEntry.flightDuration = entry.flightDuration;
     if (throwTechnique) cleanEntry.throwTechnique = throwTechnique;
     if (throwTrace) cleanEntry.throwTrace = throwTrace;
     if (landingPos) cleanEntry.landingPos = landingPos;
@@ -239,6 +250,8 @@ export function nadesToMatchZySavedNadesConfig(entries) {
     if (entry.official !== undefined) config[entry.owner][entry.name].Official = entry.official;
     if (entry.reviewStatus !== undefined) config[entry.owner][entry.name].ReviewStatus = entry.reviewStatus;
     if (entry.landingPos) config[entry.owner][entry.name].LandingPos = entry.landingPos;
+    for (const key of [...THROW_ATTRIBUTE_FIELDS, "flightDuration"])
+      if (entry[key] !== undefined) config[entry.owner][entry.name][key] = entry[key];
   }
   return config;
 }
@@ -259,6 +272,7 @@ export function matchZySavedNadesConfigToNades(config) {
         official: nade.Official,
         reviewStatus: nade.ReviewStatus,
         landingPos: nade.LandingPos,
+        ...Object.fromEntries([...THROW_ATTRIBUTE_FIELDS, "flightDuration", "team", "throwFromTitle", "throwToTitle", "throwTechnique"].map(key => [key, nade[key]])),
         map: nade.Map,
         type: nade.Type || "",
         desc: nade.Desc || "",

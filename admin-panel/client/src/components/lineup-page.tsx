@@ -5,7 +5,8 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { Field, FieldGroup, FieldLabel } from "./ui/field";
+import { Field, FieldGroup, FieldLabel, FieldSet, FieldLegend } from "./ui/field";
+import { Switch } from "./ui/switch";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "./ui/empty";
@@ -20,6 +21,7 @@ import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
 import { findLineup, lineupKey } from "../lib/lineups";
 import { inferRadarCalibration } from "../lib/nade-radar";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../../../shared/lineup-policy";
+import { THROW_FLAGS, THROW_FLAG_LABELS, CLICK_TYPES, CLICK_LABELS } from "../../../shared/throw-attributes";
 
 export function LineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
   const { mapSlug: slug, lineupId } = useParams();
@@ -32,14 +34,14 @@ export function LineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
 }
 
 function editableValues(nade) {
-  return Object.fromEntries(LINEUP_EDIT_FIELDS.map(key => [key, nade[key] ?? (key.startsWith("radar") ? null : "")]));
+  return Object.fromEntries(LINEUP_EDIT_FIELDS.map(key => [key, nade[key] ?? (THROW_FLAGS.includes(key as any) ? false : key === "click_type" ? "left" : key.startsWith("radar") ? null : "")]));
 }
 
 function formatThrowTrace(value) {
   try {
     const samples = JSON.parse(String(value || ""));
     if (!Array.isArray(samples)) return "";
-    return samples.map(sample => `${Number(sample.time).toFixed(2)}s · ${sample.buttons || "keine Taste"} · Position ${sample.position || "?"} · Geschwindigkeit ${sample.velocity || "?"} · Blickwinkel ${sample.view || "?"}`).join("\n");
+    return samples.map(sample => `${Number(sample.time ?? sample.Time).toFixed(2)}s · ${sample.buttons ?? sample.Buttons ?? "keine Taste"} · Position ${sample.position ?? sample.Position ?? "?"} · Geschwindigkeit ${sample.velocity ?? sample.Velocity ?? "?"} · Blickwinkel ${sample.view ?? sample.View ?? "?"}`).join("\n");
   } catch { return ""; }
 }
 
@@ -127,7 +129,13 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
                 </ToggleGroup>
               </fieldset>
               {textField("throwFromTitle", "Startposition", "z. B. T-Spawn")}
-              {textField("throwToTitle", "Landeposition", "z. B. Fenster")}
+              {textField("throwToTitle", "Endposition", "z. B. Fenster")}
+              <FieldSet><FieldLegend>Wurfattribute</FieldLegend><FieldGroup>
+                {THROW_FLAGS.map(key => <Field key={key} htmlFor={`throw-${key}`} className="flex items-center justify-between gap-3"><FieldLabel>{THROW_FLAG_LABELS[key]}</FieldLabel><Switch id={`throw-${key}`} aria-label={THROW_FLAG_LABELS[key]} checked={draft[key] === true} disabled={busy} onCheckedChange={value => patch({ [key]: value })} /></Field>)}
+                <FieldSet><FieldLegend>Maustaste</FieldLegend><ToggleGroup type="single" variant="outline" value={draft.click_type} disabled={busy} onValueChange={click_type => { if (click_type) patch({ click_type }); }} aria-label="Maustaste" className="grid w-full grid-cols-3">
+                  {CLICK_TYPES.map(type => <ToggleGroupItem key={type} value={type} aria-label={CLICK_LABELS[type]}>{type === "both" ? "Beide" : CLICK_LABELS[type]}</ToggleGroupItem>)}
+                </ToggleGroup></FieldSet>
+              </FieldGroup></FieldSet>
               {textField("throwTechnique", "Wurftechnik", "z. B. Jumpthrow", 500)}
               <Field><FieldLabel>Anleitung</FieldLabel><Textarea rows={5} value={draft.desc} onChange={event => patch({ desc: event.target.value })} maxLength={4000} placeholder="Positionierung, Ausrichtung und Wurf beschreiben …" /></Field>
               <details className="lineup-coordinates"><summary>Koordinaten bearbeiten</summary><FieldGroup className="mt-4">
@@ -145,9 +153,13 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
         </form> : <div className="grid gap-5">
           <dl className="lineup-detail-facts">
             <div><dt>Startposition</dt><dd>{nade.throwFromTitle || "Kreis auf der Karte"}</dd></div>
-            <div><dt>Landeposition</dt><dd>{nade.throwToTitle || "Raute auf der Karte"}</dd></div>
+            <div><dt>Endposition</dt><dd>{nade.throwToTitle || "Raute auf der Karte"}</dd></div>
             <div><dt>Wurftechnik</dt><dd>{nade.throwTechnique || "Noch nicht beschrieben"}</dd></div>
           </dl>
+          <div className="flex flex-wrap gap-2" aria-label="Wurfattribute">
+            {THROW_FLAGS.filter(key => nade[key] === true).map(key => <Badge variant="secondary" key={key}>{THROW_FLAG_LABELS[key]}</Badge>)}
+            {CLICK_TYPES.includes(nade.click_type) && <Badge variant="outline">{CLICK_LABELS[nade.click_type]}</Badge>}
+          </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{nade.desc || "Zu diesem Lineup gibt es noch keine Anleitung."}</p>
           <details className="lineup-coordinates"><summary>Koordinaten</summary><dl className="lineup-detail-facts mt-4">
             <div><dt>Start</dt><dd className="font-mono">{nade.lineupPos || "Nicht hinterlegt"}</dd></div>
@@ -155,6 +167,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             <div><dt>Landeposition</dt><dd className="font-mono">{nade.landingPos || "Nicht hinterlegt"}</dd></div>
           </dl></details>
         </div>}
+        <dl className="lineup-detail-facts"><div><dt>Gemessene Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht gemessen"}</dd></div></dl>
         {(permissions.submit || permissions.moderate) && <section className="lineup-review" aria-label="Review">
           <h2 className="text-sm font-medium">Review</h2>
           <div className="flex flex-wrap gap-2">

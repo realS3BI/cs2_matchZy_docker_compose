@@ -16,3 +16,11 @@ export function FieldLabel({ className, ...props }: ComponentPropsWithoutRef<"sp
 export function FieldDescription({ className, ...props }: ComponentPropsWithoutRef<"span">) {
   return <span className={cn("text-xs leading-relaxed text-muted-foreground", className)} {...props} />;
 }
+
+export function FieldSet({ className, ...props }: ComponentPropsWithoutRef<"fieldset">) {
+  return <fieldset className={cn("flex min-w-0 flex-col gap-4", className)} {...props} />;
+}
+
+export function FieldLegend({ className, ...props }: ComponentPropsWithoutRef<"legend">) {
+  return <legend className={cn("mb-3 text-sm font-medium", className)} {...props} />;
+}

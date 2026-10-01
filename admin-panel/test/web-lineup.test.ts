@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { applyWebNadeAction } from "../src/nade-review.js";
 import { createApp } from "../src/app.js";
+import { lineupPermissions } from "../shared/lineup-policy.js";
 
 const owner = "76561198000000001";
 const player = { identitySteam64: owner, role: "player" };
@@ -32,7 +33,7 @@ test("owners edit their draft directly, preserving identity, media and unrelated
 
 test("owner actions reject foreign, official and stale recordings and permission-changing fields", () => {
   for (const action of ["edit", "delete", "submit"]) {
-    assert.throws(() => applyWebNadeAction([entry], { ...request, action, actor: owner }, admin), denied(403));
+    if (action !== "delete") assert.throws(() => applyWebNadeAction([entry], { ...request, action, actor: owner }, admin), denied(403));
     assert.throws(() => applyWebNadeAction([{ ...entry, official: true }], { ...request, action }, player), denied(403));
     assert.throws(() => applyWebNadeAction([entry], { ...request, action, revision: "old" }, player), denied(409));
   }
@@ -43,6 +44,26 @@ test("owner actions reject foreign, official and stale recordings and permission
   assert.throws(() => applyWebNadeAction([entry], { ...request, action: "edit", patch: { radarFrom: { x: 2, y: 0 } } }, player));
   assert.throws(() => applyWebNadeAction([entry], { ...request, action: "edit", patch: { team: "invalid" } }, player), denied(400));
   assert.throws(() => applyWebNadeAction([], request, player), denied(404));
+});
+
+test("platform admins can delete all recordings while other roles retain owner restrictions", () => {
+  for (const owner of [entry.owner, admin.identitySteam64, "default"]) {
+    for (const official of [false, true]) {
+      const recording = { ...entry, owner, official, mustKnow: official };
+      const deletion = { ...request, owner, action: "delete" };
+      const untouched = { ...entry, name: "other" };
+      assert.equal(lineupPermissions(recording, admin).delete, true);
+      assert.deepEqual(applyWebNadeAction([recording, untouched], deletion, admin), [untouched]);
+      assert.throws(() => applyWebNadeAction([recording], { ...deletion, revision: "old" }, admin), denied(409));
+      for (const role of ["player", "training_player", "match_admin"]) {
+        const user = { ...admin, role };
+        const ownDraft = owner === user.identitySteam64 && !official;
+        assert.equal(lineupPermissions(recording, user).delete, ownDraft);
+        if (!ownDraft) assert.throws(() => applyWebNadeAction([recording], { ...deletion, role: "admin" }, user), denied(403));
+      }
+      assert.equal(lineupPermissions(recording).delete, false);
+    }
+  }
 });
 
 test("review transitions separate owner submission from admin approval and Must Know", () => {
@@ -95,4 +116,7 @@ test("authenticated endpoint enforces owner and role from the session, and seria
   }
   user = player;
   assert.equal((await send({ ...request, revision: entries[0].updatedAt, action: "edit", patch: { desc: "Trotz Freigabe" } })).status, 403);
+  user = admin;
+  assert.equal((await send({ ...request, revision: entries[0].updatedAt, action: "delete" })).status, 200);
+  assert.equal(entries.length, 0);
 });

@@ -40,7 +40,7 @@ public sealed class PlatformRoles(string path)
         "css_training_key" or "css_tk" or "css_training_vote" or
         "css_y" or "css_n" or "css_mapja" or "css_mapnein" or
         "css_rethrow" or "css_last" or "css_clear" or "css_savepos" or "css_loadpos" or
-        "css_bot" or "css_crouchbot" or "css_nobots" or "css_traj" or "css_impacts" or
+        "css_bot" or "css_cbot" or "css_crouchbot" or "css_nobots" or "css_traj" or "css_impacts" or
         "css_noflash" or "css_god" or "css_bestspawn" or "css_worstspawn" or "noclip";
 }
 

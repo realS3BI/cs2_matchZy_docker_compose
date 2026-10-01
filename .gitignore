@@ -7,3 +7,4 @@ admin-panel/dist/
 **/bin/
 **/obj/
 training-hud/dist/
+training-hud/.local/

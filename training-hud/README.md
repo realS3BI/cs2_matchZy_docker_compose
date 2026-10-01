@@ -4,7 +4,7 @@ Das Layout ist ein einziges Panorama-Panel, rechts und vertikal mittig am Bildsc
 
 Admin, Match Admin und die Rolle **Trainingsspieler** öffnen es im eigenständigen Nades-Training oder in MatchZy Practice per `.nades`. Die Mausbedienung braucht keine Binds. Trainingsspieler sehen im Web nur Maps und Lineups; sie dürfen den Server nicht verwalten und keine Lineups ändern. Shortcuts sind freiwillig und müssen lokal gesetzt werden.
 
-Das bestehende Workshop-Item ist **3810441722**. Updates per Workshop Manager oder manuell gestartetem GitHub-Actions-Workflow sind in der [Veröffentlichungsanleitung](workshop-release.md) beschrieben. Rollen und Panel-Funktionen kommen aus dem Server-Plugin; ein Workshop-Upload allein aktualisiert diese nicht.
+Das bestehende Workshop-Item ist **3810441722**. Auf Windows im Projekt-Root [hud.cmd](../hud.cmd) doppelklicken: Das Skript lädt den aktuellen Git-Stand, baut und installiert das lokale HUD und fragt anschließend nach einem Workshop-Release. Bei „Nein“ ist es fertig; bei „Ja“ folgen Änderungsnotiz, Sichtbarkeit und Steam-Anmeldung. Einrichtung und Workshop Manager als Alternative sind in der [Veröffentlichungsanleitung](workshop-release.md) beschrieben. Rollen und Panel-Funktionen kommen aus dem Server-Plugin; ein Workshop-Upload allein aktualisiert diese nicht.
 
 ## Aufbau ab Plugin 1.8.0
 
@@ -22,13 +22,23 @@ Quellen und Serveranbindung sind vorhanden. Die Workshop Tools wurden installier
 
 ## Bauen und installieren
 
+Auf dem Mac entwickeln und pushen. Auf Windows CS2 beenden und im Projektordner `hud.cmd` doppelklicken. Alternativ in Git Bash:
+
+```bash
+./hud.sh
+```
+
+Beim ersten Aufruf wird das CS2-Verzeichnis erkannt oder abgefragt und lokal gespeichert. Git, PowerShell 7, .NET 10 SDK und CS2 Workshop Tools müssen installiert sein. Das Skript führt `git pull --ff-only` aus und verwendet danach die heruntergeladenen HUD-Quellen und Skripte. SteamCMD wird erst bei einem bestätigten Release eingerichtet; Passwort und Steam Guard gibst du bei Bedarf direkt dort ein. CS2 wird nicht automatisch gestartet. Nach „Nein“ kannst du das neue lokale HUD im Spiel testen und später `hud.cmd -Mode release` verwenden. Details stehen in der [Veröffentlichungsanleitung](workshop-release.md).
+
+Für einen reinen Compilerlauf:
+
 ```powershell
 ./training-hud/build.ps1 -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
 ```
 
 Das Skript kopiert ausschließlich die zwei Projektquellen in `content/csgo_addons/matchzy_training_hud`, ruft Valves Compiler auf und legt die kompilierten Dateien direkt im zuvor mit den Workshop Tools angelegten Addon `game/csgo_addons/matchzy_training_hud` sowie unter `training-hud/dist` ab. Es verändert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veröffentlicht nichts.
 
-Für einen lokalen Entwicklungstest die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama` installieren und CS2 normal über Steam neu starten. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das Plugin und aktiviertes Trainings-HUD in den Servereinstellungen von Playbook. Für Mitspieler das Addon über die Workshop Tools veröffentlichen. Vor dem anschließenden Download-Test die lokalen Testdateien aus `game/csgo/panorama` in eine Sicherung verschieben, damit sie das Workshop-Addon nicht überdecken.
+Für einen lokalen Entwicklungstest installiert `hud.cmd` die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama`. Anschließend CS2 normal über Steam starten. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das Plugin und aktiviertes Trainings-HUD in den Servereinstellungen von Playbook. Vor dem anschließenden Download-Test mit `hud.cmd -Mode live` die lokalen Testdateien sichern und entfernen, damit sie das Workshop-Addon nicht überdecken.
 
 In der Webübersicht unter **Server → Trainings-HUD** einstellen und mit **Apply & restart** übernehmen:
 

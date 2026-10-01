@@ -25,12 +25,41 @@ public static class TrainingMenu
             {
                 items.Add(new("Name bearbeiten", "Wähle diesen Eintrag und schreibe den neuen Namen in den Chat. Mit abbrechen beenden. Der interne Name bleibt erhalten.", Request: new(TrainingAction.EditName, n)));
                 items.Add(new("Beschreibung bearbeiten", "Wähle diesen Eintrag und beschreibe im Chat Standpunkt, Ziel und Wurftechnik. Mit abbrechen beenden.", Request: new(TrainingAction.EditDescription, n)));
+                MenuItem Edit(string field, string label, string value) => new($"{label}: {value}", LineupEditFields.Prompt(field),
+                    Request: new(TrainingAction.EditField, n, Setting: field));
+                var attributes = n.Attributes;
+                var fields = new List<MenuItem> {
+                    Edit("team", "Seite", n.Team switch { "ct" => "CT", "t" => "T", "both" => "Beide", _ => "Offen" }),
+                    Edit("throwFromTitle", "Startposition", string.IsNullOrEmpty(n.ThrowFromTitle) ? "Offen" : n.ThrowFromTitle),
+                    Edit("throwToTitle", "Endposition", string.IsNullOrEmpty(n.ThrowToTitle) ? "Offen" : n.ThrowToTitle),
+                    Edit("throwTechnique", "Wurftechnik", string.IsNullOrEmpty(n.Technique) ? "Offen" : n.Technique),
+                };
+                fields.AddRange(LineupEditFields.Flags.Select(flag => Edit(flag.Key, flag.Value, attributes == null ? "Offen" : attributes.Flag(flag.Key) ? "Ja" : "Nein")));
+                fields.Add(Edit("click_type", "Maustaste", attributes?.ClickType switch { "left" => "Links", "right" => "Rechts", "both" => "Beide", _ => "Offen" }));
+                fields.Add(Edit("type", "Granatentyp", NadeCatalog.Label(n.Kind)));
+                fields.Add(new("Koordinaten bearbeiten", "Startpunkt, Blickwinkel und Endpunkt als drei Zahlen im Chat eingeben.", Page: new("Koordinaten", "Eine neue Startposition oder Blickrichtung erfordert eine neue Flugzeitmessung.", [
+                    Edit("lineupPos", "Start", NadeCaptureFile.Vector(n.Position)),
+                    Edit("lineupAng", "Blickwinkel", NadeCaptureFile.Vector(n.Angles)),
+                    Edit("landingPos", "Ende", "Im Chat eingeben")], Key: $"coordinates:{n.Owner}:{n.Map}:{n.Name}")));
+                items.Add(new("Lineup-Einstellungen", "Seite, Startposition, Endposition und feste Wurfattribute bearbeiten. Ein Feld auswählen, Chat öffnen und den Wert eingeben.",
+                    Page: new("Lineup-Einstellungen", "Feld auswählen, Chat öffnen und den neuen Wert senden. Mit abbrechen beenden.", fields, Key: $"attributes:{n.Owner}:{n.Map}:{n.Name}")));
                 items.Add(new(n.ReviewStatus == "pending" ? "Review angefragt" : "Zum Review freigeben", n.ReviewStatus == "pending" ? "Ein Plattform-Admin prüft deine Aufnahme. Nach seiner Freigabe erscheint sie zusätzlich unter Offiziell." : "Reicht deine Aufnahme zur Prüfung ein. Unter Alle bleibt sie sichtbar; Offiziell erfordert die Admin-Freigabe.", Request: new(TrainingAction.RequestReview, n), Enabled: n.ReviewStatus != "pending"));
                 items.Add(new("Eigene Aufnahme löschen", "Löscht ausschließlich diese eigene, noch nicht veröffentlichte Aufnahme. Du bestätigst im nächsten Schritt.", Page: new("Aufnahme löschen", n.Title, [
                     new("Abbrechen", "Behält die Aufnahme und geht zurück.", Request: new(TrainingAction.Back)),
                     new("Aufnahme endgültig löschen", "Entfernt diese Aufnahme aus deiner Bibliothek. Das kann nicht rückgängig gemacht werden.", Request: new(TrainingAction.DeleteLineup, n))], Key: $"delete:{n.Owner}:{n.Map}:{n.Name}")));
             }
+            items.Add(new(n.FlightDuration is { } duration ? FormattableString.Invariant($"Flugzeit: {duration:0.00} s") : "Flugzeit: Noch nicht gemessen",
+                "Automatische Servermessung vom Abwurf bis zur Explosion oder zum Beginn des Effekts. Eigene Aufnahmen laden und werfen, um die Zeit neu zu messen.", Enabled: false));
             var description = string.IsNullOrWhiteSpace(n.Description) ? "Noch keine Beschreibung. Eigene Aufnahmen kannst du hier ergänzen." : n.Description;
+            var facts = new List<string>();
+            if (n.Team.Length > 0) facts.Add(n.Team switch { "ct" => "CT", "t" => "T", _ => "Beide Seiten" });
+            if (n.ThrowFromTitle.Length > 0 || n.ThrowToTitle.Length > 0) facts.Add($"{n.ThrowFromTitle} → {n.ThrowToTitle}");
+            if (n.Attributes is { } a) {
+                facts.AddRange(LineupEditFields.Flags.Where(flag => a.Flag(flag.Key)).Select(flag => flag.Value));
+                facts.Add(a.ClickType switch { "right" => "Rechtsklick", "both" => "Beide Maustasten", _ => "Linksklick" });
+            }
+            if (n.FlightDuration is { } seconds) facts.Add(FormattableString.Invariant($"Flugzeit {seconds:0.00} s"));
+            if (facts.Count > 0) description = string.Join(" · ", facts) + ". " + description;
             return new((settings.IsFavorite(n) ? "★ " : "") + n.Title + (n.ReviewStatus == "pending" ? " [Review]" : ""), $"{status}. {description}",
                 Page: new(n.Title, description, items, Key: $"lineup:{n.Owner}:{n.Map}:{n.Name}"));
         }
@@ -71,7 +100,9 @@ public static class TrainingMenu
             Toggle("Flugbahnvorschau", TrainingAction.Trajectory, toggles.Trajectory, "Zeigt die Vorschau der Granatenflugbahn. Gilt für den gesamten Server."),
             Toggle("Einschläge", TrainingAction.Impacts, toggles.Impacts, "Markiert Geschosseinschläge. Gilt für den gesamten Server."),
             Toggle("Flashschutz", TrainingAction.NoFlash, toggles.NoFlash, "Verhindert Blendung durch Flashbangs für dich."),
-            Toggle("God Mode", TrainingAction.God, toggles.God, "Schaltet deinen Schutz vor Schaden ein oder aus.")], Key: "toggles");
+            Toggle("God Mode", TrainingAction.God, toggles.God, standalone
+                ? "Verhindert Schaden vollständig. Ohne God Mode bekommst du Schaden und wirst beim tödlichen Treffer sofort auf 100 HP zurückgesetzt."
+                : "Schaltet deinen Schutz vor Schaden ein oder aus.")], Key: "toggles");
         var tools = new MenuPage("Trainingswerkzeuge", "Würfe wiederholen, Positionen merken und Trainingshilfen bedienen.", [
             Action("Letzten Wurf wiederholen", TrainingAction.Rethrow, "Wirft deine zuletzt geworfene Granate erneut mit derselben Flugbahn; du kannst die Wirkung von anderswo beobachten."),
             Action("Zum letzten Abwurfpunkt", TrainingAction.LastThrow, "Bringt dich an die Position deiner zuletzt geworfenen Granate zurück."),
@@ -83,12 +114,12 @@ public static class TrainingMenu
             Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt deine aktuellen Koordinaten und Blickwinkel im Beschreibungsbereich.")], Key: "tools");
         if (standalone)
             tools = tools with { Items = tools.Items.Where(item =>
-                item.Page?.Key != "bots" && item.Request?.Action != TrainingAction.Rethrow).ToArray(),
-                Description = "Positionen merken und Trainingshilfen bedienen." };
+                item.Request?.Action != TrainingAction.Rethrow).ToArray(),
+                Description = "Positionen merken, Bots platzieren und Trainingshilfen bedienen." };
         var home = new List<MenuItem> {
             new("Granaten-Bibliothek", $"{library.Count} verfügbare Granaten auf {map}. Wähle zuerst den Granatentyp und danach deine Sammlung. {libraryError}", Page: new("Granaten-Bibliothek", "Granatentyp auswählen.", categories), Enabled: practice),
             new($"Must Know ({mustKnow.Length})", "Starte hier: wichtige Lineups für diese Map, vom Plattform-Admin ausgewählt.", Page: Lineups("Must Know", mustKnow, "must-know"), Enabled: practice),
-            new("Trainingswerkzeuge", standalone ? "Positionen merken und Trainingshilfen einstellen." : "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
+            new("Trainingswerkzeuge", standalone ? "Positionen merken, Bots platzieren und Trainingshilfen einstellen." : "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
             new("Neue Nade aufnehmen", "Aufnahme starten, eine Granate werfen und nach ihrer Wirkung speichern. Sie erscheint unter Alle und ist noch nicht offiziell geprüft.",
                 Page: new("Nade aufnehmen", "Nach dem Wurf mit KP_0 zurück ins Panel wechseln und Aufnahme speichern wählen.", [
                     Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von drei Minuten eine Granate. Abwurfpunkt, Blickwinkel, Wurftechnik und Ziel werden erfasst."),

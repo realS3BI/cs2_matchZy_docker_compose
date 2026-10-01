@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:
 import { dirname } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { applyPlayerNadeRequest } from "./nade-review.js";
+import { THROW_ATTRIBUTE_FIELDS } from "../shared/throw-attributes.js";
 import {
   matchZySavedNadesConfigToNades,
   nadesToMatchZySavedNadesConfig,
@@ -25,6 +26,7 @@ function stableNades(entries) {
     captureId: entry.captureId,
     throwTechnique: entry.throwTechnique,
     throwTrace: entry.throwTrace,
+    ...Object.fromEntries([...THROW_ATTRIBUTE_FIELDS, "flightDuration", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"].map(key => [key, entry[key]])),
     map: entry.map,
     type: entry.type,
     team: entry.team,
@@ -49,12 +51,13 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       id: current.id || entry.id,
       lineupImages: current.lineupImages || []
     };
-    for (const key of ["displayName", "team", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo"]) {
+    for (const key of ["displayName", "team", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo", ...THROW_ATTRIBUTE_FIELDS, "flightDuration"]) {
       if (current[key] !== undefined) merged[key] = current[key];
     }
     if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
       delete merged.landingPos;
       delete merged.captureId;
+      delete merged.flightDuration;
       delete merged.radarTo;
       if (!sameVector(current.lineupPos, entry.lineupPos)) delete merged.radarFrom;
     }
@@ -83,6 +86,7 @@ export function mergeNadeCaptures(entries, captures) {
     try {
       // A new measured target supersedes an old manual target marker. Start overrides remain intact.
       return sanitizeNades([{ ...entry, landingPos: capture.landingPos, radarTo: null,
+        flightDuration: capture.flightDuration ?? undefined,
         captureId: capture.captureId, updatedAt: capture.capturedAt }])[0];
     } catch { return entry; }
   });
@@ -91,10 +95,13 @@ export function mergeNadeCaptures(entries, captures) {
     try {
       const [entry] = sanitizeNades([{
         name: capture.name, displayName: capture.displayName, map: capture.map, type: capture.type,
-        desc: capture.description || capture.throwTechnique || "Captured in game",
+        desc: capture.description || capture.throwTechnique || "Im Spiel aufgenommen",
         lineupPos: capture.lineupPos, lineupAng: capture.lineupAng, landingPos: capture.landingPos,
         owner: capture.owner, captureId: capture.captureId,
         throwTechnique: capture.throwTechnique, throwTrace: capture.throwTrace,
+        team: capture.team,
+        ...Object.fromEntries(THROW_ATTRIBUTE_FIELDS.filter(key => capture[key] !== null).map(key => [key, capture[key]])),
+        ...(capture.flightDuration !== undefined && capture.flightDuration !== null ? { flightDuration: capture.flightDuration } : {}),
         updatedAt: capture.capturedAt
       }]);
       mergedEntries.push(entry);
@@ -392,7 +399,11 @@ export class NadesSyncService {
   }
 
   async writeMetadata(entries) {
-    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(({ owner, map, name, displayName, team, mustKnow, official, reviewStatus, updatedAt }) => ({ owner, map, name, ...(team ? { team } : {}), displayName: displayName || "", mustKnow: mustKnow === true, official: official === true, reviewStatus: reviewStatus || "", updatedAt })));
+    await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(entry => ({
+      owner: entry.owner, map: entry.map, name: entry.name, team: entry.team, displayName: entry.displayName || "",
+      mustKnow: entry.mustKnow === true, official: entry.official === true, reviewStatus: entry.reviewStatus || "", updatedAt: entry.updatedAt,
+      ...Object.fromEntries([...THROW_ATTRIBUTE_FIELDS, "flightDuration", "throwFromTitle", "throwToTitle", "throwTechnique"].map(key => [key, entry[key]])),
+    })));
   }
 
   async importCaptures() {
@@ -412,6 +423,7 @@ export class NadesSyncService {
         await this.writeFromMongoUnlocked(entries);
       this.lastDirection = "matchzy-to-panel";
     }
+    await this.writeMetadata(entries);
     await this.rememberCaptures(entries, receipts);
   }
 

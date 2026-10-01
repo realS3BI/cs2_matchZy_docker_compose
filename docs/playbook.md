@@ -12,12 +12,17 @@ Playbook ist die Website und das eigene Server-Plugin für die Granaten-Biblioth
 | CT-/T-Spawns und Map-Abstimmungen im HUD | Playbook | Playbook in Practice |
 | Noclip, Positionsspeicher, letzter Abwurfpunkt | Playbook | MatchZy in Practice |
 | Flugbahnvorschau, Einschläge, Flashschutz, God Mode, Granaten entfernen | Playbook | MatchZy in Practice |
-| Rethrow, Bot-Platzierung, Wurfhistorie, Colored Smokes | Noch nicht implementiert, ausgeblendet bzw. gesperrt | MatchZy in Practice |
+| Stehende und duckende Bots platzieren und entfernen | Playbook | MatchZy in Practice |
+| Rethrow, Wurfhistorie, Colored Smokes | Noch nicht implementiert, ausgeblendet bzw. gesperrt | MatchZy in Practice |
 | Ready, Matchstart, Pausen, Knife, Veto, Demos, Statistiken | Nicht verfügbar | MatchZy |
 
 Die eigene Implementierung ersetzt zunächst die grundlegenden Trainingsfunktionen. Insbesondere Rethrow benötigt zusätzlich eine geprüfte Anbindung zur Erzeugung und Initialisierung von CS2-Granatenprojektilen. Der Nades-Modus ruft keine fehlenden MatchZy-Werkzeuge auf. Im Scrim-Modus bleibt MatchZy unverändert als externes Plugin installiert.
 
 ## Befehle im Nades-Modus
+
+Der Nades-Modus startet direkt eine 60-Minuten-Trainingsrunde. Automatisches Online-/Offline-Warmup, Freezezeit, Map-Zeitlimit und Rundenlimit sind ausgeschaltet. Ignorierte Siegbedingungen verhindern automatische Rundenenden auch nach Ablauf der Rundenzeit. Ein später beitretender Spieler löst keinen Neustart für die anderen aus. Beim Mapstart werden die Einstellungen auch während der Server-Hibernation angewendet und nach dem Laden der Map-Konfiguration erneut gesetzt. Bei Rundenstart und Spawn wird ein noch aktives Warmup beendet.
+
+Beide Teams spawnen mit SSG 08, ihrer Standardpistole, Messer und allen fünf Granatentypen. CT erhalten eine Brandgranate, T einen Molotov. Ohne God Mode bleibt normaler Schaden messbar. CS2s `buddha 1` mit `buddha_reset_hp 100` verhindert den Tod und setzt Spieler beim tödlichen Treffer sofort auf 100 HP zurück. Das entspricht [MatchZys Practice-Konfiguration](https://github.com/shobhit-pathak/MatchZy/blob/main/PracticeMode.cs). God Mode verhindert Schaden vollständig. Bots bleiben durch `buddha_ignore_bots 1` verwundbar und respawnen an ihrer gespeicherten Position.
 
 Chatbefehle funktionieren mit `.`, `!` und `/`. Die entsprechende Konsole verwendet `css_`, beispielsweise `.loadnade smoke` und `css_loadnade smoke`.
 
@@ -31,6 +36,9 @@ Chatbefehle funktionieren mit `.`, `!` und `/`. Die entsprechende Konsole verwen
 | `.last` | Zum eigenen letzten Abwurfpunkt zurückkehren |
 | `.savepos` / `.loadpos` | Eigene Position und Blickwinkel merken bzw. laden |
 | `.noclip` / `noclip` | Fliegen ein- oder ausschalten |
+| `.bot` | Stehenden Bot im gegnerischen Team an der eigenen Position mit der eigenen Blickrichtung platzieren; beim Ducken ebenfalls duckend |
+| `.crouchbot` / `.cbot` | Duckenden Bot platzieren |
+| `.nobots` | Alle Trainingsbots für alle Spieler entfernen, auch eine noch laufende Platzierung abbrechen |
 | `.traj` / `.impacts` | Flugbahnvorschau bzw. Geschosseinschläge für den Server umschalten |
 | `.noflash` / `.noblind` | Eigenen Flashschutz umschalten |
 | `.god` | Eigenen Schutz vor Schaden umschalten |
@@ -53,10 +61,13 @@ Automatische Tests prüfen Modus- und Rollenregeln, Menüumfang, Bootstrap-Entfe
 
 1. Nades starten. `css_plugins list` zeigt Playbook 2.0.0 und keine MatchZy-Instanz. Ohne `.prac` sind Granaten, Respawn und HUD verfügbar.
 2. Als Admin und Match Admin Noclip, Positionsspeicher, Flashschutz, God Mode, Spawns und `.clear` prüfen. Als Player dieselben Befehle ablehnen lassen.
-3. Ein Lineup aufnehmen, speichern, laden und favorisieren. Nach Favoritenwechsel bleiben Rethrow und Bots im Nades-Menü ausgeblendet. Eigene und fremde Aufnahmen bleiben korrekt getrennt.
+3. Ein Lineup aufnehmen, speichern, laden und favorisieren. Nach Favoritenwechsel bleibt Rethrow ausgeblendet; Bots bleiben verfügbar. Eigene und fremde Aufnahmen bleiben korrekt getrennt.
 4. Mit zwei Spielern `.last` und `.savepos` prüfen. Positionen und Schutzoptionen dürfen sich nicht gegenseitig überschreiben. Nach Disconnect, Mapwechsel und Rollenentzug dürfen keine alten Spielerzustände weiterwirken.
 5. Im Nades-Modus `.ready`, `!start`, `/exitprac` und `css_rethrow` prüfen. Sie dürfen weder Match noch Trainingszustand verändern.
 6. Auf MatchZy wechseln und einen Scrim mit Ready, Start und Pause prüfen. `.prac` aktiviert dessen Trainingswerkzeuge; `.exitprac` schließt das Panel. Beide Plugins melden sich mit demselben Präfix.
 7. Zurück zu Nades wechseln. MatchZy wird entfernt, die Bibliothek und Favoriten bleiben erhalten.
+8. Einen leeren Nades-Server starten, erstmals beitreten und anschließend die Map wechseln. Ohne zweiminütiges Warmup oder Freezezeit mit SSG 08, Standardpistole und allen Granaten spawnen. Ein zweiter Join darf die laufende Runde nicht neu starten.
+9. Ohne God Mode HE, Molotov, Fallschaden und einen tödlichen Schuss prüfen. HP sinken bei gewöhnlichen Treffern und springen beim tödlichen Treffer auf 100, ohne Tod oder Teleport. Granatenschaden im Chat bleibt messbar. God Mode blockiert Schaden weiterhin vollständig.
+10. Über das HUD und `.bot`, `.cbot`, `.crouchbot` stehende und duckende Ziele platzieren. Danach wegbewegen, Flash- und HE-Schaden prüfen, Bots töten und Respawn an gleicher Position mit gleichem Duckzustand prüfen. `.nobots`, volle Teams, Disconnect während der Platzierung und Mapwechsel dürfen keine verspäteten Platzierungen verursachen.
 
 Quellen für die Abgrenzung: [MatchZy-Funktionen](https://shobhit-pathak.github.io/MatchZy/), [MatchZy-Befehle](https://shobhit-pathak.github.io/MatchZy/commands/), [CounterStrikeSharp-Spieler-API](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.CCSPlayerPawn.html).

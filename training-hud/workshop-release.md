@@ -1,28 +1,88 @@
-# Trainingspanel im Steam Workshop aktualisieren
+# Trainingspanel lokal testen und im Steam Workshop veröffentlichen
 
-Dieses Projekt aktualisiert das vorhandene [Workshop-Item 3810441722](https://steamcommunity.com/sharedfiles/filedetails/?id=3810441722). Kein neues Item anlegen, sonst müssten alle Server auf eine andere ID umgestellt werden. Laut bisherigem Screenshot heißt es „MatchZy Training HUD“ und ist nur für Freunde sichtbar. Für die allgemeine Nutzung auf **Öffentlich** stellen.
+Dieses Projekt aktualisiert das bestehende [Workshop-Item 3810441722](https://steamcommunity.com/sharedfiles/filedetails/?id=3810441722). Entwicklung, Dashboard und Server können auf dem Mac mini bleiben. Für das Kompilieren mit Valves Windows-Werkzeugen, den Spieltest und den Upload verwendest du deine Windows-Arbeitskopie. Git verbindet beide Rechner; ein GitHub-Actions-Runner oder GitHub-Secrets sind für diesen Ablauf nicht erforderlich.
 
-Es gibt zwei getrennte Updates:
+HUD-Dateien und Server-Plugin werden getrennt aktualisiert. Das Skript veröffentlicht Layout und Styles im Workshop. Änderungen an Menüs, Rollen, Favoriten und Trainingsaktionen erfordern zusätzlich ein aktuelles CS2-Image mit dem Plugin und gegebenenfalls ein neues Dashboard-Image. In Coolify aus dem passenden Commit bauen und bereitstellen, dann Einstellungen mit **Apply & restart** übernehmen.
 
-- **Dashboard und Server-Plugin:** Rollen, Menüs, Favoriten und Aktionen. In Coolify beide Images aus dem neuen Commit neu bauen und bereitstellen. Der CS2-Build kompiliert das Plugin selbst. Mit „Apply & restart“ die gespeicherten Einstellungen übernehmen.
-- **Workshop-Addon:** die kompilierten Panorama-Dateien für Layout und Styles. Das Addon nach Änderungen an XML/CSS neu hochladen. Ein Git-Commit oder Server-Neustart veröffentlicht es nicht.
+## Windows einmal einrichten
 
-Die Rolle Trainingsspieler ist in diesem Playbook-Stand enthalten. Sie öffnet das Panel im eigenständigen Nades-Training oder in MatchZy Practice mit `.nades`, ohne Binds. Im Dashboard unter „Benutzer“ anhand der Steam64-ID zuweisen. Neue Anmeldungen bleiben Player. Das Panel bleibt kompakt mit neun Listenplätzen.
-
-## Sofortiger Weg über die Workshop Tools
-
-1. Auf dem Windows-Rechner den neuen Commit holen und CS2 einschließlich Workshop Tools aktualisieren. CS2 vollständig beenden.
-2. Im Projektordner in PowerShell bauen, mit dem tatsächlichen Installationspfad:
+1. Git for Windows installieren und das Repository klonen, falls die Arbeitskopie noch nicht existiert. Dieser Projektordner darf beispielsweise auf dem Desktop liegen. Er muss eine Git-Arbeitskopie sein; ein ZIP-Download reicht für das automatische Update nicht aus.
+2. CS2 einschließlich Workshop Tools installieren oder aktualisieren. Unter dem CS2-Installationsverzeichnis muss `game/bin/win64/resourcecompiler.exe` existieren. Das Addon `matchzy_training_hud` einmal in den Workshop Tools anlegen, falls dieser Rechner es noch nicht kennt.
+3. PowerShell 7 und das .NET 10 **SDK** installieren. In Windows PowerShell:
 
    ```powershell
-   ./training-hud/build.ps1 -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
+   winget install --id Microsoft.PowerShell --source winget
+   winget install --id Microsoft.DotNet.SDK.10 --exact
    ```
 
-3. In den CS2 Workshop Tools das bestehende Addon `matchzy_training_hud` öffnen. Im Asset Browser unter **Tools → Counter-Strike 2 Workshop Manager** den bestehenden Eintrag mit ID **3810441722** bearbeiten und aktualisieren. Die neuen kompilierten Dateien liegen bereits unter `game/csgo_addons/matchzy_training_hud/panorama/`. Keine neue Submission erstellen. Vor dem Hochladen kontrollieren, dass der Manager diese neuen Dateien einpackt.
-4. Änderungsnotiz eintragen und hochladen. Steam muss den erfolgreichen Upload bestätigen. Eine eventuell verlangte Workshop-Vereinbarung oder Bestätigung mit dem Erstellerkonto abschließen.
-5. Auf der Workshop-Seite unter Besitzerverwaltung Titel und Beschreibung korrigieren und die Sichtbarkeit auf **Öffentlich** stellen. Eine Inhaltsaktualisierung hebt „Nur Freunde“ nicht automatisch auf. Anschließend die Seite ohne angemeldetes Erstellerkonto öffnen und den Download mit einem anderen Spieler prüfen.
+   Anschließend ein neues Terminal verwenden, damit die Programme im Suchpfad verfügbar sind. Die mit Windows mitgelieferte PowerShell 5.1 und eine reine .NET-Runtime reichen nicht aus.
 
-Als Titel „Playbook Training HUD“ verwenden. Titel, Beschreibung und Vorschaubild ändern die Workshop-ID nicht. Das Vorschaubild bei Bedarf mit `create-workshop-preview.ps1` neu erzeugen oder im Workshop Manager ersetzen.
+SteamCMD installiert das Skript beim ersten Upload direkt von Valve unter `training-hud/.local/steamcmd/`. Eine bestehende Installation kannst du mit `-SteamCmd 'C:/steamcmd/steamcmd.exe'` verwenden. Melde dich mit dem Steam-Anmeldenamen des Workshop-Erstellers an, nicht mit Anzeigename oder Steam64-ID. Passwort und Steam Guard werden bei Bedarf direkt von SteamCMD abgefragt. Die Anmeldung im normalen Steam-Client ersetzt die SteamCMD-Anmeldung nicht.
+
+`training-hud/.local/settings.json` merkt sich CS2-Pfad, SteamCMD-Pfad, Steam-Anmeldename und die zuletzt gewählte Sichtbarkeit. Passwort und Guard-Code werden vom Skript nicht gespeichert. SteamCMD verwaltet seinen eigenen Login-Token. Das gesamte `.local`-Verzeichnis und die Build-Ausgaben unter `dist` sind von Git ausgeschlossen und bleiben auf diesem Windows-PC. Für eine erneute Einrichtung die lokalen Einstellungen bearbeiten oder `settings.json` entfernen.
+
+## Mit einer Datei aktualisieren und optional veröffentlichen
+
+Auf dem Mac die Änderungen committen und pushen. Dann auf Windows CS2 vollständig beenden und im Projekt-Root **[hud.cmd](../hud.cmd) doppelklicken**. Das Skript funktioniert unabhängig davon, aus welchem Verzeichnis es gestartet wurde. Alternativ in Git Bash:
+
+```bash
+./hud.sh
+```
+
+Der Ablauf ist bei jeder normalen Ausführung derselbe:
+
+1. Die Git-Arbeitskopie wird mit `git pull --ff-only` auf den Stand ihres eingestellten Upstream-Branches gebracht, beim normalen Klonen also `origin/main`. Ein fehlgeschlagenes Update bricht den Ablauf vor dem HUD-Build ab. Lokale Änderungen und eigene Commits werden nicht zurückgesetzt. Nach dem Pull wird das heruntergeladene Release-Skript verwendet.
+2. Beim ersten Start erkennt es CS2 über die Steam-Bibliotheken oder fragt nach dem Installationsverzeichnis. Beispiel: `D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive`. Leerzeichen im Pfad sind erlaubt.
+3. Es kompiliert die zwei Panorama-Dateien, erstellt mit ValvePak das Workshop-VPK und prüft dessen Inhalt nach erneutem Öffnen. Die vorherigen lokalen HUD-Dateien werden gesichert; anschließend wird der neue Build in `game/csgo/panorama` und im Addon `matchzy_training_hud` installiert.
+4. Es fragt: **Diesen HUD-Stand auch im Steam Workshop veröffentlichen?** Mit `n` oder Enter endet das Skript. Git-Arbeitskopie und lokales HUD sind bereits aktualisiert. Keine Steam-Anmeldung, keine Release-Notiz und kein Upload sind dafür nötig. CS2 wird nicht automatisch gestartet.
+5. Mit `j` folgen Änderungsnotiz und Sichtbarkeit. `public` ist beim ersten Release die Vorgabe; `keep` erhält die bestehende Sichtbarkeit. Der Steam-Anmeldename wird nur beim ersten Release abgefragt.
+6. SteamCMD wird bei Bedarf installiert und meldet dich an. Passwort und Steam Guard direkt dort beantworten. Anschließend wird das vorbereitete VPK auf Item **3810441722** hochgeladen, ohne das HUD erneut zu bauen. Erfolg muss durch SteamCMD für diese Item-ID bestätigt werden.
+
+Wenn Commit, HUD-Quellen, kompilierte Dateien, VPK oder lokale Overrides nach dem Build geändert wurden, stoppt der Release. Erneut `hud.cmd` ausführen und das lokale HUD aktualisieren. Bei einem reinen Login- oder Upload-Fehler bleibt das vorbereitete Paket für einen erneuten Versuch erhalten. Ein abgebrochener Upload kann bereits Daten an Steam übertragen haben; vor einem erneuten Versuch das Änderungsdatum auf der Workshop-Seite prüfen.
+
+## Das lokale HUD bei Bedarf testen
+
+Bei der Release-Frage zunächst „Nein“ wählen. Im Dashboard unter **Server → Trainings-HUD** das HUD aktivieren und **HUD über Workshop ausliefern** ausschalten. Mit **Apply & restart** übernehmen. CS2 normal über Steam starten, den Trainingsserver betreten und `.nades` verwenden. Neue Server-Funktionen brauchen auch das aktuelle Plugin auf dem Server.
+
+Im eigenständigen Nades-Training oder in MatchZy Practice neun Listenplätze, Mausnavigation, Seitenwechsel, Lineup laden, Favoriten und Ausblenden prüfen. Die Rolle **Trainingsspieler** kann anhand der Steam64-ID im Dashboard freigeschaltet werden. Anschließend CS2 vollständig beenden und bei Bedarf den unten beschriebenen späteren Release verwenden.
+
+## Später veröffentlichen oder die Workshop-Version testen
+
+Die folgenden Befehle in PowerShell oder Eingabeaufforderung sind Alternativen zur normalen Aktualisierung:
+
+```powershell
+# Den zuletzt gebauten und lokal installierten Stand nach Spieltest veröffentlichen:
+./hud.cmd -Mode release
+
+# Lokale Overrides sichern und entfernen, damit das Workshop-HUD sichtbar wird:
+./hud.cmd -Mode live
+
+# Nur den Zustand der lokalen Dateien prüfen, auch bei laufendem CS2:
+./hud.cmd -Mode status
+```
+
+`release` fragt erneut nach der Veröffentlichung und verwendet das vorhandene Paket. Es zieht keinen neuen Git-Stand und baut nichts neu, damit der zuvor lokal installierte Stand erhalten bleibt. `live` veröffentlicht nichts und benötigt keine SteamCMD-Anmeldung. `status` prüft die Dateien auf der Festplatte; ein laufender Client kann noch ein älteres Layout im Cache halten. Diese drei Modi führen keinen Pull aus. In Git Bash funktionieren dieselben Modi als `./hud.sh release`, `./hud.sh live` und `./hud.sh status`.
+
+Für einen Workshop-Test zusätzlich im Dashboard **HUD über Workshop ausliefern** aktivieren, ID **3810441722** hinterlegen und **Apply & restart** ausführen. CS2 anschließend normal über Steam starten und erneut verbinden. Das Entfernen lokaler Overrides allein lädt noch kein Workshop-Addon herunter.
+
+Mit einem zweiten Spieler testen, der keine lokalen HUD-Dateien hat und nicht mit dem Workshop-Ersteller befreundet ist. Er muss das öffentliche Addon herunterladen können. Er braucht keine Workshop Tools und keine Binds. Ein erfolgreicher Upload beweist noch nicht, dass alle Clients das neue Addon geladen haben.
+
+Direkt in PowerShell 7 funktioniert derselbe Ablauf ohne Git Bash:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./training-hud/update-local.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./training-hud/update-local.ps1 -Mode release
+```
+
+Für abweichende Pfade oder ein anderes Erstellerkonto können `-Cs2`, `-SteamCmd` und `-SteamUsername` übergeben werden. Beispiel in Git Bash:
+
+```bash
+./hud.sh update -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive' -SteamCmd 'C:/steamcmd/steamcmd.exe' -SteamUsername 'DEIN_STEAM_ANMELDENAME'
+```
+
+## Titel, Beschreibung und Workshop Manager
+
+Titel, Beschreibung und Vorschaubild werden beim Skript-Upload erhalten. Diese Angaben über die Besitzerverwaltung der Workshop-Seite ändern. Als Titel „Playbook Training HUD“ verwenden. Titel, Beschreibung, Vorschaubild und Sichtbarkeit ändern die Workshop-ID nicht.
 
 Vorschlag für die Beschreibung:
 
@@ -36,72 +96,22 @@ Dieses Addon enthält Client-Dateien, keine spielbare Map und keinen eigenständ
 Communityprojekt, keine offizielle Valve-Veröffentlichung.
 ```
 
-## Manueller GitHub-Actions-Workflow
+Falls SteamCMD den Upload für App 730 oder das Erstellerkonto ablehnt, das bestehende Addon `matchzy_training_hud` in den Workshop Tools öffnen. Im Asset Browser unter **Tools → Counter-Strike 2 Workshop Manager** den bestehenden Eintrag **3810441722** aktualisieren. Die neuen kompilierten Dateien liegen bereits unter `game/csgo_addons/matchzy_training_hud/panorama/`. Keine neue Submission erstellen. Vor dem Upload prüfen, dass der Manager diese Dateien einpackt, und anschließend den erfolgreichen Upload bestätigen lassen. Eventuell verlangte Workshop-Vereinbarungen mit dem Erstellerkonto abschließen.
 
-Datei: [training-hud-release.yml](../.github/workflows/training-hud-release.yml). Der Workflow reagiert ausschließlich auf `workflow_dispatch`. Er läuft weder bei Push noch bei Pull Requests automatisch.
+Das Vorschaubild bei Bedarf mit `create-workshop-preview.ps1` erzeugen oder im Workshop Manager ersetzen.
 
-Er kompiliert die zwei HUD-Dateien mit Valves `resourcecompiler.exe`, packt sie mit der fest versionierten ValvePak-Bibliothek als `3810441722.vpk` und prüft die Dateiinhalte nach erneutem Öffnen des Pakets. Optional aktualisiert SteamCMD das bestehende Workshop-Item. Das Workflow-Artefakt enthält die kompilierten Dateien, das VPK und `release.json` mit Commit und SHA-256. Es enthält keine Steam-Anmeldedaten und kein Server-Plugin.
+## Release-Nachweis und automatisierte Tests
 
-### Einmalige Einrichtung auf Windows
+`training-hud/dist/release.json` enthält Commit, Build-Zeitpunkt, SHA-256 des Pakets sowie Hashes von Quellen und kompilierten Dateien. Ein bestätigter Upload ergänzt `publishedAtUtc`. Das Upload-Verzeichnis enthält ausschließlich `3810441722.vpk`. `dist/workshop-upload.vdf` verwendet absolute Pfade und gilt nur auf dem Rechner, der es erzeugt hat. Diese Dateien enthalten keine Steam-Anmeldedaten.
 
-Ein eigener **Windows-X64-Runner** mit dem zusätzlichen Label **cs2-workshop** ist erforderlich. Der Workflow installiert .NET 10; die folgenden Komponenten müssen bereits vorhanden sein:
-
-1. Git, PowerShell 7 und CS2 mit installierten Workshop Tools. Im CS2-Verzeichnis muss `game/bin/win64/resourcecompiler.exe` existieren. Das Addon `matchzy_training_hud` einmal in den Workshop Tools anlegen, falls dieser Rechner es noch nicht kennt.
-2. Im GitHub-Repository unter **Settings → Actions → Runners → New self-hosted runner** einen Windows-X64-Runner registrieren. Das Label `cs2-workshop` ergänzen. Den Runner unter demselben Windows-Benutzer wie die Workshop Tools und die spätere SteamCMD-Anmeldung starten. Der Rechner muss beim Workflow-Start eingeschaltet und der Runner online sein.
-3. Unter **Settings → Secrets and variables → Actions → Variables** die Repository-Variable `CS2_PATH` setzen, zum Beispiel `D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive`.
-
-Für automatischen Upload zusätzlich:
-
-4. [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) in einem beständigen Verzeichnis installieren, beispielsweise `C:/steamcmd`. Repository-Variable `STEAMCMD_PATH` auf `C:/steamcmd/steamcmd.exe` setzen.
-5. Als Repository-Secret `STEAM_USERNAME` den Steam-Anmeldenamen des **Erstellerkontos** hinterlegen, nicht den Anzeigenamen und nicht die Steam64-ID.
-6. SteamCMD auf dem Runner-Rechner einmal interaktiv unter dessen Windows-Benutzer anmelden:
-
-   ```powershell
-   Set-Location 'C:/steamcmd'
-   ./steamcmd.exe
-   # In SteamCMD:
-   login DEIN_STEAM_ANMELDENAME
-   # Passwort und Steam Guard nur in dieser lokalen Sitzung beantworten.
-   quit
-   ```
-
-   Anschließend lokal `./steamcmd.exe +@NoPromptForPassword 1 +login DEIN_STEAM_ANMELDENAME +quit` ausführen. Erst wenn die gespeicherte Anmeldung ohne Rückfrage funktioniert, kann der Workflow sie verwenden. Die Anmeldung im normalen Steam-Client ersetzt diesen Schritt nicht. Läuft die Sitzung ab oder fordert Steam Guard erneut eine Bestätigung, lokal wiederholen. Der Workflow kann diese Rückfrage nicht beantworten und bricht ab.
-
-Der Runner enthält damit eine gespeicherte Steam-Anmeldung. Nur eigene, geprüfte Commits ausführen. Die Anmeldung gehört weder ins Repository noch in ein Workflow-Artefakt.
-
-### Workflow starten
-
-1. Den Commit auf GitHub pushen. Für den Button **Run workflow** muss die YAML-Datei auf dem Standardbranch `main` liegen.
-2. **Actions → Trainingspanel veröffentlichen → Run workflow** öffnen und den gewünschten Branch auswählen.
-3. Für den ersten Probelauf `publish` ausgeschaltet lassen. Das erzeugt das Artefakt ohne Upload.
-4. Für die Veröffentlichung erneut starten und `publish` einschalten. `visibility` auf `public` setzen, wenn das derzeitige „Nur Freunde“ aufgehoben werden soll. `keep` erhält den bisherigen Wert. `unlisted` bedeutet über Link erreichbar, aber nicht in der Suche gelistet. `friends` und `private` eignen sich nicht für die allgemeine Auslieferung.
-5. Einzeilige Änderungsnotiz eintragen. Erfolg im SteamCMD-Schritt und Änderungsdatum auf der Workshop-Seite prüfen. Titel, Beschreibung und Vorschaubild bleiben im Workflow unverändert und werden über Steam bearbeitet.
-
-Ein abgebrochener Upload kann bereits Daten an Steam übertragen haben. Vor einem erneuten Versuch die Workshop-Seite prüfen. Bei einem reinen Login-Fehler ist das gebaute Artefakt weiterhin verfügbar, sofern der Build erfolgreich war. Wenn Steam den Upload für App 730 oder das Erstellerkonto ablehnt, denselben Stand über den Workshop Manager veröffentlichen. Ein echter Upload aus diesem neuen Workflow ist noch nicht abgenommen.
-
-Das Release-Skript funktioniert auch ohne GitHub Actions, mit PowerShell 7 und .NET 10:
+Die Release-Prüfungen und der interaktive Ablauf lassen sich ohne Valve-Compiler, Spiel, Steam-Konto oder Netzwerk testen:
 
 ```powershell
-./training-hud/release.ps1 -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
-./training-hud/release.ps1 -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive' -Publish -SteamCmd 'C:/steamcmd/steamcmd.exe' -SteamUsername 'DEIN_STEAM_ANMELDENAME' -Visibility public -ChangeNote 'Kompaktes Trainingspanel aktualisiert'
+pwsh -NoProfile -File ./training-hud/test-release.ps1
+pwsh -NoProfile -File ./training-hud/test-local-release.ps1
+pwsh -NoProfile -File ./training-hud/test-update-local.ps1
 ```
 
-Die erste Zeile baut nur, die zweite baut erneut und lädt hoch. Das generierte `dist/workshop-upload.vdf` verwendet absolute Pfade und gilt nur auf dem Rechner, der es erzeugt hat. Das Upload-Verzeichnis enthält ausschließlich das VPK, keine losen XML-/CSS-Quellen oder lokalen Entwicklungsdateien.
+Diese Tests simulieren Compiler und SteamCMD. Der Git-Test arbeitet mit echten lokalen Repositories und prüft das Update sowie den Abbruch bei einem fehlgeschlagenen Pull. Der echte Ablauf einschließlich Ingame-Test und SteamCMD-Upload muss auf dem Windows-PC noch abgenommen werden.
 
-## Auf dem Server aktivieren und mit anderen testen
-
-1. Dashboard und CS2-Image auf den neuen Commit bringen. Unter **Server → Trainings-HUD** sowohl **Trainings-HUD aktivieren** als auch **HUD über Workshop ausliefern** einschalten und **3810441722** hinterlegen. Mit **Apply & restart** übernehmen. Der Bootstrap trägt die ID in `mm_client_extra_addons` ein.
-2. Den Modus **Nades** verwenden oder als Admin/Match Admin mit `.prac` Practice starten. Dem Testspieler im Dashboard die Rolle **Trainingsspieler** geben.
-3. Auf Entwicklungsclients CS2 beenden und lokale Overrides entfernen:
-
-   ```powershell
-   ./training-hud/panel-source.ps1 live -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
-   ```
-
-   Das Skript sichert und entfernt nur die zwei lokalen HUD-Dateien. Sie würden sonst das Workshop-Addon überdecken.
-4. CS2 normal über Steam starten, nicht über Launch Tools. Mit einem zweiten Spieler testen, der keine lokalen HUD-Dateien hat und nicht mit dem Workshop-Ersteller befreundet ist. Er muss das öffentliche Addon herunterladen können. Für die Überprüfung kann er es zusätzlich auf der Workshop-Seite abonnieren.
-5. Server betreten, Team wählen, spawnen und `.nades` eingeben. Ohne Binds neun Listenplätze, Mausnavigation, Lineup laden, Favoriten und Ausblenden prüfen. Mit `.nades` wieder öffnen. Im Web darf Trainingsspieler nur Maps und Lineups sehen; Serverseiten und Schreibzugriffe müssen gesperrt sein.
-
-Nach einem Workshop-Update CS2 vollständig neu starten und erneut verbinden. Bleibt ein altes Layout sichtbar, lokale Overrides und den Workshop-Download prüfen. Ein erfolgreicher Upload allein beweist noch nicht, dass jeder Client das neue Addon geladen hat.
-
-Quellen: [Valve zur Aktualisierung bestehender Workshop-Items mit SteamCMD](https://partner.steamgames.com/doc/features/workshop/implementation#SteamCmd), [GitHub zum manuellen Workflow-Start](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow), [ValvePak zum Erstellen und Prüfen von VPKs](https://github.com/ValveResourceFormat/ValvePak).
+Quellen: [Valve zum Aktualisieren bestehender Workshop-Items](https://partner.steamgames.com/doc/features/workshop/implementation#SteamCmd), [Valve zur Wiederverwendung der SteamCMD-Anmeldung](https://partner.steamgames.com/doc/sdk/uploading#5), [Microsoft zur Installation von PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows), [Microsoft zur Installation des .NET SDK](https://learn.microsoft.com/en-us/dotnet/core/install/windows), [ValvePak](https://github.com/ValveResourceFormat/ValvePak).

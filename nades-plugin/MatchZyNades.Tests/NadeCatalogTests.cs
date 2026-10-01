@@ -25,6 +25,27 @@ public sealed class NadeCatalogTests
         new { Map = map, Type = type, LineupPos = position, LineupAng = "-12.5 90 0", Desc = "Jumpthrow" };
 
     [Fact]
+    public void PanelMetadataSuppliesTypedAttributesSideLocationsAndMeasuredTimeAfterMatchZyStripsThem()
+    {
+        var json = JsonSerializer.Serialize(new { @default = new { window = Entry() } });
+        var metadata = JsonSerializer.Serialize(new[] { new {
+            owner = "default", map = "de_mirage", name = "window", team = "ct", throwFromTitle = "Über T-Spawn", throwToTitle = "Fenster",
+            throwTechnique = "Ein Schritt", is_jumpthrow = true, is_crouch = false, is_walking = false, is_running = false,
+            is_stepping = true, click_type = "both", flightDuration = 3.125f
+        } });
+        var nade = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7655", metadata));
+        Assert.Equal("ct", nade.Team);
+        Assert.Equal("Über T-Spawn", nade.ThrowFromTitle);
+        Assert.Equal("Fenster", nade.ThrowToTitle);
+        Assert.Equal("Ein Schritt", nade.Technique);
+        Assert.Equal(new ThrowAttributes(IsJumpthrow: true, IsStepping: true, ClickType: "both"), nade.Attributes);
+        Assert.Equal(3.125f, nade.FlightDuration);
+        var legacy = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7655"));
+        Assert.Null(legacy.Attributes);
+        Assert.Null(legacy.FlightDuration);
+    }
+
+    [Fact]
     public void UsesPanelFormatAndAllOwnersOnCurrentMap()
     {
         var json = JsonSerializer.Serialize(new Dictionary<string, object>

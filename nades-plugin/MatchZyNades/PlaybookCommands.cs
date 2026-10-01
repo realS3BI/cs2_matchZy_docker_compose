@@ -12,7 +12,8 @@ public static class PlaybookCommands
 
     public static readonly HashSet<string> TrainingCommands = [
         "css_help", "css_loadnade", "css_ln", "css_listnades", "css_lin", "css_last", "css_savepos", "css_loadpos",
-        "css_noclip", "css_clear", "css_traj", "css_impacts", "css_noflash", "css_noblind", "css_god"
+        "css_noclip", "css_clear", "css_traj", "css_impacts", "css_noflash", "css_noblind", "css_god",
+        "css_bot", "css_cbot", "css_crouchbot", "css_nobots"
     ];
     private static readonly HashSet<string> PracticeCommands = [
         "css_back", "css_bestctspawn", "css_bestspawn", "css_besttspawn", "css_boost",
@@ -99,9 +100,15 @@ public static class PlaybookCommands
         ["sv_grenade_trajectory_prac_trailtime"] = "3", ["sv_showimpacts"] = "0",
         ["mp_limitteams"] = "0", ["mp_autoteambalance"] = "0", ["mp_freezetime"] = "0",
         ["mp_roundtime"] = "60", ["mp_roundtime_defuse"] = "60", ["mp_roundtime_hostage"] = "60",
+        ["mp_warmup_online_enabled"] = "0", ["mp_warmup_offline_enabled"] = "0", ["mp_do_warmup_period"] = "0",
+        ["mp_warmup_pausetimer"] = "0", ["mp_timelimit"] = "0", ["mp_maxrounds"] = "0",
         ["mp_ignore_round_win_conditions"] = "1", ["mp_respawn_on_death_ct"] = "1", ["mp_respawn_on_death_t"] = "1",
         ["mp_buy_anywhere"] = "1", ["mp_buytime"] = "9999", ["mp_maxmoney"] = "60000", ["mp_startmoney"] = "60000",
         ["ammo_grenade_limit_total"] = "5", ["mp_free_armor"] = "2", ["mp_forcecamera"] = "0", ["bot_quota"] = "0",
+        ["buddha"] = "1", ["buddha_ignore_bots"] = "1", ["buddha_reset_hp"] = "100",
+        ["bot_quota_mode"] = "normal", ["bot_join_after_player"] = "0", ["bot_stop"] = "1", ["bot_freeze"] = "1", ["bot_zombie"] = "1",
+        ["mp_ct_default_primary"] = "weapon_ssg08", ["mp_t_default_primary"] = "weapon_ssg08",
+        ["mp_ct_default_secondary"] = "weapon_hkp2000", ["mp_t_default_secondary"] = "weapon_glock",
         ["mp_ct_default_grenades"] = "\"weapon_incgrenade weapon_hegrenade weapon_smokegrenade weapon_flashbang weapon_decoy\"",
         ["mp_t_default_grenades"] = "\"weapon_molotov weapon_hegrenade weapon_smokegrenade weapon_flashbang weapon_decoy\"",
     };
