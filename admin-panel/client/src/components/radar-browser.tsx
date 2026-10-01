@@ -1,6 +1,6 @@
 import { type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { Crosshair, MapPin, Target } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { type MapDefinition } from "../lib/maps";
 import { lineupKey } from "../lib/lineups";
 import { type RadarGroup, type RadarLineup, type RadarSide } from "../lib/radar-groups";
@@ -24,17 +24,17 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
     const asset = markerSide === "to" ? radarMarkerAsset(group.nades) : null;
     const team = group.nades.every(nade => nade.team === group.nades[0].team) ? group.nades[0].team : undefined;
     const teamLabel = isLineupTeam(team) ? ` · ${TEAM_LABELS[team]}` : "";
-    const Icon = markerSide === "from" ? Crosshair : Target;
+    const countLabel = group.nades.length > 1 ? ` · ${group.nades.length} Lineups` : "";
     return <button key={`${secondary}-${group.id}`} type="button"
       className={cn("radar-spot", markerSide === "from" && "radar-spot-from", active && "radar-spot-active", asset && "radar-spot-asset", group.nades.length > 1 && "radar-spot-stack")}
       data-team={team || "unassigned"}
       style={{ left: `${group.point.x * 100}%`, top: `${group.point.y * 100}%` }}
-      aria-label={`${markerSide === "from" ? "Start" : "Ziel"}: ${group.title}, ${group.nades.length} ${group.nades.length === 1 ? "Lineup" : "Lineups"}${teamLabel}`}
+      aria-label={`${markerSide === "from" ? "Start" : "Ziel"}: ${group.title}${countLabel}${teamLabel}`}
       aria-pressed={active} aria-expanded={secondary ? group === expanded : undefined}
-      title={`${group.title} · ${group.nades.length} Lineups`}
+      title={`${group.title}${countLabel}`}
       onClick={() => secondary ? onExpand(group) : onSelect(group)}>
       {asset && <img className="radar-marker-art" src={asset} alt="" aria-hidden="true" />}
-      <span className="radar-marker-label">{group.nades.length > 1 ? group.nades.length : <Icon aria-hidden="true" />}</span>
+      {group.nades.length > 1 && <span className="radar-marker-label">{group.nades.length}</span>}
     </button>;
   }
   return <div className="radar-browser" role="group" aria-label={`Interaktive Radarkarte von ${map.name}`}>
@@ -45,7 +45,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
       </svg>}
       {(selected ? [selected] : groups).map(group => marker(group, side))}
       {selected && counterparts.map(group => marker(group, side === "from" ? "to" : "from", true))}
-      {expanded && <div className="radar-spot-options" aria-label={`Lineups bei ${expanded.title}`}
+      {expanded && expanded.nades.length > 1 && <div className="radar-spot-options" aria-label={`Lineups bei ${expanded.title}`}
         data-below={expanded.point.y < 0.25}
         style={{ left: `clamp(6rem, ${expanded.point.x * 100}%, calc(100% - 6rem))`, top: `${expanded.point.y * 100}%` }}>
         {expanded.nades.map((nade, index) => <Link key={lineupKey(nade)} to={href(nade)} title={nade.displayName || nade.name} aria-label={`${nade.displayName || nade.name} ansehen`}>{index + 1}</Link>)}

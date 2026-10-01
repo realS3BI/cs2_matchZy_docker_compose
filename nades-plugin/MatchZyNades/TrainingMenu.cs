@@ -32,10 +32,11 @@ public static class TrainingMenu
                     Edit("team", "Seite", n.Team switch { "ct" => "CT", "t" => "T", "both" => "Beide", _ => "Offen" }),
                     Edit("throwFromTitle", "Startposition", string.IsNullOrEmpty(n.ThrowFromTitle) ? "Offen" : n.ThrowFromTitle),
                     Edit("throwToTitle", "Endposition", string.IsNullOrEmpty(n.ThrowToTitle) ? "Offen" : n.ThrowToTitle),
-                    Edit("throwTechnique", "Wurftechnik", string.IsNullOrEmpty(n.Technique) ? "Offen" : n.Technique),
                 };
                 fields.AddRange(LineupEditFields.Flags.Select(flag => Edit(flag.Key, flag.Value, attributes == null ? "Offen" : attributes.Flag(flag.Key) ? "Ja" : "Nein")));
+                fields.Add(Edit("movement", "Bewegung", attributes?.MovementLabel ?? "Offen"));
                 fields.Add(Edit("click_type", "Maustaste", attributes?.ClickType switch { "left" => "Links", "right" => "Rechts", "both" => "Beide", _ => "Offen" }));
+                fields.Add(Edit("flightDuration", "Flugzeit", n.FlightDuration is { } editableSeconds ? FormattableString.Invariant($"{editableSeconds:0.00} s") : "Noch nicht erfasst"));
                 fields.Add(Edit("type", "Granatentyp", NadeCatalog.Label(n.Kind)));
                 fields.Add(new("Koordinaten bearbeiten", "Startpunkt, Blickwinkel und Endpunkt als drei Zahlen im Chat eingeben.", Page: new("Koordinaten", "Eine neue Startposition oder Blickrichtung erfordert eine neue Flugzeitmessung.", [
                     Edit("lineupPos", "Start", NadeCaptureFile.Vector(n.Position)),
@@ -48,14 +49,15 @@ public static class TrainingMenu
                     new("Abbrechen", "Behält die Aufnahme und geht zurück.", Request: new(TrainingAction.Back)),
                     new("Aufnahme endgültig löschen", "Entfernt diese Aufnahme aus deiner Bibliothek. Das kann nicht rückgängig gemacht werden.", Request: new(TrainingAction.DeleteLineup, n))], Key: $"delete:{n.Owner}:{n.Map}:{n.Name}")));
             }
-            items.Add(new(n.FlightDuration is { } duration ? FormattableString.Invariant($"Flugzeit: {duration:0.00} s") : "Flugzeit: Noch nicht gemessen",
-                "Automatische Servermessung vom Abwurf bis zur Explosion oder zum Beginn des Effekts. Eigene Aufnahmen laden und werfen, um die Zeit neu zu messen.", Enabled: false));
+            items.Add(new(n.FlightDuration is { } duration ? FormattableString.Invariant($"Flugzeit: {duration:0.00} s") : "Flugzeit: Noch nicht erfasst",
+                "Servermessung vom Abwurf bis zur Explosion oder zum Beginn des Effekts. Eigene Aufnahmen laden und werfen, um die Zeit neu zu messen, oder in den Lineup-Einstellungen eingeben.", Enabled: false));
             var description = string.IsNullOrWhiteSpace(n.Description) ? "Noch keine Beschreibung. Eigene Aufnahmen kannst du hier ergänzen." : n.Description;
             var facts = new List<string>();
             if (n.Team.Length > 0) facts.Add(n.Team switch { "ct" => "CT", "t" => "T", _ => "Beide Seiten" });
             if (n.ThrowFromTitle.Length > 0 || n.ThrowToTitle.Length > 0) facts.Add($"{n.ThrowFromTitle} → {n.ThrowToTitle}");
             if (n.Attributes is { } a) {
                 facts.AddRange(LineupEditFields.Flags.Where(flag => a.Flag(flag.Key)).Select(flag => flag.Value));
+                facts.Add(a.MovementLabel);
                 facts.Add(a.ClickType switch { "right" => "Rechtsklick", "both" => "Beide Maustasten", _ => "Linksklick" });
             }
             if (n.FlightDuration is { } seconds) facts.Add(FormattableString.Invariant($"Flugzeit {seconds:0.00} s"));
@@ -122,7 +124,7 @@ public static class TrainingMenu
             new("Trainingswerkzeuge", standalone ? "Positionen merken, Bots platzieren und Trainingshilfen einstellen." : "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
             new("Neue Nade aufnehmen", "Aufnahme starten, eine Granate werfen und nach ihrer Wirkung speichern. Sie erscheint unter Alle und ist noch nicht offiziell geprüft.",
                 Page: new("Nade aufnehmen", "Nach dem Wurf mit KP_0 zurück ins Panel wechseln und Aufnahme speichern wählen.", [
-                    Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von drei Minuten eine Granate. Abwurfpunkt, Blickwinkel, Wurftechnik und Ziel werden erfasst."),
+                    Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von drei Minuten eine Granate. Abwurfpunkt, Blickwinkel, Jumpthrow, Ducken, Bewegung, Maustaste, Ziel und Flugzeit werden automatisch erfasst."),
                     Action("Aufnahme speichern", TrainingAction.SaveCapture, "Speichert die fertige Aufnahme mit einem automatischen Namen. Unter Alle kannst du Name und Beschreibung bearbeiten und einen Review anfragen."),
                     Action("Aufnahme verwerfen", TrainingAction.CancelCapture, "Verwirft die laufende oder noch ungespeicherte Aufnahme. Bereits gespeicherte Granaten bleiben erhalten.")]), Enabled: practice),
             new($"Favoriten ({favoriteEntries.Length})", "Deine gemerkten Granaten auf dieser Map. Über die Detailansicht einer Granate hinzufügen oder entfernen.", Page: Lineups("Favoriten", favoriteEntries, "favorites"), Enabled: practice),

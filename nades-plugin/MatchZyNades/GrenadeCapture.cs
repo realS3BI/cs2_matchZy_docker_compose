@@ -263,7 +263,8 @@ public sealed partial class MatchZyNadesPlugin
             _draftNameRequests[player.Slot] = new(lineup.Owner, lineup.Kind, lineup.Map,
                 lineup.Position, lineup.Angles, target, technique, lineup.ThrowTrace,
                 lineup.Attributes ?? ThrowAttributes.Detect(samples), lineup.Team, flightDuration);
-            Tell(player, $"Ziel erfasst: {technique}. Panelbedienung aktivieren und unter Neue Nade aufnehmen die Aufnahme speichern oder verwerfen. Optional einen eigenen Namen im Chat eingeben.");
+            var duration = flightDuration is { } seconds ? FormattableString.Invariant($" Flugzeit: {seconds:0.00} s.") : " Flugzeit konnte nicht eindeutig gemessen werden.";
+            Tell(player, $"Ziel erfasst: {technique}.{duration} Panelbedienung aktivieren und unter Neue Nade aufnehmen die Aufnahme speichern oder verwerfen. Optional einen eigenen Namen im Chat eingeben.");
             return HookResult.Continue;
         }
         try

@@ -52,7 +52,8 @@ function preservePanelMetadata(importedEntries, currentEntries) {
       lineupImages: current.lineupImages || []
     };
     for (const key of ["displayName", "team", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo", ...THROW_ATTRIBUTE_FIELDS, "flightDuration"]) {
-      if (current[key] !== undefined) merged[key] = current[key];
+      // A cleared flight time must stay empty when the game rewrites an older snapshot.
+      if (current[key] !== undefined || key === "flightDuration") merged[key] = current[key];
     }
     if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
       delete merged.landingPos;

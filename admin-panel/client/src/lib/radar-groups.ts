@@ -1,4 +1,4 @@
-import { lineupId, lineupKey, type LineupReference } from "./lineups.js";
+import { findLineup, lineupId, lineupKey, type LineupReference } from "./lineups.js";
 import { type MapDefinition, type RadarPoint } from "./maps.js";
 import { resolveRadarPoints, type PositionedNade, type RadarCalibration } from "./nade-radar.js";
 
@@ -33,5 +33,5 @@ export function groupRadarNades<T extends RadarLineup>(nades: T[], side: RadarSi
 }
 
 export function findRadarGroup<T extends RadarLineup>(groups: RadarGroup<T>[], id: string | null) {
-  return id ? groups.find(group => group.nades.some(nade => lineupId(nade) === id)) : undefined;
+  return id ? groups.find(group => findLineup(group.nades, id)) : undefined;
 }

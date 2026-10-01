@@ -11,11 +11,51 @@ const admin = { identitySteam64: "76561198000000002", role: "admin" };
 const entry = { owner, name: "window", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "0 90 0", desc: "Alt", updatedAt: "2026-09-01T00:00:00.000Z", captureId: "capture-one", lineupImages: [{ key: "image.png", url: "/api/uploads/abc123.png", name: "Ausrichtung" }] };
 const request = { owner, name: entry.name, map: entry.map, revision: entry.updatedAt, action: "submit" };
 const denied = status => error => error.status === status;
+const creation = { action: "create", map: "de_mirage", patch: {
+  displayName: "Fenster über T-Spawn", type: "Smoke", team: "t", lineupPos: "1 2 3", lineupAng: "0 90 0",
+  desc: "Links ausrichten, dann werfen.", radarFrom: { x: .25, y: .75 }, radarTo: { x: .5, y: .1 },
+  is_jumpthrow: true, click_type: "left",
+} };
+
+test("manual creation assigns the session admin as owner and creates a distinct, editable draft", () => {
+  const entries = applyWebNadeAction([entry], { ...creation, owner: "default", role: "player", official: true, mustKnow: true }, admin);
+  const created = entries[1];
+  assert.equal(entries[0], entry);
+  assert.equal(created.owner, admin.identitySteam64);
+  assert.equal(created.map, creation.map);
+  assert.equal(created.displayName, creation.patch.displayName);
+  assert.match(created.name, /^web_[0-9a-f-]+$/);
+  assert.equal(created.official, false);
+  assert.equal(created.mustKnow, false);
+  assert.equal(created.reviewStatus, "");
+  assert.equal(created.flightDuration, undefined);
+  assert.deepEqual(created.radarFrom, creation.patch.radarFrom);
+  assert.equal(lineupPermissions(created, admin).edit, true);
+  assert.notEqual(applyWebNadeAction(entries, creation, admin)[2].name, created.name);
+  const updated = applyWebNadeAction(entries, { ...created, action: "edit", revision: created.updatedAt, patch: { desc: "Überarbeitet" } }, admin);
+  assert.equal(updated[1].desc, "Überarbeitet");
+});
+
+test("manual creation rejects other roles, forged fields and invalid throw data", () => {
+  for (const role of ["player", "training_player", "match_admin"]) {
+    assert.throws(() => applyWebNadeAction([entry], { ...creation, role: "admin" }, { ...admin, role }), denied(403));
+  }
+  assert.throws(() => applyWebNadeAction([], creation, undefined), denied(403));
+  for (const key of ["owner", "map", "name", "official", "mustKnow", "reviewStatus", "lineupImages", "updatedAt", "flightDuration"]) {
+    assert.throws(() => applyWebNadeAction([], { ...creation, patch: { ...creation.patch, [key]: "forged" } }, admin), denied(400));
+  }
+  for (const patch of [{ displayName: " " }, { lineupPos: "" }, { lineupAng: "NaN 0 0" }, { type: "invalid" }, { radarTo: { x: 2, y: 0 } }, { desc: "x".repeat(4001) }]) {
+    assert.throws(() => applyWebNadeAction([], { ...creation, patch: { ...creation.patch, ...patch } }, admin), denied(400));
+  }
+  for (const map of ["", "de_mirage\n", null]) {
+    assert.throws(() => applyWebNadeAction([], { ...creation, map }, admin), denied(400));
+  }
+});
 
 test("owners edit their draft directly, preserving identity, media and unrelated recordings", () => {
   const foreign = { ...entry, owner: admin.identitySteam64 };
   const [updated, untouched] = applyWebNadeAction([{ ...entry, reviewStatus: "pending" }, foreign], { ...request, action: "edit", patch: {
-    displayName: "Fenster über T-Spawn", team: "ct", desc: "Links ausrichten, dann werfen.", throwTechnique: "Jumpthrow", radarFrom: { x: .25, y: .75 }, radarTo: { x: .5, y: .1 },
+    displayName: "Fenster über T-Spawn", team: "ct", desc: "Links ausrichten, dann werfen.", is_jumpthrow: true, radarFrom: { x: .25, y: .75 }, radarTo: { x: .5, y: .1 },
   } }, player);
   assert.equal(updated.name, entry.name);
   assert.equal(updated.owner, owner);
@@ -119,4 +159,16 @@ test("authenticated endpoint enforces owner and role from the session, and seria
   user = admin;
   assert.equal((await send({ ...request, revision: entries[0].updatedAt, action: "delete" })).status, 200);
   assert.equal(entries.length, 0);
+  user = player;
+  assert.equal((await send({ ...creation, role: "admin", owner: admin.identitySteam64 })).status, 403);
+  user = admin;
+  const creations = await Promise.all([send(creation), send(creation)]);
+  assert.deepEqual(creations.map(result => result.status), [200, 200]);
+  assert.equal(entries.length, 2);
+  const created = ((await creations[0].json()) as any).entry;
+  assert.equal(created.owner, admin.identitySteam64);
+  assert.equal(created.official, false);
+  assert.notEqual(entries[0].name, entries[1].name);
+  assert.equal((await send({ ...creation, patch: { ...creation.patch, lineupPos: "invalid" } })).status, 400);
+  assert.equal(entries.length, 2);
 });

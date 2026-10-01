@@ -85,8 +85,8 @@ public static class NadeCatalog
         data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 
     private static ThrowAttributes? Attributes(JsonElement data) => ThrowAttributes.Flags.Any(key => data.TryGetProperty(key, out _)) || data.TryGetProperty("click_type", out _)
-        ? new(Flag(data, "is_jumpthrow"), Flag(data, "is_crouch"), Flag(data, "is_walking"), Flag(data, "is_running"), Flag(data, "is_stepping"),
-            Field(data, "click_type") is "right" or "both" ? Field(data, "click_type") : "left") : null;
+        ? new ThrowAttributes(Flag(data, "is_jumpthrow"), Flag(data, "is_crouch"), Flag(data, "is_walking"), Flag(data, "is_running"), Flag(data, "is_stepping"),
+            Field(data, "click_type") is "right" or "both" ? Field(data, "click_type") : "left").Normalize() : null;
 
     private static float? Duration(JsonElement data) => data.TryGetProperty("flightDuration", out var value) &&
         value.ValueKind == JsonValueKind.Number && value.TryGetSingle(out var seconds) && float.IsFinite(seconds) && seconds >= 0 ? seconds : null;

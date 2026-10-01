@@ -157,9 +157,9 @@ export function NadeFlightMap({
                 ) : null}
                 {from ? (
                   <g transform={`translate(${from.x} ${from.y})`}>
-                    <circle className="radar-origin-ring" r={markerRadius * 1.45} />
-                    <circle className="radar-origin" r={markerRadius} />
-                    {!compact ? <text className="radar-marker-label" y={markerRadius * 0.32}>{index + 1}</text> : null}
+                    <circle className="radar-origin-ring" r={markerRadius * 1.05} />
+                    <circle className="radar-origin" r={markerRadius * 0.7} />
+                    {!compact && nades.length > 1 ? <text className="radar-marker-label" y={markerRadius * 0.32}>{index + 1}</text> : null}
                   </g>
                 ) : null}
                 {to ? (

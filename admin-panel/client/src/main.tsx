@@ -6,7 +6,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { UserManagement } from "./components/user-management";
 import { RconChat } from "./components/rcon-chat";
 import { MapAtlas } from "./components/map-atlas";
-import { LineupPage } from "./components/lineup-page";
+import { LineupPage, NewLineupPage } from "./components/lineup-page";
 import { NadeFavoritesProvider } from "./components/nade-favorites";
 import { findLineup } from "./lib/lineups";
 import { mapPath, mapSlug, mapsForLibrary } from "./lib/maps";
@@ -925,7 +925,8 @@ function App() {
         <Route path={routePaths.maps} element={new URLSearchParams(location.search).has("map") || new URLSearchParams(location.search).get("view") === "library"
           ? <LegacyLibraryRedirect maps={libraryMaps} />
           : <MapAtlas maps={libraryMaps} />} />
-        <Route path="/maps/:mapSlug" element={<NadeLibrary nades={nades} maps={libraryMaps} />} />
+        <Route path="/maps/:mapSlug" element={<NadeLibrary nades={nades} maps={libraryMaps} user={user} />} />
+        <Route path="/maps/:mapSlug/lineups/new" element={<NewLineupPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} onRefresh={refreshLibrary} />} />
         <Route path="/maps/:mapSlug/lineups/:lineupId" element={<LineupPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} onRefresh={refreshLibrary} />} />
         <Route path={routePaths.nades} element={<LegacyLibraryRedirect maps={libraryMaps} />} />
         <Route path={routePaths.console} element={<RconChat />} />

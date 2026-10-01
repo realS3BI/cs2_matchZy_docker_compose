@@ -1,5 +1,5 @@
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Crosshair, Star, Target, X, Zap } from "lucide-react";
+import { ArrowRight, Check, Crosshair, Plus, Star, Target, X, Zap } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia } from "./ui/empty";
@@ -14,6 +14,7 @@ import { findRadarGroup, groupRadarNades, type RadarSide } from "../lib/radar-gr
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
 import { lineupKey, lineupPath } from "../lib/lineups";
 import { inferRadarCalibration } from "../lib/nade-radar";
+import { throwAttributeSummary } from "../../../shared/throw-attributes";
 
 const kinds = [
   { value: "all", label: "Alle" }, { value: "Smoke", label: "Smokes" },
@@ -37,7 +38,7 @@ export function LegacyLibraryRedirect({ maps }) {
   return <Navigate to={`${map ? mapPath(map) : "/maps"}${map && next.size ? `?${next}` : ""}`} replace />;
 }
 
-export function NadeLibrary({ nades, maps }) {
+export function NadeLibrary({ nades, maps, user }) {
   const { mapSlug: slug } = useParams();
   const [search, setSearch] = useSearchParams();
   const favorites = useNadeFavorites();
@@ -92,7 +93,7 @@ export function NadeLibrary({ nades, maps }) {
         <div className="map-explorer-legend"><span><Target />Landeposition</span><span><Crosshair />Startposition</span><span>Zahl = mehrere Lineups</span></div>
       </section>
       <aside className="map-explorer-sidebar" aria-label="Radarfilter und Lineup-Auswahl">
-        <header className="map-explorer-heading"><h1>{map.name}</h1></header>
+        <header className="map-explorer-heading"><h1>{map.name}</h1>{user?.role === "admin" && map.mapName && <Button asChild size="sm"><Link to={`${mapPath(map)}/lineups/new`}><Plus data-icon="inline-start" />Nade hinzufügen</Link></Button>}</header>
         <section className="explorer-control">
           <ToggleGroup type="single" variant="outline" value={side} onValueChange={value => { if (value) filter("position", value); }} aria-label="Positionen zuerst anzeigen" className="w-full">
             <ToggleGroupItem value="to" className="flex-1"><Target data-icon="inline-start" />Ziele</ToggleGroupItem>
@@ -127,7 +128,7 @@ export function NadeLibrary({ nades, maps }) {
           <Link className="map-lineup-row" to={href(nade)}>
             <span className="map-lineup-kind"><GrenadeIcon type={nade.type} />{nade.type === "Molly" ? "Molotov" : nade.type || "Nade"}</span>
             <div className="map-lineup-name"><strong>{nade.displayName || nade.name}</strong><span>{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Landeposition"}</span></div>
-            <span className="map-lineup-technique">{nade.throwTechnique || "Wurftechnik offen"}</span>
+            <span className="map-lineup-technique">{throwAttributeSummary(nade)}{typeof nade.flightDuration === "number" && ` · ${nade.flightDuration.toLocaleString("de-AT", { maximumFractionDigits: 2 })} s`}</span>
             <div className="map-lineup-badges">{isLineupTeam(nade.team) && <Badge variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}{nade.mustKnow && <Badge>Must Know</Badge>}{nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div>
             <ArrowRight className="map-lineup-arrow" aria-hidden="true" />
           </Link>

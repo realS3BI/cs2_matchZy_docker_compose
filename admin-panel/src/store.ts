@@ -1,3 +1,4 @@
+import { assignNadeIds } from "./nade-ids.js";
 import { Collection, Db, MongoClient } from "mongodb";
 import { sanitizeAdmins, sanitizeNades, sanitizeSettings } from "./validators.js";
 import { normalizeSettings, migrateAdmins } from "./policy.js";
@@ -73,6 +74,26 @@ export class Store {
         { _id: "current" },
         { $set: { settings: normalizeSettings(current.settings), updatedAt: new Date() } }
       );
+    }
+    await this.migrateNadeIds();
+  }
+
+  async migrateNadeIds() {
+    for (;;) {
+      const document = await this.nades.findOne({ _id: "current" });
+      if (!document?.entries) return;
+      const entries = assignNadeIds(document.entries);
+      if (entries.every((entry, index) => entry.id === document.entries[index].id)) return;
+      await this.nades.updateOne(
+        { _id: "before-short-ids-v1" },
+        { $setOnInsert: { entries: document.entries, updatedAt: document.updatedAt, backedUpAt: new Date() } },
+        { upsert: true }
+      );
+      const result = await this.nades.updateOne(
+        { _id: "current", entries: document.entries },
+        { $set: { entries, idSchemaVersion: 1 } }
+      );
+      if (result.matchedCount) return;
     }
   }
 

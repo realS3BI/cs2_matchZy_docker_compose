@@ -105,7 +105,7 @@ Während die Aufnahme bereit ist, protokolliert das Plugin maximal die letzten a
 
 Die Startposition kommt weiterhin aus `.savenade` beziehungsweise dem gespeicherten Lineup; sie ist der Aufstellpunkt vor einem Jump-/Runthrow, nicht die Position der Granate in der Luft. Vorhandene Lineups ohne gemessenes Ziel müssen einmal geworfen werden. Ziele lassen sich aus Position und Blickwinkel allein nicht zuverlässig rekonstruieren. Tod, Disconnect, Runden-/Mapwechsel oder Practice-Ende verwerfen offene Erfassungen. Synthetische Rethrows ohne echtes `grenade_thrown` aktivieren keine Erfassung.
 
-### Einstellungen und Wurfattribute im Panel (2.1.0)
+### Einstellungen und Wurfattribute im Panel (2.2.0)
 
 Unter **Alle → Aufnahme → Lineup-Einstellungen** können Ersteller ihre noch nicht offiziellen Aufnahmen bearbeiten. Das Panel zeigt die aktuellen Werte. Ein Feld auswählen, den Chat öffnen und den neuen Wert senden. Die Panelsteuerung gibt während der Eingabe die Spielsteuerung frei. `abbrechen` beendet die Eingabe; nach zwei Minuten läuft sie ab. CT/T-Zuordnung und Positionsnamen sind unabhängig von den gemessenen Weltkoordinaten.
 
@@ -113,17 +113,18 @@ Unter **Alle → Aufnahme → Lineup-Einstellungen** können Ersteller ihre noch
 | --- | --- |
 | Seite | `ct`, `t` oder `beide` |
 | Startposition / Endposition | Freier Name, etwa `T-Spawn` oder `Fenster` |
-| Wurftechnik | Ergänzende Anleitung |
-| Jumpthrow, geduckt, Gehen, Laufen, Schrittwurf | `ja` oder `nein` |
+| Jumpthrow, geduckt | `ja` oder `nein` |
+| Bewegung | `stand`, `gehen`, `laufen` oder `schrittwurf`, nur eine Auswahl |
+| Flugzeit | Sekunden, etwa `3,25` oder `3.25`; `-` leert den Wert |
 | Maustaste | `links`, `rechts` oder `beide` |
 | Granatentyp | `Smoke`, `Flash`, `HE`, `Molly` oder `Decoy` |
 | Koordinaten | Unter **Koordinaten bearbeiten** drei Zahlen mit Dezimalpunkt |
 
-Mit `-` lassen sich Beschreibung, Positionsnamen und Wurftechnik leeren. Anzeigename und interner Lineup-Name bleiben getrennt. Die kompakte Darstellung mit neun Listenplätzen pro Seite gilt auch für die Einstellungen. Andere Spieler dürfen Aufnahmen ansehen und favorisieren; nur der Ersteller darf eigene, noch nicht offizielle Aufnahmen ändern, löschen oder einreichen. Offiziell und Must Know bleiben Plattform-Admins vorbehalten.
+Mit `-` lassen sich Beschreibung, Positionsnamen und Flugzeit leeren. Eine freie Wurftechnik gibt es nicht mehr; die Anleitung bleibt für ergänzende Hinweise. Anzeigename und interner Lineup-Name bleiben getrennt. Die kompakte Darstellung mit neun Listenplätzen pro Seite gilt auch für die Einstellungen. Andere Spieler dürfen Aufnahmen ansehen und favorisieren; nur der Ersteller darf eigene, noch nicht offizielle Aufnahmen ändern, löschen oder einreichen. Offiziell und Must Know bleiben Plattform-Admins vorbehalten.
 
-Neue Aufnahmen speichern `is_jumpthrow`, `is_crouch`, `is_walking`, `is_running` und `is_stepping` als Booleans sowie `click_type` als `left`, `right` oder `both`. Die Erkennung verwendet die Tastenfolge und Bewegung kurz vor dem Abwurf. Ein Schrittwurf wird bei 4 bis unter 24 Units Bewegung in den letzten 1,25 Sekunden erkannt; Gehen und Laufen benötigen mindestens 30 Units/s horizontale Bewegung. Für die Maustaste zählt die zuletzt gehaltene Angriffskombination vor dem Loslassen. Diese Erkennung kann im Panel und auf der Website korrigiert werden. Alte Aufnahmen ohne Attribute werden im Panel als offen angezeigt.
+Neue Aufnahmen speichern `is_jumpthrow`, `is_crouch`, `is_walking`, `is_running` und `is_stepping` als Booleans sowie `click_type` als `left`, `right` oder `both`. Die Erkennung verwendet die Tastenfolge und Bewegung kurz vor dem Abwurf. Ein Schrittwurf wird bei 4 bis unter 24 Units Bewegung in den letzten 1,25 Sekunden und mindestens 30 Units/s horizontaler Bewegung kurz vor dem Abwurf erkannt. Er hat Vorrang vor Gehen und Laufen; diese beiden schließen sich ebenfalls gegenseitig aus. Ohne Bewegung gilt Stand. Jumpthrow verwendet nur die letzten 0,35 Sekunden, Geduckt die Haltung beim Abwurf. Alte widersprüchliche Bewegungsattribute werden beim Einlesen mit Vorrang für Schrittwurf, dann Gehen, dann Laufen auf eine Auswahl reduziert. Für die Maustaste zählt die zuletzt gehaltene Angriffskombination vor dem Loslassen. Diese Erkennung kann im Panel und auf der Website korrigiert werden. Alte Aufnahmen ohne Attribute werden im Panel als offen angezeigt.
 
-`flightDuration` enthält automatisch gemessene Sekunden vom echten `grenade_thrown` bis zur Explosion, Smoke-Entstehung, Molotov-Zündung oder Decoy-Aktivierung. Gemessen wird mit der Server-Simulationszeit. Diese Zeit erscheint im Panel und in den Lineup-Details der Website und kann nicht manuell geändert werden. Bei geänderter Startkoordinate, Blickrichtung oder geändertem Granatentyp entfällt die alte Messung bis zum nächsten Wurf. Mehrere gleichzeitig fliegende Projektile werden über ihre Entity-ID getrennt. Fehlt eine eindeutige Zuordnung, wird keine Zeit erfunden. Bei Molotov-Ereignissen ohne Entity-ID bleibt die Zeit offen, wenn mehrere passende Würfe desselben Spielers in der Luft sind.
+`flightDuration` enthält automatisch gemessene Sekunden vom echten `grenade_thrown` bis zur Explosion, Smoke-Entstehung, Molotov-Zündung oder Decoy-Aktivierung. Gemessen wird mit der Server-Simulationszeit. Diese Zeit erscheint im Panel und in den Lineup-Details der Website. Ersteller können sie bei eigenen, noch nicht offiziellen Aufnahmen dort ändern oder leeren. Eine manuelle Website-Erstellung unterstützt ebenfalls die Eingabe. Eine neue Messung ersetzt den alten Wert. Bei geänderter Startkoordinate, Blickrichtung oder geändertem Granatentyp entfällt die alte Messung bis zum nächsten Wurf. Mehrere gleichzeitig fliegende Projektile werden über ihre Entity-ID getrennt. Fehlt eine eindeutige Zuordnung, wird keine Zeit erfunden. Bei Molotov-Ereignissen ohne Entity-ID bleibt die Zeit offen, wenn mehrere passende Würfe desselben Spielers in der Luft sind.
 
 Im eigenständigen Nades-Training meldet Playbook außerdem die Flugzeit, Blenddauer pro getroffenem Spieler sowie den tatsächlichen Granatenschaden und verbleibende HP im Chat. Das gilt auch für Trainingsbots als Ziele und für Schaden durch die Molotov-Feuerfläche. Blenddauer und Schaden sind Rückmeldungen des jeweiligen Versuchs und hängen von Position, Blickrichtung und Schutz der Ziele ab. Sie werden nicht als feste Lineup-Attribute gespeichert. In MatchZy Practice zeigt MatchZy diese Rückmeldungen bereits an; Playbook misst die Flugzeit weiter, ohne die Chatmeldungen zu verdoppeln. Verwendete Server-Events: [Blendung](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventPlayerBlind.html), [Schaden](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.EventPlayerHurt.html).
 
@@ -171,7 +172,7 @@ Die Nummerierung folgt den Entity-Indizes der geladenen Map. Der Teleport prüft
 
 ## Map-Katalog und Abstimmung ab 1.9.0
 
-Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.1.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
+Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.2.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
 
 Das Dashboard schreibt den gemeinsamen Katalog als `map-catalog.json` neben die angewendeten Einstellungen. Das Plugin ermittelt installierte VPK-Maps und aktivierte Workshop-IDs und veröffentlicht `savednades.maps.json` neben der Granatenbibliothek. Nach **Refresh** verwendet der Web-Atlas genau diese Kategorien und Verfügbarkeiten. Ohne Serverbestand kennzeichnet die Website die Ladbarkeit als unbestätigt.
 

@@ -1,5 +1,6 @@
+import { assignNadeIds } from "./nade-ids.js";
 import { isLineupTeam } from "../shared/lineup-teams.js";
-import { CLICK_TYPES, THROW_FLAGS, THROW_ATTRIBUTE_FIELDS } from "../shared/throw-attributes.js";
+import { CLICK_TYPES, THROW_FLAGS, THROW_ATTRIBUTE_FIELDS, MOVEMENT_FLAGS, movementType, movementPatch } from "../shared/throw-attributes.js";
 import { flagsForRole, SETTING_KEYS } from "./policy.js";
 
 const STEAM64_RE = /^[0-9]{17}$/;
@@ -96,11 +97,6 @@ function sanitizeRadarPoint(point, fieldName) {
   return { x, y };
 }
 
-function nadeId(entry) {
-  const source = `${entry.owner}:${entry.map}:${entry.name}`;
-  return source.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "nade";
-}
-
 function sanitizeLineupImages(images) {
   if (images === undefined || images === null) return [];
   if (!Array.isArray(images)) {
@@ -144,7 +140,7 @@ export function sanitizeNades(entries) {
   }
 
   const seen = new Set();
-  return entries.map((entry) => {
+  return assignNadeIds(entries.map((entry) => {
     const name = String(entry.name ?? "").trim();
     const map = String(entry.map ?? "").trim();
     const displayName = String(entry.displayName ?? "").trim();
@@ -214,6 +210,7 @@ export function sanitizeNades(entries) {
     };
     if (isLineupTeam(entry.team)) cleanEntry.team = entry.team;
     for (const key of THROW_ATTRIBUTE_FIELDS) if (entry[key] !== undefined) cleanEntry[key] = entry[key];
+    if (MOVEMENT_FLAGS.some(key => entry[key] !== undefined)) Object.assign(cleanEntry, movementPatch(movementType(entry)));
     if (entry.flightDuration !== undefined) cleanEntry.flightDuration = entry.flightDuration;
     if (throwTechnique) cleanEntry.throwTechnique = throwTechnique;
     if (throwTrace) cleanEntry.throwTrace = throwTrace;
@@ -229,9 +226,8 @@ export function sanitizeNades(entries) {
     if (throwToTitle) cleanEntry.throwToTitle = throwToTitle;
     if (radarFrom) cleanEntry.radarFrom = radarFrom;
     if (radarTo) cleanEntry.radarTo = radarTo;
-    if (!cleanEntry.id) cleanEntry.id = nadeId(cleanEntry);
     return cleanEntry;
-  });
+  }));
 }
 
 export function nadesToMatchZySavedNadesConfig(entries) {
@@ -239,6 +235,7 @@ export function nadesToMatchZySavedNadesConfig(entries) {
   for (const entry of sanitizeNades(entries)) {
     if (!config[entry.owner]) config[entry.owner] = {};
     config[entry.owner][entry.name] = {
+      Id: entry.id,
       LineupPos: entry.lineupPos,
       LineupAng: entry.lineupAng,
       Desc: entry.desc,
@@ -267,6 +264,7 @@ export function matchZySavedNadesConfigToNades(config) {
       if (!nade || typeof nade !== "object" || Array.isArray(nade)) continue;
       const entry = {
         name,
+        id: nade.Id,
         displayName: nade.DisplayName,
         mustKnow: nade.MustKnow,
         official: nade.Official,
@@ -280,7 +278,7 @@ export function matchZySavedNadesConfigToNades(config) {
         lineupAng: nade.LineupAng,
         owner
       };
-      entries.push({ ...entry, id: nadeId({ ...entry, map: String(entry.map ?? ""), name: String(name ?? ""), owner }) });
+      entries.push(entry);
     }
   }
 

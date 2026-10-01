@@ -32,7 +32,7 @@ public static class NadeCaptureFile
         {
             NadeKind.Smoke => "Smoke", NadeKind.Flash => "Flash", NadeKind.HE => "HE",
             NadeKind.Fire => "Molly", NadeKind.Decoy => "Decoy", _ => ""
-        }, displayName, technique, technique, trace, true, team, flightDuration,
+        }, displayName, technique, "", trace, true, team, flightDuration,
         attributes?.IsJumpthrow, attributes?.IsCrouch, attributes?.IsWalking, attributes?.IsRunning, attributes?.IsStepping, attributes?.ClickType);
 
     public static void Write(string path, NadeCapture capture)

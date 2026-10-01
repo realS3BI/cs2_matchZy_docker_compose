@@ -1,6 +1,7 @@
 import { sanitizeNades } from "./validators.js";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
-import { THROW_FLAGS } from "../shared/throw-attributes.js";
+import { THROW_FLAGS, MOVEMENT_FLAGS, MOVEMENT_TYPES, movementPatch, type MovementType } from "../shared/throw-attributes.js";
+import { randomUUID } from "node:crypto";
 
 function reject(status: number, message: string): never {
   throw Object.assign(new Error(message), { status });
@@ -8,6 +9,24 @@ function reject(status: number, message: string): never {
 
 // The actor always comes from the authenticated session, never the request body.
 export function applyWebNadeAction(entries, request, user) {
+  if (request?.action === "create") {
+    if (user?.role !== "admin" || !/^[0-9]{17}$/.test(user.identitySteam64 || ""))
+      reject(403, "Nur Plattform-Admins dürfen Nades manuell hinzufügen.");
+    if (typeof request.map !== "string" || !request.map.trim() || request.map.length > 500 || /[\u0000-\u0020\u007f]/.test(request.map))
+      reject(400, "Ungültige Map.");
+    if (typeof request.patch?.displayName !== "string" || !request.patch.displayName.trim())
+      reject(400, "Bitte gib einen Namen für die Nade ein.");
+    const patch = validateWebNadePatch(request.patch);
+    let entry;
+    try {
+      [entry] = sanitizeNades([{ ...patch, owner: user.identitySteam64, map: request.map,
+        name: `web_${randomUUID()}`, official: false, mustKnow: false, reviewStatus: "",
+      }]);
+    } catch {
+      reject(400, "Ungültige Wurfdaten. Prüfe Name, Seite, Granatentyp, Koordinaten (je drei Zahlen) und Radarpositionen.");
+    }
+    return [...entries, entry];
+  }
   if (!request || ![request.owner, request.map, request.name].every(value => typeof value === "string" && value.length > 0 && value.length <= 500))
     reject(400, "Ungültiges Lineup.");
   const index = entries.findIndex(n => n.owner === request.owner && n.map === request.map && n.name === request.name);
@@ -28,15 +47,7 @@ export function applyWebNadeAction(entries, request, user) {
   if (request.action === "delete") { next.splice(index, 1); return next; }
   let patch;
   if (request.action === "edit") {
-    if (!request.patch || typeof request.patch !== "object" || Array.isArray(request.patch) ||
-        Object.keys(request.patch).some(key => !LINEUP_EDIT_FIELDS.includes(key as any)))
-      reject(400, "Diese Felder dürfen nicht geändert werden.");
-    for (const [key, value] of Object.entries(request.patch)) {
-      if (["radarFrom", "radarTo"].includes(key) || THROW_FLAGS.includes(key as any)) continue;
-      const limit = key === "desc" ? 4000 : key === "throwTechnique" ? 500 : 120;
-      if (typeof value !== "string" || value.length > limit) reject(400, "Ein Textfeld ist ungültig oder zu lang.");
-    }
-    patch = { ...request.patch, reviewStatus: "" };
+    patch = { ...validateWebNadePatch(request.patch), reviewStatus: "" };
   } else if (request.action === "submit") patch = { reviewStatus: "pending" };
   else if (request.action === "approve") patch = { official: true, reviewStatus: "approved" };
   else if (request.action === "reject") {
@@ -54,12 +65,35 @@ export function applyWebNadeAction(entries, request, user) {
   } catch {
     reject(400, "Ungültige Wurfdaten. Prüfe Name, Seite, Granatentyp, Koordinaten (je drei Zahlen) und Radarpositionen.");
   }
-  if (["lineupPos", "lineupAng", "type"].some(key => entry[key] !== next[index][key])) delete next[index].flightDuration;
+  if (["lineupPos", "lineupAng", "type"].some(key => entry[key] !== next[index][key]) && !Object.hasOwn(patch, "flightDuration")) delete next[index].flightDuration;
   return next;
 }
 
+function validateWebNadePatch(patch) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
+      Object.keys(patch).some(key => !LINEUP_EDIT_FIELDS.includes(key as any)))
+    reject(400, "Diese Felder dürfen nicht geändert werden.");
+  for (const [key, value] of Object.entries(patch)) {
+    if (key === "flightDuration") {
+      if (value !== null && (typeof value !== "number" || !Number.isFinite(value) || value < 0)) reject(400, "Die Flugzeit muss eine endliche, nicht negative Sekundenzahl sein.");
+      continue;
+    }
+    if (THROW_FLAGS.includes(key as any)) {
+      if (typeof value !== "boolean") reject(400, "Das Wurfattribut muss ein Boolean sein.");
+      continue;
+    }
+    if (["radarFrom", "radarTo"].includes(key)) continue;
+    const limit = key === "desc" ? 4000 : 120;
+    if (typeof value !== "string" || value.length > limit) reject(400, "Ein Textfeld ist ungültig oder zu lang.");
+  }
+  if (MOVEMENT_FLAGS.filter(key => patch[key] === true).length > 1) reject(400, "Wähle nur eine Bewegung: Gehen, Laufen oder Schrittwurf.");
+  const movement = MOVEMENT_FLAGS.some(key => patch[key] === true)
+    ? Object.fromEntries(MOVEMENT_FLAGS.map(key => [key, patch[key] === true])) : {};
+  return { ...patch, ...movement, ...(Object.hasOwn(patch, "flightDuration") ? { flightDuration: patch.flightDuration ?? undefined } : {}) };
+}
+
 // Requests originate from the game plugin, which supplies the authenticated Steam ID.
-// Never let a game request set ownership, official status, Must Know or measured flight time.
+// Never let a game request set ownership, official status or Must Know.
 export function applyPlayerNadeRequest(entries, request) {
   if (!request || !/^[0-9a-f]{32}$/.test(request.id || "") || !/^[0-9]{17}$/.test(request.actor || "") ||
       request.actor !== request.owner) throw new Error("Ungültiger Ersteller der Anfrage.");
@@ -71,12 +105,19 @@ export function applyPlayerNadeRequest(entries, request) {
   if (request.action === "delete") { next.splice(index, 1); return next; }
   let patch;
   if (request.action === "review") patch = { reviewStatus: "pending" };
-  else if (THROW_FLAGS.includes(request.action)) {
+  else if (request.action === "movement") {
+    if (!MOVEMENT_TYPES.includes(request.value)) throw new Error("Ungültige Bewegung.");
+    patch = { ...movementPatch(request.value as MovementType), reviewStatus: "" };
+  } else if (request.action === "flightDuration") {
+    if (request.value !== null && (typeof request.value !== "number" || !Number.isFinite(request.value) || request.value < 0))
+      throw new Error("Die Flugzeit muss eine endliche, nicht negative Sekundenzahl sein.");
+    patch = { flightDuration: request.value ?? undefined, reviewStatus: "" };
+  } else if (THROW_FLAGS.includes(request.action)) {
     if (typeof request.value !== "boolean") throw new Error("Das Wurfattribut muss ein Boolean sein.");
-    patch = { [request.action]: request.value, reviewStatus: "" };
-  } else if (["displayName", "desc", "team", "throwFromTitle", "throwToTitle", "throwTechnique", "click_type", "type", "lineupPos", "lineupAng", "landingPos"].includes(request.action)) {
-    const max = request.action === "desc" ? 300 : request.action === "throwTechnique" ? 500 : 120;
-    const mayClear = ["desc", "throwFromTitle", "throwToTitle", "throwTechnique"].includes(request.action);
+    patch = { ...(request.value && MOVEMENT_FLAGS.includes(request.action) ? Object.fromEntries(MOVEMENT_FLAGS.map(key => [key, key === request.action])) : { [request.action]: request.value }), reviewStatus: "" };
+  } else if (["displayName", "desc", "team", "throwFromTitle", "throwToTitle", "click_type", "type", "lineupPos", "lineupAng", "landingPos"].includes(request.action)) {
+    const max = request.action === "desc" ? 300 : 120;
+    const mayClear = ["desc", "throwFromTitle", "throwToTitle"].includes(request.action);
     if (typeof request.value !== "string" || (!mayClear && !request.value.trim()) || request.value.length > max || /[\u0000-\u001f\u007f]/.test(request.value))
       throw new Error("Der eingegebene Wert ist ungültig oder zu lang.");
     patch = { [request.action]: request.value.trim(), reviewStatus: "" };

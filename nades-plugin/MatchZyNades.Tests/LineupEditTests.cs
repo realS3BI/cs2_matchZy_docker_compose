@@ -15,6 +15,10 @@ public sealed class LineupEditTests
     [InlineData("throwToTitle", "-", "")]
     [InlineData("type", "molotov", "Molly")]
     [InlineData("lineupPos", "1  2 3", "1 2 3")]
+    [InlineData("movement", "gehen", "walk")]
+    [InlineData("movement", "laufen", "run")]
+    [InlineData("movement", "schrittwurf", "step")]
+    [InlineData("movement", "stand", "stand")]
     public void ChatInputMapsToCanonicalValues(string field, string input, string expected)
     {
         Assert.True(LineupEditFields.TryParse(field, input, out var value));
@@ -30,12 +34,24 @@ public sealed class LineupEditTests
     }
 
     [Theory]
-    [InlineData("official", "true")] [InlineData("flightDuration", "3")]
+    [InlineData("official", "true")] [InlineData("throwTechnique", "Jumpthrow")]
+    [InlineData("flightDuration", "-1")] [InlineData("flightDuration", "NaN")]
+    [InlineData("movement", "gehen laufen")]
     [InlineData("team", "xyz")] [InlineData("click_type", "middle")]
     [InlineData("is_crouch", "vielleicht")] [InlineData("lineupPos", "1 2 NaN")]
     [InlineData("throwFromTitle", "a\nb")]
     public void UnsupportedFieldsAndInvalidValuesAreRejected(string field, string value) =>
         Assert.False(LineupEditFields.TryParse(field, value, out _));
+
+    [Theory]
+    [InlineData("3.125", 3.125f)] [InlineData("3,125", 3.125f)] [InlineData("0", 0)]
+    public void ParsesManualFlightSeconds(string input, float expected)
+    {
+        Assert.True(LineupEditFields.TryParse("flightDuration", input, out var value));
+        Assert.Equal(expected, Assert.IsType<float>(value));
+        Assert.True(LineupEditFields.TryParse("flightDuration", "-", out var cleared));
+        Assert.Null(cleared);
+    }
 
     [Fact]
     public void EveryAttributeIsReachableInTheCompactPanelWithCurrentValues()
@@ -50,13 +66,22 @@ public sealed class LineupEditTests
         menu.Enter(settings);
         Assert.Equal(9, menu.Visible.Count());
         Assert.Equal(2, menu.PageCount);
-        foreach (var field in new[] { "team", "throwFromTitle", "throwToTitle", "throwTechnique", "click_type", "type" }.Concat(ThrowAttributes.Flags))
+        foreach (var field in new[] { "team", "throwFromTitle", "throwToTitle", "movement", "flightDuration", "click_type", "type", "is_jumpthrow", "is_crouch" })
             Assert.Contains(settings.Items, i => i.Request?.Action == TrainingAction.EditField && i.Request.Setting == field);
         Assert.Contains(settings.Items, i => i.Label == "Seite: CT");
         Assert.Contains(settings.Items, i => i.Label == "Jumpthrow: Ja");
-        menu.ChangePage(1);
-        Assert.Equal("click_type", menu.Select(1)!.Setting);
+        Assert.Contains(settings.Items, i => i.Label == "Bewegung: Stand");
+        Assert.Contains(settings.Items, i => i.Label == "Flugzeit: 3.50 s");
+        Assert.DoesNotContain(settings.Items, i => i.Request?.Setting == "throwTechnique");
+        Assert.DoesNotContain(settings.Items, i => new[] { "is_walking", "is_running", "is_stepping" }.Contains(i.Request?.Setting));
         var coordinates = settings.Items.Single(i => i.Page?.Key.StartsWith("coordinates:") == true).Page!;
         Assert.Equal(new[] { "lineupPos", "lineupAng", "landingPos" }, coordinates.Items.Select(i => i.Request!.Setting));
+        var changed = nade with { Attributes = new(IsCrouch: true, IsRunning: true, ClickType: "right"), FlightDuration = 2.25f };
+        menu.Refresh(TrainingMenu.Create([changed], nade.Map, true, null, steamId: nade.Owner).Current);
+        Assert.Contains(menu.Current.Items, i => i.Label == "Bewegung: Laufen");
+        Assert.Contains(menu.Current.Items, i => i.Label == "Jumpthrow: Nein");
+        Assert.Contains(menu.Current.Items, i => i.Label == "Geduckt: Ja");
+        Assert.Contains(menu.Current.Items, i => i.Label == "Maustaste: Rechts");
+        Assert.Contains(menu.Current.Items, i => i.Label == "Flugzeit: 2.25 s");
     }
 }

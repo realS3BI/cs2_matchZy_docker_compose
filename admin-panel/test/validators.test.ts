@@ -1,3 +1,4 @@
+import { assignNadeIds } from "../src/nade-ids.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -52,7 +53,7 @@ test("sanitizeNades validates and defaults owner", () => {
     lineupPos: "1 2 3",
     lineupAng: "4 5 6"
   }]).map(({ updatedAt, ...entry }) => entry), [{
-    id: "default-de_mirage-window_smoke",
+    id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
     name: "window_smoke",
     map: "de_mirage",
     type: "Smoke",
@@ -78,7 +79,7 @@ test("sanitizeNades accepts lineup images", () => {
       uploadedAt: "2026-05-15T00:00:00.000Z"
     }]
   }]).map(({ updatedAt, ...entry }) => entry), [{
-    id: "default-de_mirage-window_smoke",
+    id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
     name: "window_smoke",
     map: "de_mirage",
     type: "",
@@ -118,6 +119,7 @@ test("nadesToMatchZySavedNadesConfig builds MatchZy savednades.json", () => {
   }]), {
     default: {
       window_smoke: {
+        Id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
         LineupPos: "1 2 3",
         LineupAng: "4 5 6",
         Desc: "from T roof",
@@ -132,6 +134,7 @@ test("matchZySavedNadesConfigToNades imports MatchZy savednades.json", () => {
   const entries = matchZySavedNadesConfigToNades({
     default: {
       window_smoke: {
+        Id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
         LineupPos: "1 2 3",
         LineupAng: "4 5 6",
         Desc: "from T roof",
@@ -142,7 +145,7 @@ test("matchZySavedNadesConfigToNades imports MatchZy savednades.json", () => {
   });
 
   assert.deepEqual(entries.map(({ updatedAt, ...entry }) => entry), [{
-    id: "default-de_mirage-window_smoke",
+    id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
     name: "window_smoke",
     map: "de_mirage",
     type: "Smoke",
@@ -171,6 +174,7 @@ test("nadesToMatchZySavedNadesConfig omits lineup images", () => {
 
   assert.equal(config.default.window_smoke.LineupImages, undefined);
   assert.deepEqual(config.default.window_smoke, {
+    Id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
     LineupPos: "1 2 3",
     LineupAng: "4 5 6",
     Desc: "from T roof",
@@ -195,6 +199,7 @@ test("effect coordinates export as strings while panel radar metadata is omitted
   }]);
 
   assert.deepEqual(config.default.window_smoke, {
+    Id: assignNadeIds([{ owner: "default", map: "de_mirage", name: "window_smoke" }])[0].id,
     LineupPos: "1 2 3",
     LineupAng: "4 5 6",
     Desc: "from T roof",
@@ -211,7 +216,7 @@ test("effect coordinates export as strings while panel radar metadata is omitted
   }]), /between 0 and 1/);
 });
 test("display names change presentation without changing IDs or MatchZy keys", () => {
-  const original = { id: "stable-id", owner: "default", name: "window_smoke", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6" };
+  const original = { id: "Ab1Cd2E", owner: "default", name: "window_smoke", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6" };
   const [entry] = sanitizeNades([{ ...original, displayName: "  Fenster / T-Spawn – schön  " }]);
   assert.equal(entry.id, original.id);
   assert.equal(entry.name, original.name);

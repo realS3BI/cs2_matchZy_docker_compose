@@ -24,7 +24,7 @@ public sealed class ThrowAttributesTests
         var attributes = ThrowAttributes.Detect(samples);
         Assert.True(attributes.IsJumpthrow);
         Assert.False(attributes.IsCrouch);
-        Assert.True(attributes.IsWalking);
+        Assert.False(attributes.IsWalking);
         Assert.False(attributes.IsRunning);
         Assert.True(attributes.IsStepping);
         Assert.Equal("right", attributes.ClickType);
@@ -49,5 +49,31 @@ public sealed class ThrowAttributesTests
             Assert.Equal("ct", entry.GetProperty("team").GetString());
             Assert.Equal(3.125f, entry.GetProperty("flightDuration").GetSingle());
         } finally { if (Directory.Exists(Path.GetDirectoryName(path))) Directory.Delete(Path.GetDirectoryName(path)!, true); }
+    }
+
+    [Theory]
+    [InlineData("Walk, Attack", "0 0 0", "48 0 0", "80 0 0", "walk")]
+    [InlineData("Attack", "0 0 0", "80 0 0", "200 0 0", "run")]
+    [InlineData("Walk, Attack", "0 0 0", "8 0 0", "80 0 0", "step")]
+    [InlineData("Attack", "0 0 0", "8 0 0", "80 0 0", "step")]
+    [InlineData("Attack", "0 0 0", "0 0 0", "0 0 0", "stand")]
+    public void DetectsExactlyOneMovement(string buttons, string start, string end, string velocity, string expected)
+    {
+        ThrowSample[] samples = [new(1, start, velocity, "0 0 0", buttons), new(1.2f, end, velocity, "0 0 0", buttons)];
+        var attributes = ThrowAttributes.Detect(samples);
+        Assert.Equal(expected, attributes.Movement);
+        Assert.Equal(expected == "stand" ? 0 : 1, new[] { attributes.IsWalking, attributes.IsRunning, attributes.IsStepping }.Count(value => value));
+    }
+
+    [Fact]
+    public void OldJumpAndDuckSetupDoNotBecomeReleaseAttributes()
+    {
+        ThrowSample[] samples = [new(1, "0 0 0", "0 0 150", "0 0 0", "Jump, Duck, Attack2"),
+            new(1.9f, "0 0 0", "0 0 0", "0 0 0", "Attack"), new(2, "0 0 0", "0 0 0", "0 0 0", "0")];
+        var attributes = ThrowAttributes.Detect(samples);
+        Assert.False(attributes.IsJumpthrow);
+        Assert.False(attributes.IsCrouch);
+        Assert.Equal("stand", attributes.Movement);
+        Assert.Equal("left", attributes.ClickType);
     }
 }

@@ -1,3 +1,4 @@
+import { assignNadeIds } from "../src/nade-ids.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -89,6 +90,7 @@ function sampleConfig(patch = {}) {
   return {
     [entry.owner]: {
       [entry.name]: {
+        Id: assignNadeIds([entry])[0].id,
         LineupPos: entry.lineupPos,
         LineupAng: entry.lineupAng,
         Desc: entry.desc,
@@ -293,7 +295,7 @@ function sampleCapture(patch = {}) {
 }
 
 test("capture polling works even when MatchZy's library file is unchanged", async (t) => {
-  const existing = sampleEntry({ id: "stable-id", displayName: "Fenster vom Spawn", radarTo: { x: 0.1, y: 0.2 } });
+  const existing = sampleEntry({ id: "Ab1Cd2E", displayName: "Fenster vom Spawn", radarTo: { x: 0.1, y: 0.2 } });
   const { store, service } = await createHarness(t, [existing]);
   await service.writeFromMongo([existing]);
   const originalLive = await readFile(service.liveFile, "utf8");
@@ -310,7 +312,7 @@ test("capture polling works even when MatchZy's library file is unchanged", asyn
 });
 
 test("sync keeps titles and publishes metadata when MatchZy omits extended fields", async (t) => {
-  const existing = sampleEntry({ id: "stable-id", displayName: "Fenster – T-Spawn" });
+  const existing = sampleEntry({ id: "Ab1Cd2E", displayName: "Fenster – T-Spawn" });
   const { store, service } = await createHarness(t, [existing]);
   await writeJson(service.liveFile, sampleConfig({ desc: "new instructions" }));
   await service.importLiveFile("test");
@@ -449,6 +451,54 @@ test("web edits share the sync queue and stale writes cannot replace a newer rev
   assert.equal(metadata.find(n => n.owner === owner).updatedAt, store.entries[0].updatedAt);
   await service.poll();
   assert.equal(store.entries[0].desc, "Im Web geändert");
+});
+
+test("manual web creation publishes a playable nade and preserves its metadata through game sync", async t => {
+  const owner = "76561198000000002";
+  const [existing] = sanitizeNades([sampleEntry()]);
+  const { service, store } = await createHarness(t, [existing]);
+  await service.writeFromMongo([existing]);
+  const entries = await service.changeFromPanel(entries => applyWebNadeAction(entries, {
+    action: "create", map: "de_mirage", patch: { displayName: "Fenster über T-Spawn", type: "Smoke",
+      lineupPos: "1 2 3", lineupAng: "0 90 0", team: "t", radarTo: { x: .5, y: .1 }, desc: "Jumpthrow" },
+  }, { identitySteam64: owner, role: "admin" }));
+  const created = entries.at(-1);
+  const live = JSON.parse(await readFile(service.liveFile, "utf8"));
+  assert.equal(live[owner][created.name].Map, "de_mirage");
+  assert.equal(live[owner][created.name].LineupPos, "1 2 3");
+  assert.equal(live[owner][created.name].LineupAng, "0 90 0");
+  await writeJson(service.liveFile, live);
+  await service.poll();
+  const persisted = store.entries.find(n => n.owner === owner && n.name === created.name);
+  assert.equal(persisted.displayName, "Fenster über T-Spawn");
+  assert.deepEqual(persisted.radarTo, { x: .5, y: .1 });
+  assert.equal(persisted.official, false);
+  assert.equal(store.entries.length, 2);
+});
+
+test("manual flight corrections and movement selection reach the panel and survive an old game rewrite", async t => {
+  const owner = "76561198000000001";
+  const [entry] = sanitizeNades([sampleEntry({ owner, flightDuration: 3.125, is_walking: true })]);
+  const { service, store } = await createHarness(t, [entry]);
+  await service.writeFromMongo([entry]);
+  const oldLive = JSON.parse(await readFile(service.liveFile, "utf8"));
+  const request = { id: "e".repeat(32), actor: owner, owner, map: entry.map, name: entry.name };
+  await service.changeFromPanel(entries => applyWebNadeAction(entries, {
+    ...request, revision: entries[0].updatedAt, action: "edit", patch: { is_running: true, flightDuration: 2.5 },
+  }, { identitySteam64: owner, role: "player" }));
+  let metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].is_running, true);
+  assert.equal(metadata[0].is_walking, false);
+  assert.equal(metadata[0].flightDuration, 2.5);
+  await service.changeFromPanel(entries => applyWebNadeAction(entries, {
+    ...request, revision: entries[0].updatedAt, action: "edit", patch: { flightDuration: null },
+  }, { identitySteam64: owner, role: "player" }));
+  await writeJson(service.liveFile, oldLive);
+  await service.poll();
+  assert.equal(store.entries[0].flightDuration, undefined);
+  assert.equal(store.entries[0].is_running, true);
+  metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(metadata[0].flightDuration, undefined);
 });
 
 

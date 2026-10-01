@@ -1116,7 +1116,7 @@ button:not(:disabled),
 .radar-browser-lines .radar-line-muted { opacity: 0.25; }
 .radar-spot { position: absolute; display: grid; place-items: center; width: 2rem; height: 2rem; transform: translate(-50%, -50%); border: 2px solid var(--warning); border-radius: 50%; background: var(--warning); color: var(--console); font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px #0008; }
 .radar-spot svg { width: 1rem; height: 1rem; }
-.radar-spot-from { border-color: var(--primary); background: var(--primary); }
+.radar-spot-from { width: 1.35rem; height: 1.35rem; border-color: var(--primary); background: var(--primary); }
 .radar-spot-stack { box-shadow: 3px 3px 0 var(--console), 4px 4px 0 var(--warning), 0 2px 8px #0008; }
 
 .radar-spot-active { outline: 2px solid var(--foreground); outline-offset: 4px; }

@@ -8,6 +8,15 @@ namespace MatchZyNades.Tests;
 public sealed class NadeCatalogTests
 {
     [Fact]
+    public void LegacyOverlappingMovementFlagsBecomeOneMovement()
+    {
+        var json = JsonSerializer.Serialize(new { @default = new { window = Entry() } });
+        var metadata = JsonSerializer.Serialize(new[] { new { owner = "default", map = "de_mirage", name = "window",
+            is_walking = true, is_running = true, is_stepping = true } });
+        var nade = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7655", metadata));
+        Assert.Equal(new ThrowAttributes(IsStepping: true), nade.Attributes);
+    }
+    [Fact]
     public void DisplayNamesPreserveKeysAndAreScopedByOwnerAndMap()
     {
         var json = JsonSerializer.Serialize(new { @default = new { window = Entry() }, @private = new { window = Entry() } });

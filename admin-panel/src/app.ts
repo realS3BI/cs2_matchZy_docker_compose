@@ -250,7 +250,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
         lineupWrites = pending.catch(() => {});
         entries = await pending;
       }
-      res.json({ entries });
+      res.json({ entries, ...(req.body?.action === "create" ? { entry: entries.at(-1) } : {}) });
     } catch (error) { res.status(error.status || 400).json({ error: error.message }); }
   });
 

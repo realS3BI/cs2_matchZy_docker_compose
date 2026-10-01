@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Copy, RefreshCw, Save, Send, Trash2 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -18,10 +18,10 @@ import { NadeFlightMap, NadePlacementEditor } from "./map-radar";
 import { FavoriteButton } from "./nade-favorites";
 import { api } from "../lib/api";
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
-import { findLineup, lineupKey } from "../lib/lineups";
+import { findLineup, lineupKey, lineupPath } from "../lib/lineups";
 import { inferRadarCalibration } from "../lib/nade-radar";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../../../shared/lineup-policy";
-import { THROW_FLAGS, THROW_FLAG_LABELS, CLICK_TYPES, CLICK_LABELS } from "../../../shared/throw-attributes";
+import { THROW_FLAGS, BOOLEAN_THROW_FLAGS, THROW_FLAG_LABELS, CLICK_TYPES, CLICK_LABELS, MOVEMENT_TYPES, MOVEMENT_LABELS, movementType, movementPatch, type MovementType } from "../../../shared/throw-attributes";
 
 export function LineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
   const { mapSlug: slug, lineupId } = useParams();
@@ -33,8 +33,16 @@ export function LineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
   return <LineupContent key={lineupKey(nade)} {...{ nade, map, nades, user, onEntriesChange, onRefresh, back }} />;
 }
 
+export function NewLineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
+  const { mapSlug: slug } = useParams();
+  const map = maps.find(map => mapSlug(map) === slug);
+  if (user?.role !== "admin" || !map?.mapName) return <Navigate to={map ? mapPath(map) : "/maps"} replace />;
+  const nade = { owner: user.identitySteam64, map: map.mapName, name: "", type: "Smoke", team: "both", click_type: "left" };
+  return <LineupContent key={`new-${map.key}`} {...{ nade, map, nades, user, onEntriesChange, onRefresh }} back={mapPath(map)} creating />;
+}
+
 function editableValues(nade) {
-  return Object.fromEntries(LINEUP_EDIT_FIELDS.map(key => [key, nade[key] ?? (THROW_FLAGS.includes(key as any) ? false : key === "click_type" ? "left" : key.startsWith("radar") ? null : "")]));
+  return Object.fromEntries(LINEUP_EDIT_FIELDS.map(key => [key, nade[key] ?? (THROW_FLAGS.includes(key as any) ? false : key === "click_type" ? "left" : key.startsWith("radar") || key === "flightDuration" ? null : "")]));
 }
 
 function formatThrowTrace(value) {
@@ -45,7 +53,7 @@ function formatThrowTrace(value) {
   } catch { return ""; }
 }
 
-function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, back }) {
+function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, back, creating = false }) {
   const navigate = useNavigate();
   const permissions = lineupPermissions(nade, user);
   const [draft, setDraft] = useState(() => editableValues(nade));
@@ -55,6 +63,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   const running = useRef(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const dirty = permissions.edit && JSON.stringify(draft) !== baseline;
+  const canCreate = Boolean(draft.displayName.trim() && draft.lineupPos.trim() && draft.lineupAng.trim());
+  const validDuration = draft.flightDuration === null || Number.isFinite(draft.flightDuration) && draft.flightDuration >= 0;
   const stale = dirty && revision !== (nade.updatedAt || "");
   const calibration = inferRadarCalibration(map, nades.filter(item => mapMatchesNade(map, item.map)));
 
@@ -66,8 +76,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   }
   useEffect(() => {
     // A background refresh must not replace an unfinished edit.
-    if (!dirty) reset(nade);
-  }, [nade, dirty]);
+    if (!dirty && !creating) reset(nade);
+  }, [nade, dirty, creating]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -75,16 +85,25 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  function patch(value) { setDraft(current => ({ ...current, ...value })); }
+  function patch(value) {
+    setDraft(current => ({ ...current, ...value,
+      ...(["lineupPos", "lineupAng", "type"].some(key => key in value && value[key] !== current[key]) ? { flightDuration: null } : {}),
+    }));
+  }
   async function mutate(action, extra = {}) {
     if (running.current) throw new Error("Eine Aktion läuft bereits.");
     running.current = true;
     setBusy(true);
     try {
       const result = await api("/api/nades/entry", { method: "POST", body: JSON.stringify({
-        owner: nade.owner, map: nade.map, name: nade.name,
-        revision: action === "edit" ? revision : nade.updatedAt || "", action, ...extra,
+        ...(creating ? { map: nade.map } : { owner: nade.owner, map: nade.map, name: nade.name,
+          revision: action === "edit" ? revision : nade.updatedAt || "" }), action, ...extra,
       }) });
+      if (creating) {
+        onEntriesChange(result.entries);
+        navigate(lineupPath(map, result.entry));
+        return;
+      }
       const updated = result.entries.find(item => lineupKey(item) === lineupKey(nade));
       if (updated) reset(updated);
       if (action === "delete") navigate(back);
@@ -93,7 +112,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   }
 
   function textField(key, title, placeholder = "", maxLength = 120) {
-    return <Field><FieldLabel>{title}</FieldLabel><Input value={draft[key]} onChange={event => patch({ [key]: event.target.value })} placeholder={placeholder} maxLength={maxLength} /></Field>;
+    const id = `lineup-field-${key}`;
+    return <Field htmlFor={id}><FieldLabel>{title}</FieldLabel><Input id={id} required={creating && ["displayName", "lineupPos", "lineupAng"].includes(key)} value={draft[key]} onChange={event => patch({ [key]: event.target.value })} placeholder={placeholder} maxLength={maxLength} /></Field>;
   }
 
   return <article className="playbook-page lineup-page">
@@ -108,8 +128,9 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
       </div>
       <aside className="lineup-sidebar" aria-label="Lineup und Anleitung">
         <header className="grid gap-3">
-          <div className="flex items-center justify-between gap-3"><span className="control-kicker flex items-center gap-2"><GrenadeIcon type={nade.type} />{map.name} · {nade.type === "Molly" ? "Molotov" : nade.type}</span><FavoriteButton nade={nade} /></div>
-          <h1>{nade.displayName || nade.name}</h1>
+          <div className="flex items-center justify-between gap-3"><span className="control-kicker flex items-center gap-2"><GrenadeIcon type={creating ? draft.type : nade.type} />{map.name} · {creating ? draft.type : nade.type === "Molly" ? "Molotov" : nade.type}</span>{!creating && <FavoriteButton nade={nade} />}</div>
+          <h1>{creating ? "Nade hinzufügen" : nade.displayName || nade.name}</h1>
+          {creating && <p className="text-sm text-muted-foreground">Trage die Wurfdaten und eine Anleitung ein. Startkoordinaten und Blickwinkel sind erforderlich, damit die Nade im Spiel geladen werden kann. Radarpositionen kannst du per Klick setzen. Die Nade wird als dein Entwurf gespeichert.</p>}
           <div className="flex flex-wrap gap-2">
             {isLineupTeam(nade.team) && <Badge variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}
             {nade.official && <Badge variant="success">Offiziell</Badge>}{nade.mustKnow && <Badge>Must Know</Badge>}
@@ -131,33 +152,36 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
               {textField("throwFromTitle", "Startposition", "z. B. T-Spawn")}
               {textField("throwToTitle", "Endposition", "z. B. Fenster")}
               <FieldSet><FieldLegend>Wurfattribute</FieldLegend><FieldGroup>
-                {THROW_FLAGS.map(key => <Field key={key} htmlFor={`throw-${key}`} className="flex items-center justify-between gap-3"><FieldLabel>{THROW_FLAG_LABELS[key]}</FieldLabel><Switch id={`throw-${key}`} aria-label={THROW_FLAG_LABELS[key]} checked={draft[key] === true} disabled={busy} onCheckedChange={value => patch({ [key]: value })} /></Field>)}
+                {BOOLEAN_THROW_FLAGS.map(key => <Field key={key} htmlFor={`throw-${key}`} className="flex items-center justify-between gap-3"><FieldLabel>{THROW_FLAG_LABELS[key]}</FieldLabel><Switch id={`throw-${key}`} aria-label={THROW_FLAG_LABELS[key]} checked={draft[key] === true} disabled={busy} onCheckedChange={value => patch({ [key]: value })} /></Field>)}
+                <FieldSet><FieldLegend>Bewegung</FieldLegend><ToggleGroup type="single" variant="outline" value={movementType(draft)} disabled={busy} onValueChange={mode => { if (mode) patch(movementPatch(mode as MovementType)); }} aria-label="Bewegung beim Wurf" className="grid w-full grid-cols-2">
+                  {MOVEMENT_TYPES.map(mode => <ToggleGroupItem key={mode} value={mode}>{MOVEMENT_LABELS[mode]}</ToggleGroupItem>)}
+                </ToggleGroup></FieldSet>
                 <FieldSet><FieldLegend>Maustaste</FieldLegend><ToggleGroup type="single" variant="outline" value={draft.click_type} disabled={busy} onValueChange={click_type => { if (click_type) patch({ click_type }); }} aria-label="Maustaste" className="grid w-full grid-cols-3">
                   {CLICK_TYPES.map(type => <ToggleGroupItem key={type} value={type} aria-label={CLICK_LABELS[type]}>{type === "both" ? "Beide" : CLICK_LABELS[type]}</ToggleGroupItem>)}
                 </ToggleGroup></FieldSet>
               </FieldGroup></FieldSet>
-              {textField("throwTechnique", "Wurftechnik", "z. B. Jumpthrow", 500)}
+              <Field htmlFor="lineup-flight-duration" data-invalid={!validDuration || undefined}><FieldLabel>Flugzeit in Sekunden</FieldLabel><Input id="lineup-flight-duration" type="number" min="0" step="any" aria-invalid={!validDuration || undefined} value={draft.flightDuration ?? ""} onChange={event => patch({ flightDuration: event.target.value === "" ? null : event.target.valueAsNumber })} placeholder="z. B. 3,25" /><p className="text-xs text-muted-foreground">Vom Abwurf bis zur Explosion oder zum Beginn des Effekts. Wird bei einer Aufnahme automatisch gemessen. Leer lassen, wenn die Zeit unbekannt ist.</p></Field>
               <Field><FieldLabel>Anleitung</FieldLabel><Textarea rows={5} value={draft.desc} onChange={event => patch({ desc: event.target.value })} maxLength={4000} placeholder="Positionierung, Ausrichtung und Wurf beschreiben …" /></Field>
-              <details className="lineup-coordinates"><summary>Koordinaten bearbeiten</summary><FieldGroup className="mt-4">
+              <details className="lineup-coordinates" open={creating || undefined}><summary>{creating ? "Koordinaten eingeben" : "Koordinaten bearbeiten"}</summary><FieldGroup className="mt-4">
                 {textField("lineupPos", "Startkoordinaten", "x y z")}
                 {textField("lineupAng", "Blickwinkel", "x y z")}
                 {textField("landingPos", "Landekoordinaten", "x y z")}
               </FieldGroup></details>
               <div className="flex flex-wrap items-start gap-2">
-                <ActionButton icon={Save} onClick={() => mutate("edit", { patch: draft })} disabled={busy || !dirty || stale} pendingLabel="Speichert …" successLabel="Gespeichert">Speichern</ActionButton>
+                <ActionButton icon={Save} onClick={() => mutate(creating ? "create" : "edit", { patch: draft })} disabled={busy || !validDuration || (creating ? !canCreate : !dirty || stale)} pendingLabel="Speichert …" successLabel="Gespeichert">{creating ? "Nade hinzufügen" : "Speichern"}</ActionButton>
                 {dirty && <Button variant="ghost" onClick={() => reset()} disabled={busy}>Änderungen verwerfen</Button>}
               </div>
-              {dirty && <p className="text-xs text-muted-foreground" role="status">{stale ? "Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden." : "Ungespeicherte Änderungen. Nach dem Speichern kannst du das Lineup erneut zum Review einreichen."}</p>}
+              {dirty && <p className="text-xs text-muted-foreground" role="status">{creating ? "Ungespeicherter Entwurf. Name, Startkoordinaten und Blickwinkel sind erforderlich." : stale ? "Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden." : "Ungespeicherte Änderungen. Nach dem Speichern kannst du das Lineup erneut zum Review einreichen."}</p>}
             </FieldGroup>
           </fieldset>
         </form> : <div className="grid gap-5">
           <dl className="lineup-detail-facts">
             <div><dt>Startposition</dt><dd>{nade.throwFromTitle || "Kreis auf der Karte"}</dd></div>
             <div><dt>Endposition</dt><dd>{nade.throwToTitle || "Raute auf der Karte"}</dd></div>
-            <div><dt>Wurftechnik</dt><dd>{nade.throwTechnique || "Noch nicht beschrieben"}</dd></div>
           </dl>
           <div className="flex flex-wrap gap-2" aria-label="Wurfattribute">
-            {THROW_FLAGS.filter(key => nade[key] === true).map(key => <Badge variant="secondary" key={key}>{THROW_FLAG_LABELS[key]}</Badge>)}
+            {BOOLEAN_THROW_FLAGS.filter(key => nade[key] === true).map(key => <Badge variant="secondary" key={key}>{THROW_FLAG_LABELS[key]}</Badge>)}
+            <Badge variant="secondary">{MOVEMENT_LABELS[movementType(nade)]}</Badge>
             {CLICK_TYPES.includes(nade.click_type) && <Badge variant="outline">{CLICK_LABELS[nade.click_type]}</Badge>}
           </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{nade.desc || "Zu diesem Lineup gibt es noch keine Anleitung."}</p>
@@ -167,8 +191,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             <div><dt>Landeposition</dt><dd className="font-mono">{nade.landingPos || "Nicht hinterlegt"}</dd></div>
           </dl></details>
         </div>}
-        <dl className="lineup-detail-facts"><div><dt>Gemessene Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht gemessen"}</dd></div></dl>
-        {(permissions.submit || permissions.moderate) && <section className="lineup-review" aria-label="Review">
+        {!creating && !permissions.edit && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
+        {!creating && (permissions.submit || permissions.moderate) && <section className="lineup-review" aria-label="Review">
           <h2 className="text-sm font-medium">Review</h2>
           <div className="flex flex-wrap gap-2">
             {permissions.submit && <ActionButton variant="secondary" icon={Send} disabled={busy || dirty || nade.reviewStatus === "pending"} onClick={() => mutate("submit")} pendingLabel="Reicht ein …" successLabel="Eingereicht">{nade.reviewStatus === "pending" ? "Im Review" : "Zum Review einreichen"}</ActionButton>}
@@ -181,14 +205,14 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             </>)}
           </div>
         </section>}
-        <div className="grid justify-items-start gap-2 border-t pt-4">
+        {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">
           <ActionButton variant="secondary" icon={Copy} onClick={() => navigator.clipboard.writeText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>
           <code className="break-all text-xs text-muted-foreground">.loadnade {nade.name}</code>
           <div className="mt-2 flex flex-wrap gap-2">
             <ActionButton variant="ghost" size="sm" icon={RefreshCw} onClick={onRefresh} disabled={busy} successLabel="Aktualisiert">Aktualisieren</ActionButton>
             {permissions.delete && <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDeleteOpen(true)}><Trash2 data-icon="inline-start" />Löschen</Button>}
           </div>
-        </div>
+        </div>}
       </aside>
     </div>
     {nade.throwTrace && <details className="lineup-coordinates"><summary>Aufgezeichnete Tasten und Bewegung</summary><pre className="mt-4 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">{formatThrowTrace(nade.throwTrace) || "Keine lesbaren Wurfdaten vorhanden."}</pre></details>}
