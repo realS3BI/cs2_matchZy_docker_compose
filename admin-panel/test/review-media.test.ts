@@ -4,7 +4,7 @@ import { attachReviewMedia, reviewEntry, sanitizeReviewMedia } from "../src/revi
 import { applyGameReviewDecision, applyWebNadeAction } from "../src/nade-review.js";
 import { sanitizeNades } from "../src/validators.js";
 import { reviewMediaFixture } from "./review-fixtures.js";
-import { missingReviewMedia, reviewFileError, VIDEO_LIMIT } from "../shared/review-media.js";
+import { missingReviewMedia, reviewFileError, reviewPresentationError, VIDEO_LIMIT } from "../shared/review-media.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { installReviewUploads, createReviewFileRouter } from "../src/uploadthing.js";
@@ -14,6 +14,17 @@ const admin = { identitySteam64: "76561198000000002", role: "admin" };
 const entry = { owner: owner.identitySteam64, map: "de_anubis", name: "window", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6", updatedAt: "2026-10-02T08:00:00.000Z" };
 const input = { owner: entry.owner, map: entry.map, name: entry.name, slot: "aim", revision: entry.updatedAt };
 const file = reviewMediaFixture.aim!;
+
+test("front photos require the corrected server camera while other photos keep v2 compatibility", () => {
+  assert.equal(reviewPresentationError("front", "review-v3"), "");
+  for (const version of [undefined, "review-v1", "review-v2", "unknown"])
+    assert.match(reviewPresentationError("front", version), /Server-Plugin 2\.3\.1/);
+  for (const slot of ["aim", "position", "effect"] as const) {
+    assert.equal(reviewPresentationError(slot, "review-v2"), "");
+    assert.equal(reviewPresentationError(slot, "review-v3"), "");
+    assert.ok(reviewPresentationError(slot, "unknown"));
+  }
+});
 
 test("review files are scoped to a lineup, owner/admin permission and current revision", () => {
   const [result] = attachReviewMedia([entry], input, owner, file);

@@ -16,7 +16,7 @@ ReviewRecorder.share=async()=>{const recorder=new ReviewRecorder(canvas.captureS
 window.fetch=async(url,options)=>{
  const input=options?.body?JSON.parse(options.body):{};let output={ok:true};
  if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
- else if(String(url).endsWith('/photo')){events.push('prepare');command={id:'a'.repeat(32),slot:input.slot,action:'photo',presentation:'review-v2'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/photo')){events.push('prepare');command={id:'a'.repeat(32),slot:input.slot,action:'photo',presentation:'review-v3'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/poll'))output={command};
  else if(String(url).endsWith('/captured'))events.push('captured');
  else if(String(url).endsWith('/ack')){events.push('ack');command=null;}

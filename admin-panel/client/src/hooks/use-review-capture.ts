@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { ReviewRecorder } from "../lib/review-recorder";
 import { desktop } from "../lib/playbook-desktop";
-import { type ReviewSlot } from "../../../shared/review-media";
+import { reviewPresentationError, type ReviewSlot } from "../../../shared/review-media";
 
 export function useReviewCapture({ nade, admin, upload, onStep, onError, disabled, followPanel = false, onSelection = (_selection: any) => {} }) {
   const [capture, setCapture] = useState<ReviewRecorder | null>(null);
@@ -85,7 +85,11 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       setNotice("CS2 bereitet HUD und Kamera vor. Wechsle zum Spiel und halte den Bildausschnitt ruhig.");
       return;
     }
-    if (admin && command?.presentation !== "review-v2") throw new Error("Bitte das Server-Plugin aktualisieren. Die ältere Version blendet das echte Fadenkreuz noch aus.");
+    const presentationError = admin ? reviewPresentationError(slot, command?.presentation) : "";
+    if (presentationError) {
+      if (command && session.current) await releaseGame(session.current, command.id);
+      throw new Error(presentationError);
+    }
     takingPhoto.current = true;
     const reference = command?.nade || current.current.nade;
     setPreparing(true);

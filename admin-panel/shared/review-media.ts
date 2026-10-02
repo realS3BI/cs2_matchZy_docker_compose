@@ -6,6 +6,13 @@ export const REVIEW_STEPS = [
   { id: "video", title: "Den ganzen Wurf zeigen", short: "Video", description: "Laufe zum Startpunkt, richte das Fadenkreuz aus und wirf. Fliege anschließend mit Noclip zum Ziel und zeige die Wirkung." },
 ] as const;
 export type ReviewSlot = typeof REVIEW_STEPS[number]["id"];
+export function reviewPresentationError(slot: ReviewSlot, presentation?: string) {
+  if (slot === "front" && presentation !== "review-v3")
+    return "Die Vorderansicht benötigt Server-Plugin 2.3.1 oder neuer. CS2-Image neu bauen und deployen; hud.cmd aktualisiert die lokale App und das Panorama-Panel.";
+  if (presentation !== "review-v2" && presentation !== "review-v3")
+    return "Bitte das Server-Plugin aktualisieren. Die ältere Version blendet das echte Fadenkreuz noch aus.";
+  return "";
+}
 export type ReviewMedia = Partial<Record<ReviewSlot, {
   key: string; url: string; name: string; size: number; mime: string; uploadedAt: string; uploadedBy: string;
 }>>;

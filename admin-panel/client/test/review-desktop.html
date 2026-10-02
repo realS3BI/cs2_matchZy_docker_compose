@@ -31,7 +31,7 @@ let command=null,serial=0,releaseUpload,lastFile;
 window.fetch=async(url,options)=>{
  const input=options?.body?JSON.parse(options.body):{};let output={ok:true,uploadEnabled:true};
  if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
- else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',presentation:'review-v2'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',presentation:window.serverPresentation||'review-v3'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/video')){events.push('prepare:'+input.action);command={id:String(++serial).padStart(32,'0'),slot:'video',action:input.action,...(window.testFollow?{nade:window.selection?.nade||nade}:{})};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/poll'))output={command,selection:window.selection};
  else if(String(url).endsWith('/captured')){if(window.releaseFailures>0){window.releaseFailures--;events.push('captured-retry');return new Response(JSON.stringify({error:'Temporärer Serverfehler'}),{status:503});}events.push('captured');}
@@ -73,6 +73,14 @@ window.checkVideoAbort=async()=>{
  await waitFor(()=>errors.some(error=>error.includes('minimiert')));
  assert(events.includes('restore')&&!events.includes('upload:video'),'Abgebrochenes Video wurde hochgeladen oder Einstellungen blieben verändert');
  window.frameFailure=false;window.capture.disconnect();return {result:'PASS: Verlorenes Spielfenster verwirft Video und stellt CS2 wieder her',events};
+};
+window.checkOldFront=async()=>{
+ await connect();window.serverPresentation='review-v2';await window.capture.photo('front',true);
+ await waitFor(()=>events.includes('ack:false'));
+ assert(errors.some(error=>error.includes('Server-Plugin 2.3.1')),'Alter Server muss einen klaren Update-Hinweis zeigen');
+ assert(events.includes('captured')&&!events.includes('begin:front')&&!events.includes('upload:front'),'Alte Rückenansicht wurde aufgenommen oder das Spiel blieb gesperrt');
+ assert(window.capture.capture&&!events.includes('disconnect'),'Versionsfehler darf das freigegebene Spielbild nicht beenden');
+ window.capture.disconnect();return {result:'PASS: Altes Front-Protokoll gibt das Spiel frei und verhindert falsche Fotos',events};
 };
 window.checkVideoRecover=async()=>{
  await connect();await window.capture.startVideo();await waitFor(()=>window.capture.recording);window.frameFailure=true;

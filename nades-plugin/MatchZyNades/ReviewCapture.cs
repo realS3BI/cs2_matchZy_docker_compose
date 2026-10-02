@@ -59,18 +59,19 @@ public static class ReviewMenu
         var definitions = new[] {
             ("aim", "Ausrichtung", "Zeige das Fadenkreuz auf dem exakten Lineup-Punkt. Lineup laden stellt Position und Blickrichtung ein."),
             ("position", "Standposition", "Zeige den Boden und die Kanten, an denen du stehst. Stelle den Bildausschnitt selbst ein."),
-            ("front", "Vorderansicht", "Lädt den gespeicherten Start und stellt automatisch eine feste Vorderansicht ohne Fadenkreuz ein."),
+            ("front", "Vorderansicht", "Lädt den gespeicherten Start und dreht die Figur für das Foto zur festen Kamera. Blickrichtung und Kamera kehren danach zurück. Ohne Fadenkreuz."),
             ("effect", "Wirkung", "Teleportiert dich beim Öffnen zum gespeicherten Ziel und schaltet Noclip ein. Herausfliegen, den Bildausschnitt wählen und die Wirkung ohne Fadenkreuz aufnehmen.")
         };
         var items = definitions.Select((step, i) => new MenuItem($"{i + 1}. {step.Item2}{(slots.Contains(step.Item1) ? " [Foto vorhanden]" : "")}", step.Item3,
             Page: new($"{i + 1}/6 · {step.Item2}", step.Item3, [
                 new("Foto aufnehmen & hochladen", "Die Windows-App stellt HUD, Waffe und Fadenkreuz automatisch ein. Im Browser vorher der Vorbereitung folgen. Nach dem Foto öffnet sich diese Menüseite wieder.", Request: new(TrainingAction.ReviewPhoto, lineup, Setting: step.Item1)),
                 new("Lineup laden", "Teleportiert dich zum gespeicherten Start und richtet den Blick aus. Danach die gewünschte Perspektive selbst einstellen.", Request: new(TrainingAction.LoadLineup, lineup)),
-                new("Aufnahme-Hilfe anzeigen", step.Item3, Request: new(TrainingAction.ReviewHelp, lineup, Setting: step.Item1)),
                 .. (step.Item1 == "effect" ? new MenuItem[] {
+                    new("Letzte Granate erneut werfen", "Wiederholt deine zuletzt geworfene Granate mit derselben Flugbahn. Du bleibst an deiner Beobachtungsposition; ohne gespeicherten Wurf zuerst eine Granate werfen.", Request: new(TrainingAction.Rethrow)),
                     new("Zum Ziel teleportieren", "Kehrt zum Ziel der Granate zurück und schaltet Noclip ein. Fehlt der Zielpunkt, zuerst das Lineup laden und werfen.", Request: new(TrainingAction.ReviewTeleportEffect, lineup)),
                     new("Noclip umschalten", "Nach dem Flug die Panel-Steuerung mit KP_0 öffnen und das Foto aufnehmen.", Request: new(TrainingAction.Noclip))
-                } : [])
+                } : []),
+                new("Aufnahme-Hilfe anzeigen", step.Item3, Request: new(TrainingAction.ReviewHelp, lineup, Setting: step.Item1))
             ], Key: $"review-{step.Item1}:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: step.Item1),
             Request: step.Item1 == "effect" ? new(TrainingAction.ReviewTeleportEffect, lineup) : null)).ToList();
         items.Add(new($"5. Video{(slots.Contains("video") ? " [Vorhanden]" : "")}", "Zum Start laufen, zielen, werfen und mit Noclip die Wirkung zeigen. Aufnahme in Playbook, ohne Ton, maximal zwei Minuten.",
@@ -167,7 +168,7 @@ public sealed partial class MatchZyNadesPlugin
                 presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting, lineup.Angles.Y);
             }
             var command = ReviewCaptureFiles.Issue(ReviewDirectory, player.SteamID.ToString(), lineup, action, request.Setting,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v2");
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v3");
             _reviewPending[player.SteamID] = new(command.SessionId, command.Id, action, command.ExpiresAt + 180_000);
             if (presentation != null) {
                 _reviewPhotos[player.SteamID] = new(command.SessionId, command.Id, command.ExpiresAt, presentation, panel, focused);
