@@ -17,12 +17,13 @@ function Check($command, $readable, $enabled, $port) {
     if ($json -match 'secret|password|Private') { throw 'Full command line leaked' }
 }
 Check '"C:\Private\cs2.exe" +password secret' $true $false $null
-Check '"C:\Private\cs2.exe" -console -vconsole -vconport 29000 +password secret' $true $true 29000
-Check '"C:\Private\cs2.exe" "-vconsole" "-vconport" "29001" +password secret' $true $true 29001
-Check '"C:\Private\cs2.exe" -vconsole-other -vconport-other 29001' $true $false $null
+Check '"C:\Private\cs2.exe" -console -vconsole -vconport 29000 +password secret' $true $true $null
+Check '"C:\Private\cs2.exe" -console -netconport 2121 +password secret' $true $false 2121
+Check '"C:\Private\cs2.exe" "-netconport" "2122" +password secret' $true $false 2122
+Check '"C:\Private\cs2.exe" -vconsole-other -netconport-other 2122' $true $false $null
 Check $null $false $false $null
 $script:Games = @()
 if ((& $read | ConvertFrom-Json).running) { throw 'Reported a nonexistent game' }
 $script:Games = @([pscustomobject]@{ CommandLine = '-vconsole' }, [pscustomobject]@{ CommandLine = '-vconsole' })
 if ((& $read | ConvertFrom-Json).readable) { throw 'Guessed between multiple games' }
-Write-Output 'CS2 launch diagnosis: 7 cases passed; no full command line returned.'
+Write-Output 'CS2 launch diagnosis: 8 cases passed; no full command line returned.'

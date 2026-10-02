@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { VConsole } from './vconsole.js';
+import { NetConsole } from './netconsole.js';
 import { Presentation } from './presentation.js';
 import { captureFrame } from './geometry.js';
 import { ORIGIN, trusted, loginNavigation } from './security.js';
@@ -18,7 +18,7 @@ const exec = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 let window, presentation, target, blocker, quitting = false, launching = false;
 const updates = new Updates(autoUpdater, () => app.isPackaged);
-const consoleConnection = new VConsole();
+const consoleConnection = new NetConsole();
 const startup = startupLog(app);
 
 function startupFailed(error) {

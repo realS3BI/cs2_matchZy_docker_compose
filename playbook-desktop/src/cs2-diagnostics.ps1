@@ -6,7 +6,7 @@ if ($games.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace($games[0].CommandL
   $result.readable = $true
   $command = $games[0].CommandLine
   $result.vconsole = [regex]::IsMatch($command, '(?i)(?:^|\s)"?-vconsole"?(?=\s|$)')
-  $port = [regex]::Match($command, '(?i)(?:^|\s)"?-vconport"?\s+"?(\d+)"?(?=\s|$)')
+  $port = [regex]::Match($command, '(?i)(?:^|\s)"?-netconport"?\s+"?(\d+)"?(?=\s|$)')
   if ($port.Success) { $result.port = [int]$port.Groups[1].Value }
 }
 ConvertTo-Json -InputObject $result -Compress

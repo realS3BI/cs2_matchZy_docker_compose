@@ -27,7 +27,7 @@ try
         // Fixed arguments; no command interpreter or saved Steam options. Let
         // Windows launch the GUI without inheriting this helper's stdout pipe.
         var start = new ProcessStartInfo(steam) { UseShellExecute = true };
-        foreach (var argument in new[] { "-applaunch", "730", "-console", "-vconsole", "-vconport", "29000" })
+        foreach (var argument in new[] { "-applaunch", "730", "-console", "-netconport", "2121" })
             start.ArgumentList.Add(argument);
         using var launched = Process.Start(start) ?? throw new Exception("Steam konnte CS2 nicht starten.");
         Console.WriteLine("{}");

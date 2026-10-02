@@ -4,27 +4,18 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { commandPacket, PacketReader, readValue, VConsole } from '../src/vconsole.js';
+import { LineReader, readValue, NetConsole } from '../src/netconsole.js';
 import { Presentation, NAMES, profile, validSnapshot } from '../src/presentation.js';
 import { captureFrame } from '../src/geometry.js';
 import { trusted, loginNavigation } from '../src/security.js';
 import { launchAndWait } from '../src/launch.js';
 
-function printPacket(text) {
-  const packet = Buffer.alloc(41 + Buffer.byteLength(text));
-  packet.write('PRNT'); packet.writeUInt16BE(packet.length, 8); packet.write(text, 40);
-  return packet;
-}
-test('VConsole2 uses current binary version and handles split/coalesced packets', () => {
-  const packet = commandPacket('crosshair');
-  assert.equal(packet.readUInt32BE(4), 0x00d40000);
-  assert.equal(packet.readUInt16BE(8), packet.length);
-  assert.equal(packet.subarray(12).toString(), 'crosshair\0');
-  const bytes = Buffer.concat([printPacket('eins\n'), printPacket('zwei\n')]);
-  const reader = new PacketReader(); const messages = [];
-  for (const byte of bytes) messages.push(...reader.push(Buffer.from([byte])));
-  assert.deepEqual(messages, ['eins\n', 'zwei\n']);
-  assert.throws(() => new PacketReader().push(Buffer.alloc(12)), /Ungültige/);
+function printPacket(text) { return Buffer.from(text); }
+test('text console handles split UTF-8, CRLF and coalesced lines', () => {
+  const reader = new LineReader(); const messages = [];
+  for (const byte of Buffer.from('[Console] grün\r\nzweite Zeile\n')) messages.push(...reader.push(Buffer.from([byte])));
+  assert.deepEqual(messages, ['grün', 'zweite Zeile']);
+  assert.throws(() => reader.push(Buffer.from([0])), /Ungültige/);
 });
 test('console values are numeric only and names must match exactly', () => {
   assert.equal(readValue('"cl_crosshair_gap" = "-2.5" (def. "0")\n', 'cl_crosshair_gap'), '-2.5');
@@ -36,12 +27,12 @@ test('console values are numeric only and names must match exactly', () => {
 test('console roundtrip rejects denied changes and serializes overlapping requests', async t => {
   const state = { crosshair: 'true', r_drawviewmodel: 'true' };
   const server = net.createServer(socket => {
-    let pending = Buffer.alloc(0);
+    let pending = '';
     socket.on('data', bytes => {
-      pending = Buffer.concat([pending, bytes]);
-      while (pending.length >= 12 && pending.length >= pending.readUInt16BE(8)) {
-        const size = pending.readUInt16BE(8);
-        const command = pending.subarray(12, size - 1).toString(); pending = pending.subarray(size);
+      pending += bytes.toString();
+      while (pending.includes('\n')) {
+        const size = pending.indexOf('\n');
+        const command = pending.slice(0, size); pending = pending.slice(size + 1);
         const [name, value] = command.split(' ');
         if (name === 'echo') socket.write(printPacket(value + '\n'));
         else if (value === undefined) socket.write(printPacket(`${name} = ${state[name]}\n`));
@@ -50,7 +41,7 @@ test('console roundtrip rejects denied changes and serializes overlapping reques
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const console = new VConsole({ port: server.address().port });
+  const console = new NetConsole({ port: server.address().port });
   t.after(() => { console.close(); server.close(); });
   assert.deepEqual(await Promise.all([console.read(['crosshair']), console.read(['r_drawviewmodel'])]), [{ crosshair: 'true' }, { r_drawviewmodel: 'true' }]);
   await console.write({ crosshair: 'false' });
@@ -60,13 +51,13 @@ test('console roundtrip rejects denied changes and serializes overlapping reques
 
 test('launch waits for a real console reply after the game starts listening', async t => {
   const server = net.createServer(socket => {
-    let pending = Buffer.alloc(0);
+    let pending = '';
     socket.on('data', bytes => {
-      pending = Buffer.concat([pending, bytes]);
-      while (pending.length >= 12 && pending.length >= pending.readUInt16BE(8)) {
-        const size = pending.readUInt16BE(8);
-        const command = pending.subarray(12, size - 1).toString();
-        pending = pending.subarray(size);
+      pending += bytes.toString();
+      while (pending.includes('\n')) {
+        const size = pending.indexOf('\n');
+        const command = pending.slice(0, size);
+        pending = pending.slice(size + 1);
         socket.write(printPacket(command.startsWith('echo ') ? command.slice(5) + '\n' : 'crosshair = true\n'));
       }
     });
@@ -74,7 +65,7 @@ test('launch waits for a real console reply after the game starts listening', as
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   await new Promise(resolve => server.close(resolve));
-  const console = new VConsole({ port });
+  const console = new NetConsole({ port });
   let timer;
   t.after(() => { clearTimeout(timer); console.close(); server.close(); });
   await assert.rejects(console.read(['crosshair']), /ECONNREFUSED/);

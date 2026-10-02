@@ -10,10 +10,11 @@ const diagnosticScript = readFileSync(new URL('./cs2-diagnostics.ps1', import.me
 export function launchDiagnosis(info) {
   if (!info.running) return 'Es läuft derzeit kein CS2-Prozess.';
   if (!info.readable) return 'CS2 läuft; Windows gibt seine Startoptionen nicht zum Lesen frei.';
-  if (!info.vconsole) return 'CS2 läuft ohne -vconsole. Beende das Spiel vollständig und starte es anschließend über Playbook.';
-  if (info.port !== null && info.port !== 29000)
-    return `CS2 wurde mit einem anderen Steuerungsport gestartet (${info.port}). Playbook verwendet Port 29000. Prüfe die CS2-Startoptionen in Steam auf einen zusätzlichen -vconport-Eintrag.`;
-  return 'CS2 wurde mit -vconsole gestartet' + (info.port === 29000 ? ' und Port 29000' : ' ohne ausdrücklich gesetzten Port') + '. Die Startoption ist vorhanden. Falls der Verbindungsfehler auch im Hauptmenü bleibt, bitte diese Startprüfung zusammen mit dem Fehler weitergeben.';
+  if (info.port === null) return (info.vconsole ? 'CS2 läuft noch mit den alten VConsole-Startoptionen. ' : 'CS2 wurde ohne Netconsole gestartet. ') + 'Beende CS2 vollständig und starte es über die aktualisierte Playbook-App mit -netconport 2121.';
+  if (info.port !== 2121)
+    return `CS2 wurde mit einem anderen Netconsole-Port gestartet (${info.port}). Playbook verwendet Port 2121. Prüfe die CS2-Startoptionen in Steam auf einen zusätzlichen -netconport-Eintrag.`;
+  return 'CS2 wurde mit -netconport 2121 gestartet. Falls die Verbindung auch im Hauptmenü nicht bestätigt wird, bitte diese Startprüfung zusammen mit dem Fehler weitergeben.';
+
 }
 
 export async function diagnoseCS2() {
