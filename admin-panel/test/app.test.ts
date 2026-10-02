@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp as createRealApp } from "../src/app.js";
+import { normalizeSettings } from "../src/policy.js";
 
 const testToken = "a".repeat(43);
 function createApp(options) {
@@ -136,10 +137,11 @@ test("restart writes the saved server mode before restarting CS2", async () => {
     runtimeMatchZyNadesFile: join(runtimeDir, "matchzy-savednades.json")
   };
   let runtimeModeAtRestart = "";
+  let runtimeVacAtRestart = true;
   const app = createApp({
     config,
     store: {
-      getSettings: async () => ({ steamToken: "token", rconPassword: "secret", serverMode: "matchzy" }),
+      getSettings: async () => ({ steamToken: "token", rconPassword: "secret", serverMode: "matchzy", vacEnabled: false }),
       getAdmins: async () => [],
       getNades: async () => [],
       logAction: async () => undefined
@@ -147,6 +149,7 @@ test("restart writes the saved server mode before restarting CS2", async () => {
     compose: {
       restartService: async () => {
         runtimeModeAtRestart = JSON.parse(await readFile(config.runtimeSettingsFile, "utf8")).serverMode;
+        runtimeVacAtRestart = JSON.parse(await readFile(config.runtimeSettingsFile, "utf8")).vacEnabled;
         return { ok: true, stdout: "restarted", stderr: "" };
       }
     },
@@ -166,10 +169,43 @@ test("restart writes the saved server mode before restarting CS2", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(runtimeModeAtRestart, "matchzy");
+    assert.equal(runtimeVacAtRestart, false);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(runtimeDir, { recursive: true, force: true });
   }
+});
+
+test("applying either VAC mode publishes the setting before recreating the server", async (t) => {
+  const runtimeDir = await mkdtemp(join(tmpdir(), "playbook-vac-apply-"));
+  t.after(() => rm(runtimeDir, { recursive: true, force: true }));
+  const config = { sessionSecret: "test-secret", runtimeSettingsFile: join(runtimeDir, "settings.json"), runtimeAdminsFile: join(runtimeDir, "admins.json"), runtimeMatchZyAdminsFile: join(runtimeDir, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(runtimeDir, "savednades.json") };
+  let saved = normalizeSettings({ steamToken: "token", rconPassword: "secret" });
+  const applied = [];
+  const app = createApp({ config, store: {
+    getSettings: async () => saved,
+    saveSettings: async settings => { saved = settings; },
+    getAdmins: async () => [], getNades: async () => [], logAction: async () => undefined
+  }, compose: {
+    recreateService: async () => {
+      const runtime = JSON.parse(await readFile(config.runtimeSettingsFile, "utf8"));
+      assert.equal(runtime.vacEnabled, saved.vacEnabled);
+      applied.push(runtime.vacEnabled);
+      return { ok: true, stdout: "recreated", stderr: "" };
+    }
+  }, nadesSync: { writeFromMongo: async () => undefined } });
+  const server = createServer(app);
+  const address: any = await listen(server);
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  for (const vacEnabled of [false, true]) {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/control/apply`, {
+      method: "POST", headers: { Cookie: `cs2_panel_session=${testToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: { ...saved, vacEnabled } })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(saved.vacEnabled, vacEnabled);
+  }
+  assert.deepEqual(applied, [false, true]);
 });
 
 

@@ -40,7 +40,29 @@ configure_upstream_process() {
   export CS2_PW="$(read_setting '.joinPassword')"
   export CS2_MAXPLAYERS="$(read_setting '.maxPlayers')"
   export CS2_STARTMAP="$(read_setting '.startMap')"
-  export CS2_ADDITIONAL_ARGS="$(read_setting '.additionalArgs')"
+  # VAC is a process-start setting. Keep legacy runtimes compatible, but never
+  # let additional arguments override an explicitly configured VAC mode.
+  local vac_enabled
+  vac_enabled="$(read_setting '
+    if has("vacEnabled") then
+      if (.vacEnabled | type) == "boolean" then (.vacEnabled | tostring)
+      else error("vacEnabled muss ein boolean-Wert sein") end
+    else
+      ((.additionalArgs // "") | test("(^|[[:space:]])(-insecure|\u0022-insecure\u0022|\u0027-insecure\u0027)(?=[[:space:]]|$)"; "i") | not | tostring)
+    end
+  ')" || return 1
+  CS2_ADDITIONAL_ARGS="$(read_setting '
+    (.additionalArgs // "") |
+    gsub("(^|[[:space:]])(-(insecure|secure)|\u0022-(insecure|secure)\u0022|\u0027-(insecure|secure)\u0027)(?=[[:space:]]|$)"; " "; "i") |
+    sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")
+  ')" || return 1
+  if [[ "$vac_enabled" == "false" ]]; then
+    export CS2_ADDITIONAL_ARGS="${CS2_ADDITIONAL_ARGS:+$CS2_ADDITIONAL_ARGS }-insecure"
+    echo '[entrypoint] VAC deaktiviert; Clients mit und ohne -insecure können beitreten.'
+  else
+    export CS2_ADDITIONAL_ARGS
+    echo '[entrypoint] VAC aktiviert; Clients mit -insecure können nicht beitreten.'
+  fi
   # New panel settings take precedence over legacy deployment variables.
   # Keep the old environment only until a panel-managed runtime is applied.
   if jq -e 'has("trainingHudEnabled")' "$settings_file" >/dev/null; then

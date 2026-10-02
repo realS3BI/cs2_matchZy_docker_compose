@@ -6,6 +6,7 @@ export type ServerSettings = {
   serverName: string;
   rconPassword: string;
   joinPassword: string;
+  vacEnabled: boolean;
   maxPlayers: number;
   startMap: string;
   additionalArgs: string;
@@ -87,6 +88,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ]
   },
   {
+    id: "security", title: "VAC und Spielzugang", description: "VAC und der Zugang für Clients mit -insecure werden gemeinsam gesteuert. Änderungen werden erst mit „Übernehmen & neu starten“ wirksam.",
+    fields: [
+      { key: "vacEnabled", label: "VAC aktivieren", type: "boolean", description: "Aktiviert: Clients mit -insecure können nicht beitreten. Deaktiviert: Clients mit und ohne -insecure können beitreten, auch für automatische Playbook-Reviews." }
+    ]
+  },
+  {
     id: "matchzy", title: "MatchZy behavior", description: "Nur für den MatchZy-Modus.", mode: "matchzy",
     fields: [
       { key: "matchZySmokeColor", label: "Colored practice smokes", type: "boolean" },
@@ -112,7 +119,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: "advanced", title: "Advanced launch", description: "Optional process arguments passed to the dedicated server.",
     fields: [
-      { key: "additionalArgs", label: "Additional launch arguments", type: "textarea" }
+      { key: "additionalArgs", label: "Additional launch arguments", type: "textarea", description: "VAC ausschließlich unter „VAC und Spielzugang“ einstellen. -insecure und -secure hier nicht eintragen." }
     ]
   },
   {
@@ -138,6 +145,7 @@ const DEFAULTS: ServerSettings = {
   serverName: "Playbook",
   rconPassword: "",
   joinPassword: "",
+  vacEnabled: true,
   maxPlayers: 10,
   startMap: "de_mirage",
   additionalArgs: "",
@@ -174,6 +182,9 @@ export const SETTING_KEYS = Object.freeze(Object.keys(DEFAULTS) as (keyof Server
 
 const BOOLEAN_KEYS = SETTING_KEYS.filter((key) => typeof DEFAULTS[key] === "boolean");
 const STRING_KEYS = SETTING_KEYS.filter((key) => typeof DEFAULTS[key] === "string");
+// Match complete launch arguments only, never substrings in paths or values.
+const VAC_ARGUMENT = /(^|\s)(?:-(?:insecure|secure)|"-(?:insecure|secure)"|'-(?:insecure|secure)')(?=\s|$)/gi;
+const INSECURE_ARGUMENT = /(^|\s)(?:-insecure|"-insecure"|'-insecure')(?=\s|$)/i;
 
 export function isValidTimezone(value) {
   try {
@@ -193,6 +204,7 @@ export function validateSettings(input) {
   }
   for (const key of BOOLEAN_KEYS) {
     if (Object.prototype.hasOwnProperty.call(source, key) && typeof source[key] !== "boolean") {
+      if (key === "vacEnabled") throw new Error("Für VAC ist nur true oder false (boolean) erlaubt.");
       throw new Error(`${key} must be a boolean`);
     }
   }
@@ -213,6 +225,9 @@ export function validateSettings(input) {
   }
   if (source.trainingHudWorkshopId !== undefined && source.trainingHudWorkshopId !== "" && (!/^[1-9][0-9]{0,19}$/.test(source.trainingHudWorkshopId) || source.trainingHudWorkshopId.trim() !== source.trainingHudWorkshopId)) {
     throw new Error("HUD-Workshop-ID muss eine gültige numerische Workshop-ID sein.");
+  }
+  if (String(source.additionalArgs || "").match(VAC_ARGUMENT)) {
+    throw new Error("-insecure und -secure bitte aus den zusätzlichen Startargumenten entfernen und VAC unter „VAC und Spielzugang“ einstellen.");
   }
   return source;
 }
@@ -243,6 +258,15 @@ export function normalizeSettings(input): ServerSettings {
     if (Object.prototype.hasOwnProperty.call(source, key)) writable[key] = source[key] === true;
   }
   if (Object.prototype.hasOwnProperty.call(source, "maxPlayers")) output.maxPlayers = Number(source.maxPlayers);
+
+  // Preserve the effective mode of older servers. From now on the typed flag
+  // owns VAC; legacy arguments must not silently override the switch.
+  if (!Object.prototype.hasOwnProperty.call(source, "vacEnabled")) {
+    output.vacEnabled = !INSECURE_ARGUMENT.test(output.additionalArgs);
+  } else if (typeof source.vacEnabled !== "boolean") {
+    output.vacEnabled = DEFAULTS.vacEnabled;
+  }
+  output.additionalArgs = output.additionalArgs.replace(VAC_ARGUMENT, "$1").trim();
 
   // Migrate only the old shipped branding; preserve custom server names/prefixes.
   if (output.serverName === "CS2 MatchZy Server") output.serverName = "Playbook";

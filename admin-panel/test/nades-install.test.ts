@@ -74,7 +74,7 @@ printf '%s' "$MATCHZY_TRAINING_HUD_READY"
   ] as const) {
     await writeFile(settingsFile, JSON.stringify(normalizeSettings({ trainingHudEnabled: enabled, trainingHudWorkshopEnabled: workshop, trainingHudWorkshopId: "123456" })));
     const result = await execFileAsync("bash", ["-c", script]);
-    assert.equal(result.stdout, ready);
+    assert.equal(result.stdout.trim().split("\n").at(-1), ready);
     assert.equal(await readFile(config, "utf8"), `mm_extra_addons "111,222"\nmm_client_extra_addons "${expectedId}"\nmm_addon_mount_download "1"\n`);
   }
   const legacy: any = normalizeSettings({});
@@ -82,7 +82,7 @@ printf '%s' "$MATCHZY_TRAINING_HUD_READY"
   delete legacy.trainingHudWorkshopEnabled;
   delete legacy.trainingHudWorkshopId;
   await writeFile(settingsFile, JSON.stringify(legacy));
-  assert.equal((await execFileAsync("bash", ["-c", script])).stdout, "1");
+  assert.equal((await execFileAsync("bash", ["-c", script])).stdout.trim().split("\n").at(-1), "1");
   assert.match(await readFile(config, "utf8"), /mm_client_extra_addons "999"/);
   await writeFile(settingsFile, JSON.stringify(normalizeSettings({ trainingHudEnabled: true, trainingHudWorkshopEnabled: true })));
   await assert.rejects(execFileAsync("bash", ["-c", script]));

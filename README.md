@@ -137,6 +137,17 @@ Granatentyp, Team, Sammlung und Suche stehen in der URL. Die Teamfilter T und CT
 
 „Entwurf speichern“ und „Übernehmen & neu starten“ stehen am Ende der jeweiligen Serverseite. Sie erscheinen nicht in der Nade-Bibliothek oder im Atlas. Der Entwurf wird in MongoDB gespeichert. Beim Übernehmen validiert das Panel Steam-Token und RCON-Passwort, aktualisiert die Runtime-Dateien und startet den CS2-Container neu. Ein manueller Neustart schreibt ebenfalls zuerst den zuletzt gespeicherten Stand in die Runtime; noch ungespeicherte Browser-Änderungen werden dabei nicht übernommen. Nades werden separat und ohne Serverneustart gespeichert. Das Aktualisieren oder Speichern eines Bereichs erhält ungespeicherte Änderungen im anderen Bereich.
 
+### VAC und Zugang mit `-insecure`
+
+Plattform-Admins steuern unter **Server → Einstellungen → VAC und Spielzugang** mit „VAC aktivieren“ den nächsten Serverstart:
+
+- **Aktiviert** (Standard): Der Server startet mit VAC. CS2-Clients mit `-insecure` können nicht beitreten.
+- **Deaktiviert**: Der Server startet mit `-insecure`, also ohne VAC-Schutz. Clients mit und ohne `-insecure` können beitreten. Damit können automatische Playbook-Reviews über die lokale Command-Pipe auf deinem Coolify-Trainingsserver stattfinden.
+
+Die Änderung wird erst mit **Übernehmen & neu starten** wirksam und trennt dabei verbundene Spieler. „Entwurf speichern“ allein ändert den laufenden Server nicht. Der Schalter ändert keine Steam-Startoptionen der Spieler und verlangt nicht, dass normale Clients ebenfalls mit `-insecure` starten. Andere Zugangsvoraussetzungen wie das Serverpasswort gelten weiterhin. Die [Steam-Dokumentation](https://help.steampowered.com/en/faqs/view/42AB-9A00-E927-1B29) beschreibt `-insecure` als Abschaltung von VAC für den Dedicated Server.
+
+Ältere gespeicherte `-insecure`-Argumente werden automatisch in „VAC deaktiviert“ übernommen. `-insecure` und `-secure` gehören künftig nicht mehr in die zusätzlichen Startargumente; diese Einstellung wird ausschließlich über den VAC-Schalter verwaltet. Match Admins dürfen den VAC-Modus nicht ändern.
+
 Das Dashboard findet den CS2-Container ueber Docker-Compose-Labels. Dafuer ist `/var/run/docker.sock` eingebunden. Dieser Zugriff ist sicherheitsrelevant; das Panel sollte ueber HTTPS und nach Moeglichkeit zusaetzlich per VPN oder IP-Allowlist geschuetzt werden.
 
 ## Servermodi und Plugins

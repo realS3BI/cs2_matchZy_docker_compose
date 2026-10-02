@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildControlModel, normalizeSettings, SETTING_KEYS, validateRunnableSettings, validateSettings } from "../src/policy.js";
+import { buildControlModel, normalizeSettings, SETTING_KEYS, settingsForRole, validateRunnableSettings, validateSettings } from "../src/policy.js";
 
 test("normalizeSettings migrates the retired mode and drops its version field", () => {
   const settings: any = normalizeSettings({ serverMode: "executes", executesVersion: "1.1.1" });
@@ -54,6 +54,46 @@ test("new installations receive complete typed defaults", () => {
 test("normalizeSettings persists Workshop map metadata", () => {
   const catalog = '[{"title":"Aim Botz","mapName":"aim_botz","workshopId":"3070244462"}]';
   assert.equal(normalizeSettings({ workshopMapCatalog: catalog }).workshopMapCatalog, catalog);
+});
+
+test("VAC defaults to enabled and only admins can configure it", () => {
+  assert.equal(normalizeSettings({}).vacEnabled, true);
+  for (const vacEnabled of [true, false]) {
+    const settings = normalizeSettings({ vacEnabled });
+    assert.equal(settings.vacEnabled, vacEnabled);
+    assert.equal(settingsForRole(settings, "admin").vacEnabled, vacEnabled);
+    assert.equal(settingsForRole(settings, "match_admin").vacEnabled, undefined);
+    const group = buildControlModel(settings).settingsGroups.find(group => group.id === "security");
+    assert.equal(group.fields.find(field => field.key === "vacEnabled").type, "boolean");
+    assert.match(group.description, /neu starten/);
+  }
+  for (const value of ["false", "true", null, 0, 1]) {
+    assert.throws(() => validateSettings({ vacEnabled: value }), /boolean/);
+    assert.equal(normalizeSettings({ vacEnabled: value }).vacEnabled, true);
+  }
+});
+
+test("legacy insecure arguments migrate without changing other launch arguments", () => {
+  for (const flag of ["-insecure", '"-insecure"', "'-insecure'", "-INSECURE"]) {
+    const settings = normalizeSettings({ additionalArgs: `+sv_lan 0 ${flag} -dev` });
+    assert.equal(settings.vacEnabled, false);
+    assert.equal(settings.additionalArgs, "+sv_lan 0  -dev");
+    assert.deepEqual(normalizeSettings(settings), settings);
+  }
+  assert.equal(normalizeSettings({ additionalArgs: "-insecure\n-insecure\t-secure" }).additionalArgs, "");
+  assert.equal(normalizeSettings({ additionalArgs: "-secure" }).vacEnabled, true);
+  assert.equal(normalizeSettings({ additionalArgs: "+exec insecure.cfg -insecure_suffix" }).vacEnabled, true);
+  assert.equal(normalizeSettings({ vacEnabled: true, additionalArgs: "-insecure" }).vacEnabled, true);
+  assert.equal(normalizeSettings({ vacEnabled: false, additionalArgs: "-secure" }).vacEnabled, false);
+});
+
+test("additional arguments cannot bypass the VAC switch", () => {
+  for (const flag of ["-insecure", "-secure", '"-insecure"', "'-secure'", "-INSECURE"]) {
+    for (const vacEnabled of [true, false]) {
+      assert.throws(() => validateSettings({ vacEnabled, additionalArgs: `-dev ${flag}` }), /VAC und Spielzugang/);
+    }
+  }
+  assert.doesNotThrow(() => validateSettings({ vacEnabled: false, additionalArgs: "+exec insecure.cfg -insecure_suffix" }));
 });
 
 test("control model reports installed dependency chains", () => {

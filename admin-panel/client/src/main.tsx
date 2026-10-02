@@ -383,10 +383,16 @@ function Settings({ settings, setSettings, policy }) {
 
 function SettingField({ field, value, onChange }) {
   if (field.type === "boolean") {
+    const isVac = field.key === "vacEnabled";
     return (
-      <Field className="flex min-h-16 grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 px-4 py-3">
-        <span><FieldLabel>{field.label}</FieldLabel>{field.description ? <FieldDescription className="mt-1 block">{field.description}</FieldDescription> : null}</span>
-        <Switch aria-label={field.label} checked={value === true} onCheckedChange={onChange} />
+      <Field htmlFor={`setting-${field.key}`} className={cn("flex min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3", isVac && "justify-between md:col-span-2 xl:col-span-3")}>
+        <span className="min-w-0"><FieldLabel>{field.label}</FieldLabel>
+          {isVac ? <FieldDescription id={`setting-${field.key}-description`} className="mt-1 block" aria-live="polite">
+            {value === true ? "VAC aktiviert · Zugang mit -insecure nicht möglich." : "VAC deaktiviert · Zugang mit und ohne -insecure möglich. Automatische Playbook-Reviews sind möglich."}
+            {value !== true && <span className="mt-1 block">Auf diesem Server besteht kein VAC-Schutz. Das ändert nicht die VAC-Einstellung deines lokal gestarteten Spiels.</span>}
+          </FieldDescription> : field.description ? <FieldDescription id={`setting-${field.key}-description`} className="mt-1 block">{field.description}</FieldDescription> : null}
+        </span>
+        <Switch id={`setting-${field.key}`} aria-label={field.label} aria-describedby={isVac || field.description ? `setting-${field.key}-description` : undefined} checked={value === true} onCheckedChange={onChange} />
       </Field>
     );
   }

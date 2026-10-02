@@ -31,9 +31,20 @@ test("runtime files use the typed JSON settings contract", async (t) => {
   assert.equal(settings.maxPlayers, 12);
   assert.equal(settings.weaponPaintsEnabled, true);
   assert.equal(typeof settings.weaponPaintsEnabled, "boolean");
+  assert.equal(settings.vacEnabled, true);
   assert.deepEqual(synchronizedNades, []);
   assert.deepEqual(JSON.parse(await readFile(config.runtimeAdminsFile, "utf8")), {});
   assert.deepEqual(JSON.parse(await readFile(config.runtimeMatchZyAdminsFile, "utf8")), {});
+});
+
+test("runtime publication persists both VAC modes as booleans", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "playbook-vac-runtime-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const config = { runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(directory, "savednades.json") };
+  for (const vacEnabled of [false, true]) {
+    await writeServerRuntimeFiles(config, { writeFromMongo: async () => undefined }, { vacEnabled }, [], []);
+    assert.equal(JSON.parse(await readFile(config.runtimeSettingsFile, "utf8")).vacEnabled, vacEnabled);
+  }
 });
 
 test("concurrent runtime publication reads the latest role after a demotion", async () => {

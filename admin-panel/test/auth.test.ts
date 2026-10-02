@@ -157,6 +157,9 @@ test("match admins see all nades, can control permitted settings and RCON but ca
     assert.equal((await f.request("/nades", "PUT", { entries: [] })).status, 403);
     assert.equal((await f.request("/control", "PUT", { settings: { serverMode: "nades", matchZySmokeColor: true } })).status, 200);
     assert.equal((await f.request("/control", "PUT", { settings: { rconPassword: "changed" } })).status, 400);
+    assert.equal((await f.request("/control", "PUT", { settings: { vacEnabled: false } })).status, 400);
+    assert.equal((await f.request("/control/apply", "POST", { settings: { vacEnabled: false } })).status, 400);
+    assert.equal((await f.store.getSettings()).vacEnabled, true);
     assert.equal((await f.request("/control", "PUT", { settings: {}, admins: [{ role: "admin" }] })).status, 400);
     assert.equal((await f.request("/server/rcon", "POST", { command: "status" })).status, 200);
     assert.deepEqual(f.commands, ["status"]);
@@ -166,6 +169,20 @@ test("match admins see all nades, can control permitted settings and RCON but ca
     assert.equal((await f.request("/control", "PUT", { settings: { workshopMaps: "123456", workshopMapCatalog: JSON.stringify([map]) } })).status, 200);
     assert.equal((await f.request("/control", "PUT", { settings: { workshopMaps: "" } })).status, 400);
     assert.equal((await f.request("/control", "PUT", { settings: { workshopMapCatalog: JSON.stringify([{ ...map, title: "Changed" }]) } })).status, 400);
+  } finally { await f.close(); }
+});
+
+test("admins save VAC drafts without modifying the running server configuration", async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.request("/control", "PUT", { settings: { vacEnabled: false } })).status, 200);
+    assert.equal((await f.store.getSettings()).vacEnabled, false);
+    assert.equal(JSON.parse(await readFile(f.config.runtimeSettingsFile, "utf8")).vacEnabled, true);
+    assert.equal((await f.request("/control", "PUT", { settings: { vacEnabled: "false" } })).status, 400);
+    assert.equal((await f.request("/control", "PUT", { settings: { vacEnabled: true, additionalArgs: "-insecure" } })).status, 400);
+    assert.equal((await f.store.getSettings()).vacEnabled, false);
+    assert.equal((await f.request("/control", "PUT", { settings: { vacEnabled: true } })).status, 200);
+    assert.equal((await f.store.getSettings()).vacEnabled, true);
   } finally { await f.close(); }
 });
 
