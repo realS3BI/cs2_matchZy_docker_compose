@@ -3,7 +3,7 @@ import { ArrowRight, ChevronDown, ClipboardCheck, RefreshCw } from "lucide-react
 import { missingReviewMedia } from "../../../shared/review-media";
 import { mapMatchesNade } from "../lib/maps";
 import { lineupKey, lineupReviewPath } from "../lib/lineups";
-import { queueSearch, reviewQueue, reviewStatus, REVIEW_FILTERS } from "../lib/review-queue";
+import { queueSearch, reviewQueue, reviewQueueStatus, reviewStatus, REVIEW_FILTERS } from "../lib/review-queue";
 import { ActionButton } from "./action-button";
 import { GrenadeIcon } from "./nade-icons";
 import { Badge } from "./ui/badge";
@@ -22,7 +22,7 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange 
   const entries = reviewQueue(nades, maps, search);
   const filter = (key: string, value: string) => setSearch(current => {
     const next = queueSearch(current);
-    if (!value || value === "all") next.delete(key); else next.set(key, value);
+    if (!value || (key !== "status" && value === "all")) next.delete(key); else next.set(key, value);
     return next;
   }, { replace: key === "q" });
   const href = nade => {
@@ -41,7 +41,7 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange 
     <CollapsibleContent className="grid gap-4">
     <Card><CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
       <Field><FieldLabel>Map</FieldLabel><Select value={search.get("map") || "all"} onValueChange={value => filter("map", value)}><SelectTrigger aria-label="Reviews nach Map filtern"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Alle Maps</SelectItem>{maps.map(map => <SelectItem key={map.key} value={map.key}>{map.name}</SelectItem>)}</SelectContent></Select></Field>
-      <Field><FieldLabel>Status</FieldLabel><Select value={REVIEW_FILTERS.some(filter => filter.value === search.get("status")) ? search.get("status") : "all"} onValueChange={value => filter("status", value)}><SelectTrigger aria-label="Review-Status filtern"><SelectValue /></SelectTrigger><SelectContent>{REVIEW_FILTERS.map(filter => <SelectItem key={filter.value} value={filter.value}>{filter.label}</SelectItem>)}</SelectContent></Select></Field>
+      <Field><FieldLabel>Status</FieldLabel><Select value={reviewQueueStatus(search)} onValueChange={value => filter("status", value)}><SelectTrigger aria-label="Review-Status filtern"><SelectValue /></SelectTrigger><SelectContent>{REVIEW_FILTERS.map(filter => <SelectItem key={filter.value} value={filter.value}>{filter.label}</SelectItem>)}</SelectContent></Select></Field>
       <Field htmlFor="review-search"><FieldLabel>Lineup suchen</FieldLabel><Input id="review-search" value={search.get("q") || ""} onChange={event => filter("q", event.target.value)} placeholder="Name, Start oder Ziel …" /></Field>
     </CardContent></Card>
     <p className="text-sm text-muted-foreground" role="status">{entries.length} {entries.length === 1 ? "offenes Review" : "offene Reviews"}</p>

@@ -11,7 +11,9 @@ test("review queue contains every non-official owner and imported lineup, priori
     { owner: "76561198000000003", map: "de_mirage", name: "mid", reviewStatus: "rejected" },
     { owner: "default", map: "de_mirage", name: "official", official: true, reviewStatus: "approved" },
   ];
-  const all = reviewQueue(entries, ACTIVE_DUTY_MAPS, new URLSearchParams());
+  assert.deepEqual(reviewQueue(entries, ACTIVE_DUTY_MAPS, new URLSearchParams()).map(entry => entry.name), ["A smoke", "garage"]);
+  assert.deepEqual(reviewQueue(entries, ACTIVE_DUTY_MAPS, new URLSearchParams("status=invalid")).map(entry => entry.name), ["A smoke", "garage"]);
+  const all = reviewQueue(entries, ACTIVE_DUTY_MAPS, new URLSearchParams("status=all"));
   assert.equal(all.length, 4);
   assert.equal(all[0].reviewStatus, "pending");
   assert.ok(all.some(entry => entry.owner === "default"));
@@ -23,4 +25,5 @@ test("review queue contains every non-official owner and imported lineup, priori
 });
 test("review filter state survives queue links without carrying unrelated query parameters", () => {
   assert.equal(queueSearch(new URLSearchParams("queue=1&map=mirage&status=pending&q=Fenster&redirect=https://example.com")).toString(), "map=mirage&status=pending&q=Fenster");
+  assert.equal(queueSearch(new URLSearchParams("queue=1&status=all")).toString(), "status=all");
 });

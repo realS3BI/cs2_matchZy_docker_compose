@@ -21,15 +21,17 @@ internal sealed class ReviewPhotoPresentation : IDisposable
     private readonly float _nextAttack;
     private readonly float _attackLock = Server.CurrentTime + 45f;
     private readonly Coordinates _frontAngles;
+    private readonly ReviewCrouchHold? _crouch;
     private bool _frontPoseApplied;
     private bool _freezeApplied;
     private bool _disposed;
     public uint PawnHandle { get; }
     public float CameraPitch => ReviewPhotoFraming.CameraPitch(_frontAngles.X);
 
-    public ReviewPhotoPresentation(CCSPlayerPawn pawn, string slot)
+    public ReviewPhotoPresentation(CCSPlayerPawn pawn, string slot, ReviewCrouchHold? crouch = null)
     {
         _pawn = pawn;
+        _crouch = crouch;
         PawnHandle = pawn.EntityHandle.Raw;
         _cameraServices = pawn.CameraServices?.As<CCSPlayerBase_CameraServices>()
             ?? throw new InvalidOperationException("Die Spielkamera ist noch nicht bereit.");
@@ -72,6 +74,7 @@ internal sealed class ReviewPhotoPresentation : IDisposable
                 pawn.Teleport(null, new QAngle(_frontAngles.X, _frontAngles.Y, _frontAngles.Z), new Vector());
                 PlayerBodyRotation.Repair(pawn);
             }
+            _crouch?.Maintain();
             Utilities.SetStateChanged(pawn, "CBasePlayerPawn", "m_pCameraServices");
         } catch { Dispose(); throw; }
     }
@@ -81,6 +84,7 @@ internal sealed class ReviewPhotoPresentation : IDisposable
         if (_disposed || !_pawn.IsValid) return false;
         if (_front && _pawn.Health > 0 && (_pawn.EyeAngles.X != _frontAngles.X || _pawn.EyeAngles.Y != _frontAngles.Y))
             _pawn.Teleport(null, new QAngle(_frontAngles.X, _frontAngles.Y, _frontAngles.Z), new Vector());
+        if (_pawn.Health > 0) _crouch?.Maintain();
         return !_front || _pawn.Health > 0 && !_cameraServices.ViewEntity.IsValid;
     }
 
@@ -88,6 +92,7 @@ internal sealed class ReviewPhotoPresentation : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _crouch?.Dispose();
         if (!_pawn.IsValid || _pawn.EntityHandle.Raw != PawnHandle) return;
         if (_freezeApplied && !_wasFrozen) {
             _pawn.Flags &= ~(uint)PlayerFlags.FL_FROZEN;

@@ -79,7 +79,6 @@ public static class ReviewMenu
                 new("Video starten", "Playbook-Aufnahme starten. Erst nach der Chat-Bestätigung zum Startpunkt loslaufen.", Request: new(TrainingAction.ReviewVideoStart, lineup)),
                 new("Video stoppen & hochladen", "Beendet die Aufnahme und lädt das Video hoch. Windows-App: F8. Browser: bind F8 css_training_review_stop", Request: new(TrainingAction.ReviewVideoStop, lineup)),
                 new("Lineup laden", "Lädt den gespeicherten Start und die Blickrichtung für den nächsten Versuch.", Request: new(TrainingAction.LoadLineup, lineup)),
-                new("Zur Ausrichtung", "Zum Lineup-Schritt zurückkehren.", Page: items[0].Page),
                 new("Noclip umschalten", "Zum Ziel fliegen und die Wirkung zeigen.", Request: new(TrainingAction.Noclip))
             ], Key: $"review-video:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "video")));
         var missingDetails = MissingDetails(lineup);
@@ -163,6 +162,7 @@ public sealed partial class MatchZyNadesPlugin
         }
         var action = request.Action == TrainingAction.ReviewPhoto ? "photo" : request.Action == TrainingAction.ReviewVideoStart ? "video-start" : "video-stop";
         ReviewPhotoPresentation? presentation = null;
+        ReviewCrouchHold? crouch = null;
         MenuSession? panel = null;
         var focused = false;
         try
@@ -177,6 +177,8 @@ public sealed partial class MatchZyNadesPlugin
                 !session.FollowPanel && (session.Owner != lineup.Owner || session.Map != lineup.Map || session.Name != lineup.Name))
                 throw new InvalidOperationException("Öffne Server → Reviews und verbinde das Spielbild.");
             if (action == "photo" && session.Recording) throw new InvalidOperationException("Bitte zuerst das laufende Video stoppen.");
+            if (action == "photo" && request.Setting == "front")
+                crouch = new(new ReviewPawnCrouchState(player.PlayerPawn.Value!, (player.Buttons & PlayerButtons.Duck) != 0));
             if (panel != null) Hide(panel);
             if (action == "photo") {
                 if (request.Setting == "front") {
@@ -191,7 +193,7 @@ public sealed partial class MatchZyNadesPlugin
                     if (origin == null || Math.Abs(origin.X - lineup.Position.X) > 2 || Math.Abs(origin.Y - lineup.Position.Y) > 2 || Math.Abs(origin.Z - lineup.Position.Z) > 5)
                         throw new InvalidOperationException("Der Startpunkt konnte nicht geladen werden. Bitte das Lineup erneut laden.");
                 }
-                presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting);
+                presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting, crouch);
             }
             var command = ReviewCaptureFiles.Issue(ReviewDirectory, player.SteamID.ToString(), lineup, action, request.Setting,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v6", request.Setting == "front" ? presentation?.CameraPitch : null);
@@ -207,6 +209,7 @@ public sealed partial class MatchZyNadesPlugin
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             presentation?.Dispose();
+            crouch?.Dispose();
             RestoreReviewPanel(player, panel, focused);
             var message = error is InvalidOperationException ? error.Message : "Aufnahmesignal konnte nicht gespeichert werden. Bitte erneut versuchen.";
             if (commandId != null) WriteReviewFailure(player.SteamID, commandId, message, requestOnly: true);

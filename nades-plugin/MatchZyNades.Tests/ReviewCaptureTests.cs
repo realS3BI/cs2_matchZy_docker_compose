@@ -127,16 +127,13 @@ public sealed class ReviewCaptureTests
         Assert.Null(ReviewEffectTarget.Resolve(Lineup, null));
     }
     [Fact]
-    public void VideoAllowsLoadingTheLineupAndReturningToTheAimStep()
+    public void VideoAllowsLoadingTheLineupWithoutAnAimShortcut()
     {
         var menu = new InGameMenu(ReviewMenu.Create(Lineup), Lineup.Map);
         menu.Select(5);
         Assert.Equal("video", menu.Current.ReviewStep);
         Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.LoadLineup && item.Request.Lineup == Lineup);
-        var aim = menu.Current.Items.ToList().FindIndex(item => item.Page?.ReviewStep == "aim");
-        Assert.True(aim >= 0);
-        menu.Select(aim + 1);
-        Assert.Equal("aim", menu.Current.ReviewStep);
+        Assert.DoesNotContain(menu.Current.Items, item => item.Page?.ReviewStep == "aim");
         Assert.Equal(Lineup, menu.Current.ReviewLineup);
     }
     [Fact]
