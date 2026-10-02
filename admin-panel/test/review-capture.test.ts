@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, chown, chmod } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, chown, chmod } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -82,4 +82,37 @@ test("CS2's steam user can write a command into a browser-created session direct
   await bridge.poll(actor, session.id, async () => {});
   const repaired = issue();
   assert.equal(repaired.status, 0, `Bestehende Sitzung wurde nicht repariert: ${repaired.stderr}`);
+});
+
+test("photos require server preparation and release the game before upload acknowledgement", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "playbook-photo-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const bridge = new ReviewCaptureBridge(directory);
+  const actor = "76561198000000001";
+  const session = await bridge.start(actor, { owner: actor, map: "de_anubis", name: "ct_to_a_main" }, 1000);
+  const request = await bridge.requestPhoto(actor, session.id, "front", 1100);
+  assert.equal(await bridge.poll(actor, session.id, async () => {}, 1200), null);
+  await assert.rejects(() => bridge.requestPhoto(actor, session.id, "aim", 1300), { status: 409 });
+  await assert.rejects(() => bridge.requestPhoto(actor, session.id, "video", 1300), { status: 400 });
+  const command = { id: request.id, sessionId: session.id, action: "photo", slot: "front", presentation: "review-v1", notBefore: 5000, expiresAt: 30_000 };
+  const put = (name, data) => writeFile(join(directory, actor, `${name}.json`), JSON.stringify(data));
+  await put("command", command);
+  assert.equal(await bridge.poll(actor, session.id, async () => {}, 4999), null);
+  assert.deepEqual(await bridge.poll(actor, session.id, async () => {}, 5000), { id: request.id, action: "photo", slot: "front", presentation: "review-v1" });
+  await assert.rejects(() => bridge.captured(actor, { sessionId: session.id, commandId: "wrong" }, 5001), { status: 409 });
+  await bridge.captured(actor, { sessionId: session.id, commandId: request.id }, 5001);
+  assert.equal(JSON.parse(await readFile(join(directory, actor, "captured.json"), "utf8")).commandId, request.id);
+  assert.equal(await bridge.poll(actor, session.id, async () => {}, 5002), null);
+  // Taking the photo is not an upload acknowledgement; the plugin can restore
+  // the game while the upload is still pending and a second request is blocked.
+  await assert.rejects(() => bridge.requestPhoto(actor, session.id, "aim", 5100), { status: 409 });
+  await bridge.acknowledge(actor, { sessionId: session.id, commandId: request.id, ok: true }, 5200);
+  const next = await bridge.requestPhoto(actor, session.id, "aim", 5300);
+  assert.notEqual(next.id, request.id);
+  await put("request-result", { sessionId: session.id, commandId: next.id, ok: false, message: "Kamera nicht verfügbar" });
+  assert.deepEqual(await bridge.poll(actor, session.id, async () => {}, 5400), { id: next.id, action: "error", message: "Kamera nicht verfügbar" });
+  assert.equal(JSON.parse(await readFile(join(directory, actor, "result.json"), "utf8")).commandId, request.id);
+  assert.notEqual((await bridge.requestPhoto(actor, session.id, "aim", 5500)).id, next.id);
+  await put("result", { sessionId: session.id, commandId: request.id, ok: false });
+  await assert.rejects(() => bridge.captured(actor, { sessionId: session.id, commandId: request.id }, 5600), { status: 409 });
 });

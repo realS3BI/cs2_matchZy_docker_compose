@@ -20,7 +20,7 @@ export class ReviewRecorder {
     try { await capture.video.play(); return capture; }
     catch (error) { capture.dispose(); throw error; }
   }
-  async photo(name: string) {
+  async photo(name: string, reviewCrosshair = false) {
     if (this.stream.getVideoTracks()[0]?.readyState !== "live" || !this.video.videoWidth) throw new Error("Das Spielbild ist noch nicht bereit. Prüfe die Vorschau und versuche es erneut.");
     // A background tab may stop painting its video element. Read the track
     // directly in Chromium so an in-game trigger captures the current frame.
@@ -35,6 +35,19 @@ export class ReviewRecorder {
     canvas.height = Math.round(height * scale);
     try { canvas.getContext("2d")!.drawImage(source, 0, 0, canvas.width, canvas.height); }
     finally { frame?.close(); }
+    if (reviewCrosshair) {
+      const ctx = canvas.getContext("2d")!;
+      // Fixed proportions across resolutions. CS2 must be captured borderless,
+      // so the centre of the shared surface is the centre of the game view.
+      const unit = canvas.height / 1080;
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.scale(unit, unit);
+      ctx.beginPath();
+      ctx.moveTo(-10, 0); ctx.lineTo(-3, 0); ctx.moveTo(3, 0); ctx.lineTo(10, 0);
+      ctx.moveTo(0, -10); ctx.lineTo(0, -3); ctx.moveTo(0, 3); ctx.lineTo(0, 10);
+      ctx.strokeStyle = "#111"; ctx.lineWidth = 4; ctx.stroke();
+      ctx.strokeStyle = "#73ffd0"; ctx.lineWidth = 2; ctx.stroke();
+    }
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Das Foto konnte nicht aufgenommen werden.")), "image/jpeg", 0.92));
     return new File([blob], `${name}.jpg`, { type: "image/jpeg" });
   }

@@ -16,7 +16,7 @@ public static class PanelSettingsMenu
         };
         var keys = PlayerPanelSettings.Labels.Select(action => new MenuItem(
             $"{action.Value}: {PlayerPanelSettings.DefaultKeys[action.Key]}", hints[action.Key])).ToList();
-        keys.Insert(0, new("Alle Keybinds in Konsole ausgeben", "Konsole öffnen und Zeile 1 für das Panel kopieren. Zeile 2: optional Noclip, Taste frei wählbar. Vorher eigene Binds sichern; kein automatisches Zurücksetzen.", Request: new(TrainingAction.ExportBindings)));
+        keys.Insert(0, new("Alle Keybinds in Konsole ausgeben", "Konsole öffnen: Zeile 1 für das Panel, Zeile 2 für Noclip, Zeile 3 für Video-Stopp mit F8. Vorher eigene Binds sichern; kein automatisches Zurücksetzen.", Request: new(TrainingAction.ExportBindings)));
         return new("Keybinds", "Feste Tasten für alle Spieler. Der Server kann deine lokalen Binds weder setzen noch prüfen. Mausbedienung funktioniert ohne diese Binds.", keys, Key: "settings");
     }
 }

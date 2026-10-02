@@ -64,20 +64,53 @@ export class ReviewCaptureBridge {
     if (!id || session?.id !== id || session.expiresAt <= now) fail(409, "Die Ingame-Verbindung ist abgelaufen. Bildschirm erneut verbinden.");
     return session;
   }
-  async poll(actor: string, id: string, validate: (reference) => Promise<void>, now = Date.now()) {
+  async poll(actor: string, id: string, validate: (reference) => Promise<void>, now = Date.now(), recording = false) {
     return this.exclusive(actor, async () => {
       const session = await this.session(actor, id, now);
       await validate(session);
       await this.prepareDirectory(actor);
-      await write(this.path(actor, "session"), { ...session, expiresAt: now + leaseMs });
+      await write(this.path(actor, "session"), { ...session, recording, expiresAt: now + leaseMs });
       const command = await read(this.path(actor, "command"));
       const result = await read(this.path(actor, "result"));
+      const captured = await read(this.path(actor, "captured"));
+      const request = await read(this.path(actor, "request"));
+      const requestResult = await read(this.path(actor, "request-result"));
+      if (request?.sessionId === id && request.expiresAt > now && requestResult?.sessionId === id && requestResult.commandId === request.id)
+        return { id: request.id, action: "error", message: String(requestResult.message || "Die Foto-Vorbereitung ist fehlgeschlagen.").slice(0, 300) };
+      if (command?.sessionId === id && command.action === "photo" && result?.sessionId === id && result.commandId === command.id && result.ok === false)
+        return { id: command.id, action: "error", message: String(result.message || "Foto abgebrochen. Bitte erneut aufnehmen.").slice(0, 300) };
       if (!command || command.sessionId !== id || result?.commandId === command.id ||
+          captured?.sessionId === id && captured.commandId === command.id ||
           !/^[a-f0-9]{32}$/.test(command.id) || command.expiresAt <= now || command.notBefore > now ||
           !Number.isFinite(command.expiresAt) || !Number.isFinite(command.notBefore) ||
           !["photo", "video-start", "video-stop"].includes(command.action) ||
           (command.action === "photo" && (!isReviewSlot(command.slot) || command.slot === "video"))) return null;
-      return { id: command.id, action: command.action, slot: command.slot };
+      return { id: command.id, action: command.action, slot: command.slot, ...(command.presentation === "review-v1" ? { presentation: command.presentation } : {}) };
+    });
+  }
+  async requestPhoto(actor: string, id: string, slot: unknown, now = Date.now()) {
+    return this.exclusive(actor, async () => {
+      await this.session(actor, id, now);
+      if (!isReviewSlot(slot) || slot === "video") fail(400, "Ungültiger Fotoschritt.");
+      const request = await read(this.path(actor, "request"));
+      const result = await read(this.path(actor, "result"));
+      const requestResult = await read(this.path(actor, "request-result"));
+      if (request?.sessionId === id && request.expiresAt > now && result?.commandId !== request.id && requestResult?.commandId !== request.id)
+        fail(409, "Die vorige Foto-Anfrage läuft noch.");
+      const next = { id: randomUUID().replaceAll("-", ""), sessionId: id, slot, expiresAt: now + 30_000 };
+      await write(this.path(actor, "request"), next);
+      return next;
+    });
+  }
+  async captured(actor: string, input, now = Date.now()) {
+    return this.exclusive(actor, async () => {
+      await this.session(actor, input?.sessionId, now);
+      const command = await read(this.path(actor, "command"));
+      const result = await read(this.path(actor, "result"));
+      if (!input?.commandId || command?.id !== input.commandId || command.sessionId !== input.sessionId || command.action !== "photo" || command.expiresAt <= now ||
+          result?.sessionId === input.sessionId && result.commandId === command.id && result.ok === false)
+        fail(409, "Die Foto-Anfrage ist nicht mehr aktuell.");
+      await write(this.path(actor, "captured"), { sessionId: input.sessionId, commandId: command.id });
     });
   }
   async acknowledge(actor: string, input, now = Date.now()) {
@@ -114,7 +147,9 @@ export function installReviewCapture(app, { config, store }) {
   });
   route("poll", async (input, user) => ({ command: await bridge.poll(user.identitySteam64, input?.sessionId, async reference => {
     reviewEntry(await store.getNades(), reference, user);
-  }) }));
+  }, Date.now(), input?.recording === true) }));
   route("ack", async (input, user) => { await bridge.acknowledge(user.identitySteam64, input); return { ok: true }; });
+  route("photo", async (input, user) => ({ request: await bridge.requestPhoto(user.identitySteam64, input?.sessionId, input?.slot) }));
+  route("captured", async (input, user) => { await bridge.captured(user.identitySteam64, input); return { ok: true }; });
   route("stop", async (input, user) => { await bridge.stop(user.identitySteam64, input?.sessionId); return { ok: true }; });
 }

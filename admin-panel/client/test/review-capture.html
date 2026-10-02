@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Regression fixture: real capture hook and recorder; shared-volume API and upload are simulated. -->
+<html lang="de"><head><meta charset="UTF-8"><title>Fotoablauf prüfen</title></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { useReviewCapture } from '/src/hooks/use-review-capture.ts';
+import { ReviewRecorder } from '/src/lib/review-recorder.ts';
+const nade={owner:'76561198000000001',map:'de_anubis',name:'ct_to_a_main'};
+const events=[],errors=[];let command=null,releaseUpload,lastPhoto;
+const canvas=document.createElement('canvas');canvas.width=1920;canvas.height=1080;
+const ctx=canvas.getContext('2d');ctx.fillStyle='#315173';ctx.fillRect(0,0,1920,1080);
+const interval=setInterval(()=>ctx.fillRect(0,0,1920,1080),50);
+ReviewRecorder.share=async()=>{const recorder=new ReviewRecorder(canvas.captureStream(30));await recorder.video.play();return recorder;};
+window.fetch=async(url,options)=>{
+ const input=options?.body?JSON.parse(options.body):{};let output={ok:true};
+ if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
+ else if(String(url).endsWith('/photo')){events.push('prepare');command={id:'a'.repeat(32),slot:input.slot,action:'photo',presentation:'review-v1'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/poll'))output={command};
+ else if(String(url).endsWith('/captured'))events.push('captured');
+ else if(String(url).endsWith('/ack')){events.push('ack');command=null;}
+ return new Response(JSON.stringify(output),{headers:{'Content-Type':'application/json'}});
+};
+function App(){const capture=useReviewCapture({nade,admin:true,disabled:false,onStep:()=>{},onError:e=>errors.push(e),upload:async(slot,file)=>{lastPhoto=file;events.push('upload');await new Promise(r=>releaseUpload=r);events.push('uploaded');}});window.capture=capture;return React.createElement('p',null,capture.notice);}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+const waitFor=async f=>{for(let i=0;i<150;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+JSON.stringify({events,errors}));};
+window.checkPhoto=async(slot='aim')=>{
+ await waitFor(()=>window.capture);await window.capture.connect();await waitFor(()=>window.capture.capture);
+ await window.capture.photo(slot,true);await waitFor(()=>releaseUpload);
+ if(events.join(',')!=='prepare,captured,upload')throw Error('HUD-Freigabe kommt nicht vor Upload: '+events.join(','));
+ const bitmap=await createImageBitmap(lastPhoto),photo=document.createElement('canvas');photo.width=1920;photo.height=1080;photo.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+ const pixel=photo.getContext('2d').getImageData(966,540,1,1).data;
+ const green=pixel[1]>180&&pixel[1]>pixel[2];
+ if(green!==(slot!=='front'))throw Error('Falsches Fadenkreuz: '+slot+' '+Array.from(pixel));
+ releaseUpload();await waitFor(()=>events.includes('ack'));
+ if(errors.length)throw Error(errors.join(';'));
+ window.capture.disconnect();clearInterval(interval);
+ return {result:'PASS: Vorbereitung → Foto → HUD-Freigabe → Upload → Bestätigung',slot,events,crosshair:green};
+};
+</script></body></html>

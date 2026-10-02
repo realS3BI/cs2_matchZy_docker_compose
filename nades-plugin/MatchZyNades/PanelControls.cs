@@ -29,7 +29,7 @@ public sealed partial class MatchZyNadesPlugin
                 return true;
             case TrainingAction.ExportBindings:
                 foreach (var line in settings.ConsoleExport().Split('\n')) player.PrintToConsole(line);
-                Tell(player, "Die beiden Befehlszeilen stehen in deiner Konsole.");
+                Tell(player, "Die Befehlszeilen stehen in deiner Konsole. F8 stoppt das Review-Video.");
                 return true;
             default: return false;
         }

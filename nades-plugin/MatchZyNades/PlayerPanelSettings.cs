@@ -40,7 +40,7 @@ public sealed record PlayerPanelSettings
     public string BindingLine(string action) => $"bind \"{DefaultKeys[action]}\" \"css_training_key {DefaultKeys[action]}\"";
     public string Export() => string.Join('\n', DefaultKeys.Keys.Select(BindingLine));
     // Keep the complete line below the client console message limit.
-    public string ConsoleExport() => string.Join(";", DefaultKeys.Values.Select((key, index) => $"bind {key} \"css_tk {index}\"")) + "\nbind \"n\" \"noclip\"";
+    public string ConsoleExport() => string.Join(";", DefaultKeys.Values.Select((key, index) => $"bind {key} \"css_tk {index}\"")) + "\nbind \"n\" \"noclip\"\nbind \"F8\" \"css_training_review_stop\"";
     public static string? ActionForIndex(string index) => int.TryParse(index, out var value) && value >= 0 && value < DefaultKeys.Count
         ? DefaultKeys.Keys.ElementAt(value) : null;
     public string? ActionForKey(string key) => DefaultKeys.FirstOrDefault(p => p.Value.Equals(key, StringComparison.OrdinalIgnoreCase)).Key;

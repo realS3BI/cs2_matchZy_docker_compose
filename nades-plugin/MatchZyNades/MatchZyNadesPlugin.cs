@@ -84,6 +84,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         WriteRuntimeStatus(true);
         AddTimer(5f, () => WriteRuntimeStatus(true), TimerFlags.REPEAT);
         AddTimer(2f, SyncOpenLibraries, TimerFlags.REPEAT);
+        AddTimer(0.5f, ReadReviewResults, TimerFlags.REPEAT);
         Logger.LogInformation("Playbook {Version} loaded: .nades / !nades / css_nades", ModuleVersion);
     }
 
@@ -145,6 +146,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void TogglePanelControl(CCSPlayerController? player)
     {
         if (!CanControl(player) || !Alive(player)) return;
+        if (_reviewPhotos.ContainsKey(player!.SteamID)) CancelReview(player);
         if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
@@ -160,6 +162,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     private void TogglePanelVisible(CCSPlayerController? player)
     {
         if (!CanControl(player) || !Alive(player)) return;
+        if (_reviewPhotos.ContainsKey(player!.SteamID)) CancelReview(player);
         if (!TrainingEnabled) { Close(player!.Slot); Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (_menus.TryGetValue(player!.Slot, out var session))
         {
@@ -436,6 +439,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
 
     private void Close(int slot)
     {
+        var reviewing = Utilities.GetPlayerFromSlot(slot);
+        if (reviewing is { IsValid: true }) CancelReview(reviewing);
         if (!_menus.Remove(slot, out var session)) return;
         SetFocus(session, false);
         session.Panel.Dispose();
@@ -504,5 +509,13 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     }
 
     private void CloseAll() { foreach (var slot in _menus.Keys.ToArray()) Close(slot); }
-    private void Reset() { ResetTraining(); CloseAll(); _last.Clear(); ResetCapture(); _edits.Clear(); CancelMapVote(); _nextMapVote = 0; }
+    private void Reset()
+    {
+        foreach (var (actor, photo) in _reviewPhotos.ToArray()) {
+            WriteReviewFailure(actor, photo.Command, "Foto wegen Server- oder Mapwechsel abgebrochen.");
+            RestoreReviewPhoto(actor, false);
+        }
+        _reviewPending.Clear(); _reviewRequests.Clear();
+        ResetTraining(); CloseAll(); _last.Clear(); ResetCapture(); _edits.Clear(); CancelMapVote(); _nextMapVote = 0;
+    }
 }

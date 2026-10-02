@@ -78,7 +78,7 @@ public sealed class PlayerPanelSettingsTests : IDisposable
     {
         var settings = new PlayerPanelSettings();
         var lines = settings.ConsoleExport().Split('\n');
-        Assert.Equal(2, lines.Length);
+        Assert.Equal(3, lines.Length);
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(lines[0]) < 240);
         var commands = lines[0].Split(';');
         Assert.Equal(8, commands.Length);
@@ -92,5 +92,6 @@ public sealed class PlayerPanelSettingsTests : IDisposable
         Assert.Null(PlayerPanelSettings.ActionForIndex("-1"));
         Assert.Null(PlayerPanelSettings.ActionForIndex("0;quit"));
         Assert.Equal("bind \"n\" \"noclip\"", lines[1]);
+        Assert.Equal("bind \"F8\" \"css_training_review_stop\"", lines[2]);
     }
 }

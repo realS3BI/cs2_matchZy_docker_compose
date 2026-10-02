@@ -5,7 +5,6 @@ public sealed partial class MatchZyNadesPlugin
     private void SyncOpenLibraries()
     {
         ReadLineupResults();
-        ReadReviewResults();
         foreach (var session in _menus.Values)
         {
             if (!TrainingEnabled || !Alive(session.Player) || session.Menu.ContainsPage("settings")) continue;
