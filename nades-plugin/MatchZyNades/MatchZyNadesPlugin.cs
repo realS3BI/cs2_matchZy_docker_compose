@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.3.1";
+    public override string ModuleVersion => "2.3.2";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -392,7 +392,11 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         if (!TrainingEnabled) { ResetCapture(); CloseAll(); _edits.Clear(); CancelMapVote(); return; }
         RecordSaveInputs();
-        foreach (var photo in _reviewPhotos.Values) photo.Presentation.Maintain();
+        foreach (var (actor, photo) in _reviewPhotos.ToArray()) {
+            if (photo.Presentation.Maintain()) continue;
+            WriteReviewFailure(actor, photo.Command, "Die Fotokamera oder das Charaktermodell ist nicht mehr verfügbar. Bitte erneut aufnehmen.");
+            RestoreReviewPhoto(actor, true);
+        }
         // MatchZy's own .loadnade/.last/.loadpos bypass our loader. Repair the same
         // scene-node tilt for living practice players (including practice bots).
         // No changes in live matches or to parented/spectator/dead pawns.

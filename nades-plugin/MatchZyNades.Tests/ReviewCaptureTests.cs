@@ -41,17 +41,17 @@ public sealed class ReviewCaptureTests
     [InlineData(90, 10, -100, 90, -90)]
     [InlineData(180, 130, 20, -180, 0)]
     [InlineData(-90, 10, 140, -90, 90)]
-    public void FrontCameraStaysOnTheApproachSideAndThePlayerFacesIt(float yaw, float x, float y, float viewYaw, float playerYaw)
+    public void FrontCameraStaysOnTheApproachSideAndThePreviewModelFacesIt(float yaw, float x, float y, float viewYaw, float modelYaw)
     {
         var pose = ReviewPhotoFraming.Front(new(10, 20, 30), yaw, false);
         Assert.Equal(x, pose.Position.X, 3); Assert.Equal(y, pose.Position.Y, 3);
         Assert.Equal(78, pose.Position.Z); Assert.Equal(new Coordinates(0, viewYaw, 0), pose.Angles);
-        Assert.Equal(new Coordinates(0, playerYaw, 0), pose.PlayerAngles);
+        Assert.Equal(new Coordinates(0, modelYaw, 0), pose.ModelAngles);
         var crouched = ReviewPhotoFraming.Front(new(10, 20, 30), yaw, true);
         Assert.Equal(62, crouched.Position.Z);
         Assert.Equal(pose.Position.X, crouched.Position.X);
         Assert.Equal(pose.Angles, crouched.Angles);
-        Assert.Equal(pose.PlayerAngles, crouched.PlayerAngles);
+        Assert.Equal(pose.ModelAngles, crouched.ModelAngles);
     }
     [Theory]
     [InlineData(-1080)]
@@ -61,17 +61,15 @@ public sealed class ReviewCaptureTests
     [InlineData(135)]
     [InlineData(450)]
     [InlineData(1080)]
-    public void FrontCameraAndPlayerLookTowardEachOtherEvenWithWrappedAngles(float yaw)
+    public void FrontCameraAndModelLookTowardEachOtherEvenWithWrappedAngles(float yaw)
     {
         var pose = ReviewPhotoFraming.Front(new(10, 20, 30), yaw, false);
         var dx = pose.Position.X - 10; var dy = pose.Position.Y - 20;
-        var facing = pose.PlayerAngles.Y * MathF.PI / 180f;
+        var facing = pose.ModelAngles.Y * MathF.PI / 180f;
         var cameraFacing = pose.Angles.Y * MathF.PI / 180f;
         Assert.Equal(120, MathF.Sqrt(dx * dx + dy * dy), 3);
         Assert.True(dx * MathF.Cos(facing) + dy * MathF.Sin(facing) > 119);
         Assert.True(-dx * MathF.Cos(cameraFacing) - dy * MathF.Sin(cameraFacing) > 119);
-        Assert.True(ReviewPhotoFraming.SameAngles(pose.PlayerAngles, pose.PlayerAngles with { Y = pose.PlayerAngles.Y + 360 }));
-        Assert.False(ReviewPhotoFraming.SameAngles(pose.PlayerAngles, pose.Angles));
     }
     [Fact]
     public void SignalsRequireTheExactActiveBrowserSessionAndRejectPendingOrExpiredWork()

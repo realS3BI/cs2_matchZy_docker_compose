@@ -16,12 +16,13 @@ const input = { owner: entry.owner, map: entry.map, name: entry.name, slot: "aim
 const file = reviewMediaFixture.aim!;
 
 test("front photos require the corrected server camera while other photos keep v2 compatibility", () => {
-  assert.equal(reviewPresentationError("front", "review-v3"), "");
-  for (const version of [undefined, "review-v1", "review-v2", "unknown"])
-    assert.match(reviewPresentationError("front", version), /Server-Plugin 2\.3\.1/);
+  assert.equal(reviewPresentationError("front", "review-v4"), "");
+  for (const version of [undefined, "review-v1", "review-v2", "review-v3", "unknown"])
+    assert.match(reviewPresentationError("front", version), /Server-Plugin 2\.3\.2/);
   for (const slot of ["aim", "position", "effect"] as const) {
     assert.equal(reviewPresentationError(slot, "review-v2"), "");
     assert.equal(reviewPresentationError(slot, "review-v3"), "");
+    assert.equal(reviewPresentationError(slot, "review-v4"), "");
     assert.ok(reviewPresentationError(slot, "unknown"));
   }
 });

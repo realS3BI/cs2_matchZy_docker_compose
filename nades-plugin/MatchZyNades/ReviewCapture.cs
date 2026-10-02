@@ -59,7 +59,7 @@ public static class ReviewMenu
         var definitions = new[] {
             ("aim", "Ausrichtung", "Zeige das Fadenkreuz auf dem exakten Lineup-Punkt. Lineup laden stellt Position und Blickrichtung ein."),
             ("position", "Standposition", "Zeige den Boden und die Kanten, an denen du stehst. Stelle den Bildausschnitt selbst ein."),
-            ("front", "Vorderansicht", "Lädt den gespeicherten Start und dreht die Figur für das Foto zur festen Kamera. Blickrichtung und Kamera kehren danach zurück. Ohne Fadenkreuz."),
+            ("front", "Vorderansicht", "Zeigt dein Charaktermodell am gespeicherten Start von vorne. Die Kamera sucht freien Platz; das Fotomodell blickt zu ihr. Ohne Fadenkreuz."),
             ("effect", "Wirkung", "Teleportiert dich beim Öffnen zum gespeicherten Ziel und schaltet Noclip ein. Herausfliegen, den Bildausschnitt wählen und die Wirkung ohne Fadenkreuz aufnehmen.")
         };
         var items = definitions.Select((step, i) => new MenuItem($"{i + 1}. {step.Item2}{(slots.Contains(step.Item1) ? " [Foto vorhanden]" : "")}", step.Item3,
@@ -168,7 +168,7 @@ public sealed partial class MatchZyNadesPlugin
                 presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting, lineup.Angles.Y);
             }
             var command = ReviewCaptureFiles.Issue(ReviewDirectory, player.SteamID.ToString(), lineup, action, request.Setting,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v3");
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v4");
             _reviewPending[player.SteamID] = new(command.SessionId, command.Id, action, command.ExpiresAt + 180_000);
             if (presentation != null) {
                 _reviewPhotos[player.SteamID] = new(command.SessionId, command.Id, command.ExpiresAt, presentation, panel, focused);

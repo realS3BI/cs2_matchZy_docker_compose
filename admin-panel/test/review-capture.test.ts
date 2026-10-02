@@ -94,11 +94,11 @@ test("photos require server preparation and release the game before upload ackno
   assert.equal(await bridge.poll(actor, session.id, async () => {}, 1200), null);
   await assert.rejects(() => bridge.requestPhoto(actor, session.id, "aim", 1300), { status: 409 });
   await assert.rejects(() => bridge.requestPhoto(actor, session.id, "video", 1300), { status: 400 });
-  const command = { id: request.id, sessionId: session.id, action: "photo", slot: "front", presentation: "review-v3", notBefore: 5000, expiresAt: 30_000 };
+  const command = { id: request.id, sessionId: session.id, action: "photo", slot: "front", presentation: "review-v4", notBefore: 5000, expiresAt: 30_000 };
   const put = (name, data) => writeFile(join(directory, actor, `${name}.json`), JSON.stringify(data));
   await put("command", command);
   assert.equal(await bridge.poll(actor, session.id, async () => {}, 4999), null);
-  assert.deepEqual(await bridge.poll(actor, session.id, async () => {}, 5000), { id: request.id, action: "photo", slot: "front", presentation: "review-v3" });
+  assert.deepEqual(await bridge.poll(actor, session.id, async () => {}, 5000), { id: request.id, action: "photo", slot: "front", presentation: "review-v4" });
   await assert.rejects(() => bridge.captured(actor, { sessionId: session.id, commandId: "wrong" }, 5001), { status: 409 });
   await bridge.captured(actor, { sessionId: session.id, commandId: request.id }, 5001);
   assert.equal(JSON.parse(await readFile(join(directory, actor, "captured.json"), "utf8")).commandId, request.id);
