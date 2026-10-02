@@ -11,6 +11,7 @@ import { ORIGIN, trusted, loginNavigation } from './security.js';
 import { startupLog } from './startup-log.js';
 import { Updates } from './updates.js';
 import { launchAndWait } from './launch.js';
+import { diagnoseCS2 } from './cs2-diagnostics.js';
 
 const { autoUpdater } = updater;
 const exec = promisify(execFile);
@@ -36,6 +37,12 @@ async function native(action) {
   } catch (error) { throw new Error(error.stderr?.trim() || (action === 'launch' ? 'Steam konnte CS2 nicht starten.' : 'CS2-Fenster nicht gefunden. Bitte CS2 starten und geöffnet lassen.')); }
 }
 const game = () => native();
+async function connectionError(error) {
+  if (process.platform !== 'win32') return error;
+  const diagnosis = await diagnoseCS2();
+  startup.write(`CS2-Verbindung: ${diagnosis}`);
+  return new Error(`${error.message}\n\nStartprüfung: ${diagnosis}`);
+}
 async function capturedGame() {
   const next = await game();
   if (!target || next.identity !== target.identity || next.id !== target.id) throw new Error('Das CS2-Fenster hat sich geändert. Bitte das Spielbild erneut verbinden.');
@@ -126,14 +133,17 @@ else {
         await launchAndWait(() => native('launch'), consoleConnection);
         await presentation.recover();
       }
+      catch (error) { throw await connectionError(error); }
       finally { launching = false; }
     });
     handle('connect', async () => {
       if (launching) throw new Error('CS2 wird noch gestartet. Bitte kurz warten und anschließend das Spielbild verbinden.');
       if (presentation.active) throw new Error('Bitte die Aufnahme zuerst beenden.');
       const next = await game();
-      await presentation.recover();
-      await consoleConnection.read(['crosshair']);
+      try {
+        await presentation.recover();
+        await consoleConnection.read(['crosshair']);
+      } catch (error) { throw await connectionError(error); }
       target = next;
       blocker ??= powerSaveBlocker.start('prevent-display-sleep');
     });

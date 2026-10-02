@@ -23,6 +23,8 @@ Zeigt die App **„Noch kein App-Update veröffentlicht“**, gibt es im GitHub-
 
 Bei **„CS2 nimmt keine lokale Verbindung an“** das Spiel vollständig beenden, über den Start-Button öffnen und auf das Hauptmenü warten. Anschließend das Spielbild verbinden. Die Fehlermeldung enthält den lokalen Port und den Verbindungsfehler, etwa `ECONNREFUSED`. Ein bereits laufendes Spiel übernimmt zusätzliche Startoptionen nicht nachträglich. Den Port nicht in der Firewall freigeben.
 
+Ab Version 0.1.3 ergänzt Playbook bei Start- und Verbindungsfehlern eine **Startprüfung**. Sie liest über die in Windows enthaltene PowerShell, ob das laufende CS2 tatsächlich mit `-vconsole` und welchem `-vconport` gestartet wurde. Die Prüfung verändert nichts. An die App werden nur diese Angaben übergeben; die vollständige Befehlszeile und mögliche Serverpasswörter erscheinen weder in der Website noch im Protokoll. Ist die Windows-Abfrage nicht verfügbar, bleibt der ursprüngliche Fehler sichtbar und die Prüfung wird als nicht verfügbar gekennzeichnet. Vorhandene Startoptionen allein bestätigen noch keine funktionierende Verbindung.
+
 ## Entwickeln und ausliefern
 
 Voraussetzungen: Windows 10/11 x64, Node.js 22+, .NET SDK 10. Die App benötigt Internet für Playbook und UploadThing, Steam und einen laufenden Trainingsserver mit dem aktuellen Review-Plugin. `r_drawviewmodel` benötigt die auf dem Trainingsserver erlaubten Cheats; die App ändert keine globalen Serverregeln.

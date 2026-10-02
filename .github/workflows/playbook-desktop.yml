@@ -25,13 +25,18 @@ jobs:
         run: npm ci
       - name: Windows-Update-Skript prüfen
         shell: powershell
-        run: .\playbook-desktop\test\build-and-run.test.ps1
+        run: |
+          .\playbook-desktop\test\build-and-run.test.ps1
+          .\playbook-desktop\test\cs2-diagnostics.test.ps1
       - name: Windows-Installer bauen und testen
         working-directory: playbook-desktop
         run: npm run dist
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      - name: UTF-8-Ausgabe des Windows-Hilfsprogramms prüfen
+        shell: powershell
+        run: .\playbook-desktop\test\native-encoding.test.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: Playbook-Windows

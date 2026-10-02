@@ -6,6 +6,10 @@ using System.Runtime.Versioning;
 
 [assembly: SupportedOSPlatform("windows")]
 
+// Electron decodes both redirected streams as UTF-8, independently of the
+// Windows console code page. This must happen before the first error is written.
+Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+
 // Separate process: physical pixel coordinates, independent of Electron's DPI mode.
 Native.SetProcessDpiAwarenessContext(new nint(-4));
 try
@@ -29,7 +33,7 @@ try
         Console.WriteLine("{}");
         return;
     }
-    if (args.Length != 0) throw new Exception("Unbekannte Playbook-Aktion.");
+    if (args.Length != 0) throw new Exception("Ungültige Playbook-Aktion.");
     var games = Process.GetProcessesByName("cs2").Where(p => p.MainWindowHandle != 0).ToArray();
     if (games.Length != 1) throw new Exception("Bitte genau ein CS2-Fenster öffnen.");
     using var game = games[0];
