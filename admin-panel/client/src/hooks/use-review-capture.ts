@@ -72,7 +72,7 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
     } catch (error) { disconnect(); current.current.onError(error.message); }
     finally { if (mounted.current) setConnecting(false); }
   }
-  async function photo(slot: ReviewSlot, countdown = false, command?: { id: string; presentation?: string; nade?: any }) {
+  async function photo(slot: ReviewSlot, countdown = false, command?: { id: string; presentation?: string; cameraPitch?: number; nade?: any }) {
     if (!currentCapture.current || slot === "video") throw new Error("Bitte zuerst das Spielbild verbinden.");
     if (takingPhoto.current || preparingVideo.current || videoUpload.current || countdown && requestedCapture.current) throw new Error("Eine Aufnahme läuft bereits.");
     currentCapture.current.checkPhotoFrame();
@@ -105,7 +105,14 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       let token: string | undefined;
       try {
         if (desktop) {
-          token = await desktop.begin(slot);
+          if (slot === "front") {
+            const version = (await desktop.status()).appVersion.split(".").map(Number);
+            if (!(version[0] > 0 || version[0] === 0 && (version[1] > 1 || version[1] === 1 && version[2] >= 9)))
+              throw new Error("Die automatische Vorderansicht benötigt Windows-App 0.1.9 oder neuer. Bitte die App mit hud.cmd aktualisieren.");
+          }
+          if (admin && slot === "front" && (!Number.isFinite(command?.cameraPitch) || Math.abs(command!.cameraPitch!) > 89))
+            throw new Error("Der Server hat keine gültige Kamera-Ausrichtung übermittelt. Bitte das Server-Plugin aktualisieren.");
+          token = await desktop.begin(slot, slot === "front" ? command?.cameraPitch : undefined);
           // Let CS2 render the verified local settings before grabbing pixels.
           await new Promise(resolve => setTimeout(resolve, 350));
         }

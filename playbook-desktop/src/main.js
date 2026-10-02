@@ -207,12 +207,12 @@ else {
       await saveDiagnosis(undefined, 'connect', true);
     });
     handle('frame', async (width, height) => captureFrame(await capturedGame(), width, height));
-    handle('begin', async slot => {
+    handle('begin', async (slot, cameraPitch) => {
       await capturedGame();
       if (presentation.active) throw new Error('Eine Aufnahme läuft bereits.');
       if (slot === 'video' && !globalShortcut.register('F8', () => window.webContents.send('review:stop-video')))
         throw new Error('F8 ist von einer anderen App belegt. Bitte dort freigeben und erneut versuchen.');
-      try { return await presentation.begin(slot); }
+      try { return await presentation.begin(slot, cameraPitch); }
       catch (error) { globalShortcut.unregister('F8'); throw error; }
     });
     handle('end', async token => { if (typeof token !== 'string' || token.length > 100) throw new Error('Ungültige Aufnahme.'); await presentation.end(token); globalShortcut.unregister('F8'); });

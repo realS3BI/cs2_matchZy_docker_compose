@@ -134,12 +134,19 @@ export class NetConsole {
     const ordered = [...names.filter(name => name !== 'cl_crosshair_screen_height'), ...names.filter(name => name === 'cl_crosshair_screen_height')];
     await this.execute(ordered.map(name => `${name} ${values[name]}`));
     const actual = await this.read(names);
-    const mismatched = names.filter(name => numeric(actual[name]) !== numeric(values[name]));
+    // CS2 can report cam_idealyaw 180 as -180. Those are the same camera angle.
+    const mismatched = names.filter(name => {
+      if (name === 'cam_idealyaw' || name === 'cam_idealpitch') {
+        const delta = Math.abs((numeric(actual[name]) - numeric(values[name])) % 360);
+        return Math.min(delta, 360 - delta) > .001;
+      }
+      return numeric(actual[name]) !== numeric(values[name]);
+    });
     if (mismatched.length) {
       this.log('values.mismatched', { names: mismatched }, 'ERROR');
       const hint = mismatched.some(name => name.startsWith('cl_crosshair'))
         ? 'CS2 hat die Fadenkreuzwerte abweichend übernommen. Bitte die Spielauflösung prüfen und das Spielbild erneut verbinden.'
-        : 'Bitte mit dem Trainingsserver verbinden und prüfen, ob die benötigten HUD- und Viewmodel-Einstellungen erlaubt sind.';
+        : 'Bitte mit dem Trainingsserver verbinden und prüfen, ob die benötigten Kamera-, HUD- und Viewmodel-Einstellungen erlaubt sind.';
       throw Object.assign(new Error(`CS2 hat ${mismatched.join(', ')} nicht wie angefordert übernommen. ${hint}`), { code: 'ECVARMISMATCH' });
     }
   }

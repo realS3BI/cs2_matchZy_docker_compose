@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { LineReader, readValue, NetConsole } from '../src/netconsole.js';
-import { Presentation, NAMES, profile, validSnapshot } from '../src/presentation.js';
+import { Presentation, NAMES, FRONT_CAMERA, profile, validSnapshot } from '../src/presentation.js';
 import { captureFrame } from '../src/geometry.js';
 import { trusted, loginNavigation } from '../src/security.js';
 import { launchAndWait } from '../src/launch.js';
@@ -88,25 +88,27 @@ test('launch refuses an already running game and never reports unconfirmed succe
 async function fixture(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'playbook-review-'));
   const file = path.join(directory, 'recovery.json');
-  const original = Object.fromEntries(NAMES.map((name, index) => [name, String(index / 2)]));
-  let state = { ...original }, writes = 0, fail = 0;
+  const original = Object.fromEntries([...NAMES, ...Object.keys(FRONT_CAMERA)].map((name, index) => [name, String(index / 2)]));
+  let state = { ...original }, writes = 0, fail = 0, cameraFailure = false;
+  const cameraCommands = [];
   const console = {
-    async read() { return { ...state }; },
+    async read(names) { return Object.fromEntries(names.map(name => [name, state[name]])); },
+    async execute(commands) { cameraCommands.push(...commands); return cameraFailure && commands.includes('thirdperson') ? 'Cheat command denied' : ''; },
     async write(values) {
       assert.ok(JSON.parse(await readFile(file, 'utf8')).values, 'journal exists before mutation');
-      writes++; state = { ...values };
+      writes++; state = { ...state, ...values };
       if (fail-- > 0) throw new Error('Verbindung unterbrochen');
     },
   };
   const presentation = new Presentation(console, file, async () => ({ identity: 'game:1', client: { top: 132, bottom: 1212 } }));
   t.after(async () => { clearTimeout(presentation.timer); await rm(directory, { recursive: true, force: true }); });
-  return { presentation, console, file, original, state: () => state, writes: () => writes, fail: n => { fail = n; } };
+  return { presentation, console, file, original, state: () => state, writes: () => writes, fail: n => { fail = n; }, cameraCommands, denyCamera: () => { cameraFailure = true; } };
 }
 test('all photo/video profiles restore exact originals, including unusual values', async t => {
   const f = await fixture(t);
   for (const slot of ['aim', 'position', 'front', 'effect', 'video']) {
     const token = await f.presentation.begin(slot);
-    assert.deepEqual(f.state(), profile(slot));
+    assert.deepEqual(f.state(), { ...f.original, ...profile(slot) });
     assert.equal(f.state().crosshair, ['front', 'effect'].includes(slot) ? 'false' : 'true');
     assert.equal(f.state().r_drawviewmodel, slot === 'video' ? 'true' : 'false');
     await f.presentation.end(token);
@@ -119,7 +121,7 @@ test('idle recovery cannot restore an active capture and stale tokens cannot end
   const starting = f.presentation.begin('aim');
   const idle = f.presentation.recoverIfIdle();
   const token = await starting; await idle;
-  assert.deepEqual(f.state(), profile('aim'));
+  assert.deepEqual(f.state(), { ...f.original, ...profile('aim') });
   await assert.rejects(f.presentation.begin('front'), /läuft bereits/);
   await assert.rejects(f.presentation.end('stale'), /nicht mehr aktiv/);
   await f.presentation.end(token);
@@ -140,13 +142,13 @@ test('partial prepare failure restores settings; lost connection survives app re
 });
 test('older 33-setting recovery journals remain restorable after adding scope settings', async t => {
   const f = await fixture(t);
-  const legacy = Object.fromEntries(Object.entries(f.original).filter(([name]) => !name.startsWith('cl_ironsight_')));
+  const legacy = Object.fromEntries(Object.entries(f.original).filter(([name]) => NAMES.includes(name) && !name.startsWith('cl_ironsight_')));
   const saved = { version: 1, game: 'game:old', values: legacy };
   assert.equal(Object.keys(legacy).length, 33);
   assert.equal(validSnapshot(saved), true);
   await writeFile(f.file, JSON.stringify(saved), 'utf8');
   await f.presentation.recover();
-  assert.deepEqual(f.state(), legacy);
+  assert.deepEqual(f.state(), f.original);
   assert.equal(await f.presentation.saved(), undefined);
 });
 test('physical pixel crop removes window borders and keeps the true aim point', () => {
@@ -173,4 +175,67 @@ test('only the exact HTTPS Playbook origin gets native access; Steam can navigat
   for (const url of ['http://playbook.schlossers.at', 'https://playbook.schlossers.at.evil.test', 'https://user@playbook.schlossers.at', 'file:///tmp/a', 'https://steamcommunity.com']) assert.equal(trusted(url), false);
   assert.ok(loginNavigation('https://steamcommunity.com/openid/login'));
   assert.equal(loginNavigation('https://steamcommunity.com.evil.test'), false);
+});
+
+test('front camera enters third person and restores first person and camera cvars', async t => {
+  const f = await fixture(t);
+  const token = await f.presentation.begin('front');
+  assert.deepEqual(f.cameraCommands, ['thirdperson']);
+  assert.equal(f.state().cam_idealyaw, '180');
+  assert.equal(f.state().cam_idealpitch, '0');
+  assert.equal(f.state().c_minyaw, '-180');
+  assert.equal(f.state().c_maxyaw, '180');
+  await f.presentation.end(token);
+  assert.deepEqual(f.cameraCommands, ['thirdperson', 'firstperson']);
+  assert.deepEqual(f.state(), f.original);
+});
+
+test('front photos accept the server compensation for upward and downward aim and restore pitch limits', async t => {
+  const f = await fixture(t);
+  for (const pitch of [44.8, -29.6, -89, 89]) {
+    const token = await f.presentation.begin('front', pitch);
+    assert.equal(Number(f.state().cam_idealpitch), pitch);
+    assert.equal(f.state().c_minpitch, '-89');
+    assert.equal(f.state().c_maxpitch, '89');
+    await f.presentation.end(token);
+    assert.deepEqual(f.state(), f.original);
+  }
+  for (const pitch of [NaN, Infinity, 90, '44.8'])
+    await assert.rejects(f.presentation.begin('front', pitch), /Kamera-Pitch/);
+});
+
+test('denied third person releases capture and restores saved camera settings', async t => {
+  const f = await fixture(t); f.denyCamera();
+  await assert.rejects(f.presentation.begin('front'), /Third Person abgelehnt/);
+  assert.deepEqual(f.cameraCommands, ['thirdperson', 'firstperson']);
+  assert.deepEqual(f.state(), f.original);
+  assert.equal(f.presentation.active, undefined);
+  assert.equal(await f.presentation.saved(), undefined);
+});
+
+test('front journal restores camera mode after an app restart', async t => {
+  const f = await fixture(t);
+  await f.presentation.begin('front'); clearTimeout(f.presentation.timer);
+  const restarted = new Presentation(f.console, f.file, () => {});
+  await restarted.recover();
+  assert.deepEqual(f.cameraCommands, ['thirdperson', 'firstperson']);
+  assert.deepEqual(f.state(), f.original);
+});
+
+test('version 2 journals restore without changing the camera mode', async t => {
+  const f = await fixture(t);
+  const values = Object.fromEntries(NAMES.map(name => [name, f.original[name]]));
+  await writeFile(f.file, JSON.stringify({ version: 2, game: 'old', values }), 'utf8');
+  await f.presentation.recover();
+  assert.deepEqual(f.cameraCommands, []);
+  assert.deepEqual(f.state(), f.original);
+});
+
+test('version 3 front journals restore after adding pitch limits to the new profile', async t => {
+  const f = await fixture(t);
+  const values = Object.fromEntries(Object.entries(f.original).filter(([name]) => !['c_minpitch', 'c_maxpitch'].includes(name)));
+  await writeFile(f.file, JSON.stringify({ version: 3, game: 'old', frontCamera: true, values }), 'utf8');
+  await f.presentation.recover();
+  assert.deepEqual(f.cameraCommands, ['firstperson']);
+  assert.deepEqual(f.state(), f.original);
 });

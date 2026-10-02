@@ -7,9 +7,9 @@ export const REVIEW_STEPS = [
 ] as const;
 export type ReviewSlot = typeof REVIEW_STEPS[number]["id"];
 export function reviewPresentationError(slot: ReviewSlot, presentation?: string) {
-  if (slot === "front" && presentation !== "review-v4")
-    return "Die Vorderansicht benötigt Server-Plugin 2.3.2 oder neuer. CS2-Image neu bauen und deployen; hud.cmd aktualisiert die lokale App und das Panorama-Panel.";
-  if (!["review-v2", "review-v3", "review-v4"].includes(presentation || ""))
+  if (slot === "front" && presentation !== "review-v6")
+    return "Die Vorderansicht benötigt Server-Plugin 2.3.4 oder neuer. CS2-Image neu bauen und deployen; hud.cmd aktualisiert die lokale App und das Panorama-Panel.";
+  if (!["review-v2", "review-v3", "review-v4", "review-v5", "review-v6"].includes(presentation || ""))
     return "Bitte das Server-Plugin aktualisieren. Die ältere Version blendet das echte Fadenkreuz noch aus.";
   return "";
 }

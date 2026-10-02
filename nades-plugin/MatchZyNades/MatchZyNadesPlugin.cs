@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.3.2";
+    public override string ModuleVersion => "2.3.4";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -44,6 +44,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         public float AttackLock { get; set; }
         public bool Visible { get; set; } = true;
         public bool Focused { get; set; }
+        public bool OwnsFreeze { get; set; }
         public PlayerPanelSettings Settings { get; set; } = new();
         public IReadOnlyList<NadeLineup>? Library { get; set; }
         public ScreenPanel Panel { get; } = new(player);
@@ -308,6 +309,10 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             case TrainingAction.RepeatLineup:
                 if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
                 return;
+            case TrainingAction.ReviewRethrow:
+                Server.ExecuteCommand("sv_rethrow_last_grenade");
+                Tell(player, "Letzten Server-Wurf erneut angefordert.");
+                return;
             case TrainingAction.CheckPosition: CheckPlacement(player); return;
             case TrainingAction.StartCapture: ArmNewLineupCapture(player); return;
             case TrainingAction.SaveCapture: SavePanelCapture(player); return;
@@ -487,6 +492,12 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 session.Pawn.MoveType = MoveType_t.MOVETYPE_NONE;
                 session.Pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
             }
+            session.OwnsFreeze = session.MoveType == MoveType_t.MOVETYPE_NOCLIP &&
+                (session.Pawn.Flags & (uint)PlayerFlags.FL_FROZEN) == 0;
+            if (session.OwnsFreeze) {
+                session.Pawn.Flags |= (uint)PlayerFlags.FL_FROZEN;
+                Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_fFlags");
+            }
             session.Pawn.AbsVelocity.X = session.Pawn.AbsVelocity.Y = session.Pawn.AbsVelocity.Z = 0;
             Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_MoveType");
             LockAttacks(session);
@@ -494,6 +505,12 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         }
         if (session.Pawn.IsValid)
         {
+            if (session.OwnsFreeze) {
+                session.Pawn.Flags &= ~(uint)PlayerFlags.FL_FROZEN;
+                Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_fFlags");
+                session.OwnsFreeze = false;
+            }
+
             // Restore only state still owned by this menu, and only on the original pawn.
             if (session.Pawn.MoveType == MoveType_t.MOVETYPE_NONE)
             {

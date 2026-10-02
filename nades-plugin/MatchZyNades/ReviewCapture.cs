@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace MatchZyNades;
 
 public sealed record ReviewSession(string Id, string Actor, string Owner, string Map, string Name, long ExpiresAt, bool Recording = false, bool FollowPanel = false);
-public sealed record ReviewCommand(string Id, string SessionId, string Action, string Slot, long NotBefore, long ExpiresAt, string Presentation = "", string Owner = "", string Map = "", string Name = "");
+public sealed record ReviewCommand(string Id, string SessionId, string Action, string Slot, long NotBefore, long ExpiresAt, string Presentation = "", string Owner = "", string Map = "", string Name = "", float? CameraPitch = null);
 public sealed record ReviewPhotoRequest(string Id, string SessionId, string Slot, long ExpiresAt, string Action = "photo", string Owner = "", string Map = "", string Name = "");
 public sealed record ReviewSelection(string Id, string SessionId, string Actor, string Owner, string Map, string Name, string Step);
 public sealed record ReviewCaptured(string SessionId, string CommandId);
@@ -21,7 +21,7 @@ public static class ReviewCaptureFiles
     public static readonly string[] Slots = ["aim", "position", "front", "effect", "video"];
     public static bool ValidRequest(ReviewPhotoRequest request) => Guid.TryParseExact(request.Id, "N", out _) && request.Id.Length == 32 &&
         (request.Action == "photo" ? Slots.Take(4).Contains(request.Slot) : (request.Action is "video-start" or "video-stop") && request.Slot == "video");
-    public static ReviewCommand Issue(string directory, string actor, NadeLineup lineup, string action, string slot, long now, string? commandId = null, string presentation = "")
+    public static ReviewCommand Issue(string directory, string actor, NadeLineup lineup, string action, string slot, long now, string? commandId = null, string presentation = "", float? cameraPitch = null)
     {
         if (actor.Length != 17 || !actor.All(char.IsAsciiDigit) || lineup.Official ||
             (action == "photo" ? !Slots.Take(4).Contains(slot) : action is not ("video-start" or "video-stop")))
@@ -38,7 +38,7 @@ public static class ReviewCaptureFiles
         if (commandId != null && (!Guid.TryParseExact(commandId, "N", out _) || commandId.Length != 32))
             throw new InvalidOperationException("Ungültige Aufnahme-Anfrage.");
         var command = new ReviewCommand(commandId ?? Guid.NewGuid().ToString("N"), session.Id, action, slot,
-            now + (action == "video-stop" ? 0 : 3000), now + 30_000, presentation, lineup.Owner, lineup.Map, lineup.Name);
+            now + (action == "video-stop" ? 0 : 3000), now + 30_000, presentation, lineup.Owner, lineup.Map, lineup.Name, cameraPitch);
         var path = Path.Combine(folder, "command.json");
         File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(command, Json));
         File.Move(path + ".tmp", path, true);
@@ -59,7 +59,7 @@ public static class ReviewMenu
         var definitions = new[] {
             ("aim", "Ausrichtung", "Zeige das Fadenkreuz auf dem exakten Lineup-Punkt. Lineup laden stellt Position und Blickrichtung ein."),
             ("position", "Standposition", "Zeige den Boden und die Kanten, an denen du stehst. Stelle den Bildausschnitt selbst ein."),
-            ("front", "Vorderansicht", "Zeigt dein Charaktermodell am gespeicherten Start von vorne. Die Kamera sucht freien Platz; das Fotomodell blickt zu ihr. Ohne Fadenkreuz."),
+            ("front", "Vorderansicht", "Zeigt dich am gespeicherten Start von vorne, ohne Fadenkreuz. Windows-App: echte Third-Person-Kamera. Browser: Kamera vorher per Konsole einstellen."),
             ("effect", "Wirkung", "Teleportiert dich beim Öffnen zum gespeicherten Ziel und schaltet Noclip ein. Herausfliegen, den Bildausschnitt wählen und die Wirkung ohne Fadenkreuz aufnehmen.")
         };
         var items = definitions.Select((step, i) => new MenuItem($"{i + 1}. {step.Item2}{(slots.Contains(step.Item1) ? " [Foto vorhanden]" : "")}", step.Item3,
@@ -67,7 +67,7 @@ public static class ReviewMenu
                 new("Foto aufnehmen & hochladen", "Die Windows-App stellt HUD, Waffe und Fadenkreuz automatisch ein. Im Browser vorher der Vorbereitung folgen. Nach dem Foto öffnet sich diese Menüseite wieder.", Request: new(TrainingAction.ReviewPhoto, lineup, Setting: step.Item1)),
                 new("Lineup laden", "Teleportiert dich zum gespeicherten Start und richtet den Blick aus. Danach die gewünschte Perspektive selbst einstellen.", Request: new(TrainingAction.LoadLineup, lineup)),
                 .. (step.Item1 == "effect" ? new MenuItem[] {
-                    new("Letzte Granate erneut werfen", "Wiederholt deine zuletzt geworfene Granate mit derselben Flugbahn. Du bleibst an deiner Beobachtungsposition; ohne gespeicherten Wurf zuerst eine Granate werfen.", Request: new(TrainingAction.Rethrow)),
+                    new("Letzte Granate erneut werfen", "Wiederholt den letzten Wurf auf dem Server mit sv_rethrow_last_grenade. Du bleibst an deiner Beobachtungsposition; ohne gespeicherten Wurf zuerst eine Granate werfen.", Request: new(TrainingAction.ReviewRethrow)),
                     new("Zum Ziel teleportieren", "Kehrt zum Ziel der Granate zurück und schaltet Noclip ein. Fehlt der Zielpunkt, zuerst das Lineup laden und werfen.", Request: new(TrainingAction.ReviewTeleportEffect, lineup)),
                     new("Noclip umschalten", "Nach dem Flug die Panel-Steuerung mit KP_0 öffnen und das Foto aufnehmen.", Request: new(TrainingAction.Noclip))
                 } : []),
@@ -165,10 +165,10 @@ public sealed partial class MatchZyNadesPlugin
                     if (origin == null || Math.Abs(origin.X - lineup.Position.X) > 2 || Math.Abs(origin.Y - lineup.Position.Y) > 2 || Math.Abs(origin.Z - lineup.Position.Z) > 5)
                         throw new InvalidOperationException("Der Startpunkt konnte nicht geladen werden. Bitte das Lineup erneut laden.");
                 }
-                presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting, lineup.Angles.Y);
+                presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting);
             }
             var command = ReviewCaptureFiles.Issue(ReviewDirectory, player.SteamID.ToString(), lineup, action, request.Setting,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v4");
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v6", request.Setting == "front" ? presentation?.CameraPitch : null);
             _reviewPending[player.SteamID] = new(command.SessionId, command.Id, action, command.ExpiresAt + 180_000);
             if (presentation != null) {
                 _reviewPhotos[player.SteamID] = new(command.SessionId, command.Id, command.ExpiresAt, presentation, panel, focused);

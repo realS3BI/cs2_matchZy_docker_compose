@@ -17,7 +17,7 @@ if (location.origin === 'https://playbook.schlossers.at' && window === window.to
     launch: () => invoke('review:launch'),
     connect: () => invoke('review:connect'),
     frame: (width, height) => invoke('review:frame', width, height),
-    begin: slot => invoke('review:begin', slot),
+    begin: (slot, cameraPitch) => invoke('review:begin', slot, cameraPitch),
     end: token => invoke('review:end', token),
     disconnect: () => invoke('review:disconnect'),
     recover: () => invoke('review:recover'),

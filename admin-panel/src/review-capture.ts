@@ -89,7 +89,8 @@ export class ReviewCaptureBridge {
       if (session.followPanel) await validate(reference);
       return { id: command.id, action: command.action, slot: command.slot,
         ...(session.followPanel ? { reference } : {}),
-        ...(["review-v2", "review-v3", "review-v4"].includes(command.presentation) ? { presentation: command.presentation } : {}) };
+        ...(command.slot === "front" && command.presentation === "review-v6" && Number.isFinite(command.cameraPitch) && Math.abs(command.cameraPitch) <= 89 ? { cameraPitch: command.cameraPitch } : {}),
+        ...(["review-v2", "review-v3", "review-v4", "review-v5", "review-v6"].includes(command.presentation) ? { presentation: command.presentation } : {}) };
     });
   }
   async selection(actor: string, id: string, now = Date.now()) {

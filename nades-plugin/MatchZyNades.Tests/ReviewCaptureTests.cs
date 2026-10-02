@@ -37,39 +37,15 @@ public sealed class ReviewCaptureTests
         Assert.NotEqual(0u, ReviewPhotoFraming.HiddenHud(slot) & 256u);
     }
     [Theory]
-    [InlineData(0, -110, 20, 0, -180)]
-    [InlineData(90, 10, -100, 90, -90)]
-    [InlineData(180, 130, 20, -180, 0)]
-    [InlineData(-90, 10, 140, -90, 90)]
-    public void FrontCameraStaysOnTheApproachSideAndThePreviewModelFacesIt(float yaw, float x, float y, float viewYaw, float modelYaw)
+    [InlineData(-44.8f, 44.8f)]
+    [InlineData(29.6f, -29.6f)]
+    [InlineData(0, 0)]
+    [InlineData(-89, 89)]
+    [InlineData(89, -89)]
+    public void FrontCameraCancelsPlayerPitchWithoutChangingThePlayer(float pitch, float expected)
     {
-        var pose = ReviewPhotoFraming.Front(new(10, 20, 30), yaw, false);
-        Assert.Equal(x, pose.Position.X, 3); Assert.Equal(y, pose.Position.Y, 3);
-        Assert.Equal(78, pose.Position.Z); Assert.Equal(new Coordinates(0, viewYaw, 0), pose.Angles);
-        Assert.Equal(new Coordinates(0, modelYaw, 0), pose.ModelAngles);
-        var crouched = ReviewPhotoFraming.Front(new(10, 20, 30), yaw, true);
-        Assert.Equal(62, crouched.Position.Z);
-        Assert.Equal(pose.Position.X, crouched.Position.X);
-        Assert.Equal(pose.Angles, crouched.Angles);
-        Assert.Equal(pose.ModelAngles, crouched.ModelAngles);
-    }
-    [Theory]
-    [InlineData(-1080)]
-    [InlineData(-450)]
-    [InlineData(-179)]
-    [InlineData(0)]
-    [InlineData(135)]
-    [InlineData(450)]
-    [InlineData(1080)]
-    public void FrontCameraAndModelLookTowardEachOtherEvenWithWrappedAngles(float yaw)
-    {
-        var pose = ReviewPhotoFraming.Front(new(10, 20, 30), yaw, false);
-        var dx = pose.Position.X - 10; var dy = pose.Position.Y - 20;
-        var facing = pose.ModelAngles.Y * MathF.PI / 180f;
-        var cameraFacing = pose.Angles.Y * MathF.PI / 180f;
-        Assert.Equal(120, MathF.Sqrt(dx * dx + dy * dy), 3);
-        Assert.True(dx * MathF.Cos(facing) + dy * MathF.Sin(facing) > 119);
-        Assert.True(-dx * MathF.Cos(cameraFacing) - dy * MathF.Sin(cameraFacing) > 119);
+        Assert.Equal(expected, ReviewPhotoFraming.CameraPitch(pitch));
+        Assert.Equal(0, pitch + ReviewPhotoFraming.CameraPitch(pitch));
     }
     [Fact]
     public void SignalsRequireTheExactActiveBrowserSessionAndRejectPendingOrExpiredWork()
@@ -145,6 +121,7 @@ public sealed class ReviewCaptureTests
         Assert.Equal("effect", menu.Current.ReviewStep);
         Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.LoadLineup);
         Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.ReviewTeleportEffect && item.Enabled);
+        Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.ReviewRethrow);
         Assert.Null(ReviewEffectTarget.Resolve(Lineup, null));
     }
     [Fact]

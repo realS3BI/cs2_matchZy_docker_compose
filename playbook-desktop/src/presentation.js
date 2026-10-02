@@ -20,16 +20,20 @@ const CLEAN = Object.freeze({
   cl_hud_telemetry_ping_show: '0', cl_hud_telemetry_serverrecvmargin_graph_show: '0',
 });
 export const NAMES = Object.freeze([...Object.keys(CROSSHAIR), ...Object.keys(CLEAN)]);
+export const FRONT_CAMERA = Object.freeze({ c_minpitch: '-89', c_maxpitch: '89', c_minyaw: '-180', c_maxyaw: '180', cam_idealyaw: '180', cam_idealpitch: '0', cam_collision: '1', cam_showangles: 'false' });
+const OLD_FRONT_NAMES = [...NAMES, ...Object.keys(FRONT_CAMERA).filter(name => !["c_minpitch", "c_maxpitch"].includes(name))];
+const FRONT_NAMES = [...NAMES, ...Object.keys(FRONT_CAMERA)];
 const LEGACY_NAMES = NAMES.filter(name => !name.startsWith('cl_ironsight_'));
-export function profile(slot, screenHeight = 1080) {
+export function profile(slot, screenHeight = 1080, cameraPitch = 0) {
   if (!['aim', 'position', 'front', 'effect', 'video'].includes(slot)) throw new Error('Unbekannte Aufnahme.');
   if (!Number.isInteger(screenHeight) || screenHeight < 240 || screenHeight > 16384) throw new Error('Die aktuelle CS2-Spielhöhe konnte nicht bestimmt werden. Bitte das Spielbild erneut verbinden.');
+  if (!Number.isFinite(cameraPitch) || Math.abs(cameraPitch) > 89) throw new Error('Ungültiger Kamera-Pitch.');
   // CS2 rebases pixel dimensions to the current game height when sizes change.
   // A fixed 1080 reference rescales the values again on e.g. a 1440p window.
-  return { ...CROSSHAIR, ...CLEAN, cl_crosshair_screen_height: String(screenHeight), crosshair: ['front', 'effect'].includes(slot) ? 'false' : 'true', r_drawviewmodel: slot === 'video' ? 'true' : 'false' };
+  return { ...CROSSHAIR, ...CLEAN, ...(slot === 'front' ? { ...FRONT_CAMERA, cam_idealpitch: String(cameraPitch) } : {}), cl_crosshair_screen_height: String(screenHeight), crosshair: ['front', 'effect'].includes(slot) ? 'false' : 'true', r_drawviewmodel: slot === 'video' ? 'true' : 'false' };
 }
 export function validSnapshot(saved) {
-  const names = saved?.version === 1 ? LEGACY_NAMES : saved?.version === 2 ? NAMES : [];
+  const names = saved?.version === 1 ? LEGACY_NAMES : saved?.version === 2 ? NAMES : saved?.version === 3 && typeof saved.frontCamera === 'boolean' ? (saved.frontCamera ? OLD_FRONT_NAMES : NAMES) : saved?.version === 4 && typeof saved.frontCamera === "boolean" ? (saved.frontCamera ? FRONT_NAMES : NAMES) : [];
   return names.length > 0 && typeof saved.game === 'string' &&
     saved.values && Object.keys(saved.values).length === names.length &&
     names.every(name => /^(?:true|false|[-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)$/i.test(saved.values[name] ?? ''));
@@ -53,18 +57,19 @@ export class Presentation {
       const saved = await this.saved();
       if (!saved) return;
       // Restore even after a CS2 restart: archived crosshair settings can survive it.
+      if (saved.frontCamera) await this.console.execute(['firstperson']);
       await this.console.write(saved.values);
       await unlink(this.path);
     } finally { this.active = undefined; }
   }
-  begin(slot) {
+  begin(slot, cameraPitch = 0) {
     return this.serial(async () => {
       if (this.active) throw new Error('Eine Aufnahme läuft bereits.');
       await this.restore();
       const game = await this.game();
-      const settings = profile(slot, game.client.bottom - game.client.top);
-      const values = await this.console.read(NAMES);
-      const saved = { version: 2, game: game.identity, values };
+      const settings = profile(slot, game.client.bottom - game.client.top, cameraPitch);
+      const values = await this.console.read(Object.keys(settings));
+      const saved = { version: 4, game: game.identity, frontCamera: slot === 'front', values };
       // Journal must reach disk before the first setting changes.
       await writeFile(this.path + '.tmp', JSON.stringify(saved), { mode: 0o600, flush: true });
       await rename(this.path + '.tmp', this.path);
@@ -72,6 +77,10 @@ export class Presentation {
       this.active = { token, slot };
       try {
         await this.console.write(settings);
+        if (slot === 'front') {
+          const reply = await this.console.execute(['thirdperson']);
+          if (/cheat|unknown command/i.test(reply)) throw new Error('CS2 hat Third Person abgelehnt. Bitte die Kamera auf dem Trainingsserver freigeben.');
+        }
         this.timer = setTimeout(() => { void this.recover().catch(() => {}); }, slot === 'video' ? 135_000 : 15_000);
         return token;
       } catch (error) {

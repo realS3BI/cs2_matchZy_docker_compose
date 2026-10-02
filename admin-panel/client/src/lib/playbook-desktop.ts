@@ -14,7 +14,7 @@ export type PlaybookDesktop = {
   launch(): Promise<void>;
   connect(): Promise<void>;
   frame(width: number, height: number): Promise<PhotoFrame>;
-  begin(slot: ReviewSlot): Promise<string>;
+  begin(slot: ReviewSlot, cameraPitch?: number): Promise<string>;
   end(token: string): Promise<void>;
   disconnect(): Promise<void>;
   recover(): Promise<void>;

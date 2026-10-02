@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { NetConsole } from '../src/netconsole.js';
-import { Presentation, NAMES, profile } from '../src/presentation.js';
+import { Presentation, NAMES, FRONT_CAMERA, profile } from '../src/presentation.js';
 
 test('normal CS2 netconsole reads and restores values over the text protocol', async t => {
   const state = { crosshair: 'true', cl_crosshair_gap: '-2.5', r_drawviewmodel: 'true' };
@@ -68,6 +68,8 @@ test('CS2 pixel scaling at 1440p rejects a fixed 1080 profile; captures use the 
         } else if (value === undefined) socket.write(`[Console] ${name} = ${state[name]}\n`);
         else if (!(denied && name === 'cl_crosshaircolor_r' && value === '255')) {
           state[name] = value;
+          if (name === 'cam_idealyaw' && value === '180') state[name] = '-180';
+          if (name === 'cam_idealpitch') state[name] = String(Math.max(Number(state.c_minpitch), Math.min(Number(state.c_maxpitch), Number(value))));
           if (sizes.includes(name)) state.cl_crosshair_screen_height = String(height);
         }
       }
@@ -82,7 +84,8 @@ test('CS2 pixel scaling at 1440p rejects a fixed 1080 profile; captures use the 
     clearTimeout(presentation.timer); connection.close(); server.close();
     await rm(directory, { recursive: true, force: true });
   });
-  const original = screenHeight => ({ ...profile('video', screenHeight),
+  const original = screenHeight => ({ ...profile('video', screenHeight), ...FRONT_CAMERA,
+    cam_idealyaw: '0', cam_idealpitch: '12', c_minyaw: '-135', c_maxyaw: '135', c_minpitch: '0', c_maxpitch: '90',
     cl_crosshairstyle: '7', cl_crosshair_length: '10', cl_crosshair_thickness: '2', cl_crosshair_gap: '5',
     cl_crosshaircolor_r: '19', cl_crosshaircolor_g: '213', cl_crosshaircolor_b: '167',
     cl_crosshair_drawoutline: '1', cl_crosshairdot: 'true', cl_crosshair_recoil: 'true', cl_showfps: '1',
@@ -98,12 +101,16 @@ test('CS2 pixel scaling at 1440p rejects a fixed 1080 profile; captures use the 
     const before = original(height); state = { ...before };
     for (const slot of ['aim', 'position', 'front', 'effect', 'video']) {
       const token = await presentation.begin(slot);
-      assert.deepEqual(await connection.read(NAMES), profile(slot, height));
+      assert.deepEqual(state, { ...before, ...profile(slot, height), ...(slot === 'front' ? { cam_idealyaw: '-180' } : {}) });
       await presentation.end(token);
-      assert.deepEqual(await connection.read(NAMES), before);
+      assert.deepEqual(state, before);
       assert.equal(await presentation.saved(), undefined);
     }
   }
+  const compensated = await presentation.begin('front', -29.6);
+  assert.equal(state.cam_idealpitch, '-29.6', 'pitch limits must change before setting a negative offset');
+  await presentation.end(compensated);
+  assert.deepEqual(state, original(height));
   denied = true;
   await assert.rejects(presentation.begin('aim'), { code: 'ECVARMISMATCH' });
   assert.deepEqual(state, original(height));

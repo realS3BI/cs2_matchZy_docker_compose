@@ -6,10 +6,10 @@
 window.events=[];window.errors=[];
 let token=0;const stopListeners=new Set();
 window.playbookDesktop={version:1,
- status:async()=>({appVersion:'0.1.0',update:{state:'ready',message:'Version 0.2.0 ist bereit. Nach dem Review neu starten.'},connected:false,recovery:false,active:false}),
+ status:async()=>({appVersion:window.appVersion||'0.1.9',update:{state:'ready',message:'Version 0.2.0 ist bereit. Nach dem Review neu starten.'},connected:false,recovery:false,active:false}),
  launch:async()=>{},connect:async()=>events.push('connect'),disconnect:async()=>events.push('disconnect'),
  frame:async(width,height)=>{if(window.frameFailure)throw Error('CS2 ist minimiert.');return {width,height,left:4,top:32,right:4,bottom:4};},
- begin:async(slot)=>{events.push('begin:'+slot);window.photoSlot=slot;return String(++token);},
+ begin:async(slot,pitch)=>{if(slot==='front'&&pitch!==44.8)throw Error('Kamera-Pitch wurde nicht übermittelt');events.push('begin:'+slot);window.photoSlot=slot;return String(++token);},
  end:async()=>events.push('restore'),recover:async()=>{},checkUpdate:async()=>{},installUpdate:async()=>{},
  onStopVideo:callback=>{stopListeners.add(callback);window.pressF8=()=>stopListeners.forEach(callback=>callback());return()=>stopListeners.delete(callback);}
 };
@@ -31,7 +31,7 @@ let command=null,serial=0,releaseUpload,lastFile;
 window.fetch=async(url,options)=>{
  const input=options?.body?JSON.parse(options.body):{};let output={ok:true,uploadEnabled:true};
  if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
- else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',presentation:window.serverPresentation||'review-v4'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',cameraPitch:44.8,presentation:window.serverPresentation||'review-v6'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/video')){events.push('prepare:'+input.action);command={id:String(++serial).padStart(32,'0'),slot:'video',action:input.action,...(window.testFollow?{nade:window.selection?.nade||nade}:{})};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/poll'))output={command,selection:window.selection};
  else if(String(url).endsWith('/captured')){if(window.releaseFailures>0){window.releaseFailures--;events.push('captured-retry');return new Response(JSON.stringify({error:'Temporärer Serverfehler'}),{status:503});}events.push('captured');}
@@ -74,13 +74,21 @@ window.checkVideoAbort=async()=>{
  assert(events.includes('restore')&&!events.includes('upload:video'),'Abgebrochenes Video wurde hochgeladen oder Einstellungen blieben verändert');
  window.frameFailure=false;window.capture.disconnect();return {result:'PASS: Verlorenes Spielfenster verwirft Video und stellt CS2 wieder her',events};
 };
-window.checkOldFront=async(version='review-v3')=>{
+window.checkOldFront=async(version='review-v4')=>{
  await connect();window.serverPresentation=version;await window.capture.photo('front',true);
  await waitFor(()=>events.includes('ack:false'));
- assert(errors.some(error=>error.includes('Server-Plugin 2.3.2')),'Alter Server muss einen klaren Update-Hinweis zeigen');
+ assert(errors.some(error=>error.includes('Server-Plugin 2.3.4')),'Alter Server muss einen klaren Update-Hinweis zeigen');
  assert(events.includes('captured')&&!events.includes('begin:front')&&!events.includes('upload:front'),'Alte Rückenansicht wurde aufgenommen oder das Spiel blieb gesperrt');
  assert(window.capture.capture&&!events.includes('disconnect'),'Versionsfehler darf das freigegebene Spielbild nicht beenden');
  window.capture.disconnect();return {result:'PASS: Altes Front-Protokoll gibt das Spiel frei und verhindert falsche Fotos',events};
+};
+window.checkOldApp=async()=>{
+ await connect();window.appVersion='0.1.7';await window.capture.photo('front',true);
+ await waitFor(()=>events.includes('ack:false'));
+ assert(errors.some(error=>error.includes('Windows-App 0.1.9')),'Alte App braucht einen Update-Hinweis');
+ assert(events.includes('captured')&&!events.includes('begin:front')&&!events.includes('upload:front'),'Alte App hat das Spiel nicht freigegeben');
+ assert(window.capture.capture&&!events.includes('disconnect'),'Versionsfehler darf das Spielbild nicht beenden');
+ window.capture.disconnect();return {result:'PASS: Alte App verhindert Rückenfoto und gibt das Spiel frei',events};
 };
 window.checkVideoRecover=async()=>{
  await connect();await window.capture.startVideo();await waitFor(()=>window.capture.recording);window.frameFailure=true;

@@ -18,7 +18,7 @@ let server;
   await server.listen();
   const cases = [
     ['review-desktop', 'checkConnectFailure()'],
-    ['review-desktop', 'checkPhoto("aim")'], ['review-desktop', 'checkPhoto("front")'], ['review-desktop', 'checkOldFront()'], ['review-desktop', 'checkPhoto("effect")'],
+    ['review-desktop', 'checkPhoto("aim")'], ['review-desktop', 'checkPhoto("front")'], ['review-desktop', 'checkOldFront()'], ['review-desktop', 'checkOldApp()'], ['review-desktop', 'checkPhoto("effect")'],
     ['review-desktop', 'checkPhoto("aim",true)'], ['review-desktop', 'checkPhotoRecover()'], ['review-desktop', 'checkPhotoSignals()'], ['review-desktop', 'checkVideo()'], ['review-desktop', 'checkVideoAbort()'], ['review-desktop', 'checkVideoRecover()'], ['review-desktop', 'checkFollowVideo()'],
     ['review-session', 'checkSession()'], ['review-session', 'checkSession()', 375],
     ['review-capture', 'checkPhoto("aim")'], ['review-capture', 'checkPhoto("front")'],
