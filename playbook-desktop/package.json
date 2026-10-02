@@ -1,7 +1,7 @@
 {
   "name": "playbook-desktop",
   "productName": "Playbook",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Playbook mit automatischer CS2-Review-Aufnahme für Windows",
   "author": "Sebastian Schlosser",
   "private": true,

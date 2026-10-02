@@ -30,6 +30,9 @@ const assert=(value,message)=>{if(!value)throw Error(message);};
 window.checkPages=async()=>{
  await waitFor(()=>document.querySelector('h1'));
  if(role!=='admin'){await waitFor(()=>location.pathname==='/maps');assert(!document.body.innerText.includes('Offene Reviews'),'Admin-Seite für Spieler sichtbar');return 'PASS: Admin-Übersicht ist geschützt';}
+ assert(document.querySelector('[data-slot="collapsible-trigger"]').getAttribute('aria-expanded')==='false','Review-Liste nicht eingeklappt');
+ assert(document.body.innerText.includes('Spielbild freigeben')&&document.body.innerText.includes('CS2 starten'),'Dauerhafte Review-Einrichtung fehlt');
+ document.querySelector('[data-slot="collapsible-trigger"]').click();
  await waitFor(()=>document.querySelectorAll('a[href*="/review?"]').length===3);
  assert(!document.body.innerText.includes('Offizielle Nade'),'Offizielle Nade in offener Liste');
  const mapFilter=document.querySelector('[aria-label="Reviews nach Map filtern"]');mapFilter.click();await waitFor(()=>document.querySelector('[role="option"]'));

@@ -23,7 +23,8 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
     string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "", bool MustKnow = false,
     bool Official = false, string ReviewStatus = "", string Revision = "", string Team = "", string ThrowFromTitle = "",
-    string ThrowToTitle = "", string Technique = "", ThrowAttributes? Attributes = null, float? FlightDuration = null, string[]? ReviewMediaSlots = null)
+    string ThrowToTitle = "", string Technique = "", ThrowAttributes? Attributes = null, float? FlightDuration = null, string[]? ReviewMediaSlots = null,
+    Coordinates? LandingPosition = null)
 {
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }
@@ -57,7 +58,8 @@ public static class NadeCatalog
                     Field(data, "Desc"), position, angles, Field(data, "DisplayName"), MustKnow: Flag(data, "MustKnow"),
                     Official: Flag(data, "Official"), ReviewStatus: Field(data, "ReviewStatus"), Team: Field(data, "team"),
                     ThrowFromTitle: Field(data, "throwFromTitle"), ThrowToTitle: Field(data, "throwToTitle"),
-                    Technique: Field(data, "throwTechnique"), Attributes: Attributes(data), FlightDuration: Duration(data)));
+                    Technique: Field(data, "throwTechnique"), Attributes: Attributes(data), FlightDuration: Duration(data),
+                    LandingPosition: Point(data, "LandingPos")));
             }
         }
         if (metadata != null)
@@ -74,6 +76,7 @@ public static class NadeCatalog
                         Team = Field(title, "team"), ThrowFromTitle = Field(title, "throwFromTitle"), ThrowToTitle = Field(title, "throwToTitle"),
                         Technique = Field(title, "throwTechnique"), Attributes = Attributes(title) ?? result[index].Attributes,
                         FlightDuration = Duration(title),
+                        LandingPosition = title.TryGetProperty("landingPos", out _) ? Point(title, "landingPos") : result[index].LandingPosition,
                         ReviewMediaSlots = title.TryGetProperty("reviewMediaSlots", out var slots) && slots.ValueKind == JsonValueKind.Array
                             ? slots.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.String && ReviewCaptureFiles.Slots.Contains(s.GetString())).Select(s => s.GetString()!).Distinct().ToArray() : []
                     };
@@ -96,6 +99,9 @@ public static class NadeCatalog
     private static string Field(JsonElement data, string name) =>
         data.ValueKind == JsonValueKind.Object && data.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String
             ? field.GetString() ?? "" : "";
+
+    private static Coordinates? Point(JsonElement data, string name) =>
+        Coordinates.TryParse(Field(data, name), out var point) ? point : null;
 
     public static NadeKind Kind(string type) => type.Trim().ToLowerInvariant() switch
     {

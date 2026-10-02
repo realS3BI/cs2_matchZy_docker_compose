@@ -7,14 +7,14 @@ public enum TrainingAction
     Bot, CrouchBot, RemoveBots, Trajectory, Impacts, NoFlash, God,
     BestSpawn, WorstSpawn, StartCapture, SaveCapture, CancelCapture, RefreshLibrary, GiveGrenade,
     Settings, BindKey, ToggleGameButtons, ExportBindings, ToggleFavorite, TeleportSpawn, EditName, EditDescription, EditField, RequestReview, DeleteLineup, StartMapVote, VoteYes, VoteNo,
-    ReviewPhoto, ReviewVideoStart, ReviewVideoStop, ReviewHelp, ReviewApprove, ReviewReject
+    ReviewPhoto, ReviewVideoStart, ReviewVideoStop, ReviewHelp, ReviewApprove, ReviewReject, ReviewTeleportEffect
 }
 
 public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null, NadeKind Kind = NadeKind.Other,
     string Setting = "", string Value = "", CompetitiveSpawn? Spawn = null);
 public sealed record MenuItem(string Label, string Hint = "", MenuPage? Page = null,
     MenuRequest? Request = null, bool Enabled = true);
-public sealed record MenuPage(string Title, string Description, IReadOnlyList<MenuItem> Items, string Key = "");
+public sealed record MenuPage(string Title, string Description, IReadOnlyList<MenuItem> Items, string Key = "", NadeLineup? ReviewLineup = null, string ReviewStep = "");
 
 // No game API: navigation, rendering and the action gateway have separate responsibilities.
 public sealed class InGameMenu(MenuPage root, string map)
@@ -111,7 +111,6 @@ public sealed class InGameMenu(MenuPage root, string map)
         if (item.Page is { } page)
         {
             Enter(page);
-            return null;
         }
         return item.Request;
     }

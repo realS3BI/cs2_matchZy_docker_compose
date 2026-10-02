@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { genUploader } from "uploadthing/client";
 import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, Circle, Crosshair, Film, MonitorUp, Play, Send, ShieldCheck, Square, Upload } from "lucide-react";
-import type { ReviewFileRouter } from "../../../src/uploadthing";
-import { REVIEW_STEPS, canUploadReviewMedia, missingReviewMedia, reviewFileError, type ReviewSlot } from "../../../shared/review-media";
+import { REVIEW_STEPS, canUploadReviewMedia, missingReviewMedia, type ReviewSlot } from "../../../shared/review-media";
 import { lineupPermissions } from "../../../shared/lineup-policy";
-import { THROW_ATTRIBUTE_FIELDS } from "../../../shared/throw-attributes";
+import { useReviewUpload } from "../hooks/use-review-upload";
 import { useReviewCapture } from "../hooks/use-review-capture";
-import { api } from "../lib/api";
 import { cn } from "../lib/utils";
 import { ActionButton } from "./action-button";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
@@ -18,67 +15,30 @@ import { ReviewPhotoFrame } from "./review-photo-frame";
 import { ReviewGameSetup } from "./review-game-setup";
 import { desktop } from "../lib/playbook-desktop";
 
-const { uploadFiles } = genUploader<ReviewFileRouter>({ url: "/api/uploadthing" });
 const steps = [...REVIEW_STEPS, { id: "finish", title: "Alles bereit für den Review", short: "Prüfung", description: "Prüfe die Aufnahmen und die Wurfdaten. Die offizielle Freigabe übernimmt ein Plattform-Admin." }] as const;
 
-export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, onBusyChange = (_busy: boolean) => {} }) {
+export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, onBusyChange = (_busy: boolean) => {}, externalCapture = null, externalUpload = null, syncedStep = "" }) {
   const [index, setIndex] = useState(() => {
     const missing = REVIEW_STEPS.findIndex(step => !nade.reviewMedia?.[step.id]);
     return missing < 0 ? REVIEW_STEPS.length : missing;
   });
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [error, setError] = useState("");
-  const [progress, setProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [retry, setRetry] = useState<{ slot: ReviewSlot; file: File } | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const preview = useRef<HTMLVideoElement>(null);
-  const running = useRef(false);
-  const currentNade = useRef(nade);
-  currentNade.current = nade;
   const permissions = lineupPermissions(nade, user);
   const editable = canUploadReviewMedia(nade, user);
   const missing = missingReviewMedia(nade);
   const step = steps[index];
   const media = nade.reviewMedia?.[step.id];
+  const ownUpload = useReviewUpload({ nade, user, disabled, onEntriesChange });
+  const { enabled, error, setError, progress, uploading, retry, upload } = externalUpload || ownUpload;
+  const ownCapture = useReviewCapture({ nade, admin: permissions.moderate, upload, onStep: (slot: ReviewSlot) => setIndex(REVIEW_STEPS.findIndex(step => step.id === slot)), onError: setError, disabled: !!externalCapture || disabled || !editable });
+  const capture = externalCapture || ownCapture;
   useEffect(() => {
-    let active = true;
-    api("/api/nades/review/config").then(data => { if (active) setEnabled(data.uploadEnabled); }).catch(error => { if (active) setError(error.message); });
-    return () => { active = false; };
-  }, []);
-
-  async function upload(slot: ReviewSlot, file: File) {
-    if (running.current || disabled) throw new Error("Bitte die laufende Aktion beenden und Änderungen zuerst speichern.");
-    if (!enabled || !editable) throw new Error("Uploads sind für dieses Lineup gerade nicht verfügbar.");
-    const validation = reviewFileError(slot, file);
-    if (validation) throw new Error(validation);
-    running.current = true;
-    setUploading(true); setProgress(0); setError(""); setRetry({ slot, file });
-    try {
-      const previous = currentNade.current;
-      const { owner, map, name } = previous;
-      // Playing the lineup records a new flight measurement and revision while
-      // this page is open. Refresh before every attempt, retaining the File.
-      const latest = await api("/api/nades");
-      const entry = latest.entries.find(n => n.owner === owner && n.map === map && n.name === name);
-      if (!entry) throw new Error("Dieses Lineup ist nicht mehr verfügbar.");
-      currentNade.current = entry;
-      onEntriesChange(latest.entries);
-      if (!canUploadReviewMedia(entry, user)) throw new Error("Für dieses Lineup sind keine weiteren Uploads erlaubt. Es wurde möglicherweise bereits freigegeben.");
-      if (["lineupPos", "lineupAng", "type", "throwTechnique", ...THROW_ATTRIBUTE_FIELDS].some(key => previous[key] !== entry[key]))
-        throw new Error("Die Wurfdaten wurden geändert und sind jetzt aktualisiert. Prüfe, ob die Aufnahme noch passt, bevor du den Upload erneut versuchst.");
-      const options = { files: [file], input: { owner, map, name, revision: entry.updatedAt, slot }, onUploadProgress: ({ totalProgress }) => setProgress(totalProgress) };
-      const result = await uploadFiles(slot === "video" ? "reviewVideo" : "reviewPhoto", options);
-      if (!result?.[0]?.serverData?.saved) throw new Error("Die Datei wurde nicht bestätigt. Bitte erneut versuchen.");
-      const data = await api("/api/nades");
-      currentNade.current = data.entries.find(n => n.owner === owner && n.map === map && n.name === name) || currentNade.current;
-      onEntriesChange(data.entries);
-      setRetry(null);
-    } catch (error) { setError(error.message || "Upload fehlgeschlagen. Die Aufnahme kann erneut hochgeladen werden."); throw error; }
-    finally { running.current = false; setUploading(false); }
-  }
-  const capture = useReviewCapture({ nade, admin: permissions.moderate, upload, onStep: (slot: ReviewSlot) => setIndex(REVIEW_STEPS.findIndex(step => step.id === slot)), onError: setError, disabled: disabled || !editable });
+    if (!syncedStep) return;
+    const selected = steps.findIndex(step => step.id === syncedStep);
+    setIndex(selected < 0 ? 0 : selected);
+  }, [syncedStep, nade.owner, nade.map, nade.name]);
   const locked = disabled || uploading || capture.preparing;
   const navigationLocked = locked || capture.recording;
   useEffect(() => { onBusyChange(uploading || capture.recording || capture.preparing || capture.connecting); }, [uploading, capture.recording, capture.preparing, capture.connecting, onBusyChange]);
@@ -104,8 +64,8 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
       </li>)}</ol>
     </nav>
 
-    {editable && <ReviewGameSetup />}
-    {editable && <div className="review-capture-bar">
+    {editable && !externalCapture && <ReviewGameSetup />}
+    {editable && !externalCapture && <div className="review-capture-bar">
       <div className="review-capture-copy"><MonitorUp aria-hidden="true" /><div><strong>{capture.capture ? "Spielbild verbunden" : "Direkt aus CS2 aufnehmen"}</strong><p>{capture.capture ? "Fotos und Video werden nach der Aufnahme direkt hochgeladen. Video ohne Ton, maximal zwei Minuten." : desktop ? "Playbook erkennt dein CS2-Fenster automatisch. Die App bleibt während des Reviews geöffnet." : "In Chrome oder Edge dein CS2-Fenster freigeben. Die Review-Seite bleibt während des Spiels offen."}</p></div></div>
       <div className="flex flex-wrap gap-2">
         {capture.recording && <Button disabled={locked} onClick={() => run(capture.stopVideo)}><Square data-icon="inline-start" />Video stoppen und hochladen</Button>}
@@ -119,7 +79,7 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
     {enabled === false && editable && <Alert><AlertTitle>Uploads noch nicht eingerichtet</AlertTitle><AlertDescription>{permissions.moderate ? "Hinterlege UPLOADTHING_TOKEN in der Serverumgebung und starte das Webpanel neu. Danach sind Datei-Uploads und die Browser-Aufnahme verfügbar." : "Ein Plattform-Admin muss den Upload-Dienst noch einrichten."}</AlertDescription></Alert>}
     {disabled && editable && <Alert><AlertTitle>Änderungen zuerst speichern</AlertTitle><AlertDescription>Speichere deine Wurfdaten, bevor du Medien ergänzt oder den Review abschließt.</AlertDescription></Alert>}
     {error && <Alert variant="destructive"><AlertTitle>Aufnahme nicht abgeschlossen</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-    {retry && !uploading && <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">{retry.file.name} bleibt zum erneuten Upload bereit.</span><Button variant="secondary" disabled={locked} onClick={() => run(() => upload(retry.slot, retry.file))}>Upload erneut versuchen</Button></div>}
+    {retry && !uploading && <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">{retry.file.name} für „{retry.reference.displayName || retry.reference.name}“ bleibt zum erneuten Upload bereit.</span><Button variant="secondary" disabled={locked} onClick={() => run(() => upload(retry.slot, retry.file, retry.reference))}>Upload erneut versuchen</Button></div>}
 
     {step.id !== "finish" ? <div className="review-step-layout">
       <div className={cn("review-media-stage", dragging && "review-media-dragging")}
@@ -136,7 +96,7 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
         <CardContent className="flex flex-col gap-5">
           <div className="review-position"><span>{nade.throwFromTitle || "Startposition"}</span><ArrowRight aria-hidden="true" /><span>{nade.throwToTitle || "Zielposition"}</span></div>
           {step.id === "front" && editable && <p className="text-sm text-muted-foreground">{permissions.moderate ? "Der Spielserver lädt den Startpunkt und stellt eine feste Vorderansicht ohne Fadenkreuz ein. Nach dem Foto kehren Kamera, HUD und Panel zurück." : "Zeige die Spielfigur von vorne in Third Person. Für die automatische Kamera ist ein Plattform-Admin im Spiel nötig."}</p>}
-          {step.id !== "video" && editable && permissions.moderate && <p className="text-sm text-muted-foreground">{desktop ? "Playbook stellt das Fadenkreuz direkt in CS2 ein und entfernt den Fensterrand automatisch. Deine bisherigen Einstellungen kehren nach dem Foto zurück." : "Die Ego-Fotos verwenden dein echtes CS2-Fadenkreuz. Bestätige vor dem ersten Foto den Aufnahmeausschnitt, damit kein Fensterrand mit aufgenommen wird."}</p>}
+          {step.id !== "video" && editable && permissions.moderate && <p className="text-sm text-muted-foreground">{step.id === "effect" ? "Wirf die Granate und öffne Wirkung im Ingame-Panel: Du wirst zum Ziel teleportiert und Noclip wird eingeschaltet. Fliege für den Bildausschnitt heraus und öffne die Panel-Steuerung mit KP_0. Zum Ziel teleportieren bringt dich bei Bedarf zurück. Für das Foto werden Fadenkreuz, HUD und Waffe ausgeblendet." : desktop ? "Playbook stellt das Fadenkreuz direkt in CS2 ein und entfernt den Fensterrand automatisch. Deine bisherigen Einstellungen kehren nach dem Foto zurück." : "Ausrichtung und Standposition verwenden dein echtes CS2-Fadenkreuz. Bestätige vor dem ersten Foto den Aufnahmeausschnitt, damit kein Fensterrand mit aufgenommen wird."}</p>}
           {step.id === "video" && <ol className="review-video-sequence"><li>Zum Startpunkt laufen</li><li>Auf den Lineup-Punkt zielen</li><li>Granate abwerfen</li><li>Mit Noclip zum Ziel fliegen</li><li>Die Wirkung zeigen</li></ol>}
           {step.id === "video" && editable && (desktop ? <p className="text-sm text-muted-foreground">Mit <kbd>F8</kbd> stoppst du das Video direkt im Spiel. Playbook lädt es anschließend hoch.</p> : permissions.moderate && <p className="text-sm text-muted-foreground">Einmal in der CS2-Konsole eingeben: <code>bind "F8" "css_training_review_stop"</code>. Danach stoppt F8 die Aufnahme auch bei geschlossenem Panel und startet den Upload.</p>)}
           {editable && <>

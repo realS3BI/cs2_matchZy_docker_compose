@@ -26,7 +26,7 @@ export function profile(slot, screenHeight = 1080) {
   if (!Number.isInteger(screenHeight) || screenHeight < 240 || screenHeight > 16384) throw new Error('Die aktuelle CS2-Spielhöhe konnte nicht bestimmt werden. Bitte das Spielbild erneut verbinden.');
   // CS2 rebases pixel dimensions to the current game height when sizes change.
   // A fixed 1080 reference rescales the values again on e.g. a 1440p window.
-  return { ...CROSSHAIR, ...CLEAN, cl_crosshair_screen_height: String(screenHeight), crosshair: slot === 'front' ? 'false' : 'true', r_drawviewmodel: slot === 'video' ? 'true' : 'false' };
+  return { ...CROSSHAIR, ...CLEAN, cl_crosshair_screen_height: String(screenHeight), crosshair: ['front', 'effect'].includes(slot) ? 'false' : 'true', r_drawviewmodel: slot === 'video' ? 'true' : 'false' };
 }
 export function validSnapshot(saved) {
   const names = saved?.version === 1 ? LEGACY_NAMES : saved?.version === 2 ? NAMES : [];

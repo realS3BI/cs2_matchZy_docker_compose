@@ -4,7 +4,7 @@ import { ReviewRecorder } from "../lib/review-recorder";
 import { desktop } from "../lib/playbook-desktop";
 import { type ReviewSlot } from "../../../shared/review-media";
 
-export function useReviewCapture({ nade, admin, upload, onStep, onError, disabled }) {
+export function useReviewCapture({ nade, admin, upload, onStep, onError, disabled, followPanel = false, onSelection = (_selection: any) => {} }) {
   const [capture, setCapture] = useState<ReviewRecorder | null>(null);
   const [recording, setRecording] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -17,17 +17,21 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
   const preparingVideo = useRef(false);
   const requestedCapture = useRef<{ id: string; expiresAt: number } | undefined>(undefined);
   const videoStopCommand = useRef<{ id: string } | undefined>(undefined);
+  const pendingRelease = useRef<{ sessionId: string; commandId: string } | undefined>(undefined);
+  const pendingAcknowledgement = useRef<{ sessionId: string; commandId: string; ok: boolean } | undefined>(undefined);
   const mounted = useRef(true);
-  const current = useRef({ nade, upload, onStep, onError, disabled, recording });
-  current.current = { nade, upload, onStep, onError, disabled, recording };
+  const current = useRef({ nade, upload, onStep, onError, disabled, recording, onSelection });
+  current.current = { nade, upload, onStep, onError, disabled, recording, onSelection };
 
   function disconnect() {
     const id = session.current;
+    const source = currentCapture.current;
     session.current = undefined;
     requestedCapture.current = undefined;
-    currentCapture.current?.dispose();
+    pendingRelease.current = pendingAcknowledgement.current = undefined;
     currentCapture.current = undefined;
-    if (desktop) void desktop.disconnect().catch(error => { if (mounted.current) current.current.onError(error.message); });
+    source?.dispose();
+    if (source && desktop) void desktop.disconnect().catch(error => { if (mounted.current) current.current.onError(error.message); });
     if (id) void fetch("/api/nades/review/capture/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: id }), keepalive: true }).catch(() => {});
     if (mounted.current) { setCapture(null); setRecording(false); setPreparing(false); }
   }
@@ -35,28 +39,40 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
     mounted.current = true;
     return () => { mounted.current = false; disconnect(); };
   }, []);
-  useEffect(() => { if (disabled) disconnect(); }, [disabled]);
+
+  async function releaseGame(sessionId: string, commandId: string) {
+    const signal = { sessionId, commandId };
+    pendingRelease.current = signal;
+    try {
+      await api("/api/nades/review/capture/captured", { method: "POST", body: JSON.stringify(signal) });
+      if (pendingRelease.current === signal) pendingRelease.current = undefined;
+    } catch {
+      // Retain the captured File and retry the release while polling. An upload
+      // acknowledgement also releases the server's camera if this signal is lost.
+      if (mounted.current) setNotice("Aufnahme erstellt. Die Rückmeldung an das Spiel wird erneut gesendet.");
+    }
+  }
 
   async function connect() {
     if (connecting || currentCapture.current) return;
     setConnecting(true);
     try {
       const next = await ReviewRecorder.share();
-      if (!mounted.current) { next.dispose(); return; }
+      if (!mounted.current) { next.dispose(); if (desktop) await desktop.disconnect().catch(() => {}); return; }
       currentCapture.current = next;
       if (admin) {
-        const { owner, map, name } = current.current.nade;
-        const data = await api("/api/nades/review/capture/start", { method: "POST", body: JSON.stringify({ owner, map, name }) });
+        const reference = followPanel ? { followPanel: true } : current.current.nade;
+        const data = await api("/api/nades/review/capture/start", { method: "POST", body: JSON.stringify(reference) });
         session.current = data.session.id;
       }
       if (!mounted.current) { disconnect(); return; }
       next.stream.getVideoTracks()[0].addEventListener("ended", disconnect, { once: true });
       setCapture(next);
-      setNotice(admin ? "Verbunden. Öffne im Spiel dieses Lineup und wähle Medien-Review." : "Spielbild verbunden. Du kannst jetzt Fotos und ein Video aufnehmen.");
+      setNotice(admin ? followPanel ? "Verbunden. Wähle im Ingame-Panel ein Medien-Review. Lineup, Bilder und Schritt erscheinen hier automatisch." : "Verbunden. Öffne im Spiel dieses Lineup und wähle Medien-Review." : "Spielbild verbunden. Du kannst jetzt Fotos und ein Video aufnehmen.");
     } catch (error) { disconnect(); current.current.onError(error.message); }
     finally { if (mounted.current) setConnecting(false); }
   }
-  async function photo(slot: ReviewSlot, countdown = false, command?: { id: string; presentation?: string }) {
+  async function photo(slot: ReviewSlot, countdown = false, command?: { id: string; presentation?: string; nade?: any }) {
     if (!currentCapture.current || slot === "video") throw new Error("Bitte zuerst das Spielbild verbinden.");
     if (takingPhoto.current || preparingVideo.current || videoUpload.current || countdown && requestedCapture.current) throw new Error("Eine Aufnahme läuft bereits.");
     currentCapture.current.checkPhotoFrame();
@@ -71,6 +87,7 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
     }
     if (admin && command?.presentation !== "review-v2") throw new Error("Bitte das Server-Plugin aktualisieren. Die ältere Version blendet das echte Fadenkreuz noch aus.");
     takingPhoto.current = true;
+    const reference = command?.nade || current.current.nade;
     setPreparing(true);
     try {
       current.current.onStep(slot);
@@ -96,19 +113,17 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
         // before the potentially slow upload. Errors also release the game.
         try { if (token) await desktop!.end(token); }
         finally {
-          if (command && session.current) await api("/api/nades/review/capture/captured", {
-            method: "POST", body: JSON.stringify({ sessionId: session.current, commandId: command.id }),
-          });
+          if (command && session.current) await releaseGame(session.current, command.id);
         }
       }
-      await current.current.upload(slot, file);
+      await current.current.upload(slot, file, reference);
       if (mounted.current) setNotice("Foto gespeichert. Du kannst die nächste Perspektive aufnehmen.");
     } catch (error) {
       if (mounted.current) setNotice("Foto-Aufnahme beendet. Bitte die Fehlermeldung unten prüfen.");
       throw error;
     } finally { takingPhoto.current = false; if (mounted.current) setPreparing(false); }
   }
-  async function startVideo(countdown = false, command?: { id: string }) {
+  async function startVideo(countdown = false, command?: { id: string; nade?: any }) {
     if (!currentCapture.current || videoUpload.current || takingPhoto.current || preparingVideo.current) throw new Error("Bitte zuerst das Spielbild verbinden oder die laufende Aufnahme beenden.");
     currentCapture.current.checkPhotoFrame();
     if (admin && countdown) {
@@ -126,6 +141,7 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
     videoStopCommand.current = undefined;
     const source = currentCapture.current;
     const videoSession = session.current;
+    const reference = command?.nade || current.current.nade;
     let token: string | undefined;
     try {
       if (desktop) {
@@ -141,14 +157,12 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
         try { if (token) await desktop!.end(token); }
         finally {
           const released = videoStopCommand.current || command;
-          if (released && videoSession && session.current === videoSession) await api("/api/nades/review/capture/captured", {
-            method: "POST", body: JSON.stringify({ sessionId: videoSession, commandId: released.id }),
-          });
+          if (released && videoSession && session.current === videoSession) await releaseGame(videoSession, released.id);
         }
       }).then(async file => {
         if (!mounted.current) return;
         setRecording(false);
-        await current.current.upload("video", file);
+        await current.current.upload("video", file, reference);
       }).finally(() => { videoUpload.current = undefined; if (mounted.current) setRecording(false); });
       // The stop command also awaits this promise so the game receives upload failures.
       void videoUpload.current.catch(error => { if (mounted.current && currentCapture.current) current.current.onError(error.message); });
@@ -187,6 +201,8 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let lastCommand = "";
+    let lastSelection = "";
+    let pollFailed = false;
     let processing = false;
     async function processCommand(command, id) {
       processing = true;
@@ -203,22 +219,46 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       let ok = false;
       try {
         if (current.current.disabled) throw new Error("Bitte Änderungen zuerst speichern.");
+        if (command.nade) current.current.onSelection({ id: command.id, nade: command.nade, step: command.slot });
         if (command.action === "photo") await operations.current.photo(command.slot, false, command);
         else if (command.action === "video-start") await operations.current.startVideo(false, command);
         else await operations.current.stopVideo(false, command);
         ok = true;
       } catch (error) { if (!stopped) current.current.onError(error.message); }
       try {
-        if (!stopped && session.current === id) await api("/api/nades/review/capture/ack", { method: "POST", body: JSON.stringify({ sessionId: id, commandId: command.id, ok }) });
-      } catch (error) { if (!stopped) current.current.onError(error.message); }
+        if (!stopped && session.current === id) {
+          const signal = { sessionId: id, commandId: command.id, ok };
+          pendingAcknowledgement.current = signal;
+          await api("/api/nades/review/capture/ack", { method: "POST", body: JSON.stringify(signal) });
+          if (pendingAcknowledgement.current === signal) pendingAcknowledgement.current = undefined;
+        }
+      } catch { if (!stopped) setNotice("Aufnahme verarbeitet. Die Bestätigung an das Spiel wird erneut gesendet."); }
       finally { processing = false; }
     }
     async function poll() {
       const id = session.current;
       if (stopped || !id) return;
       try {
-        const { command } = await api("/api/nades/review/capture/poll", { method: "POST", body: JSON.stringify({ sessionId: id, recording: current.current.recording }) });
+        const { command, selection } = await api("/api/nades/review/capture/poll", { method: "POST", body: JSON.stringify({ sessionId: id, recording: current.current.recording }) });
         if (stopped || session.current !== id) return;
+        for (const [path, pending] of [["captured", pendingRelease], ["ack", pendingAcknowledgement]] as const) {
+          const signal = pending.current;
+          if (!signal) continue;
+          if (signal.sessionId !== id) { pending.current = undefined; continue; }
+          try {
+            await api(`/api/nades/review/capture/${path}`, { method: "POST", body: JSON.stringify(signal) });
+            if (pending.current === signal) pending.current = undefined;
+          } catch (error) {
+            if (error.status === 409) pending.current = undefined;
+            else throw error;
+          }
+        }
+        if (pollFailed) { pollFailed = false; setNotice("Ingame-Verbindung wiederhergestellt. Das Spielbild bleibt verbunden."); }
+        const selectionStamp = selection && `${selection.id}:${selection.nade?.updatedAt}:${selection.nade?.official}`;
+        if (followPanel && selection && selectionStamp !== lastSelection) {
+          lastSelection = selectionStamp;
+          current.current.onSelection(selection);
+        }
         if (requestedCapture.current && requestedCapture.current.expiresAt <= Date.now()) {
           requestedCapture.current = undefined;
           setPreparing(false);
@@ -229,11 +269,24 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
         // Keep renewing the lease while a large video uploads.
         if (command && command.id !== lastCommand && !processing) void processCommand(command, id);
       } catch (error) {
-        if (!stopped) { current.current.onError(error.message); disconnect(); }
-      } finally { if (!stopped && session.current === id) timer = setTimeout(poll, 1000); }
+        if (!stopped) {
+          if (error.status === 401 || error.status === 403) { current.current.onError(error.message); disconnect(); }
+          else {
+            pollFailed = true;
+            setNotice("Ingame-Verbindung kurz unterbrochen. Das Spielbild bleibt verbunden; Playbook versucht es erneut.");
+            if (error.status === 409 && !processing && !takingPhoto.current && !videoUpload.current && !preparingVideo.current) {
+              try {
+                const reference = followPanel ? { followPanel: true } : current.current.nade;
+                const data = await api("/api/nades/review/capture/start", { method: "POST", body: JSON.stringify(reference) });
+                if (!stopped && session.current === id) { session.current = data.session.id; lastCommand = ""; lastSelection = ""; }
+              } catch { /* Keep the shared game image while the server recovers. */ }
+            }
+          }
+        }
+      } finally { if (!stopped && session.current) timer = setTimeout(poll, pollFailed ? 2000 : 1000); }
     }
     void poll();
     return () => { stopped = true; clearTimeout(timer); };
-  }, [capture, admin]);
+  }, [capture, admin, followPanel]);
   return { capture, recording, connecting, preparing, notice, connect, disconnect, photo, startVideo: () => startVideo(true), stopVideo: () => stopVideo(true) };
 }

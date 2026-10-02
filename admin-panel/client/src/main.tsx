@@ -975,7 +975,7 @@ function App() {
           <Settings settings={settings} setSettings={setSettings} policy={policy} />
           <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />
         </>} />
-        <Route path={routePaths.reviews} element={<ReviewQueuePage maps={libraryMaps} nades={nades} user={user} onRefresh={refreshLibrary} />} />
+        <Route path={routePaths.reviews} element={<ReviewQueuePage maps={libraryMaps} nades={nades} user={user} onRefresh={refreshLibrary} onEntriesChange={setNades} />} />
         <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={user.role === "admin"} /></>} />
         <Route
           path={routePaths.access}

@@ -24,11 +24,17 @@ public sealed class ReviewCaptureTests
     [Theory]
     [InlineData("aim")]
     [InlineData("position")]
-    [InlineData("effect")]
     public void FirstPersonPhotosKeepTheGameCrosshair(string slot)
     {
         Assert.Equal(0u, ReviewPhotoFraming.HiddenHud(slot) & (4u | 16u | 256u));
         Assert.NotEqual(0u, ReviewPhotoFraming.HiddenHud("front") & 256u);
+    }
+    [Theory]
+    [InlineData("front")]
+    [InlineData("effect")]
+    public void FrontAndEffectPhotosHideTheGameCrosshair(string slot)
+    {
+        Assert.NotEqual(0u, ReviewPhotoFraming.HiddenHud(slot) & 256u);
     }
     [Theory]
     [InlineData(0, 130, 20, -180)]
@@ -70,6 +76,69 @@ public sealed class ReviewCaptureTests
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "aim", 4000));
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, "../escape", Lineup, "photo", "aim", 1000));
         } finally { Directory.Delete(directory, true); }
+    }
+    [Fact]
+    public void FollowingThePanelKeepsOneSessionAndPinsEachCommandToItsLineup()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(directory, Actor);
+        Directory.CreateDirectory(folder);
+        try {
+            var session = new ReviewSession(Guid.NewGuid().ToString(), Actor, "", "", "", 100_000, FollowPanel: true);
+            File.WriteAllText(Path.Combine(folder, "session.json"), JsonSerializer.Serialize(session, ReviewCaptureFiles.Json));
+            var first = ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "front", 1000);
+            Assert.Equal((Lineup.Owner, Lineup.Map, Lineup.Name), (first.Owner, first.Map, first.Name));
+            File.WriteAllText(Path.Combine(folder, "result.json"), JsonSerializer.Serialize(new ReviewResult(session.Id, first.Id, true, "Gespeichert"), ReviewCaptureFiles.Json));
+            var other = Lineup with { Owner = Actor, Name = "other" };
+            var second = ReviewCaptureFiles.Issue(directory, Actor, other, "photo", "effect", 2000);
+            Assert.Equal(session.Id, second.SessionId);
+            Assert.Equal((other.Owner, other.Map, other.Name), (second.Owner, second.Map, second.Name));
+            Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, other with { Official = true }, "photo", "aim", 3000));
+        } finally { Directory.Delete(directory, true); }
+    }
+    [Fact]
+    public void EnteringEffectRequestsTeleportAndKeepsThePhotoAtTheChosenView()
+    {
+        var lineup = Lineup with { LandingPosition = new(100, 200, 300) };
+        var menu = new InGameMenu(ReviewMenu.Create(lineup), lineup.Map);
+        var request = menu.Select(4);
+        Assert.Equal(TrainingAction.ReviewTeleportEffect, request!.Action);
+        Assert.Equal(lineup, request.Lineup);
+        Assert.Equal("effect", menu.Current.ReviewStep);
+        Assert.Equal(lineup, menu.Current.ReviewLineup);
+        var photo = menu.Select(1);
+        Assert.Equal(TrainingAction.ReviewPhoto, photo!.Action);
+        Assert.Equal("effect", photo.Setting);
+        var teleport = menu.Current.Items.ToList().FindIndex(item => item.Request?.Action == TrainingAction.ReviewTeleportEffect);
+        Assert.Equal(request, menu.Select(teleport + 1));
+        menu.Refresh(ReviewMenu.Create(lineup with { DisplayName = "Neuer Titel" }));
+        Assert.Equal("effect", menu.Current.ReviewStep);
+        Assert.True(menu.Back());
+        Assert.Equal("overview", menu.Current.ReviewStep);
+        Assert.Equal(3, menu.Index);
+    }
+    [Fact]
+    public void EffectRemainsReachableWithoutAPreviouslySavedTarget()
+    {
+        var menu = new InGameMenu(ReviewMenu.Create(Lineup), Lineup.Map);
+        Assert.Equal(TrainingAction.ReviewTeleportEffect, menu.Select(4)!.Action);
+        Assert.Equal("effect", menu.Current.ReviewStep);
+        Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.LoadLineup);
+        Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.ReviewTeleportEffect && item.Enabled);
+        Assert.Null(ReviewEffectTarget.Resolve(Lineup, null));
+    }
+    [Fact]
+    public void VideoAllowsLoadingTheLineupAndReturningToTheAimStep()
+    {
+        var menu = new InGameMenu(ReviewMenu.Create(Lineup), Lineup.Map);
+        menu.Select(5);
+        Assert.Equal("video", menu.Current.ReviewStep);
+        Assert.Contains(menu.Current.Items, item => item.Request?.Action == TrainingAction.LoadLineup && item.Request.Lineup == Lineup);
+        var aim = menu.Current.Items.ToList().FindIndex(item => item.Page?.ReviewStep == "aim");
+        Assert.True(aim >= 0);
+        menu.Select(aim + 1);
+        Assert.Equal("aim", menu.Current.ReviewStep);
+        Assert.Equal(Lineup, menu.Current.ReviewLineup);
     }
     [Fact]
     public void ReviewHasSixStepsAndApprovalRequiresAllFiveUploads()

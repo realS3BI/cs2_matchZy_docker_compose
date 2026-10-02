@@ -1,5 +1,5 @@
 import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, RefreshCw } from "lucide-react";
+import { ArrowRight, ChevronDown, ClipboardCheck, RefreshCw } from "lucide-react";
 import { missingReviewMedia } from "../../../shared/review-media";
 import { mapMatchesNade } from "../lib/maps";
 import { lineupKey, lineupReviewPath } from "../lib/lineups";
@@ -13,8 +13,10 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 import { Field, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { ReviewSessionWorkspace } from "./review-session-workspace";
 
-export function ReviewQueuePage({ maps, nades, user, onRefresh }) {
+export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange = (_entries: any[]) => { void onRefresh(); } }) {
   const [search, setSearch] = useSearchParams();
   if (user?.role !== "admin") return <Navigate to="/maps" replace />;
   const entries = reviewQueue(nades, maps, search);
@@ -33,6 +35,10 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh }) {
       <div><p className="control-kicker">Server · Plattform-Admin</p><h1 className="control-title mt-2 text-3xl">Reviews</h1><p className="mt-2 text-sm text-muted-foreground">Eingereichte Lineups prüfen und ausstehende Aufnahmen vervollständigen.</p></div>
       <ActionButton variant="outline" icon={RefreshCw} onClick={onRefresh} successLabel="Aktualisiert">Aktualisieren</ActionButton>
     </header>
+    <ReviewSessionWorkspace {...{ nades, user, onEntriesChange }} />
+    <Collapsible defaultOpen={false} className="grid gap-4">
+    <CollapsibleTrigger asChild><Button variant="outline" className="w-full justify-between">Reviews und Filter · {entries.length} offen<ChevronDown data-icon="inline-end" /></Button></CollapsibleTrigger>
+    <CollapsibleContent className="grid gap-4">
     <Card><CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
       <Field><FieldLabel>Map</FieldLabel><Select value={search.get("map") || "all"} onValueChange={value => filter("map", value)}><SelectTrigger aria-label="Reviews nach Map filtern"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Alle Maps</SelectItem>{maps.map(map => <SelectItem key={map.key} value={map.key}>{map.name}</SelectItem>)}</SelectContent></Select></Field>
       <Field><FieldLabel>Status</FieldLabel><Select value={REVIEW_FILTERS.some(filter => filter.value === search.get("status")) ? search.get("status") : "all"} onValueChange={value => filter("status", value)}><SelectTrigger aria-label="Review-Status filtern"><SelectValue /></SelectTrigger><SelectContent>{REVIEW_FILTERS.map(filter => <SelectItem key={filter.value} value={filter.value}>{filter.label}</SelectItem>)}</SelectContent></Select></Field>
@@ -49,5 +55,7 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh }) {
         {target ? <Button asChild variant="secondary"><Link to={target}><ClipboardCheck data-icon="inline-start" />Review öffnen<ArrowRight data-icon="inline-end" /></Link></Button> : <span className="text-sm text-muted-foreground">Map nicht verfügbar</span>}
       </CardContent></Card></li>;
     })}</ul> : <Empty><EmptyHeader><EmptyTitle>Keine offenen Reviews</EmptyTitle><EmptyDescription>Für diese Filter ist nichts ausstehend. Wähle eine andere Map oder einen anderen Status.</EmptyDescription></EmptyHeader></Empty>}
+    </CollapsibleContent>
+    </Collapsible>
   </article>;
 }

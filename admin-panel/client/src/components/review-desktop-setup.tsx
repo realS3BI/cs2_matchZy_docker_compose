@@ -17,7 +17,7 @@ export function ReviewDesktopSetup() {
   return <Card>
     <CardHeader><CardTitle>Review mit Playbook für Windows</CardTitle><CardDescription>CS2 starten, mit dem Trainingsserver verbinden und unten das Spielbild verbinden. Danach kannst du den Review direkt im Spiel bedienen.</CardDescription></CardHeader>
     <CardContent className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">Fotos ohne Fensterrahmen, HUD und Waffe. Playbook stellt das weiße statische Kreuz mit schwarzer halber Kontur direkt in CS2 ein: Länge 22, Stärke 3, Abstand 9, ohne Mittelpunkt und T-Stil. Deine bisherigen Werte kehren nach jeder Aufnahme zurück. Die Frontansicht bleibt ohne Fadenkreuz. Im Video ist die Waffe sichtbar; mit <kbd>F8</kbd> beendest du die Aufnahme und startest den Upload.</p>
+      <p className="text-sm text-muted-foreground">Fotos ohne Fensterrahmen, HUD und Waffe. Playbook stellt das weiße statische Kreuz mit schwarzer halber Kontur direkt in CS2 ein: Länge 22, Stärke 3, Abstand 9, ohne Mittelpunkt und T-Stil. Deine bisherigen Werte kehren nach jeder Aufnahme zurück. Vorderansicht und Wirkung bleiben ohne Fadenkreuz. Im Video ist die Waffe sichtbar; mit <kbd>F8</kbd> beendest du die Aufnahme und startest den Upload.</p>
       <div className="flex flex-wrap gap-3">
         <ActionButton icon={Play} disabled={status?.connected || status?.active} onClick={() => desktop!.launch()} successLabel="Start abgeschlossen">CS2 für Review ohne VAC starten</ActionButton>
         <ActionButton variant="outline" icon={RotateCcw} disabled={status?.active} onClick={() => desktop!.recover()} successLabel="Wiederhergestellt">Einstellungen wiederherstellen</ActionButton>

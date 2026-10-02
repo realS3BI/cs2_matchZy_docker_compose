@@ -107,7 +107,7 @@ test('all photo/video profiles restore exact originals, including unusual values
   for (const slot of ['aim', 'position', 'front', 'effect', 'video']) {
     const token = await f.presentation.begin(slot);
     assert.deepEqual(f.state(), profile(slot));
-    assert.equal(f.state().crosshair, slot === 'front' ? 'false' : 'true');
+    assert.equal(f.state().crosshair, ['front', 'effect'].includes(slot) ? 'false' : 'true');
     assert.equal(f.state().r_drawviewmodel, slot === 'video' ? 'true' : 'false');
     await f.presentation.end(token);
     assert.deepEqual(f.state(), f.original);

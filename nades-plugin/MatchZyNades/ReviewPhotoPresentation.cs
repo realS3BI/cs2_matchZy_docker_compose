@@ -8,9 +8,9 @@ public readonly record struct ReviewCameraPose(Coordinates Position, Coordinates
 
 public static class ReviewPhotoFraming
 {
-    // Never set HIDEHUD_ALL in first person: it also suppresses the real crosshair.
+    // Aim and position retain the real crosshair; front and effect suppress it.
     // The local photo-mode command hides the remaining HUD and viewmodel.
-    public static uint HiddenHud(string slot) => slot == "front" ? 4u | 128u | 256u : 128u;
+    public static uint HiddenHud(string slot) => slot is "front" or "effect" ? 4u | 128u | 256u : 128u;
     public const uint FieldOfView = 90;
     public static ReviewCameraPose Front(Coordinates origin, float yaw, bool crouched)
     {
@@ -30,6 +30,8 @@ internal sealed class ReviewPhotoPresentation : IDisposable
     private readonly uint _hud;
     private readonly uint _photoHud;
     private readonly bool _front;
+    private readonly float _frontYaw;
+    private readonly Coordinates? _bodyRotation, _bodyAbsRotation;
     private readonly uint _view;
     private readonly CCSPlayerBase_CameraServices _cameraServices;
     private readonly uint _fov, _fovStart;
@@ -49,6 +51,11 @@ internal sealed class ReviewPhotoPresentation : IDisposable
             ?? throw new InvalidOperationException("Die Spielkamera ist noch nicht bereit.");
         _hud = pawn.HideHUD;
         _front = slot == "front";
+        _frontYaw = frontYaw;
+        if (_front && pawn.CBodyComponent?.SceneNode is { } body) {
+            _bodyRotation = new(body.Rotation.X, body.Rotation.Y, body.Rotation.Z);
+            _bodyAbsRotation = new(body.AbsRotation.X, body.AbsRotation.Y, body.AbsRotation.Z);
+        }
         _photoHud = _hud | ReviewPhotoFraming.HiddenHud(slot);
         _view = _cameraServices.ViewEntity.Raw;
         _fov = _cameraServices.FOV; _fovStart = _cameraServices.FOVStart;
@@ -70,6 +77,7 @@ internal sealed class ReviewPhotoPresentation : IDisposable
             pawn.WeaponServices.As<CCSPlayer_WeaponServices>().NextAttack = _attackLock;
             Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
             if (slot == "front") {
+                Maintain();
                 var origin = pawn.AbsOrigin ?? throw new InvalidOperationException("Die Spielerposition ist nicht verfügbar.");
                 var pose = ReviewPhotoFraming.Front(new(origin.X, origin.Y, origin.Z), frontYaw,
                     pawn.MovementServices!.As<CCSPlayer_MovementServices>().Ducked);
@@ -85,12 +93,27 @@ internal sealed class ReviewPhotoPresentation : IDisposable
         } catch { Dispose(); throw; }
     }
 
+    public void Maintain()
+    {
+        if (_disposed || !_front || !_pawn.IsValid || _pawn.CBodyComponent?.SceneNode is not { } scene) return;
+        // View yaw and body yaw can differ after teleporting or strafing. Pin the
+        // upright body to the saved yaw, facing the camera in front of it.
+        scene.Rotation.X = scene.Rotation.Z = scene.AbsRotation.X = scene.AbsRotation.Z = 0;
+        scene.Rotation.Y = scene.AbsRotation.Y = _frontYaw;
+        Utilities.SetStateChanged(_pawn, "CBaseEntity", "m_CBodyComponent");
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         try {
             if (!_pawn.IsValid || _pawn.EntityHandle.Raw != PawnHandle) return;
+            if (_front && _bodyRotation is { } local && _bodyAbsRotation is { } absolute && _pawn.CBodyComponent?.SceneNode is { } scene && scene.Rotation.Y == _frontYaw) {
+                scene.Rotation.X = local.X; scene.Rotation.Y = local.Y; scene.Rotation.Z = local.Z;
+                scene.AbsRotation.X = absolute.X; scene.AbsRotation.Y = absolute.Y; scene.AbsRotation.Z = absolute.Z;
+                Utilities.SetStateChanged(_pawn, "CBaseEntity", "m_CBodyComponent");
+            }
             if (_pawn.HideHUD == _photoHud) _pawn.HideHUD = _hud;
             Utilities.SetStateChanged(_pawn, "CBasePlayerPawn", "m_iHideHUD");
             if (_camera is { IsValid: true } && _cameraServices.ViewEntity.Raw == _camera.EntityHandle.Raw)

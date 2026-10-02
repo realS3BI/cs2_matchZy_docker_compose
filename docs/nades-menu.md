@@ -172,7 +172,7 @@ Die Nummerierung folgt den Entity-Indizes der geladenen Map. Der Teleport prüft
 
 ## Map-Katalog und Abstimmung ab 1.9.0
 
-Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.2.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
+Dashboard und Server-Plugin gemeinsam aktualisieren. `css_plugins list` muss **Playbook 2.3.0** anzeigen; die früheren Korrekturen hatten noch dieselbe Versionsnummer 1.8.0.
 
 Das Dashboard schreibt den gemeinsamen Katalog als `map-catalog.json` neben die angewendeten Einstellungen. Das Plugin ermittelt installierte VPK-Maps und aktivierte Workshop-IDs und veröffentlicht `savednades.maps.json` neben der Granatenbibliothek. Nach **Refresh** verwendet der Web-Atlas genau diese Kategorien und Verfügbarkeiten. Ohne Serverbestand kennzeichnet die Website die Ladbarkeit als unbestätigt.
 

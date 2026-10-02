@@ -53,21 +53,21 @@ export class ReviewCaptureBridge {
       await this.prepareDirectory(actor);
       const previous = await read(this.path(actor, "session"));
       if (previous?.expiresAt > now) fail(409, "Eine Aufnahme ist bereits in einem anderen Tab verbunden. Dort beenden oder 90 Sekunden warten.");
-      const { owner, map, name } = reference;
-      const session = { id: randomUUID(), actor, owner, map, name, expiresAt: now + leaseMs };
+      const { owner = "", map = "", name = "", followPanel = false } = reference;
+      const session = { id: randomUUID(), actor, owner, map, name, followPanel, expiresAt: now + leaseMs };
       await write(this.path(actor, "session"), session);
       return session;
     });
   }
   async session(actor: string, id: string, now = Date.now()) {
     const session = await read(this.path(actor, "session"));
-    if (!id || session?.id !== id || session.expiresAt <= now) fail(409, "Die Ingame-Verbindung ist abgelaufen. Bildschirm erneut verbinden.");
+    if (!id || session?.id !== id || session.actor !== actor || session.expiresAt <= now) fail(409, "Die Ingame-Verbindung ist abgelaufen. Spielbild erneut verbinden.");
     return session;
   }
   async poll(actor: string, id: string, validate: (reference) => Promise<void>, now = Date.now(), recording = false) {
     return this.exclusive(actor, async () => {
       const session = await this.session(actor, id, now);
-      await validate(session);
+      if (!session.followPanel) await validate(session);
       await this.prepareDirectory(actor);
       await write(this.path(actor, "session"), { ...session, recording, expiresAt: now + leaseMs });
       const command = await read(this.path(actor, "command"));
@@ -85,8 +85,19 @@ export class ReviewCaptureBridge {
           !Number.isFinite(command.expiresAt) || !Number.isFinite(command.notBefore) ||
           !["photo", "video-start", "video-stop"].includes(command.action) ||
           (command.action === "photo" && (!isReviewSlot(command.slot) || command.slot === "video"))) return null;
-      return { id: command.id, action: command.action, slot: command.slot, ...(command.presentation === "review-v2" ? { presentation: command.presentation } : {}) };
+      const reference = { owner: command.owner, map: command.map, name: command.name };
+      if (session.followPanel) await validate(reference);
+      return { id: command.id, action: command.action, slot: command.slot,
+        ...(session.followPanel ? { reference } : {}),
+        ...(command.presentation === "review-v2" ? { presentation: command.presentation } : {}) };
     });
+  }
+  async selection(actor: string, id: string, now = Date.now()) {
+    await this.session(actor, id, now);
+    const selection = await read(this.path(actor, "selection"));
+    if (selection?.sessionId !== id || selection.actor !== actor || !["overview", "aim", "position", "front", "effect", "video", "finish"].includes(selection.step) ||
+        ![selection.owner, selection.map, selection.name].every(value => typeof value === "string" && value.length > 0 && value.length <= 500)) return null;
+    return selection;
   }
   async requestPhoto(actor: string, id: string, slot: unknown, now = Date.now()) {
     return this.requestCapture(actor, id, "photo", slot, now);
@@ -96,14 +107,20 @@ export class ReviewCaptureBridge {
   }
   private async requestCapture(actor: string, id: string, action: unknown, slot: unknown, now: number) {
     return this.exclusive(actor, async () => {
-      await this.session(actor, id, now);
+      const session = await this.session(actor, id, now);
       if (action === "photo" ? !isReviewSlot(slot) || slot === "video" : !["video-start", "video-stop"].includes(String(action)) || slot !== "video") fail(400, "Ungültiger Aufnahmeschritt.");
       const request = await read(this.path(actor, "request"));
       const result = await read(this.path(actor, "result"));
       const requestResult = await read(this.path(actor, "request-result"));
       if (request?.sessionId === id && request.expiresAt > now && result?.commandId !== request.id && requestResult?.commandId !== request.id)
         fail(409, "Die vorige Aufnahme-Anfrage läuft noch.");
-      const next = { id: randomUUID().replaceAll("-", ""), sessionId: id, action, slot, expiresAt: now + 30_000 };
+      const video = action === "video-stop" ? await read(this.path(actor, "command")) : null;
+      const reference = session.followPanel
+        ? video?.sessionId === id && video.action === "video-start" ? video : await this.selection(actor, id, now)
+        : session;
+      if (!reference) fail(409, "Bitte zuerst im Ingame-Panel ein Medien-Review öffnen.");
+      const next = { id: randomUUID().replaceAll("-", ""), sessionId: id, action, slot,
+        owner: reference.owner, map: reference.map, name: reference.name, expiresAt: now + 30_000 };
       await write(this.path(actor, "request"), next);
       return next;
     });
@@ -148,12 +165,17 @@ export function installReviewCapture(app, { config, store }) {
     } catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : "Die Verbindung zum Spielserver konnte nicht hergestellt werden." }); }
   });
   route("start", async (input, user) => {
-    const entry = reviewEntry(await store.getNades(), input, user);
+    const entry = input?.followPanel === true ? { followPanel: true } : reviewEntry(await store.getNades(), input, user);
     return { session: await bridge.start(user.identitySteam64, entry) };
   });
-  route("poll", async (input, user) => ({ command: await bridge.poll(user.identitySteam64, input?.sessionId, async reference => {
-    reviewEntry(await store.getNades(), reference, user);
-  }, Date.now(), input?.recording === true) }));
+  route("poll", async (input, user) => {
+    const entries = await store.getNades();
+    const command = await bridge.poll(user.identitySteam64, input?.sessionId, async reference => { reviewEntry(entries, reference, user); }, Date.now(), input?.recording === true);
+    const selected = await bridge.selection(user.identitySteam64, input?.sessionId);
+    const nade = selected && entries.find(entry => entry.owner === selected.owner && entry.map === selected.map && entry.name === selected.name);
+    return { command: command && "reference" in command && command.reference ? { ...command, nade: reviewEntry(entries, command.reference, user) } : command,
+      selection: nade ? { ...selected, nade } : null };
+  });
   route("ack", async (input, user) => { await bridge.acknowledge(user.identitySteam64, input); return { ok: true }; });
   route("photo", async (input, user) => ({ request: await bridge.requestPhoto(user.identitySteam64, input?.sessionId, input?.slot) }));
   route("video", async (input, user) => ({ request: await bridge.requestVideo(user.identitySteam64, input?.sessionId, input?.action) }));

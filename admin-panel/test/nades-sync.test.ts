@@ -71,6 +71,7 @@ test("throw settings and automatic flight seconds reach the panel metadata and s
   assert.equal(store.entries[0].flightDuration, 3.125);
   let metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
   assert.equal(metadata[0].flightDuration, 3.125);
+  assert.equal(metadata[0].landingPos, "10 20 30");
   assert.equal(metadata[0].click_type, "both");
   assert.equal(metadata[0].throwFromTitle, "Über T-Spawn");
   await writeJson(service.liveFile, sampleConfig({ owner }));
@@ -312,8 +313,8 @@ test("capture polling works even when MatchZy's library file is unchanged", asyn
   assert.equal(store.actions.length, actionCount);
 });
 
-test("sync keeps titles and publishes metadata when MatchZy omits extended fields", async (t) => {
-  const existing = sampleEntry({ id: "Ab1Cd2E", displayName: "Fenster – T-Spawn" });
+test("sync keeps titles and landing points and publishes metadata when MatchZy omits extended fields", async (t) => {
+  const existing = sampleEntry({ id: "Ab1Cd2E", displayName: "Fenster – T-Spawn", landingPos: "10 20 30" });
   const { store, service } = await createHarness(t, [existing]);
   await writeJson(service.liveFile, sampleConfig({ desc: "new instructions" }));
   await service.importLiveFile("test");
@@ -321,6 +322,11 @@ test("sync keeps titles and publishes metadata when MatchZy omits extended field
   assert.equal(store.entries[0].id, existing.id);
   const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
   assert.equal(metadata[0].displayName, existing.displayName);
+  assert.equal(metadata[0].landingPos, existing.landingPos);
+  await writeJson(service.liveFile, sampleConfig({ lineupPos: "2 3 4" }));
+  await service.importLiveFile("test");
+  const changed = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.equal(changed[0].landingPos, null);
 });
 
 test("captures respect owner, map, technical key, position and angle", () => {

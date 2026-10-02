@@ -406,6 +406,7 @@ export class NadesSyncService {
       owner: entry.owner, map: entry.map, name: entry.name, team: entry.team, displayName: entry.displayName || "",
       mustKnow: entry.mustKnow === true, official: entry.official === true, reviewStatus: entry.reviewStatus || "", updatedAt: entry.updatedAt,
       reviewMediaSlots: Object.keys(entry.reviewMedia || {}),
+      landingPos: entry.landingPos || null,
       ...Object.fromEntries([...THROW_ATTRIBUTE_FIELDS, "flightDuration", "throwFromTitle", "throwToTitle", "throwTechnique"].map(key => [key, entry[key]])),
     })));
   }

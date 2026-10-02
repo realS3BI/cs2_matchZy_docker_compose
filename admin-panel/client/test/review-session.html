@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ingame-Review-Sitzung prüfen</title></head><body><main id="root" style="max-width:1200px;margin:24px auto;padding:0 16px"></main>
+<script>
+window.events=[];window.selection=null;window.failPoll=false;window.shares=0;window.starts=0;
+window.playbookDesktop={version:1,status:async()=>({appVersion:'test',update:{state:'idle',message:'Test'},connected:true,recovery:false,active:false}),launch:async()=>{},connect:async()=>events.push('connect'),disconnect:async()=>events.push('disconnect'),frame:async(width,height)=>({width,height,left:0,top:0,right:0,bottom:0}),begin:async()=>'',end:async()=>{},recover:async()=>{},checkUpdate:async()=>{},installUpdate:async()=>{},onStopVideo:()=>()=>{}};
+</script>
+<script type="module">
+import React,{useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {BrowserRouter} from 'react-router-dom';
+import {ReviewQueuePage} from '/src/components/review-queue-page.tsx';
+import {ACTIVE_DUTY_MAPS} from '/src/lib/maps.ts';
+import '/src/index.css';
+const actor='76561198000000001';
+const initial=[{id:'Abc1234',owner:'default',map:'de_mirage',name:'window',displayName:'Fenster vom T-Spawn',type:'Smoke',reviewStatus:'pending',updatedAt:'1'},{id:'Abc1235',owner:actor,map:'de_mirage',name:'window',displayName:'Eigenes Fenster',type:'Smoke',reviewStatus:'pending',updatedAt:'1'}];
+const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;canvas.getContext('2d').fillRect(0,0,640,360);
+setInterval(()=>canvas.getContext('2d').fillRect(0,0,640,360),30);
+Object.defineProperty(navigator,'mediaDevices',{value:{getDisplayMedia:async()=>{window.shares++;const stream=canvas.captureStream(30);window.track=stream.getVideoTracks()[0];return stream;}},configurable:true});
+window.fetch=async(url,options)=>{
+ const input=options?.body?JSON.parse(options.body):{};
+ let output={ok:true,uploadEnabled:true};
+ if(String(url).endsWith('/start')){if(!input.followPanel)throw Error('Sitzung folgt dem Panel nicht');window.starts++;output={session:{id:'session'}};}
+ else if(String(url).endsWith('/poll')){if(window.failPoll)return new Response(JSON.stringify({error:'Temporärer Serverfehler'}),{status:503});output={command:null,selection:window.selection};}
+ else if(String(url)==='/api/nades')output={entries:initial};
+ return new Response(JSON.stringify(output),{headers:{'Content-Type':'application/json'}});
+};
+history.replaceState(null,'','/server/reviews');
+function App(){const[nades,setNades]=useState(initial);return React.createElement(BrowserRouter,null,React.createElement(ReviewQueuePage,{maps:ACTIVE_DUTY_MAPS,nades,user:{identitySteam64:actor,role:'admin'},onEntriesChange:setNades,onRefresh:async()=>{}}));}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+const waitFor=async f=>{for(let i=0;i<350;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
+const assert=(value,message)=>{if(!value)throw Error(message);};
+window.selectReview=(index,step,id=step)=>{window.selection={id,sessionId:'session',actor,nade:initial[index],step};};
+window.checkSession=async()=>{
+ await waitFor(()=>[...document.querySelectorAll('button')].some(button=>button.textContent==='Spielbild freigeben'&&!button.disabled));
+ assert(document.querySelector('[data-slot="collapsible-trigger"]').getAttribute('aria-expanded')==='false','Review-Liste nicht eingeklappt');
+ [...document.querySelectorAll('button')].find(button=>button.textContent==='Spielbild freigeben').click();
+ await waitFor(()=>document.querySelector('.review-live-preview')?.srcObject);
+ const shared=window.track;
+ window.selectReview(0,'front');await waitFor(()=>document.querySelector('[aria-current="step"]')?.textContent.includes('Vorne'));
+ assert(document.body.innerText.includes('Fenster vom T-Spawn'),'Ingame-Lineup fehlt');
+ window.selectReview(0,'effect');await waitFor(()=>document.querySelector('[aria-current="step"]')?.textContent.includes('Wirkung'));
+ assert(document.body.innerText.includes('ohne Fadenkreuz'),'Wirkung-Hilfe fehlt');
+ window.selectReview(1,'video');await waitFor(()=>document.body.innerText.includes('Eigenes Fenster')&&document.querySelector('[aria-current="step"]')?.textContent.includes('Video'));
+ assert(!document.body.innerText.includes('Fenster vom T-Spawn'),'Owner beim gleichnamigen Lineup verwechselt');
+ window.failPoll=true;await waitFor(()=>document.body.innerText.includes('kurz unterbrochen'));window.failPoll=false;
+ await waitFor(()=>document.body.innerText.includes('wiederhergestellt'));
+ assert(window.track===shared&&shared.readyState==='live'&&window.shares===1&&window.starts===1&&!events.includes('disconnect'),'Schrittwechsel oder Serverfehler beendet die Freigabe');
+ initial[1]={...initial[1],official:true,updatedAt:'2'};window.selectReview(1,'finish','approved');
+ await waitFor(()=>document.body.innerText.includes('Offiziell freigegeben'));
+ assert(shared.readyState==='live'&&window.shares===1,'Offizielle Freigabe beendet die Sitzung');
+ window.selectReview(0,'aim','next');await waitFor(()=>document.body.innerText.includes('Fenster vom T-Spawn')&&document.querySelector('[aria-current="step"]')?.textContent.includes('Lineup'));
+ assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
+ return 'PASS: Eine Spielbild-Freigabe, Panel-Schritte, Owner-Zuordnung, Wiederverbindung und nächster Review nach Freigabe';
+};
+</script></body></html>

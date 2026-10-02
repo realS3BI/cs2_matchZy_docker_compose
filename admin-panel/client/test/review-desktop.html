@@ -24,7 +24,7 @@ const nade={owner:'76561198000000001',map:'de_anubis',name:'ct_to_a_main',displa
 const canvas=document.createElement('canvas');canvas.width=1920;canvas.height=1080;
 const ctx=canvas.getContext('2d');window.photoSlot='aim';
 const draw=()=>{ctx.fillStyle='#c02020';ctx.fillRect(0,0,1920,1080);ctx.fillStyle='#315173';ctx.fillRect(4,32,1912,1044);
- if(window.photoSlot!=='front'){ctx.fillStyle='#fff';ctx.fillRect(950,553,21,3);ctx.fillRect(959,544,3,21);}};
+ if(!['front','effect'].includes(window.photoSlot)){ctx.fillStyle='#fff';ctx.fillRect(950,553,21,3);ctx.fillRect(959,544,3,21);}};
 draw();const timer=setInterval(draw,30);
 Object.defineProperty(navigator,'mediaDevices',{value:{getDisplayMedia:async()=>canvas.captureStream(30)},configurable:true});
 let command=null,serial=0,releaseUpload,lastFile;
@@ -32,16 +32,16 @@ window.fetch=async(url,options)=>{
  const input=options?.body?JSON.parse(options.body):{};let output={ok:true,uploadEnabled:true};
  if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
  else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',presentation:'review-v2'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
- else if(String(url).endsWith('/video')){events.push('prepare:'+input.action);command={id:String(++serial).padStart(32,'0'),slot:'video',action:input.action};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
- else if(String(url).endsWith('/poll'))output={command};
- else if(String(url).endsWith('/captured'))events.push('captured');
- else if(String(url).endsWith('/ack')){events.push('ack:'+input.ok);command=null;}
+ else if(String(url).endsWith('/video')){events.push('prepare:'+input.action);command={id:String(++serial).padStart(32,'0'),slot:'video',action:input.action,...(window.testFollow?{nade:window.selection?.nade||nade}:{})};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/poll'))output={command,selection:window.selection};
+ else if(String(url).endsWith('/captured')){if(window.releaseFailures>0){window.releaseFailures--;events.push('captured-retry');return new Response(JSON.stringify({error:'Temporärer Serverfehler'}),{status:503});}events.push('captured');}
+ else if(String(url).endsWith('/ack')){if(window.ackFailures>0){window.ackFailures--;events.push('ack-retry');return new Response(JSON.stringify({error:'Temporärer Serverfehler'}),{status:503});}events.push('ack:'+input.ok);command=null;}
  return new Response(JSON.stringify(output),{headers:{'Content-Type':'application/json'}});
 };
-function App(){const capture=useReviewCapture({nade,admin:true,disabled:false,onStep:()=>{},onError:e=>errors.push(e),upload:async(slot,file)=>{lastFile=file;events.push('upload:'+slot);await new Promise(r=>releaseUpload=r);events.push('uploaded');}});window.capture=capture;return null;}
+function App(){const[currentNade,setNade]=React.useState(nade);const capture=useReviewCapture({nade:currentNade,admin:true,followPanel:true,disabled:false,onStep:()=>{},onSelection:selection=>{window.followedStep=selection.step;setNade(selection.nade);},onError:e=>errors.push(e),upload:async(slot,file,reference)=>{lastFile=file;window.uploadedReference=reference;events.push('upload:'+slot);await new Promise(r=>releaseUpload=r);events.push('uploaded');}});window.capture=capture;return null;}
 createRoot(document.getElementById('hook')).render(React.createElement(App));
 createRoot(document.getElementById('root')).render(React.createElement(LineupReview,{nade,user:{identitySteam64:'76561198000000002',role:'admin'},disabled:false,mutate:async()=>{},onEntriesChange:()=>{}}));
-const waitFor=async f=>{for(let i=0;i<250;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+JSON.stringify({events,errors}));};
+const waitFor=async f=>{for(let i=0;i<450;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+JSON.stringify({events,errors}));};
 const assert=(condition,message)=>{if(!condition)throw Error(message+': '+JSON.stringify({events,errors}));};
 async function connect(){await waitFor(()=>window.capture);await window.capture.connect();await waitFor(()=>window.capture.capture);events.length=0;}
 window.checkPhoto=async(slot='aim',fail=false)=>{
@@ -53,7 +53,7 @@ window.checkPhoto=async(slot='aim',fail=false)=>{
  const bitmap=await createImageBitmap(lastFile),photo=document.createElement('canvas');
  assert(bitmap.width===1912&&bitmap.height===1044,'Fensterrand nicht entfernt');photo.width=bitmap.width;photo.height=bitmap.height;photo.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
  const pixel=(x,y)=>Array.from(photo.getContext('2d').getImageData(x,y,1,1).data);
- assert((pixel(962,522)[0]>210)===(slot!=='front'),'Echtes Fadenkreuz verschoben/Frontfoto falsch');
+ assert((pixel(962,522)[0]>210)===(!['front','effect'].includes(slot)),'Echtes Fadenkreuz verschoben/Front- oder Wirkungsfoto falsch');
  assert(pixel(962,508)[1]<150&&pixel(10,10)[0]<100,'Overlay oder Fensterrahmen im Bild');
  releaseUpload();await waitFor(()=>events.includes('ack:true'));assert(!errors.length,'Unerwarteter Fehler');window.capture.disconnect();
  return {result:'PASS: Desktop-Foto, automatische Ränder, echtes Fadenkreuz, Wiederherstellung vor Upload',slot,events};
@@ -73,6 +73,47 @@ window.checkVideoAbort=async()=>{
  await waitFor(()=>errors.some(error=>error.includes('minimiert')));
  assert(events.includes('restore')&&!events.includes('upload:video'),'Abgebrochenes Video wurde hochgeladen oder Einstellungen blieben verändert');
  window.frameFailure=false;window.capture.disconnect();return {result:'PASS: Verlorenes Spielfenster verwirft Video und stellt CS2 wieder her',events};
+};
+window.checkVideoRecover=async()=>{
+ await connect();await window.capture.startVideo();await waitFor(()=>window.capture.recording);window.frameFailure=true;
+ await new Promise(r=>setTimeout(r,3500));window.frameFailure=false;
+ await new Promise(r=>setTimeout(r,1200));
+ assert(window.capture.recording&&!errors.length&&!events.includes('disconnect'),'Kurze Unterbrechung beendet die Aufnahme');
+ window.pressF8();await waitFor(()=>releaseUpload);releaseUpload();await waitFor(()=>!window.capture.recording);window.capture.disconnect();
+ return {result:'PASS: Kurze Spielbild-Unterbrechung wird überbrückt, Video lässt sich abschließen',events};
+};
+window.checkPhotoRecover=async()=>{
+ await connect();window.frameFailure=true;setTimeout(()=>window.frameFailure=false,1800);
+ await window.capture.photo('aim',true);await waitFor(()=>releaseUpload);
+ assert(events.includes('restore')&&events.includes('captured')&&!errors.length,'Kurzer Bildaussetzer verwirft Foto');
+ releaseUpload();await waitFor(()=>events.includes('ack:true'));window.capture.disconnect();
+ return {result:'PASS: Foto wartet bei kurzem Bildaussetzer auf ein aktuelles Bild',events};
+};
+window.checkPhotoSignals=async()=>{
+ await connect();window.releaseFailures=1;window.ackFailures=1;
+ await window.capture.photo('aim',true);await waitFor(()=>releaseUpload);await waitFor(()=>events.includes('captured'));
+ assert(events.filter(event=>event==='upload:aim').length===1,'Datei bei fehlgeschlagener Rückmeldung verloren oder doppelt hochgeladen');
+ releaseUpload();await waitFor(()=>events.includes('ack:true'));
+ assert(events.includes('captured-retry')&&events.includes('ack-retry')&&!errors.length&&!events.includes('disconnect'),'Spielbild bei Rückmeldungsfehler verloren');
+ window.capture.disconnect();return {result:'PASS: Aufnahme und Upload bleiben bei kurzen Rückmeldungsfehlern erhalten',events};
+};
+window.checkFollowVideo=async()=>{
+ await connect();window.testFollow=true;const source=window.capture.capture;
+ await window.capture.startVideo();await waitFor(()=>window.capture.recording);
+ window.selection={id:'next',nade:{...nade,owner:'default',displayName:'Importierte Aufnahme'},step:'effect'};
+ await waitFor(()=>window.followedStep==='effect');
+ assert(window.capture.recording&&window.capture.capture===source,'Panel-Schritt während Video nicht synchronisiert');
+ window.pressF8();await waitFor(()=>releaseUpload);
+ assert(window.uploadedReference.owner===nade.owner&&window.uploadedReference.name===nade.name,'Video dem inzwischen ausgewählten Lineup zugeordnet');
+ releaseUpload();await waitFor(()=>!window.capture.recording);assert(!errors.length,'Video-Zuordnung fehlgeschlagen');window.capture.disconnect();
+ return {result:'PASS: Aktueller Panel-Schritt auch während Video, Upload bleibt beim ursprünglichen Owner und Lineup',events};
+};
+window.checkConnectFailure=async()=>{
+ await waitFor(()=>window.capture);const share=navigator.mediaDevices.getDisplayMedia;
+ navigator.mediaDevices.getDisplayMedia=async()=>{throw Error('Bildschirmfreigabe abgebrochen');};
+ await window.capture.connect();await waitFor(()=>!window.capture.connecting);navigator.mediaDevices.getDisplayMedia=share;
+ assert(!window.capture.capture&&events.includes('disconnect')&&errors.includes('Bildschirmfreigabe abgebrochen'),'Abgebrochene Freigabe behält die Desktop-Verbindung');
+ return {result:'PASS: Abgebrochene Bildschirmfreigabe gibt die Desktop-Verbindung frei',events};
 };
 window.checkUI=()=>{const text=document.body.innerText;assert(text.includes('Review mit Playbook für Windows'),'Desktop-Einrichtung fehlt');assert(!text.includes('Fotomodus-Befehl kopieren'),'Manuelle Befehle in Desktop-App');assert(document.querySelectorAll('.review-step').length===6,'Stepper fehlt');assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');return 'PASS: Desktop-Einrichtung, Update-Button, sechs Schritte';};
 </script></body></html>

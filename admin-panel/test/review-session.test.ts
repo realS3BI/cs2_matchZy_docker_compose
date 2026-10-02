@@ -1,0 +1,93 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import express from "express";
+import { installReviewCapture, ReviewCaptureBridge } from "../src/review-capture.js";
+
+test("one Steam-scoped session follows panel steps and pins requests and commands to their original lineup", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "playbook-session-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const bridge = new ReviewCaptureBridge(directory), actor = "76561198000000001", other = "76561198000000002";
+  const session = await bridge.start(actor, { followPanel: true }, 1000);
+  const put = (file, value) => writeFile(join(directory, actor, `${file}.json`), JSON.stringify(value));
+  assert.equal(await bridge.poll(actor, session.id, async () => { throw Error("No lineup selected yet"); }, 1100), null);
+  assert.equal(await bridge.selection(actor, session.id, 1100), null);
+  await assert.rejects(bridge.requestPhoto(actor, session.id, "aim", 1200), { status: 409 });
+  const first = { id: "first", sessionId: session.id, actor, owner: "default", map: "de_mirage", name: "window", step: "front" };
+  await put("selection", { ...first, actor: other });
+  assert.equal(await bridge.selection(actor, session.id, 1300), null);
+  await put("selection", { ...first, sessionId: "another-browser" });
+  assert.equal(await bridge.selection(actor, session.id, 1300), null);
+  await put("selection", first);
+  assert.deepEqual(await bridge.selection(actor, session.id, 1400), first);
+  await assert.rejects(bridge.selection(other, session.id, 1400), { status: 409 });
+  const request = await bridge.requestPhoto(actor, session.id, "front", 1500);
+  const second = { ...first, id: "second", owner: other, step: "effect" };
+  await put("selection", second);
+  assert.equal(JSON.parse(await readFile(join(directory, actor, "request.json"), "utf8")).owner, "default");
+  assert.equal((await bridge.selection(actor, session.id, 1600)).owner, other);
+  await put("command", { id: request.id, sessionId: session.id, action: "photo", slot: "front", notBefore: 0, expiresAt: 30_000, owner: "default", map: first.map, name: first.name });
+  const command = await bridge.poll(actor, session.id, async reference => assert.equal(reference.owner, "default"), 1700);
+  assert.ok(command && "reference" in command);
+  assert.deepEqual(command.reference, { owner: "default", map: first.map, name: first.name });
+  await bridge.captured(actor, { sessionId: session.id, commandId: request.id }, 1800);
+  await bridge.acknowledge(actor, { sessionId: session.id, commandId: request.id, ok: true }, 1900);
+  // Approving/deleting the selected entry must not invalidate the shared stream.
+  assert.equal(await bridge.poll(actor, session.id, async () => { throw Error("Entry now official"); }, 2000), null);
+  const next = await bridge.requestVideo(actor, session.id, "video-start", 2100);
+  assert.equal(next.owner, other);
+  await put("command", { ...next, notBefore: 0 });
+  await bridge.acknowledge(actor, { sessionId: session.id, commandId: next.id, ok: true }, 2200);
+  await put("selection", first);
+  const stop = await bridge.requestVideo(actor, session.id, "video-stop", 2300);
+  assert.equal(stop.owner, other, "Stopping a video retains its recording target despite panel navigation");
+  assert.equal((await bridge.session(actor, session.id, 2400)).id, session.id);
+});
+
+test("review HTTP sessions use the authenticated Steam ID, return exact panel media and stay connected after approval", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "playbook-session-api-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const actor = "76561198000000001", other = "76561198000000002";
+  let user = { identitySteam64: actor, role: "admin" };
+  const entries: any[] = [
+    { owner: "default", map: "de_mirage", name: "window", displayName: "Importiert" },
+    { owner: actor, map: "de_mirage", name: "window", displayName: "Eigene Aufnahme", reviewMedia: { front: { url: "https://example.invalid/front.jpg" } } },
+  ];
+  const app = express();
+  app.use(express.json());
+  app.use((_req, res, next) => { res.locals.user = user; next(); });
+  installReviewCapture(app, { config: { liveMatchZyNadesFile: join(directory, "savednades.json"), uploadthingToken: "configured" }, store: { getNades: async () => entries } });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const address = server.address() as { port: number };
+  const call = (route, body) => fetch(`http://127.0.0.1:${address.port}/api/nades/review/capture/${route}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  user.role = "player";
+  assert.equal((await call("start", { followPanel: true })).status, 403);
+  user.role = "admin";
+  const start = await call("start", { followPanel: true, actor: other });
+  assert.equal(start.status, 200);
+  const { session } = await start.json() as any;
+  assert.equal(session.actor, actor);
+  assert.equal(session.followPanel, true);
+  const put = (file, value) => writeFile(join(directory, "savednades.review", actor, `${file}.json`), JSON.stringify(value));
+  const selection = { id: "selection", sessionId: session.id, actor, owner: actor, map: "de_mirage", name: "window", step: "front" };
+  await put("selection", selection);
+  const command = { id: "a".repeat(32), sessionId: session.id, action: "photo", slot: "front", presentation: "review-v2", owner: actor, map: selection.map, name: selection.name, notBefore: 0, expiresAt: Date.now() + 30_000 };
+  await put("command", command);
+  user.identitySteam64 = other;
+  assert.equal((await call("poll", { sessionId: session.id, actor })).status, 409);
+  user.identitySteam64 = actor;
+  const poll: any = await (await call("poll", { sessionId: session.id })).json();
+  assert.equal(poll.selection.nade.displayName, "Eigene Aufnahme");
+  assert.deepEqual(poll.selection.nade.reviewMedia, entries[1].reviewMedia);
+  assert.equal(poll.command.nade.owner, actor);
+  assert.equal((await call("ack", { sessionId: session.id, commandId: command.id, ok: true })).status, 200);
+  entries[1].official = true;
+  const approved = await call("poll", { sessionId: session.id });
+  assert.equal(approved.status, 200);
+  const approvedData: any = await approved.json();
+  assert.equal(approvedData.selection.nade.official, true);
+});

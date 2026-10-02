@@ -42,26 +42,56 @@ export class ReviewRecorder {
   static async share() {
     if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Bildschirmaufnahme benötigt HTTPS und einen unterstützten Browser. Unter Windows bitte Chrome oder Edge verwenden.");
     if (desktop) await desktop.connect();
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, ...(desktop ? { width: { ideal: 16384 }, height: { ideal: 16384 } } : {}) }, audio: false });
-    const capture = new ReviewRecorder(stream);
+    let capture: ReviewRecorder | undefined;
     try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, ...(desktop ? { width: { ideal: 16384 }, height: { ideal: 16384 } } : {}) }, audio: false });
+      capture = new ReviewRecorder(stream);
       await capture.video.play();
       if (desktop) await capture.refreshDesktopFrame();
       return capture;
     }
-    catch (error) { capture.dispose(); throw error; }
+    catch (error) {
+      capture?.dispose();
+      if (desktop) await desktop.disconnect().catch(() => {});
+      throw error;
+    }
   }
   async refreshDesktopFrame() {
     if (desktop) this.setPhotoFrame(await desktop.frame(this.video.videoWidth, this.video.videoHeight));
   }
+  private async gameFrame(): Promise<ImageBitmap | undefined> {
+    const Capture = (window as any).ImageCapture;
+    if (!Capture) return undefined;
+    let expired = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const frame = new Capture(this.stream.getVideoTracks()[0]).grabFrame().then((bitmap: ImageBitmap) => {
+      if (expired) { bitmap.close(); throw new Error("Spielbild kurz unterbrochen."); }
+      return bitmap;
+    });
+    try {
+      return await Promise.race([frame, new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => { expired = true; reject(new Error("Spielbild kurz unterbrochen.")); }, 1200);
+      })]);
+    } finally { clearTimeout(timer!); }
+  }
   async photo(name: string) {
-    await this.refreshDesktopFrame();
-    this.checkPhotoFrame();
-    if (this.stream.getVideoTracks()[0]?.readyState !== "live" || !this.video.videoWidth) throw new Error("Das Spielbild ist noch nicht bereit. Prüfe die Vorschau und versuche es erneut.");
     // A background tab may stop painting its video element. Read the track
     // directly in Chromium so an in-game trigger captures the current frame.
-    const Capture = (window as any).ImageCapture;
-    const frame: ImageBitmap | undefined = Capture ? await new Capture(this.stream.getVideoTracks()[0]).grabFrame() : undefined;
+    let frame: ImageBitmap | undefined;
+    const deadline = Date.now() + 5000;
+    while (true) {
+      try {
+        await this.refreshDesktopFrame();
+        this.checkPhotoFrame();
+        if (this.stream.getVideoTracks()[0]?.readyState !== "live" || this.stream.getVideoTracks()[0].muted || !this.video.videoWidth)
+          throw new Error("Das Spielbild ist noch nicht bereit. Prüfe die Vorschau und versuche es erneut.");
+        frame = await this.gameFrame();
+        break;
+      } catch (error) {
+        if (this.stream.getVideoTracks()[0]?.readyState !== "live" || Date.now() >= deadline) throw error;
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
     const source = frame || this.video;
     const width = frame?.width || this.video.videoWidth;
     const height = frame?.height || this.video.videoHeight;
@@ -92,24 +122,36 @@ export class ReviewRecorder {
       let stopped = false;
       let timer: ReturnType<typeof setTimeout>;
       let geometryTimer: ReturnType<typeof setTimeout>;
+      let geometryInterrupted = 0;
+      let frameInterrupted = 0;
       this.stopVideoFrame = () => { stopped = true; clearTimeout(timer); clearTimeout(geometryTimer); output.getTracks().forEach(track => track.stop()); };
       const checkGeometry = async () => {
-        try { await this.refreshDesktopFrame(); }
-        catch (error) { if (!stopped) this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen.")); }
-        if (!stopped) geometryTimer = setTimeout(() => void checkGeometry(), 3000);
+        try { await this.refreshDesktopFrame(); geometryInterrupted = 0; }
+        catch (error) {
+          geometryInterrupted ||= Date.now();
+          if (!stopped && (this.stream.getVideoTracks()[0]?.readyState !== "live" || Date.now() - geometryInterrupted >= 5000))
+            this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen."));
+        }
+        if (!stopped) geometryTimer = setTimeout(() => void checkGeometry(), geometryInterrupted ? 250 : 3000);
       };
       const paint = async () => {
-        const Capture = (window as any).ImageCapture;
         let frame: ImageBitmap | undefined;
         try {
-          frame = Capture ? await new Capture(this.stream.getVideoTracks()[0]).grabFrame() : undefined;
+          if (this.stream.getVideoTracks()[0]?.readyState !== "live" || this.stream.getVideoTracks()[0].muted)
+            throw new Error("Spielbild unterbrochen.");
+          frame = await this.gameFrame();
           if (stopped) return;
           const rect = photoRectangle(this.photoFrame!, frame?.width || this.video.videoWidth, frame?.height || this.video.videoHeight);
           if (rect.width !== initial.width || rect.height !== initial.height) throw new Error("Die Spielgröße hat sich während des Videos geändert. Bitte erneut aufnehmen.");
           context.drawImage(frame || this.video, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
-        } catch (error) { this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen.")); }
+          frameInterrupted = 0;
+        } catch (error) {
+          frameInterrupted ||= Date.now();
+          if (this.stream.getVideoTracks()[0]?.readyState !== "live" || Date.now() - frameInterrupted >= 5000)
+            this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen."));
+        }
         finally { frame?.close(); }
-        if (!stopped) timer = setTimeout(() => void paint(), 33);
+        if (!stopped) timer = setTimeout(() => void paint(), frameInterrupted ? 150 : 33);
       };
       context.drawImage(this.video, initial.x, initial.y, initial.width, initial.height, 0, 0, canvas.width, canvas.height);
       const result = this.startVideo(onLimit, output);

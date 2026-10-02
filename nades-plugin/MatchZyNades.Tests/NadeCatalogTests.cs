@@ -40,7 +40,7 @@ public sealed class NadeCatalogTests
         var metadata = JsonSerializer.Serialize(new[] { new {
             owner = "default", map = "de_mirage", name = "window", team = "ct", throwFromTitle = "Über T-Spawn", throwToTitle = "Fenster",
             throwTechnique = "Ein Schritt", is_jumpthrow = true, is_crouch = false, is_walking = false, is_running = false,
-            is_stepping = true, click_type = "both", flightDuration = 3.125f
+            is_stepping = true, click_type = "both", flightDuration = 3.125f, landingPos = "100.5 -20 30"
         } });
         var nade = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7655", metadata));
         Assert.Equal("ct", nade.Team);
@@ -49,9 +49,42 @@ public sealed class NadeCatalogTests
         Assert.Equal("Ein Schritt", nade.Technique);
         Assert.Equal(new ThrowAttributes(IsJumpthrow: true, IsStepping: true, ClickType: "both"), nade.Attributes);
         Assert.Equal(3.125f, nade.FlightDuration);
+        Assert.Equal(new Coordinates(100.5f, -20, 30), nade.LandingPosition);
         var legacy = Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7655"));
         Assert.Null(legacy.Attributes);
         Assert.Null(legacy.FlightDuration);
+        Assert.Null(legacy.LandingPosition);
+    }
+
+    [Fact]
+    public void LandingPointsRespectOwnerAndMapAndReadMatchZysExtendedField()
+    {
+        var json = JsonSerializer.Serialize(new {
+            @default = new { window = new { Map = "de_mirage", Type = "Smoke", LineupPos = "1 2 3", LineupAng = "4 5 6", LandingPos = "10 20 30" } },
+            @private = new { window = Entry() }
+        });
+        var metadata = JsonSerializer.Serialize(new[] {
+            new { owner = "private", map = "de_mirage", name = "window", landingPos = "40 50 60" },
+            new { owner = "default", map = "de_nuke", name = "window", landingPos = "70 80 90" }
+        });
+        var nades = NadeCatalog.Parse(json, "de_mirage", "7655", metadata);
+        Assert.Equal(new Coordinates(10, 20, 30), nades.Single(n => n.Owner == "default").LandingPosition);
+        Assert.Equal(new Coordinates(40, 50, 60), nades.Single(n => n.Owner == "private").LandingPosition);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("1 2")]
+    [InlineData("NaN 2 3")]
+    [InlineData("Infinity 2 3")]
+    public void ClearedOrMalformedMetadataNeverUsesAnOldLandingPoint(string? target)
+    {
+        var json = JsonSerializer.Serialize(new { @default = new { window = new {
+            Map = "de_mirage", Type = "Smoke", LineupPos = "1 2 3", LineupAng = "4 5 6", LandingPos = "10 20 30"
+        } } });
+        var metadata = JsonSerializer.Serialize(new[] { new { owner = "default", map = "de_mirage", name = "window", landingPos = target } });
+        Assert.Null(Assert.Single(NadeCatalog.Parse(json, "de_mirage", "7655", metadata)).LandingPosition);
     }
 
     [Fact]

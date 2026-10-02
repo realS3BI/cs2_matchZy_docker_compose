@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.2.0";
+    public override string ModuleVersion => "2.3.0";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -392,6 +392,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         if (!TrainingEnabled) { ResetCapture(); CloseAll(); _edits.Clear(); CancelMapVote(); return; }
         RecordSaveInputs();
+        foreach (var photo in _reviewPhotos.Values) photo.Presentation.Maintain();
         // MatchZy's own .loadnade/.last/.loadpos bypass our loader. Repair the same
         // scene-node tilt for living practice players (including practice bots).
         // No changes in live matches or to parented/spectator/dead pawns.
@@ -416,7 +417,11 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             if (session.Focused && (Server.CurrentTime - session.LastInput > 90f || MenuManager.GetActiveMenu(player) != null))
                 SetFocus(session, false);
             if (!session.Visible) continue;
-            if (session.Focused) LockAttacks(session);
+            if (session.Focused) {
+                LockAttacks(session);
+                if (session.Pawn.MoveType == MoveType_t.MOVETYPE_NOCLIP)
+                    session.Pawn.AbsVelocity.X = session.Pawn.AbsVelocity.Y = session.Pawn.AbsVelocity.Z = 0;
+            }
             if (_menus.ContainsKey(slot) && session.Visible)
             {
                 try
@@ -472,8 +477,13 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             session.MoveType = session.Pawn.MoveType;
             session.ActualMoveType = session.Pawn.ActualMoveType;
             session.NextAttack = session.Pawn.WeaponServices!.As<CCSPlayer_WeaponServices>().NextAttack;
-            session.Pawn.MoveType = MoveType_t.MOVETYPE_NONE;
-            session.Pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
+            // Keep flight active while the HUD captures input. MOVETYPE_NONE
+            // conflicts with the client's noclip prediction when opening the panel.
+            if (session.MoveType != MoveType_t.MOVETYPE_NOCLIP) {
+                session.Pawn.MoveType = MoveType_t.MOVETYPE_NONE;
+                session.Pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
+            }
+            session.Pawn.AbsVelocity.X = session.Pawn.AbsVelocity.Y = session.Pawn.AbsVelocity.Z = 0;
             Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_MoveType");
             LockAttacks(session);
             return;

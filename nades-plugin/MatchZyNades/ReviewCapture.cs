@@ -3,13 +3,15 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace MatchZyNades;
 
-public sealed record ReviewSession(string Id, string Actor, string Owner, string Map, string Name, long ExpiresAt, bool Recording = false);
-public sealed record ReviewCommand(string Id, string SessionId, string Action, string Slot, long NotBefore, long ExpiresAt, string Presentation = "");
-public sealed record ReviewPhotoRequest(string Id, string SessionId, string Slot, long ExpiresAt, string Action = "photo");
+public sealed record ReviewSession(string Id, string Actor, string Owner, string Map, string Name, long ExpiresAt, bool Recording = false, bool FollowPanel = false);
+public sealed record ReviewCommand(string Id, string SessionId, string Action, string Slot, long NotBefore, long ExpiresAt, string Presentation = "", string Owner = "", string Map = "", string Name = "");
+public sealed record ReviewPhotoRequest(string Id, string SessionId, string Slot, long ExpiresAt, string Action = "photo", string Owner = "", string Map = "", string Name = "");
+public sealed record ReviewSelection(string Id, string SessionId, string Actor, string Owner, string Map, string Name, string Step);
 public sealed record ReviewCaptured(string SessionId, string CommandId);
 public sealed record ReviewResult(string SessionId, string CommandId, bool Ok, string Message);
 
@@ -27,8 +29,8 @@ public static class ReviewCaptureFiles
         var folder = Path.Combine(directory, actor);
         var session = Read<ReviewSession>(Path.Combine(folder, "session.json"));
         if (session == null || session.Actor != actor || session.ExpiresAt <= now || !Guid.TryParse(session.Id, out _) ||
-            session.Owner != lineup.Owner || session.Map != lineup.Map || session.Name != lineup.Name)
-            throw new InvalidOperationException("Öffne dieses Lineup im Browser, verbinde das Spielbild und lasse die Seite geöffnet.");
+            !session.FollowPanel && (session.Owner != lineup.Owner || session.Map != lineup.Map || session.Name != lineup.Name))
+            throw new InvalidOperationException("Öffne Server → Reviews, verbinde das Spielbild und lasse die Seite geöffnet.");
         var pending = Read<ReviewCommand>(Path.Combine(folder, "command.json"));
         var result = Read<ReviewResult>(Path.Combine(folder, "result.json"));
         if (pending?.SessionId == session.Id && pending.ExpiresAt + 180_000 > now && result?.CommandId != pending.Id)
@@ -36,7 +38,7 @@ public static class ReviewCaptureFiles
         if (commandId != null && (!Guid.TryParseExact(commandId, "N", out _) || commandId.Length != 32))
             throw new InvalidOperationException("Ungültige Aufnahme-Anfrage.");
         var command = new ReviewCommand(commandId ?? Guid.NewGuid().ToString("N"), session.Id, action, slot,
-            now + (action == "video-stop" ? 0 : 3000), now + 30_000, presentation);
+            now + (action == "video-stop" ? 0 : 3000), now + 30_000, presentation, lineup.Owner, lineup.Map, lineup.Name);
         var path = Path.Combine(folder, "command.json");
         File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(command, Json));
         File.Move(path + ".tmp", path, true);
@@ -58,30 +60,38 @@ public static class ReviewMenu
             ("aim", "Ausrichtung", "Zeige das Fadenkreuz auf dem exakten Lineup-Punkt. Lineup laden stellt Position und Blickrichtung ein."),
             ("position", "Standposition", "Zeige den Boden und die Kanten, an denen du stehst. Stelle den Bildausschnitt selbst ein."),
             ("front", "Vorderansicht", "Lädt den gespeicherten Start und stellt automatisch eine feste Vorderansicht ohne Fadenkreuz ein."),
-            ("effect", "Wirkung", "Granate selbst werfen, mit Noclip zum Ziel fliegen und die entfaltete Wirkung zeigen.")
+            ("effect", "Wirkung", "Teleportiert dich beim Öffnen zum gespeicherten Ziel und schaltet Noclip ein. Herausfliegen, den Bildausschnitt wählen und die Wirkung ohne Fadenkreuz aufnehmen.")
         };
         var items = definitions.Select((step, i) => new MenuItem($"{i + 1}. {step.Item2}{(slots.Contains(step.Item1) ? " [Foto vorhanden]" : "")}", step.Item3,
             Page: new($"{i + 1}/6 · {step.Item2}", step.Item3, [
                 new("Foto aufnehmen & hochladen", "Die Windows-App stellt HUD, Waffe und Fadenkreuz automatisch ein. Im Browser vorher der Vorbereitung folgen. Nach dem Foto öffnet sich diese Menüseite wieder.", Request: new(TrainingAction.ReviewPhoto, lineup, Setting: step.Item1)),
                 new("Lineup laden", "Teleportiert dich zum gespeicherten Start und richtet den Blick aus. Danach die gewünschte Perspektive selbst einstellen.", Request: new(TrainingAction.LoadLineup, lineup)),
-                new("Aufnahme-Hilfe anzeigen", step.Item3, Request: new(TrainingAction.ReviewHelp, lineup, Setting: step.Item1))
-            ], Key: $"review-{step.Item1}:{lineup.Owner}:{lineup.Map}:{lineup.Name}"))).ToList();
+                new("Aufnahme-Hilfe anzeigen", step.Item3, Request: new(TrainingAction.ReviewHelp, lineup, Setting: step.Item1)),
+                .. (step.Item1 == "effect" ? new MenuItem[] {
+                    new("Zum Ziel teleportieren", "Kehrt zum Ziel der Granate zurück und schaltet Noclip ein. Fehlt der Zielpunkt, zuerst das Lineup laden und werfen.", Request: new(TrainingAction.ReviewTeleportEffect, lineup)),
+                    new("Noclip umschalten", "Nach dem Flug die Panel-Steuerung mit KP_0 öffnen und das Foto aufnehmen.", Request: new(TrainingAction.Noclip))
+                } : [])
+            ], Key: $"review-{step.Item1}:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: step.Item1),
+            Request: step.Item1 == "effect" ? new(TrainingAction.ReviewTeleportEffect, lineup) : null)).ToList();
         items.Add(new($"5. Video{(slots.Contains("video") ? " [Vorhanden]" : "")}", "Zum Start laufen, zielen, werfen und mit Noclip die Wirkung zeigen. Aufnahme in Playbook, ohne Ton, maximal zwei Minuten.",
             Page: new("5/6 · Video", "Nach dem Start drei Sekunden warten. Panel wird ausgeblendet. Die Windows-App aktiviert F8 automatisch; im Browser ist der Review-Bind nötig.", [
                 new("Video starten", "Playbook-Aufnahme starten. Erst nach der Chat-Bestätigung zum Startpunkt loslaufen.", Request: new(TrainingAction.ReviewVideoStart, lineup)),
-                new("Video stoppen & hochladen", "Beendet die Aufnahme und lädt das Video hoch. Windows-App: F8. Browser: bind F8 css_training_review_stop", Request: new(TrainingAction.ReviewVideoStop, lineup))
-            ], Key: $"review-video:{lineup.Owner}:{lineup.Map}:{lineup.Name}")));
+                new("Video stoppen & hochladen", "Beendet die Aufnahme und lädt das Video hoch. Windows-App: F8. Browser: bind F8 css_training_review_stop", Request: new(TrainingAction.ReviewVideoStop, lineup)),
+                new("Lineup laden", "Lädt den gespeicherten Start und die Blickrichtung für den nächsten Versuch.", Request: new(TrainingAction.LoadLineup, lineup)),
+                new("Zur Ausrichtung", "Zum Lineup-Schritt zurückkehren.", Page: items[0].Page),
+                new("Noclip umschalten", "Zum Ziel fliegen und die Wirkung zeigen.", Request: new(TrainingAction.Noclip))
+            ], Key: $"review-video:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "video")));
         items.Add(new("6. Prüfen & freigeben", "Die fünf Aufnahmen zuerst in der Website ansehen. Nur vollständige Reviews können offiziell freigegeben werden.",
             Page: new("6/6 · Freigabe", $"{slots.Length}/5 Medien vorhanden. Bilder und Video vor der Freigabe auf der Website prüfen.", [
                 new("Offiziell freigeben", "Bestätigt die Prüfung von Wurf, Fotos und Video. Die Website prüft Rolle, Version und Vollständigkeit erneut.",
                     Page: new("Freigabe bestätigen", "Hast du alle vier Fotos und das Video auf der Website geprüft?", [
                         new("Abbrechen", Request: new(TrainingAction.Back)),
                         new("Geprüft und offiziell freigeben", Request: new(TrainingAction.ReviewApprove, lineup))
-                    ], Key: $"review-approve:{lineup.Owner}:{lineup.Map}:{lineup.Name}"), Enabled: ReviewCaptureFiles.Slots.All(slots.Contains)),
+                    ], Key: $"review-approve:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "finish"), Enabled: ReviewCaptureFiles.Slots.All(slots.Contains)),
                 new("Überarbeitung anfragen", "Gibt die eingereichte Aufnahme an den Ersteller zurück.", Request: new(TrainingAction.ReviewReject, lineup), Enabled: lineup.ReviewStatus == "pending")
-            ], Key: $"review-finish:{lineup.Owner}:{lineup.Map}:{lineup.Name}")));
-        return new("Medien-Review", "In der Playbook-App oder im Browser dieses Lineup öffnen und Spielbild verbinden. Danach hier die Perspektiven aufnehmen. Dateien werden automatisch hochgeladen.", items,
-            Key: $"review:{lineup.Owner}:{lineup.Map}:{lineup.Name}");
+            ], Key: $"review-finish:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "finish")));
+        return new("Medien-Review", "Server → Reviews öffnen, CS2 starten und Spielbild verbinden. Lineup und Schritt erscheinen dort automatisch. Danach den Review hier steuern.", items,
+            Key: $"review:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "overview");
     }
 }
 
@@ -89,7 +99,7 @@ public sealed partial class MatchZyNadesPlugin
 {
     private sealed record PendingReview(string Session, string Command, string Action, long Expires);
     private sealed record ActivePhoto(string Session, string Command, long Expires, ReviewPhotoPresentation Presentation, MenuSession? Panel, bool Focused);
-    private sealed record ActiveVideo(string Session, MenuSession? Panel, bool Focused);
+    private sealed record ActiveVideo(string Session, MenuSession? Panel, bool Focused, NadeLineup Lineup);
     private readonly Dictionary<ulong, PendingReview> _reviewPending = [];
     private readonly Dictionary<ulong, ActivePhoto> _reviewPhotos = [];
     private readonly Dictionary<ulong, ActiveVideo> _reviewVideos = [];
@@ -97,11 +107,29 @@ public sealed partial class MatchZyNadesPlugin
     private string ReviewDirectory => Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.review");
     private bool HandleReviewAction(CCSPlayerController player, MenuRequest request, string? commandId = null)
     {
-        if (request.Action is not (TrainingAction.ReviewPhoto or TrainingAction.ReviewVideoStart or TrainingAction.ReviewVideoStop or TrainingAction.ReviewHelp or TrainingAction.ReviewApprove or TrainingAction.ReviewReject)) return false;
+        if (request.Action is not (TrainingAction.ReviewPhoto or TrainingAction.ReviewVideoStart or TrainingAction.ReviewVideoStop or TrainingAction.ReviewHelp or TrainingAction.ReviewApprove or TrainingAction.ReviewReject or TrainingAction.ReviewTeleportEffect)) return false;
         if (!CanWriteNades(player) || !TrainingEnabled) { Tell(player, "Der Medien-Review ist nur für Plattform-Admins im Training verfügbar."); return true; }
         var selected = request.Lineup;
         var lineup = ReadLibrary(player)?.FirstOrDefault(n => n.Owner == selected?.Owner && n.Map == selected.Map && n.Name == selected.Name);
         if (lineup == null || lineup.Official) { Tell(player, "Die Aufnahme ist nicht mehr verfügbar oder bereits offiziell."); return true; }
+        if (request.Action == TrainingAction.ReviewTeleportEffect) {
+            if (!Alive(player)) { Tell(player, "Bitte zuerst spawnen."); return true; }
+            if (_reviewPhotos.ContainsKey(player.SteamID)) { Tell(player, "Das vorige Foto wird noch aufgenommen."); return true; }
+            // A freshly measured landing point is usable before the website has synced it.
+            var captures = ReviewCaptureFiles.Read<NadeCapture[]>(Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.captures.json"));
+            var target = ReviewEffectTarget.Resolve(lineup, captures);
+            if (target is not { } point) {
+                Tell(player, "Für dieses Lineup fehlt der Zielpunkt. Zuerst Lineup laden und die Granate werfen, dann Zum Ziel teleportieren wählen.");
+                return true;
+            }
+            ReleaseControl(player.Slot);
+            var pawn = player.PlayerPawn.Value!;
+            pawn.MoveType = pawn.ActualMoveType = MoveType_t.MOVETYPE_NOCLIP;
+            Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
+            pawn.Teleport(new Vector(point.X, point.Y, point.Z), null, new Vector(0, 0, 0));
+            Tell(player, "Zum Ziel teleportiert. Noclip ist eingeschaltet: Herausfliegen und den Bildausschnitt wählen. KP_0 öffnet die Panel-Steuerung.");
+            return true;
+        }
         if (request.Action is TrainingAction.ReviewApprove or TrainingAction.ReviewReject) {
             if (selected?.Revision != lineup.Revision) { Tell(player, "Das Lineup wurde geändert. Bitte den Review erneut öffnen und prüfen."); return true; }
             QueueReviewDecision(player, lineup, request.Action); return true;
@@ -125,8 +153,8 @@ public sealed partial class MatchZyNadesPlugin
             // Validate the session before changing anything in the game.
             var session = ReviewCaptureFiles.Read<ReviewSession>(Path.Combine(ReviewDirectory, player.SteamID.ToString(), "session.json"));
             if (session == null || session.Actor != player.SteamID.ToString() || session.ExpiresAt <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() ||
-                session.Owner != lineup.Owner || session.Map != lineup.Map || session.Name != lineup.Name)
-                throw new InvalidOperationException("Öffne dieses Lineup im Browser und verbinde das Spielbild.");
+                !session.FollowPanel && (session.Owner != lineup.Owner || session.Map != lineup.Map || session.Name != lineup.Name))
+                throw new InvalidOperationException("Öffne Server → Reviews und verbinde das Spielbild.");
             if (action == "photo" && session.Recording) throw new InvalidOperationException("Bitte zuerst das laufende Video stoppen.");
             if (panel != null) Hide(panel);
             if (action == "photo") {
@@ -145,7 +173,7 @@ public sealed partial class MatchZyNadesPlugin
                 _reviewPhotos[player.SteamID] = new(command.SessionId, command.Id, command.ExpiresAt, presentation, panel, focused);
                 // Chat stays silent during a photo, including the countdown.
             } else {
-                if (action == "video-start") _reviewVideos[player.SteamID] = new(command.SessionId, panel, focused);
+                if (action == "video-start") _reviewVideos[player.SteamID] = new(command.SessionId, panel, focused, lineup);
                 Tell(player, action == "video-start" ? "Video startet nach drei Sekunden. Warte auf die Bestätigung, dann loslaufen. F8 stoppt mit eingerichtetem Review-Bind." : "Video wird beendet und hochgeladen. Bitte warten.");
             }
         }
@@ -193,6 +221,7 @@ public sealed partial class MatchZyNadesPlugin
     }
     private void ReadReviewResults()
     {
+        SyncReviewSelections();
         ReadBrowserCaptureRequests();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         foreach (var (actor, photo) in _reviewPhotos.ToArray()) {
@@ -231,6 +260,29 @@ public sealed partial class MatchZyNadesPlugin
                 RestoreReviewVideo(actor, true);
         }
     }
+    private void SyncReviewSelections()
+    {
+        if (!TrainingEnabled) return;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        foreach (var panel in _menus.Values) {
+            var player = panel.Player;
+            var page = panel.Menu.Current;
+            if (!player.IsValid || !CanWriteNades(player) || page.ReviewLineup is not { } lineup) continue;
+            var folder = Path.Combine(ReviewDirectory, player.SteamID.ToString());
+            var session = ReviewCaptureFiles.Read<ReviewSession>(Path.Combine(folder, "session.json"));
+            if (session == null || session.Actor != player.SteamID.ToString() || session.ExpiresAt <= now) continue;
+            var previous = ReviewCaptureFiles.Read<ReviewSelection>(Path.Combine(folder, "selection.json"));
+            if (previous?.SessionId == session.Id && previous.Owner == lineup.Owner && previous.Map == lineup.Map && previous.Name == lineup.Name && previous.Step == page.ReviewStep) continue;
+            try {
+                var selection = new ReviewSelection(Guid.NewGuid().ToString("N"), session.Id, session.Actor, lineup.Owner, lineup.Map, lineup.Name, page.ReviewStep);
+                var path = Path.Combine(folder, "selection.json");
+                File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(selection, ReviewCaptureFiles.Json));
+                File.Move(path + ".tmp", path, true);
+            } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+                Logger.LogWarning(error, "Could not sync review selection for {SteamId}", player.SteamID);
+            }
+        }
+    }
     private void ReadBrowserCaptureRequests()
     {
         if (!TrainingEnabled) return;
@@ -244,7 +296,7 @@ public sealed partial class MatchZyNadesPlugin
             if (session?.Id != request.SessionId || session.Actor != player.SteamID.ToString()) continue;
             var previous = ReviewCaptureFiles.Read<ReviewCommand>(Path.Combine(folder, "command.json"));
             if (previous?.Id == request.Id) continue;
-            var lineup = ReadLibrary(player, quiet: true)?.FirstOrDefault(n => n.Owner == session.Owner && n.Map == session.Map && n.Name == session.Name);
+            var lineup = ReadLibrary(player, quiet: true)?.FirstOrDefault(n => n.Owner == (session.FollowPanel ? request.Owner : session.Owner) && n.Map == (session.FollowPanel ? request.Map : session.Map) && n.Name == (session.FollowPanel ? request.Name : session.Name));
             if (lineup == null || lineup.Official) { WriteReviewFailure(player.SteamID, request.Id, "Dieses Lineup ist nicht mehr für Aufnahmen verfügbar.", requestOnly: true); continue; }
             if (request.Action != "video-stop" && !Alive(player)) { WriteReviewFailure(player.SteamID, request.Id, "Bitte zuerst spawnen.", requestOnly: true); continue; }
             var action = request.Action == "video-start" ? TrainingAction.ReviewVideoStart : request.Action == "video-stop" ? TrainingAction.ReviewVideoStop : TrainingAction.ReviewPhoto;
@@ -268,7 +320,8 @@ public sealed partial class MatchZyNadesPlugin
     {
         if (player is not { IsValid: true, IsBot: false } || !TrainingEnabled || !CanWriteNades(player)) return;
         var session = ReviewCaptureFiles.Read<ReviewSession>(Path.Combine(ReviewDirectory, player!.SteamID.ToString(), "session.json"));
-        var lineup = session == null ? null : ReadLibrary(player, quiet: true)?.FirstOrDefault(n => n.Owner == session.Owner && n.Map == session.Map && n.Name == session.Name);
+        var reference = _reviewVideos.GetValueOrDefault(player.SteamID)?.Lineup;
+        var lineup = session == null ? null : ReadLibrary(player, quiet: true)?.FirstOrDefault(n => n.Owner == (reference?.Owner ?? session.Owner) && n.Map == (reference?.Map ?? session.Map) && n.Name == (reference?.Name ?? session.Name));
         if (lineup == null) { Tell(player, "Bitte zuerst das Spielbild auf der Review-Seite verbinden."); return; }
         HandleReviewAction(player, new(TrainingAction.ReviewVideoStop, lineup));
     }

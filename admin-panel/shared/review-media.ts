@@ -2,7 +2,7 @@ export const REVIEW_STEPS = [
   { id: "aim", title: "Ausrichtung", short: "Lineup", description: "Zeige aus der Ego-Perspektive genau, worauf das Fadenkreuz zielt. Orientierungspunkte müssen gut erkennbar sein." },
   { id: "position", title: "Standposition", short: "Position", description: "Zeige den Boden und die Kanten, an denen du dich für den Wurf positionierst." },
   { id: "front", title: "Vorderansicht", short: "Vorne", description: "Zeige die Spielfigur von vorne in Third Person, zusammen mit ihrer unmittelbaren Umgebung." },
-  { id: "effect", title: "Wirkung am Ziel", short: "Wirkung", description: "Wirf die Granate und zeige den tatsächlichen Effekt am Ziel. Bei einer Smoke muss die Rauchwolke vollständig sichtbar sein." },
+  { id: "effect", title: "Wirkung am Ziel", short: "Wirkung", description: "Wirf die Granate und zeige den tatsächlichen Effekt am Ziel ohne Fadenkreuz. Bei einer Smoke muss die Rauchwolke vollständig sichtbar sein." },
   { id: "video", title: "Den ganzen Wurf zeigen", short: "Video", description: "Laufe zum Startpunkt, richte das Fadenkreuz aus und wirf. Fliege anschließend mit Noclip zum Ziel und zeige die Wirkung." },
 ] as const;
 export type ReviewSlot = typeof REVIEW_STEPS[number]["id"];
