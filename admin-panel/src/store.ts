@@ -134,6 +134,13 @@ export class Store {
     }, { upsert: true });
   }
 
+  async recordTestLogin(steamId: string, name: string) {
+    await this.users.updateOne({ _id: steamId }, {
+      $setOnInsert: { identitySteam64: steamId, createdAt: new Date() },
+      $set: { name, role: "player", flags: [], lastLoginAt: new Date() }
+    }, { upsert: true });
+  }
+
   async getNadeFavorites(steamId) {
     const user = await this.users.findOne({ _id: steamId }, { projection: { nadeFavorites: 1 } });
     return user?.nadeFavorites || [];

@@ -60,6 +60,21 @@ Danach:
 docker compose up -d --build
 ```
 
+### Testzugang als Spieler
+
+Unter `https://playbook.schlossers.at/login/test` kannst du dich mit Benutzername und Passwort als zusätzlicher Spieler anmelden. Der Zugang zeigt die Plattform ohne Admin-Rechte und speichert eigene Favoriten. Auch wenn du bereits als Admin angemeldet bist, kannst du über diese Seite zum Testkonto wechseln. Zurück zum Admin-Konto kommst du über Abmelden und die Steam-Anmeldung.
+
+Setze dafür in Coolify oder in der Compose-Umgebung:
+
+```dotenv
+ADMIN_PANEL_TEST_USERNAME=test
+ADMIN_PANEL_TEST_PASSWORD=DEIN_LANGES_ZUFAELLIGES_PASSWORT
+```
+
+Deploye die Ressource anschließend neu. Der Benutzername ist standardmäßig `test`; das Passwort legst du selbst fest. Es gibt kein voreingestelltes Passwort. Ohne `ADMIN_PANEL_TEST_PASSWORD` bleibt der Testzugang deaktiviert und bestehende Test-Sitzungen verlieren ihren Zugriff. Lokal gelten dieselben Variablen in `.env.development`; starte die Entwicklungsumgebung danach neu.
+
+Alle Anmeldungen über diesen Zugang verwenden dasselbe separate Testkonto mit der Rolle Spieler und der reservierten internen Identität `00000000000000001`. Das Konto besitzt keine echte Steam-ID und keinen Ingame-Zugang. Test-Sitzungen bleiben auf Spielerrechte beschränkt, auch wenn die Rolle des Kontos in der Benutzerverwaltung geändert wird. Die bestehenden Regeln für Favoriten und das Bearbeiten eigener Lineups gelten auch für dieses Konto.
+
 In Coolify wird das Repository als Compose-Ressource verbunden. Diese Werte kommen in die Environment-Ansicht der Ressource. Fuer `admin-panel` wird eine Domain mit dem internen Zielport `8080` angelegt. Der Stack bindet diesen Port nicht an den Host; dadurch kollidiert er nicht mit anderen Coolify-Projekten, die intern ebenfalls Port 8080 verwenden.
 
 Am Host werden nur die Spielports veroeffentlicht:

@@ -13,6 +13,8 @@ export function getConfig() {
     bootstrapAdminSteamId: process.env.ADMIN_PANEL_ADMIN_STEAM_ID || "",
     promoteBootstrapAdmin: process.env.NODE_ENV === "development",
     sessionSecret: requireEnv("ADMIN_PANEL_SESSION_SECRET"),
+    testLoginUsername: process.env.ADMIN_PANEL_TEST_USERNAME || "test",
+    testLoginPassword: process.env.ADMIN_PANEL_TEST_PASSWORD || "",
     mongodbUri: "mongodb://mongodb:27017/cs2_admin_panel",
     mongoDbName: "cs2_admin_panel",
     projectDir: "",

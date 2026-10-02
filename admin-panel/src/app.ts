@@ -67,7 +67,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     windowMs: 5 * 60 * 1000,
     limit: 10,
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    message: { error: "Zu viele Anmeldeversuche. Bitte in fünf Minuten erneut versuchen." }
   });
 
   app.get("/healthz", (req, res) => res.json({ ok: true, service: "playbook" }));

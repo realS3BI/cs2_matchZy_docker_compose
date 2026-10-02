@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import type { Express } from "express";
 
 export const SESSION_COOKIE = "cs2_panel_session";
+// Reserved synthetic identity, outside the range of Steam-issued account IDs.
+export const TEST_USER_ID = "00000000000000001";
 const STATE_COOKIE = "cs2_steam_state";
 const STEAM_ENDPOINT = "https://steamcommunity.com/openid/login";
 const OPENID_NS = "http://specs.openid.net/auth/2.0";
@@ -77,6 +79,24 @@ export function installAuth(app: Express, { config, store, loginLimiter, steamVe
       return res.status(403).json({ error: "Anfrage von dieser Herkunft ist nicht erlaubt." });
     next();
   });
+  app.post("/api/auth/test", loginLimiter, async (req, res, next) => {
+    try {
+      if (!config.testLoginPassword) return res.status(404).json({ error: "Der Testzugang ist nicht aktiviert." });
+      const { username, password } = req.body || {};
+      if (typeof username !== "string" || typeof password !== "string" || username.length > 100 || password.length > 1024)
+        return res.status(401).json({ error: "Benutzername oder Passwort ist falsch." });
+      const same = (value: string, expected: string) => crypto.timingSafeEqual(Buffer.from(hash(value), "hex"), Buffer.from(hash(expected), "hex"));
+      const validUsername = same(username, config.testLoginUsername);
+      const validPassword = same(password, config.testLoginPassword);
+      if (!validUsername || !validPassword) return res.status(401).json({ error: "Benutzername oder Passwort ist falsch." });
+      await store.recordTestLogin(TEST_USER_ID, config.testLoginUsername);
+      if (req.cookies[SESSION_COOKIE]) await store.deleteSession(hash(req.cookies[SESSION_COOKIE]));
+      const token = newToken();
+      await store.createSession(hash(token), { purpose: "test", steamId: TEST_USER_ID, expiresAt: new Date(Date.now() + 12 * 60 * 60_000) });
+      res.cookie(SESSION_COOKIE, token, { ...cookieOptions, maxAge: 12 * 60 * 60_000 });
+      res.json({ ok: true });
+    } catch (error) { next(error); }
+  });
   app.post("/api/auth/logout", async (req, res, next) => {
     try {
       if (req.cookies[SESSION_COOKIE]) await store.deleteSession(hash(req.cookies[SESSION_COOKIE]));
@@ -88,10 +108,12 @@ export function installAuth(app: Express, { config, store, loginLimiter, steamVe
     try {
       const token = req.cookies[SESSION_COOKIE];
       const session = typeof token === "string" && /^[\w-]{43}$/.test(token) ? await store.getSession(hash(token)) : null;
-      if (!session || session.purpose !== "user") return res.status(401).json({ error: "Bitte mit Steam anmelden." });
+      if (!session || !["user", "test"].includes(session.purpose) ||
+          (session.purpose === "test" && (!config.testLoginPassword || session.steamId !== TEST_USER_ID)))
+        return res.status(401).json({ error: "Bitte anmelden." });
       const user = await store.getUser(session.steamId);
       if (!user) return res.status(401).json({ error: "Benutzer nicht gefunden." });
-      res.locals.user = user;
+      res.locals.user = session.purpose === "test" ? { ...user, role: "player", flags: [] } : user;
       next();
     } catch (error) { next(error); }
   });

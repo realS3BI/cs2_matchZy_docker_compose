@@ -130,6 +130,54 @@ function Login() {
   </main>;
 }
 
+function TestLogin() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    setPending(true);
+    setError("");
+    try {
+      await api("/api/auth/test", { method: "POST", body: JSON.stringify({ username, password }) });
+      window.location.replace("/maps");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Anmeldung fehlgeschlagen.");
+      setPending(false);
+    }
+  }
+
+  return <main className="login-shell login-grid grid min-h-screen place-items-center p-6">
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">PLAYBOOK</span></div>
+        <CardTitle>Als Spieler testen</CardTitle>
+        <CardDescription>Melde dich mit dem Testkonto an, um Maps und Lineups mit der Rolle Spieler zu nutzen.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit}>
+          <FieldGroup>
+            <Field htmlFor="test-username">
+              <FieldLabel>Benutzername</FieldLabel>
+              <Input id="test-username" name="username" autoComplete="username" required maxLength={100} value={username} onChange={event => setUsername(event.target.value)} disabled={pending} />
+            </Field>
+            <Field htmlFor="test-password">
+              <FieldLabel>Passwort</FieldLabel>
+              <Input id="test-password" name="password" type="password" autoComplete="current-password" required maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} disabled={pending} />
+            </Field>
+            <Message error={error} />
+            <Button type="submit" disabled={pending}>{pending && <Spinner data-icon="inline-start" />}{pending ? "Anmeldung läuft …" : "Als Spieler anmelden"}</Button>
+          </FieldGroup>
+        </form>
+      </CardContent>
+      <CardFooter><Button asChild variant="ghost"><NavLink to="/login">Zur Steam-Anmeldung</NavLink></Button></CardFooter>
+    </Card>
+  </main>;
+}
+
 function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, operation, status, statusUnavailable, selectedMap, selectedNade }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
   const currentPage = selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label);
@@ -845,6 +893,8 @@ function App() {
       </main>
     );
   }
+
+  if (location.pathname === "/login/test") return <TestLogin />;
 
   if (!authenticated) {
     if (location.pathname !== routePaths.login) {

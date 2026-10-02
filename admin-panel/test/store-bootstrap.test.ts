@@ -2,8 +2,34 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Store } from "../src/store.js";
+import { TEST_USER_ID } from "../src/auth.js";
 
 const mongodbUri = process.env.TEST_MONGODB_URI;
+
+test("test account logins preserve personal favorites and never inherit admin privileges", { skip: !mongodbUri }, async () => {
+  const store = new Store({ mongodbUri, mongoDbName: `test_login_${randomUUID()}`, bootstrapAdminSteamId: "" });
+  try {
+    await store.connect();
+    const steamId = "76561198000000001";
+    await store.saveUser({ identitySteam64: steamId, name: "Admin", role: "admin" });
+    await store.recordTestLogin(TEST_USER_ID, "test");
+    assert.equal((await store.getUser(TEST_USER_ID)).role, "player");
+    const reference = { owner: steamId, map: "de_mirage", name: "window" };
+    await store.setNadeFavorite(TEST_USER_ID, reference, true);
+    const before = await store.users.findOne({ _id: TEST_USER_ID });
+    await store.saveUser({ identitySteam64: TEST_USER_ID, name: "Promoted", role: "admin" });
+    await store.recordTestLogin(TEST_USER_ID, "test");
+    assert.equal((await store.getUser(TEST_USER_ID)).role, "player");
+    assert.deepEqual((await store.getUser(TEST_USER_ID)).flags, []);
+    assert.deepEqual(await store.getNadeFavorites(TEST_USER_ID), [reference]);
+    assert.deepEqual(await store.getNadeFavorites(steamId), []);
+    assert.equal((await store.getUser(steamId)).role, "admin");
+    assert.deepEqual((await store.users.findOne({ _id: TEST_USER_ID })).createdAt, before.createdAt);
+  } finally {
+    if (store.db) await store.db.dropDatabase();
+    await store.close();
+  }
+});
 
 test("development bootstrap promotes the configured existing player and preserves their data", { skip: !mongodbUri }, async () => {
   const steamId = "76561198000000001";

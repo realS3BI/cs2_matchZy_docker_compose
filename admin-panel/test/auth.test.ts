@@ -5,21 +5,22 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/app.js";
-import { tokenHash, verifySteam } from "../src/auth.js";
+import { TEST_USER_ID, tokenHash, verifySteam } from "../src/auth.js";
 import { normalizeSettings, migrateAdmins, ADMIN_ROLES } from "../src/policy.js";
 
 const steamId = "76561198000000001";
 const token = "b".repeat(43);
-async function fixture(role = "admin") {
+async function fixture(role = "admin", testLogin = false) {
   const directory = await mkdtemp(join(tmpdir(), "matchzy-auth-"));
   const user = { identitySteam64: steamId, name: "Test", role };
+  let testUser = null;
   const sessions = new Map<string, any>([[tokenHash(token, "secret"), { purpose: "user", steamId, expiresAt: new Date(Date.now() + 60_000) }]]);
   let settings = normalizeSettings({ steamToken: "gslt-secret", rconPassword: "rcon-secret", joinPassword: "join-secret" });
   const nades = [{ name: "public", official: true, owner: "default", map: "de_mirage", lineupImages: [{ url: "/api/uploads/aaaa.png" }] }, { name: "private", owner: steamId, map: "de_mirage", lineupImages: [{ url: "/api/uploads/bbbb.png" }] }];
   const favorites = new Map<string, any[]>();
   const commands = [];
   const actions = [];
-  const config = { publicUrl: "https://cs2.example.com", sessionSecret: "secret", liveMatchZyNadesFile: join(directory, "nades.json"), runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(directory, "savednades.json"), uploadDir: directory };
+  const config = { testLoginUsername: "test", testLoginPassword: testLogin ? "test-password" : "", publicUrl: "https://cs2.example.com", sessionSecret: "secret", liveMatchZyNadesFile: join(directory, "nades.json"), runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(directory, "savednades.json"), uploadDir: directory };
   await writeFile(config.runtimeSettingsFile, JSON.stringify(settings));
   await writeFile(join(directory, "aaaa.png"), "official");
   await writeFile(join(directory, "bbbb.png"), "private");
@@ -28,8 +29,9 @@ async function fixture(role = "admin") {
     createSession: async (id, value) => { sessions.set(id, value); },
     consumeSession: async (id, purpose) => { const value = await store.getSession(id); if (value?.purpose !== purpose) return null; sessions.delete(id); return value; },
     deleteSession: async id => { sessions.delete(id); },
-    getUser: async () => user,
+    getUser: async id => id === TEST_USER_ID ? testUser : user,
     recordLogin: async id => assert.equal(id, steamId),
+    recordTestLogin: async (id, name) => { testUser = { identitySteam64: id, name, role: "player", flags: [] }; },
     getSettings: async () => settings,
     saveSettings: async value => { settings = value; return value; },
     getNades: async () => nades,
@@ -56,8 +58,73 @@ async function fixture(role = "admin") {
   const request = (path, method = "GET", body = undefined, extra = {}) => fetch(`${base}/api${path}`, {
     method, redirect: "manual", headers: { Cookie: `cs2_panel_session=${token}`, "Content-Type": "application/json", ...extra }, body: body === undefined ? undefined : JSON.stringify(body)
   });
-  return { request, user, nades, sessions, commands, actions, directory, base, close: async () => { await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true }); } };
+  return { request, user, config, store, nades, sessions, commands, actions, directory, base, close: async () => { await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true }); } };
 }
+
+test("test login switches an admin to a separate player session with no admin access", async () => {
+  const f = await fixture("admin", true);
+  try {
+    const response = await f.request("/auth/test", "POST", { username: "test", password: "test-password", role: "admin", steamId });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie").split(";")[0];
+    assert.match(response.headers.get("set-cookie"), /HttpOnly/);
+    assert.match(response.headers.get("set-cookie"), /Secure/);
+    assert.match(response.headers.get("set-cookie"), /SameSite=Lax/);
+    assert.equal(f.sessions.has(tokenHash(token, "secret")), false);
+    const request = (path, method = "GET", body = undefined) => f.request(path, method, body, { Cookie: cookie });
+    const me = await (await request("/auth/me")).json() as any;
+    assert.equal(me.user.identitySteam64, TEST_USER_ID);
+    assert.equal(me.user.role, "player");
+    assert.equal(f.user.role, "admin");
+    assert.equal((await request("/nades")).status, 200);
+    for (const path of ["/users", "/server/logs", "/server/game"]) assert.equal((await request(path)).status, 403);
+    assert.equal((await request("/control/apply", "POST", {})).status, 403);
+    const settings = await (await request("/control")).json();
+    assert.doesNotMatch(JSON.stringify(settings), /gslt-secret|rcon-secret|join-secret/);
+    const reference = { owner: "default", map: "de_mirage", name: "public", favorite: true };
+    assert.equal((await request("/nades/favorites", "PUT", reference)).status, 200);
+    assert.deepEqual(await f.store.getNadeFavorites(steamId), []);
+    Object.assign(await f.store.getUser(TEST_USER_ID), { role: "admin", flags: ["@css/root"] });
+    assert.equal((await request("/users")).status, 403);
+    assert.equal((await (await request("/auth/me")).json() as any).user.role, "player");
+    assert.deepEqual((await (await request("/auth/me")).json() as any).user.flags, []);
+    assert.equal((await request("/auth/logout", "POST", {})).status, 200);
+    assert.equal((await request("/auth/me")).status, 401);
+  } finally { await f.close(); }
+});
+
+test("test login is opt-in and rejects invalid credentials without changing the current session", async () => {
+  const f = await fixture();
+  try {
+    const credentials = { username: "test", password: "test-password" };
+    assert.equal((await f.request("/auth/test", "POST", credentials)).status, 404);
+    f.config.testLoginPassword = "test-password";
+    for (const body of [{}, { ...credentials, username: "other" }, { ...credentials, password: "wrong" }, { ...credentials, password: ["test-password"] }]) {
+      const response = await f.request("/auth/test", "POST", body);
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get("set-cookie"), null);
+    }
+    assert.equal(f.sessions.size, 1);
+    assert.equal((await f.request("/auth/me")).status, 200);
+    const response = await f.request("/auth/test", "POST", credentials, { Cookie: "" });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie").split(";")[0];
+    f.config.testLoginPassword = "";
+    assert.equal((await f.request("/auth/me", "GET", undefined, { Cookie: cookie })).status, 401);
+  } finally { await f.close(); }
+});
+
+test("test login rejects cross-site requests and limits password attempts", async () => {
+  const f = await fixture("admin", true);
+  try {
+    const credentials = { username: "test", password: "test-password" };
+    for (const headers of [{ Origin: "https://attacker.example" }, { "Sec-Fetch-Site": "cross-site" }, { "Content-Type": "application/x-www-form-urlencoded" }])
+      assert.equal((await f.request("/auth/test", "POST", credentials, headers)).status, 403);
+    for (let i = 0; i < 10; i++) assert.equal((await f.request("/auth/test", "POST", { ...credentials, password: "wrong" })).status, 401);
+    assert.equal((await f.request("/auth/test", "POST", credentials)).status, 429);
+    assert.equal(f.sessions.size, 1);
+  } finally { await f.close(); }
+});
 
 for (const role of ["player", "training_player"]) test(`${role} receives all recordings and map metadata without administrative access or secrets`, async () => {
   const f = await fixture(role);
