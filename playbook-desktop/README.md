@@ -25,6 +25,10 @@ Für lokale Updates unter Windows genügt ein Doppelklick auf **[`playbook.cmd`]
 
 Git for Windows, Node.js 22 oder neuer inklusive npm und das **.NET SDK 10** müssen installiert sein. Das Skript verwendet die in Windows enthaltene PowerShell; PowerShell 7 ist dafür nicht nötig. Bei Fehlern bleibt das Fenster mit der Fehlermeldung offen. Ein fehlgeschlagenes Update oder ein Build-Fehler startet keinen älteren Installer.
 
+Vor dem Build und vor der Installation schließt das Skript laufende Playbook-Fenster regulär und wartet bis zu 30 Sekunden auf das Ende aller Playbook-Prozesse. So kann die App ihre CS2-Einstellungen wiederherstellen. Falls Prozesse weiterlaufen oder bereits ein Installer offen ist, hält das Skript vor dem nächsten Schritt an und nennt die Blockade. Eine Rückfrage in Playbook muss gegebenenfalls noch beantwortet werden.
+
+Erscheint bei einer älteren Version im Installer **„Playbook kann nicht geschlossen werden“**, zuerst den laufenden Review beenden und Playbook schließen. Bleiben danach Prozesse ohne sichtbares Fenster übrig, im Windows-Task-Manager unter **Details** die Prozesse `Playbook.exe` beenden und im Installer **Wiederholen** wählen. Playbook und das Update-Skript unter demselben Windows-Konto und normalerweise ohne Administratorrechte starten.
+
 ```powershell
 cd playbook-desktop
 npm ci

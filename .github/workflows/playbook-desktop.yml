@@ -23,6 +23,9 @@ jobs:
       - name: Abhängigkeiten installieren
         working-directory: playbook-desktop
         run: npm ci
+      - name: Windows-Update-Skript prüfen
+        shell: powershell
+        run: .\playbook-desktop\test\build-and-run.test.ps1
       - name: Windows-Installer bauen und testen
         working-directory: playbook-desktop
         run: npm run dist

@@ -10,6 +10,36 @@ function Invoke-BuildCommand {
     }
 }
 
+function Close-PlaybookForUpdate {
+    $currentSessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+    $installers = @(Get-Process -Name 'Playbook-Setup-*' -ErrorAction SilentlyContinue |
+        Where-Object { $_.SessionId -eq $currentSessionId })
+    if ($installers.Count -gt 0) {
+        throw 'Ein Playbook-Installer ist bereits geöffnet. Bitte die laufende Installation abschließen oder dort Abbrechen wählen und playbook.cmd erneut starten.'
+    }
+
+    $processes = @(Get-Process -Name 'Playbook', 'Playbook.Windows' -ErrorAction SilentlyContinue)
+    if ($processes.Count -eq 0) { return }
+
+    Write-Host 'Playbook wird regulär geschlossen. Spieleinstellungen können dabei wiederhergestellt werden ...'
+    foreach ($playbookProcess in $processes) {
+        if ($playbookProcess.SessionId -eq $currentSessionId -and $playbookProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+            try { [void]$playbookProcess.CloseMainWindow() }
+            catch { Write-Host "Das Playbook-Fenster von Prozess $($playbookProcess.Id) konnte nicht geschlossen werden. Bitte selbst schließen." }
+        }
+    }
+
+    # Electron's child processes and local CS2 recovery can outlive the window.
+    # Wait for all files to be released before either rebuilding or installing.
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        $remaining = @(Get-Process -Name 'Playbook', 'Playbook.Windows' -ErrorAction SilentlyContinue)
+        if ($remaining.Count -eq 0) { return }
+        Start-Sleep -Milliseconds 500
+    }
+    $details = ($remaining | ForEach-Object { "$($_.ProcessName), PID $($_.Id), Sitzung $($_.SessionId)" }) -join '; '
+    throw "Playbook läuft weiterhin: $details. Bitte Playbook und mögliche Rückfragen schließen. Falls kein Fenster mehr sichtbar ist, nach dem Beenden deines Reviews die genannten Prozesse im Task-Manager beenden. Danach playbook.cmd erneut starten."
+}
+
 try {
     foreach ($requirement in @(
         @{ Command = 'node.exe'; Name = 'Node.js 22 oder neuer' },
@@ -30,6 +60,7 @@ try {
         throw '.NET SDK 10 fehlt. Die .NET Runtime allein genügt nicht. Bitte das SDK installieren.'
     }
 
+    Close-PlaybookForUpdate
     Push-Location $PSScriptRoot
     try {
         Write-Host '[2/4] Build-Abhängigkeiten installieren ...'
@@ -44,6 +75,8 @@ try {
             throw "Der gebaute Installer wurde nicht gefunden: $installer"
         }
 
+        # The user may have reopened Playbook during the build.
+        Close-PlaybookForUpdate
         Write-Host '[4/4] Installer starten ...'
         Start-Process -FilePath $installer
         Write-Host 'Der Installer ist geöffnet. Playbook startet nach der Installation automatisch.'
