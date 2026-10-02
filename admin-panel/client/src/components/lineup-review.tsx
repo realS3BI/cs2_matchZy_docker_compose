@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, Circle, Crosshair, 
 import type { ReviewFileRouter } from "../../../src/uploadthing";
 import { REVIEW_STEPS, canUploadReviewMedia, missingReviewMedia, reviewFileError, type ReviewSlot } from "../../../shared/review-media";
 import { lineupPermissions } from "../../../shared/lineup-policy";
+import { THROW_ATTRIBUTE_FIELDS } from "../../../shared/throw-attributes";
 import { useReviewCapture } from "../hooks/use-review-capture";
 import { api } from "../lib/api";
 import { cn } from "../lib/utils";
@@ -50,8 +51,19 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange }) 
     running.current = true;
     setUploading(true); setProgress(0); setError(""); setRetry({ slot, file });
     try {
-      const { owner, map, name, updatedAt } = currentNade.current;
-      const options = { files: [file], input: { owner, map, name, revision: updatedAt, slot }, onUploadProgress: ({ totalProgress }) => setProgress(totalProgress) };
+      const previous = currentNade.current;
+      const { owner, map, name } = previous;
+      // Playing the lineup records a new flight measurement and revision while
+      // this page is open. Refresh before every attempt, retaining the File.
+      const latest = await api("/api/nades");
+      const entry = latest.entries.find(n => n.owner === owner && n.map === map && n.name === name);
+      if (!entry) throw new Error("Dieses Lineup ist nicht mehr verfügbar.");
+      currentNade.current = entry;
+      onEntriesChange(latest.entries);
+      if (!canUploadReviewMedia(entry, user)) throw new Error("Für dieses Lineup sind keine weiteren Uploads erlaubt. Es wurde möglicherweise bereits freigegeben.");
+      if (["lineupPos", "lineupAng", "type", "throwTechnique", ...THROW_ATTRIBUTE_FIELDS].some(key => previous[key] !== entry[key]))
+        throw new Error("Die Wurfdaten wurden geändert und sind jetzt aktualisiert. Prüfe, ob die Aufnahme noch passt, bevor du den Upload erneut versuchst.");
+      const options = { files: [file], input: { owner, map, name, revision: entry.updatedAt, slot }, onUploadProgress: ({ totalProgress }) => setProgress(totalProgress) };
       const result = await uploadFiles(slot === "video" ? "reviewVideo" : "reviewPhoto", options);
       if (!result?.[0]?.serverData?.saved) throw new Error("Die Datei wurde nicht bestätigt. Bitte erneut versuchen.");
       const data = await api("/api/nades");

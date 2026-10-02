@@ -64,6 +64,9 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       const file = await source.photo(slot);
       await current.current.upload(slot, file);
       if (mounted.current) setNotice("Foto gespeichert. Du kannst die nächste Perspektive aufnehmen.");
+    } catch (error) {
+      if (mounted.current) setNotice("Foto-Aufnahme beendet. Bitte die Fehlermeldung unten prüfen.");
+      throw error;
     } finally { takingPhoto.current = false; }
   }
   function startVideo() {

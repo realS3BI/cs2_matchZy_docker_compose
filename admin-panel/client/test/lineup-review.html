@@ -8,7 +8,8 @@ import {ReviewRecorder} from '/src/lib/review-recorder.ts';
 import '/src/index.css';
 window.fetch=async()=>new Response(JSON.stringify({uploadEnabled:true}),{headers:{'Content-Type':'application/json'}});
 const nade={owner:'76561198000000001',map:'de_anubis',name:'window',displayName:'Fenster-Smoke',type:'Smoke',updatedAt:'2026-10-02T08:00:00.000Z',reviewStatus:'pending',throwFromTitle:'T-Spawn',throwToTitle:'Fenster'};
-createRoot(document.getElementById('root')).render(React.createElement(LineupReview,{nade,user:{identitySteam64:'76561198000000002',role:'admin'},disabled:false,mutate:async()=>{},onEntriesChange:()=>{}}));
+function Fixture(){const [entry,setEntry]=React.useState(nade);return React.createElement(LineupReview,{nade:entry,user:{identitySteam64:'76561198000000002',role:'admin'},disabled:false,mutate:async()=>{},onEntriesChange:entries=>setEntry(entries[0])});}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture));
 window.checkReview=async()=>{
  const tick=()=>new Promise(r=>setTimeout(r,80));
  const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
@@ -28,5 +29,32 @@ window.checkRecorder=async()=>{
  try{await recorder.video.play();await new Promise(r=>setTimeout(r,100));const photo=await recorder.photo('aim');if(photo.type!=='image/jpeg'||!photo.size)throw Error('Foto leer');
  const result=recorder.startVideo(()=>{});await new Promise(r=>setTimeout(r,1300));recorder.stopVideo();const video=await result;if(video.type!=='video/webm'||!video.size)throw Error('Video leer');return {photo:photo.size,video:video.size,result:'PASS: echte JPEG- und WebM-Aufnahme'};
  }finally{recorder.dispose();clearInterval(paint);}
+};
+
+// Simulate a flight measurement arriving from CS2 while this detail page is open.
+// The actual UploadThing client must submit the refreshed revision on retry.
+window.checkStaleRetry=async(changedSetup=false)=>{
+ const current={...nade,flightDuration:7.40625,updatedAt:'2026-10-02T09:59:12.9327389+00:00'};
+ if(changedSetup)current.lineupAng='-10 20 0';
+ const attempts=[];let reads=0;
+ window.fetch=async(url,options)=>{
+  if(String(url).includes('/api/uploadthing')){
+   attempts.push(JSON.parse(options.body).input);
+   if(attempts.length===1&&!changedSetup)current.updatedAt='2026-10-02T10:00:00.0000000+00:00';
+   return new Response(JSON.stringify({message:'Das Lineup wurde geändert. Bitte aktualisieren.',code:'BAD_REQUEST'}),{status:400,headers:{'Content-Type':'application/json'}});
+  }
+  if(String(url)==='/api/nades')reads++;
+  return new Response(JSON.stringify({entries:[current],uploadEnabled:true}),{headers:{'Content-Type':'application/json'}});
+ };
+ const tick=()=>new Promise(r=>setTimeout(r,50));
+ const waitFor=async(predicate)=>{for(let i=0;i<100;i++){if(predicate())return;await tick();}throw Error('Zeitüberschreitung');};
+ const input=document.querySelector('input[type=file]'),transfer=new DataTransfer();
+ transfer.items.add(new File(['test'], 'aim.jpg',{type:'image/jpeg'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+ await waitFor(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Upload erneut versuchen'&&!b.disabled));
+ if(changedSetup&&attempts.length)throw Error('Geänderte Wurfdaten wurden ungeprüft hochgeladen');
+ [...document.querySelectorAll('button')].find(b=>b.textContent==='Upload erneut versuchen').click();
+ await waitFor(()=>attempts.length>=(changedSetup?1:2));
+ if(attempts.at(-1).revision!==current.updatedAt)throw Error('Upload erneut versuchen sendet weiterhin die veraltete Version: '+JSON.stringify({attempts,reads}));
+ return {result:changedSetup?'PASS: Geänderte Wurfdaten verlangen Prüfung vor dem Upload':'PASS: Retry aktualisiert die Version und behält das Foto',attempts:attempts.length,reads};
 };
 </script></body></html>

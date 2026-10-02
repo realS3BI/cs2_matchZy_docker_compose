@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { reviewEntry } from "./review-media.js";
 import { isReviewSlot } from "../shared/review-media.js";
@@ -14,6 +14,7 @@ async function write(path: string, value) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
   await writeFile(temporary, JSON.stringify(value));
+  await chmod(temporary, 0o644);
   await rename(temporary, path);
 }
 
@@ -26,6 +27,20 @@ export class ReviewCaptureBridge {
     if (!/^\d{17}$/.test(actor)) fail(403, "Ungültiger Benutzer.");
     return join(this.directory, actor, `${file}.json`);
   }
+  private async prepareDirectory(actor: string) {
+    const folder = dirname(this.path(actor, "session"));
+    await mkdir(folder, { recursive: true });
+    // The webpanel runs as root, CS2 as steam. Inherit the game directory's
+    // owner so the plugin can atomically create command.json in its session.
+    // Also repair directories made by older webpanel versions on the next poll.
+    if (process.getuid?.() === 0) {
+      const owner = await stat(dirname(this.directory));
+      for (const path of [this.directory, folder]) {
+        await chown(path, owner.uid, owner.gid);
+        await chmod(path, 0o755);
+      }
+    }
+  }
   async exclusive<T>(actor: string, operation: () => Promise<T>): Promise<T> {
     const pending = (this.queues.get(actor) || Promise.resolve()).then(operation);
     const settled = pending.catch(() => {});
@@ -35,6 +50,7 @@ export class ReviewCaptureBridge {
   }
   async start(actor: string, reference, now = Date.now()) {
     return this.exclusive(actor, async () => {
+      await this.prepareDirectory(actor);
       const previous = await read(this.path(actor, "session"));
       if (previous?.expiresAt > now) fail(409, "Eine Aufnahme ist bereits in einem anderen Tab verbunden. Dort beenden oder 90 Sekunden warten.");
       const { owner, map, name } = reference;
@@ -52,6 +68,7 @@ export class ReviewCaptureBridge {
     return this.exclusive(actor, async () => {
       const session = await this.session(actor, id, now);
       await validate(session);
+      await this.prepareDirectory(actor);
       await write(this.path(actor, "session"), { ...session, expiresAt: now + leaseMs });
       const command = await read(this.path(actor, "command"));
       const result = await read(this.path(actor, "result"));
