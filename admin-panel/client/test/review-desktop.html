@@ -32,6 +32,7 @@ window.fetch=async(url,options)=>{
  const input=options?.body?JSON.parse(options.body):{};let output={ok:true,uploadEnabled:true};
  if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
  else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',presentation:'review-v2'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/video')){events.push('prepare:'+input.action);command={id:String(++serial).padStart(32,'0'),slot:'video',action:input.action};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/poll'))output={command};
  else if(String(url).endsWith('/captured'))events.push('captured');
  else if(String(url).endsWith('/ack')){events.push('ack:'+input.ok);command=null;}
@@ -58,8 +59,9 @@ window.checkPhoto=async(slot='aim',fail=false)=>{
  return {result:'PASS: Desktop-Foto, automatische Ränder, echtes Fadenkreuz, Wiederherstellung vor Upload',slot,events};
 };
 window.checkVideo=async()=>{
- await connect();await window.capture.startVideo();await new Promise(r=>setTimeout(r,1200));window.pressF8();await waitFor(()=>releaseUpload);
- assert(events.join(',')==='begin:video,restore,upload:video','F8 oder Wiederherstellung fehlerhaft');
+ await connect();await window.capture.startVideo();await waitFor(()=>window.capture.recording);await new Promise(r=>setTimeout(r,1200));window.pressF8();await waitFor(()=>releaseUpload);
+ assert(events.includes('prepare:video-start')&&events.includes('prepare:video-stop'),'Server-Vorbereitung für Start/Stopp fehlt');
+ assert(events.indexOf('restore')<events.indexOf('captured')&&events.indexOf('captured')<events.indexOf('upload:video'),'F8 oder Wiederherstellung fehlerhaft');
  const url=URL.createObjectURL(lastFile),video=document.createElement('video');video.src=url;
  await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=reject;});
  assert(video.videoWidth===1912&&video.videoHeight===1044,'Video enthält Fensterrand');
@@ -67,7 +69,7 @@ window.checkVideo=async()=>{
  return {result:'PASS: echtes WebM, automatische Ränder, F8, Wiederherstellung vor Upload',size,events};
 };
 window.checkVideoAbort=async()=>{
- await connect();await window.capture.startVideo();window.frameFailure=true;
+ await connect();await window.capture.startVideo();await waitFor(()=>window.capture.recording);window.frameFailure=true;
  await waitFor(()=>errors.some(error=>error.includes('minimiert')));
  assert(events.includes('restore')&&!events.includes('upload:video'),'Abgebrochenes Video wurde hochgeladen oder Einstellungen blieben verändert');
  window.frameFailure=false;window.capture.disconnect();return {result:'PASS: Verlorenes Spielfenster verwirft Video und stellt CS2 wieder her',events};

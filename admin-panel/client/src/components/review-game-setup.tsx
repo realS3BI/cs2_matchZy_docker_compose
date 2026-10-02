@@ -6,8 +6,8 @@ import { Input } from "./ui/input";
 import { desktop } from "../lib/playbook-desktop";
 import { ReviewDesktopSetup } from "./review-desktop-setup";
 
-// Reviewer-provided CS2 share code. Keep opaque: Valve changes the format.
-export const REVIEW_CROSSHAIR_CODE = "CSKBTrLqOGX2ztECdjH7rsZaUPwtosk7jjPtSRje8xvSyF";
+// Current CS2 pixel settings. CS2 records the current resolution when sizes change.
+export const REVIEW_CROSSHAIR_COMMANDS = "cl_crosshairstyle 4; cl_crosshair_length 22; cl_crosshair_thickness 3; cl_crosshair_gap 9; cl_crosshaircolor_r 255; cl_crosshaircolor_g 255; cl_crosshaircolor_b 255; cl_crosshaircolor_a 255; cl_crosshair_drawoutline 2; cl_crosshairoutline_r 0; cl_crosshairoutline_g 0; cl_crosshairoutline_b 0; cl_crosshairoutline_a 255; cl_crosshairdot 0; cl_crosshair_t 0; cl_crosshair_recoil 0; cl_ironsight_usecrosshaircolor 0; cl_ironsight_dot_scale 1";
 const photoMode = "cl_draw_only_deathnotices 1; r_drawviewmodel 0";
 const normalMode = "cl_draw_only_deathnotices 0; r_drawviewmodel 1";
 
@@ -18,12 +18,12 @@ export function ReviewGameSetup() {
     <CardContent className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <strong className="text-sm">Review-Fadenkreuz</strong>
-        <p className="text-sm text-muted-foreground">Dieses Fadenkreuz für alle Review-Fotos verwenden. In CS2 unter Einstellungen → Spiel → Fadenkreuz → Teilen oder importieren einfügen.</p>
+        <p className="text-sm text-muted-foreground">Weißes statisches Kreuz mit schwarzer halber Kontur: Länge 22, Stärke 3, Abstand 9. Ohne Mittelpunkt, T-Stil und Rückstoßbewegung. Die Befehle vor den Fotos in die lokale CS2-Konsole einfügen.</p>
         <div className="flex flex-wrap gap-2">
-          <Input className="min-w-0 flex-1 basis-80 font-mono" aria-label="Review-Crosshair-Code" readOnly value={REVIEW_CROSSHAIR_CODE} onFocus={event => event.target.select()} />
-          <ActionButton variant="secondary" icon={Copy} successLabel="Kopiert" onClick={() => copyText(REVIEW_CROSSHAIR_CODE)}>Crosshair-Code kopieren</ActionButton>
+          <Input className="min-w-0 flex-1 basis-80 font-mono" aria-label="Review-Fadenkreuz-Befehle" readOnly value={REVIEW_CROSSHAIR_COMMANDS} onFocus={event => event.target.select()} />
+          <ActionButton variant="secondary" icon={Copy} successLabel="Kopiert" onClick={() => copyText(REVIEW_CROSSHAIR_COMMANDS)}>Fadenkreuz-Befehle kopieren</ActionButton>
         </div>
-        <p className="text-xs text-muted-foreground">Deinen persönlichen Code bewahrst du selbst auf. Importiere ihn nach dem Review wieder. Die Website prüft und speichert ihn nicht.</p>
+        <p className="text-xs text-muted-foreground">Sichere vorab deinen persönlichen Code unter Einstellungen → Fadenkreuz/Zielfernrohre → Teilen oder importieren und importiere ihn nach dem Review wieder. Die Website prüft und speichert ihn nicht.</p>
       </div>
       <details>
         <summary className="cursor-pointer text-sm font-medium">Geldanzeige, HUD und Waffe ausblenden</summary>

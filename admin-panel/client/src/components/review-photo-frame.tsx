@@ -29,10 +29,10 @@ export function ReviewPhotoFrame({ capture, disabled }: { capture: ReviewRecorde
   }, [capture, frame]);
   function update(next: PhotoFrame) { capture.clearPhotoFrame(); setFrame(next); setConfirmed(false); setError(""); }
   return <details className="basis-full" open={!confirmed}>
-    <summary className="cursor-pointer text-sm font-medium">{confirmed ? "Fotoausschnitt gespeichert · Anpassen" : "Fotoausschnitt festlegen"}</summary>
+    <summary className="cursor-pointer text-sm font-medium">{confirmed ? "Aufnahmeausschnitt gespeichert · Anpassen" : "Aufnahmeausschnitt festlegen"}</summary>
     <div className="flex flex-col gap-4 pt-4">
       <p className="text-sm text-muted-foreground">Entferne nur den Fensterrand. Gib die Breite der Ränder in Pixeln an und prüfe die Vorschau. Das echte Fadenkreuz bleibt Teil des Spielbilds. Bei randlosem CS2 können alle Werte 0 bleiben.</p>
-      <canvas ref={preview} className="w-full max-w-3xl rounded-md border" aria-label="Vorschau des Fotoausschnitts" />
+      <canvas ref={preview} className="w-full max-w-3xl rounded-md border" aria-label="Vorschau des Aufnahmeausschnitts" />
       <FieldGroup className="sm:flex-row">{edges.map(([edge, label]) => <Field key={edge}>
         <FieldLabel>{label} · Pixel</FieldLabel>
         <Input type="number" min="0" step="1" value={Number.isFinite(frame[edge]) ? frame[edge] : ""} disabled={disabled} aria-invalid={!!error} onChange={event => update({ ...frame, [edge]: event.target.valueAsNumber })} />
@@ -42,10 +42,10 @@ export function ReviewPhotoFrame({ capture, disabled }: { capture: ReviewRecorde
         <Button disabled={disabled} onClick={() => {
           try { capture.setPhotoFrame(frame); setConfirmed(true); setError(""); }
           catch (error) { setError(error.message); }
-        }}>Fotoausschnitt bestätigen</Button>
+        }}>Aufnahmeausschnitt bestätigen</Button>
         <Button variant="outline" disabled={disabled} onClick={() => update({ width: capture.video.videoWidth, height: capture.video.videoHeight, top: 0, right: 0, bottom: 0, left: 0 })}>Ganzes Spielbild</Button>
       </div>
-      <p className="text-xs text-muted-foreground">Gilt für die Fotos dieser Freigabe. Für Videos CS2 randlos freigeben. Nach einer Größenänderung den Fotoausschnitt erneut einstellen.</p>
+      <p className="text-xs text-muted-foreground">Gilt für Fotos und Videos dieser Freigabe. Nach einer Größenänderung den Aufnahmeausschnitt erneut einstellen.</p>
     </div>
   </details>;
 }

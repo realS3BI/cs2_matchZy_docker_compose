@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -22,7 +22,7 @@ test('console values are numeric only and names must match exactly', () => {
   assert.equal(readValue('crosshair = true\n', 'crosshair'), 'true');
   assert.throws(() => readValue('other_crosshair = 1', 'crosshair'));
   assert.throws(() => readValue('crosshair = exec evil', 'crosshair'));
-  assert.equal(validSnapshot({ version: 1, game: '1', values: Object.fromEntries(NAMES.map(name => [name, '1;quit'])) }), false);
+  assert.equal(validSnapshot({ version: 2, game: '1', values: Object.fromEntries(NAMES.map(name => [name, '1;quit'])) }), false);
 });
 test('console roundtrip rejects denied changes and serializes overlapping requests', async t => {
   const state = { crosshair: 'true', r_drawviewmodel: 'true' };
@@ -46,7 +46,7 @@ test('console roundtrip rejects denied changes and serializes overlapping reques
   assert.deepEqual(await Promise.all([console.read(['crosshair']), console.read(['r_drawviewmodel'])]), [{ crosshair: 'true' }, { r_drawviewmodel: 'true' }]);
   await console.write({ crosshair: 'false' });
   assert.equal(state.crosshair, 'false');
-  await assert.rejects(console.write({ r_drawviewmodel: 'false' }), /erlaubt r_drawviewmodel/);
+  await assert.rejects(console.write({ r_drawviewmodel: 'false' }), { code: 'ECVARMISMATCH' });
 });
 
 test('launch waits for a real console reply after the game starts listening', async t => {
@@ -98,7 +98,7 @@ async function fixture(t) {
       if (fail-- > 0) throw new Error('Verbindung unterbrochen');
     },
   };
-  const presentation = new Presentation(console, file, async () => 'game:1');
+  const presentation = new Presentation(console, file, async () => ({ identity: 'game:1', client: { top: 132, bottom: 1212 } }));
   t.after(async () => { clearTimeout(presentation.timer); await rm(directory, { recursive: true, force: true }); });
   return { presentation, console, file, original, state: () => state, writes: () => writes, fail: n => { fail = n; } };
 }
@@ -133,10 +133,21 @@ test('partial prepare failure restores settings; lost connection survives app re
   f.fail(2);
   await assert.rejects(f.presentation.begin('front'), /lokal gesichert/);
   assert.ok(await f.presentation.saved());
-  const restarted = new Presentation(f.console, f.file, async () => 'game:2');
+  const restarted = new Presentation(f.console, f.file, async () => ({ identity: 'game:2', client: { top: 0, bottom: 1440 } }));
   await restarted.recover();
   assert.deepEqual(f.state(), f.original);
   assert.equal(await restarted.saved(), undefined);
+});
+test('older 33-setting recovery journals remain restorable after adding scope settings', async t => {
+  const f = await fixture(t);
+  const legacy = Object.fromEntries(Object.entries(f.original).filter(([name]) => !name.startsWith('cl_ironsight_')));
+  const saved = { version: 1, game: 'game:old', values: legacy };
+  assert.equal(Object.keys(legacy).length, 33);
+  assert.equal(validSnapshot(saved), true);
+  await writeFile(f.file, JSON.stringify(saved), 'utf8');
+  await f.presentation.recover();
+  assert.deepEqual(f.state(), legacy);
+  assert.equal(await f.presentation.saved(), undefined);
 });
 test('physical pixel crop removes window borders and keeps the true aim point', () => {
   const game = { client: { left: 104, top: 132, right: 2016, bottom: 1176 }, window: { left: 100, top: 100, right: 2020, bottom: 1180 } };

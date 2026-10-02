@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review-Seiten prüfen</title></head><body><main id="root" style="max-width:1200px;margin:24px auto;padding:0 16px"></main><script type="module">
+import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {BrowserRouter, Route, Routes} from 'react-router-dom';
+import {ReviewQueuePage} from '/src/components/review-queue-page.tsx';
+import {LineupPage} from '/src/components/lineup-page.tsx';
+import {LineupReviewPage} from '/src/components/lineup-review-page.tsx';
+import {NadeFavoritesProvider} from '/src/components/nade-favorites.tsx';
+import {ACTIVE_DUTY_MAPS} from '/src/lib/maps.ts';
+import '/src/index.css';
+const initial=[
+ {id:'Abc1234',owner:'default',map:'de_mirage',name:'window',displayName:'Fenster vom T-Spawn',type:'Smoke',reviewStatus:'pending',updatedAt:'1'},
+ {id:'Abc1235',owner:'default',map:'de_mirage',name:'stairs',displayName:'Treppe',type:'Smoke',reviewStatus:'',updatedAt:'1'},
+ {id:'Abc1236',owner:'default',map:'de_nuke',name:'garage',displayName:'Garage',type:'Smoke',reviewStatus:'pending',updatedAt:'1'},
+ {id:'Abc1237',owner:'default',map:'de_mirage',name:'official',displayName:'Offizielle Nade',type:'Smoke',official:true,updatedAt:'1'},
+];
+window.fetch=async url=>new Response(JSON.stringify(String(url).includes('favorites')?{favorites:[]}:String(url).includes('/config')?{uploadEnabled:false}:{entries:initial}),{headers:{'Content-Type':'application/json'}});
+const role=new URLSearchParams(location.search).get('role')||'admin';
+const user={identitySteam64:'76561198000000001',role};
+history.replaceState(null,'','/server/reviews');
+function App(){const [nades,setNades]=useState(initial);window.approve=()=>setNades(current=>current.map(nade=>nade.id==='Abc1234'?{...nade,official:true}:nade));const props={maps:ACTIVE_DUTY_MAPS,nades,user,onEntriesChange:setNades,onRefresh:async()=>{}};return React.createElement(BrowserRouter,null,React.createElement(NadeFavoritesProvider,null,React.createElement(Routes,null,
+ React.createElement(Route,{path:'/server/reviews',element:React.createElement(ReviewQueuePage,props)}),
+ React.createElement(Route,{path:'/maps/:mapSlug/lineups/:lineupId',element:React.createElement(LineupPage,props)}),
+ React.createElement(Route,{path:'/maps/:mapSlug/lineups/:lineupId/review',element:React.createElement(LineupReviewPage,props)}),
+ React.createElement(Route,{path:'/maps',element:React.createElement('h1',null,'Maps')}))));}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+const waitFor=async f=>{for(let i=0;i<100;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
+const assert=(value,message)=>{if(!value)throw Error(message);};
+window.checkPages=async()=>{
+ await waitFor(()=>document.querySelector('h1'));
+ if(role!=='admin'){await waitFor(()=>location.pathname==='/maps');assert(!document.body.innerText.includes('Offene Reviews'),'Admin-Seite für Spieler sichtbar');return 'PASS: Admin-Übersicht ist geschützt';}
+ await waitFor(()=>document.querySelectorAll('a[href*="/review?"]').length===3);
+ assert(!document.body.innerText.includes('Offizielle Nade'),'Offizielle Nade in offener Liste');
+ const mapFilter=document.querySelector('[aria-label="Reviews nach Map filtern"]');mapFilter.click();await waitFor(()=>document.querySelector('[role="option"]'));
+ [...document.querySelectorAll('[role="option"]')].find(option=>option.textContent==='Mirage').click();
+ await waitFor(()=>document.querySelectorAll('a[href*="/review?"]').length===2);
+ assert(!document.body.innerText.includes('Garage'),'Mapfilter ignoriert');
+ document.querySelector('a[href*="Abc1234/review?"]').click();await waitFor(()=>document.querySelectorAll('.review-step').length===6);
+ assert(location.pathname.endsWith('/review'),'Review hat keine eigene Route');
+ assert(document.querySelector('h1').textContent==='Fenster vom T-Spawn','Lineup-Titel fehlt');
+ assert(document.querySelector('.review-stepper').getBoundingClientRect().top<450,'Stepper zu weit unten');
+ window.approve();await waitFor(()=>document.body.innerText.includes('Review abgeschlossen'));
+ [...document.querySelectorAll('button')].find(button=>button.textContent.includes('Nächstes Lineup')).click();
+ await waitFor(()=>location.pathname.includes('Abc1235')&&document.querySelector('h1')?.textContent==='Treppe');
+ assert(new URLSearchParams(location.search).get('map')==='mirage','Mapfilter beim Wechsel verloren');
+ [...document.querySelectorAll('a')].find(link=>link.textContent.includes('Zur Detailseite')).click();await waitFor(()=>location.pathname.endsWith('Abc1235')&&!document.querySelector('.review-stepper')&&document.querySelector('h1')?.textContent==='Treppe');
+ assert(!document.querySelector('.review-stepper'),'Stepper weiterhin in der Detailseite');
+ assert([...document.querySelectorAll('button')].some(button=>button.textContent==='Review öffnen'),'Review-Button fehlt');
+ assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
+ return 'PASS: Admin-Queue, Mapfilter, eigener Review, nächstes Lineup nach Freigabe und kompakte Detailseite';
+};
+</script></body></html>

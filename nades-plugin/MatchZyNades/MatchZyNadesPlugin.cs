@@ -515,7 +515,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             WriteReviewFailure(actor, photo.Command, "Foto wegen Server- oder Mapwechsel abgebrochen.");
             RestoreReviewPhoto(actor, false);
         }
-        _reviewPending.Clear(); _reviewRequests.Clear();
+        _reviewVideos.Clear(); _reviewPending.Clear(); _reviewRequests.Clear();
         ResetTraining(); CloseAll(); _last.Clear(); ResetCapture(); _edits.Clear(); CancelMapVote(); _nextMapVote = 0;
     }
 }

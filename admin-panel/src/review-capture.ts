@@ -76,7 +76,7 @@ export class ReviewCaptureBridge {
       const request = await read(this.path(actor, "request"));
       const requestResult = await read(this.path(actor, "request-result"));
       if (request?.sessionId === id && request.expiresAt > now && requestResult?.sessionId === id && requestResult.commandId === request.id)
-        return { id: request.id, action: "error", message: String(requestResult.message || "Die Foto-Vorbereitung ist fehlgeschlagen.").slice(0, 300) };
+        return { id: request.id, action: "error", message: String(requestResult.message || "Die Aufnahme-Vorbereitung ist fehlgeschlagen.").slice(0, 300) };
       if (command?.sessionId === id && command.action === "photo" && result?.sessionId === id && result.commandId === command.id && result.ok === false)
         return { id: command.id, action: "error", message: String(result.message || "Foto abgebrochen. Bitte erneut aufnehmen.").slice(0, 300) };
       if (!command || command.sessionId !== id || result?.commandId === command.id ||
@@ -89,15 +89,21 @@ export class ReviewCaptureBridge {
     });
   }
   async requestPhoto(actor: string, id: string, slot: unknown, now = Date.now()) {
+    return this.requestCapture(actor, id, "photo", slot, now);
+  }
+  async requestVideo(actor: string, id: string, action: unknown, now = Date.now()) {
+    return this.requestCapture(actor, id, action, "video", now);
+  }
+  private async requestCapture(actor: string, id: string, action: unknown, slot: unknown, now: number) {
     return this.exclusive(actor, async () => {
       await this.session(actor, id, now);
-      if (!isReviewSlot(slot) || slot === "video") fail(400, "Ungültiger Fotoschritt.");
+      if (action === "photo" ? !isReviewSlot(slot) || slot === "video" : !["video-start", "video-stop"].includes(String(action)) || slot !== "video") fail(400, "Ungültiger Aufnahmeschritt.");
       const request = await read(this.path(actor, "request"));
       const result = await read(this.path(actor, "result"));
       const requestResult = await read(this.path(actor, "request-result"));
       if (request?.sessionId === id && request.expiresAt > now && result?.commandId !== request.id && requestResult?.commandId !== request.id)
-        fail(409, "Die vorige Foto-Anfrage läuft noch.");
-      const next = { id: randomUUID().replaceAll("-", ""), sessionId: id, slot, expiresAt: now + 30_000 };
+        fail(409, "Die vorige Aufnahme-Anfrage läuft noch.");
+      const next = { id: randomUUID().replaceAll("-", ""), sessionId: id, action, slot, expiresAt: now + 30_000 };
       await write(this.path(actor, "request"), next);
       return next;
     });
@@ -107,9 +113,9 @@ export class ReviewCaptureBridge {
       await this.session(actor, input?.sessionId, now);
       const command = await read(this.path(actor, "command"));
       const result = await read(this.path(actor, "result"));
-      if (!input?.commandId || command?.id !== input.commandId || command.sessionId !== input.sessionId || command.action !== "photo" || command.expiresAt <= now ||
+      if (!input?.commandId || command?.id !== input.commandId || command.sessionId !== input.sessionId || !["photo", "video-start", "video-stop"].includes(command.action) || (command.action !== "video-start" && command.expiresAt <= now) ||
           result?.sessionId === input.sessionId && result.commandId === command.id && result.ok === false)
-        fail(409, "Die Foto-Anfrage ist nicht mehr aktuell.");
+        fail(409, "Die Aufnahme-Anfrage ist nicht mehr aktuell.");
       await write(this.path(actor, "captured"), { sessionId: input.sessionId, commandId: command.id });
     });
   }
@@ -150,6 +156,7 @@ export function installReviewCapture(app, { config, store }) {
   }, Date.now(), input?.recording === true) }));
   route("ack", async (input, user) => { await bridge.acknowledge(user.identitySteam64, input); return { ok: true }; });
   route("photo", async (input, user) => ({ request: await bridge.requestPhoto(user.identitySteam64, input?.sessionId, input?.slot) }));
+  route("video", async (input, user) => ({ request: await bridge.requestVideo(user.identitySteam64, input?.sessionId, input?.action) }));
   route("captured", async (input, user) => { await bridge.captured(user.identitySteam64, input); return { ok: true }; });
   route("stop", async (input, user) => { await bridge.stop(user.identitySteam64, input?.sessionId); return { ok: true }; });
 }

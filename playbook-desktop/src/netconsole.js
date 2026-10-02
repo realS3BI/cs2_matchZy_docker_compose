@@ -129,10 +129,19 @@ export class NetConsole {
   }
   async write(values) {
     const names = Object.keys(values);
-    await this.execute(names.map(name => `${name} ${values[name]}`));
+    // Size setters also update CS2's authoring height. Write the saved height
+    // after all size fields, including when recovering older journal files.
+    const ordered = [...names.filter(name => name !== 'cl_crosshair_screen_height'), ...names.filter(name => name === 'cl_crosshair_screen_height')];
+    await this.execute(ordered.map(name => `${name} ${values[name]}`));
     const actual = await this.read(names);
-    for (const name of names) if (numeric(actual[name]) !== numeric(values[name]))
-      throw new Error(`CS2 erlaubt ${name} momentan nicht. Für Fotos bitte mit dem Trainingsserver verbinden.`);
+    const mismatched = names.filter(name => numeric(actual[name]) !== numeric(values[name]));
+    if (mismatched.length) {
+      this.log('values.mismatched', { names: mismatched }, 'ERROR');
+      const hint = mismatched.some(name => name.startsWith('cl_crosshair'))
+        ? 'CS2 hat die Fadenkreuzwerte abweichend übernommen. Bitte die Spielauflösung prüfen und das Spielbild erneut verbinden.'
+        : 'Bitte mit dem Trainingsserver verbinden und prüfen, ob die benötigten HUD- und Viewmodel-Einstellungen erlaubt sind.';
+      throw Object.assign(new Error(`CS2 hat ${mismatched.join(', ')} nicht wie angefordert übernommen. ${hint}`), { code: 'ECVARMISMATCH' });
+    }
   }
   close() { this.socket?.destroy(); }
 }

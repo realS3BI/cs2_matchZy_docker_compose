@@ -9,7 +9,7 @@ namespace MatchZyNades;
 
 public sealed record ReviewSession(string Id, string Actor, string Owner, string Map, string Name, long ExpiresAt, bool Recording = false);
 public sealed record ReviewCommand(string Id, string SessionId, string Action, string Slot, long NotBefore, long ExpiresAt, string Presentation = "");
-public sealed record ReviewPhotoRequest(string Id, string SessionId, string Slot, long ExpiresAt);
+public sealed record ReviewPhotoRequest(string Id, string SessionId, string Slot, long ExpiresAt, string Action = "photo");
 public sealed record ReviewCaptured(string SessionId, string CommandId);
 public sealed record ReviewResult(string SessionId, string CommandId, bool Ok, string Message);
 
@@ -17,6 +17,8 @@ public static class ReviewCaptureFiles
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static readonly string[] Slots = ["aim", "position", "front", "effect", "video"];
+    public static bool ValidRequest(ReviewPhotoRequest request) => Guid.TryParseExact(request.Id, "N", out _) && request.Id.Length == 32 &&
+        (request.Action == "photo" ? Slots.Take(4).Contains(request.Slot) : (request.Action is "video-start" or "video-stop") && request.Slot == "video");
     public static ReviewCommand Issue(string directory, string actor, NadeLineup lineup, string action, string slot, long now, string? commandId = null, string presentation = "")
     {
         if (actor.Length != 17 || !actor.All(char.IsAsciiDigit) || lineup.Official ||
@@ -32,7 +34,7 @@ public static class ReviewCaptureFiles
         if (pending?.SessionId == session.Id && pending.ExpiresAt + 180_000 > now && result?.CommandId != pending.Id)
             throw new InvalidOperationException("Die vorige Aufnahme wird noch verarbeitet. Bitte kurz warten.");
         if (commandId != null && (!Guid.TryParseExact(commandId, "N", out _) || commandId.Length != 32))
-            throw new InvalidOperationException("Ungültige Foto-Anfrage.");
+            throw new InvalidOperationException("Ungültige Aufnahme-Anfrage.");
         var command = new ReviewCommand(commandId ?? Guid.NewGuid().ToString("N"), session.Id, action, slot,
             now + (action == "video-stop" ? 0 : 3000), now + 30_000, presentation);
         var path = Path.Combine(folder, "command.json");
@@ -87,8 +89,10 @@ public sealed partial class MatchZyNadesPlugin
 {
     private sealed record PendingReview(string Session, string Command, string Action, long Expires);
     private sealed record ActivePhoto(string Session, string Command, long Expires, ReviewPhotoPresentation Presentation, MenuSession? Panel, bool Focused);
+    private sealed record ActiveVideo(string Session, MenuSession? Panel, bool Focused);
     private readonly Dictionary<ulong, PendingReview> _reviewPending = [];
     private readonly Dictionary<ulong, ActivePhoto> _reviewPhotos = [];
+    private readonly Dictionary<ulong, ActiveVideo> _reviewVideos = [];
     private readonly Dictionary<ulong, string> _reviewRequests = [];
     private string ReviewDirectory => Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.review");
     private bool HandleReviewAction(CCSPlayerController player, MenuRequest request, string? commandId = null)
@@ -140,7 +144,10 @@ public sealed partial class MatchZyNadesPlugin
             if (presentation != null) {
                 _reviewPhotos[player.SteamID] = new(command.SessionId, command.Id, command.ExpiresAt, presentation, panel, focused);
                 // Chat stays silent during a photo, including the countdown.
-            } else Tell(player, action == "video-start" ? "Video startet nach drei Sekunden. Warte auf die Bestätigung, dann loslaufen. F8 stoppt mit eingerichtetem Review-Bind." : "Video wird beendet und hochgeladen. Bitte warten.");
+            } else {
+                if (action == "video-start") _reviewVideos[player.SteamID] = new(command.SessionId, panel, focused);
+                Tell(player, action == "video-start" ? "Video startet nach drei Sekunden. Warte auf die Bestätigung, dann loslaufen. F8 stoppt mit eingerichtetem Review-Bind." : "Video wird beendet und hochgeladen. Bitte warten.");
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -170,16 +177,23 @@ public sealed partial class MatchZyNadesPlugin
         var player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == actor);
         if (reopen && player != null) RestoreReviewPanel(player, photo.Panel, photo.Focused);
     }
+    private void RestoreReviewVideo(ulong actor, bool reopen)
+    {
+        if (!_reviewVideos.Remove(actor, out var video)) return;
+        var player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == actor);
+        if (reopen && player != null) RestoreReviewPanel(player, video.Panel, video.Focused);
+    }
     private void CancelReview(CCSPlayerController player)
     {
         if (_reviewPhotos.TryGetValue(player.SteamID, out var photo)) WriteReviewFailure(player.SteamID, photo.Command, "Foto abgebrochen. Bitte erneut aufnehmen.");
         RestoreReviewPhoto(player.SteamID, false);
+        RestoreReviewVideo(player.SteamID, false);
         _reviewPending.Remove(player.SteamID);
         _reviewRequests.Remove(player.SteamID);
     }
     private void ReadReviewResults()
     {
-        ReadBrowserPhotoRequests();
+        ReadBrowserCaptureRequests();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         foreach (var (actor, photo) in _reviewPhotos.ToArray()) {
             var folder = Path.Combine(ReviewDirectory, actor.ToString());
@@ -200,30 +214,41 @@ public sealed partial class MatchZyNadesPlugin
             if (result?.SessionId != pending.Session || result.CommandId != pending.Command) { if (!expired) continue; result = null; }
             _reviewPending.Remove(actor);
             RestoreReviewPhoto(actor, true);
+            if (pending.Action == "video-stop" || (pending.Action == "video-start" && result?.Ok != true)) RestoreReviewVideo(actor, true);
             var player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == actor);
             if (player != null) {
-                if (pending.Action == "video-stop" && _menus.TryGetValue(player.Slot, out var panel)) RestoreReviewPanel(player, panel, true);
                 Tell(player, result != null ? MenuRenderer.Plain(result.Message, 180) : "Keine Aufnahmebestätigung erhalten. Bitte Browser-Verbindung und Upload prüfen.");
             }
         }
+        foreach (var (actor, video) in _reviewVideos.ToArray()) {
+            var folder = Path.Combine(ReviewDirectory, actor.ToString());
+            var session = ReviewCaptureFiles.Read<ReviewSession>(Path.Combine(folder, "session.json"));
+            var command = ReviewCaptureFiles.Read<ReviewCommand>(Path.Combine(folder, "command.json"));
+            var captured = ReviewCaptureFiles.Read<ReviewCaptured>(Path.Combine(folder, "captured.json"));
+            var player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == actor);
+            var finished = (command?.Action is "video-start" or "video-stop") && command.SessionId == video.Session && captured?.SessionId == video.Session && captured.CommandId == command.Id;
+            if (finished || session?.Id != video.Session || session.ExpiresAt <= now || !TrainingEnabled || !Alive(player) || !CanWriteNades(player!))
+                RestoreReviewVideo(actor, true);
+        }
     }
-    private void ReadBrowserPhotoRequests()
+    private void ReadBrowserCaptureRequests()
     {
         if (!TrainingEnabled) return;
-        foreach (var player in Utilities.GetPlayers().Where(p => Alive(p) && CanWriteNades(p))) {
+        foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && CanWriteNades(p))) {
             var folder = Path.Combine(ReviewDirectory, player.SteamID.ToString());
             var request = ReviewCaptureFiles.Read<ReviewPhotoRequest>(Path.Combine(folder, "request.json"));
             if (request == null || request.ExpiresAt <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() ||
-                _reviewRequests.GetValueOrDefault(player.SteamID) == request.Id || !Guid.TryParseExact(request.Id, "N", out _) ||
-                !ReviewCaptureFiles.Slots.Take(4).Contains(request.Slot)) continue;
+                _reviewRequests.GetValueOrDefault(player.SteamID) == request.Id || !ReviewCaptureFiles.ValidRequest(request)) continue;
             _reviewRequests[player.SteamID] = request.Id;
             var session = ReviewCaptureFiles.Read<ReviewSession>(Path.Combine(folder, "session.json"));
             if (session?.Id != request.SessionId || session.Actor != player.SteamID.ToString()) continue;
             var previous = ReviewCaptureFiles.Read<ReviewCommand>(Path.Combine(folder, "command.json"));
             if (previous?.Id == request.Id) continue;
             var lineup = ReadLibrary(player, quiet: true)?.FirstOrDefault(n => n.Owner == session.Owner && n.Map == session.Map && n.Name == session.Name);
-            if (lineup == null || lineup.Official) { WriteReviewFailure(player.SteamID, request.Id, "Dieses Lineup ist nicht mehr für Fotos verfügbar.", requestOnly: true); continue; }
-            HandleReviewAction(player, new(TrainingAction.ReviewPhoto, lineup, Setting: request.Slot), request.Id);
+            if (lineup == null || lineup.Official) { WriteReviewFailure(player.SteamID, request.Id, "Dieses Lineup ist nicht mehr für Aufnahmen verfügbar.", requestOnly: true); continue; }
+            if (request.Action != "video-stop" && !Alive(player)) { WriteReviewFailure(player.SteamID, request.Id, "Bitte zuerst spawnen.", requestOnly: true); continue; }
+            var action = request.Action == "video-start" ? TrainingAction.ReviewVideoStart : request.Action == "video-stop" ? TrainingAction.ReviewVideoStop : TrainingAction.ReviewPhoto;
+            HandleReviewAction(player, new(action, lineup, Setting: request.Slot), request.Id);
         }
     }
     private void WriteReviewFailure(ulong actor, string commandId, string message, bool requestOnly = false)

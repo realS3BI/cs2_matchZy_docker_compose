@@ -27,7 +27,7 @@ const consoleConnection = new CommandPipe({ log, inspect: async id => {
   assert.ok(info.listeners.some(listener => listener.cs2 && listener.port === 29000), 'CS2 must own the reply port');
 } });
 const game = async () => JSON.parse((await run(helper, [], { windowsHide: true, timeout: 5000 })).stdout);
-const presentation = new Presentation(consoleConnection, path.join(userData, 'review-recovery.json'), async () => (await game()).identity);
+const presentation = new Presentation(consoleConnection, path.join(userData, 'review-recovery.json'), game);
 let launched = false, restored = false;
 try {
   if ((await collectCS2Diagnostics()).info?.running) throw new Error('CS2 läuft bereits. Das Spiel vor dem Live-Test regulär schließen.');

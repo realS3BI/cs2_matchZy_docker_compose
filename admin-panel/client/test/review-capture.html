@@ -27,7 +27,7 @@ createRoot(document.getElementById('root')).render(React.createElement(App));
 const waitFor=async f=>{for(let i=0;i<150;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+JSON.stringify({events,errors}));};
 window.checkPhoto=async(slot='aim')=>{
  photoSlot=slot;draw();await waitFor(()=>window.capture);await window.capture.connect();await waitFor(()=>window.capture.capture);
- let rejected=false;try{await window.capture.photo(slot,true);}catch(e){rejected=e.message.includes('Fotoausschnitt');}
+ let rejected=false;try{await window.capture.photo(slot,true);}catch(e){rejected=e.message.includes('Aufnahmeausschnitt');}
  if(!rejected||events.length)throw Error('Nicht bestätigter Ausschnitt hat eine Aufnahme ausgelöst');
  window.capture.capture.setPhotoFrame({width:1920,height:1080,top:32,right:4,bottom:4,left:4});
  await window.capture.photo(slot,true);await waitFor(()=>releaseUpload);
@@ -46,5 +46,17 @@ window.checkPhoto=async(slot='aim')=>{
  if(errors.length)throw Error(errors.join(';'));
  window.capture.disconnect();clearInterval(interval);
  return {result:'PASS: Vorbereitung → Foto → HUD-Freigabe → Upload → Bestätigung',slot,events,gameCrosshair,wrongCenter,size:[photo.width,photo.height]};
+};
+window.checkVideoCrop=async()=>{
+ const source=new ReviewRecorder(canvas.captureStream(30));await source.video.play();
+ let refused=false;try{await source.prepareVideo(()=>{});}catch(error){refused=error.message.includes('Aufnahmeausschnitt');}
+ if(!refused)throw Error('Video ohne bestätigten Ausschnitt gestartet');
+ source.setPhotoFrame({width:1920,height:1080,top:32,right:4,bottom:4,left:4});
+ const {recording}=await source.prepareVideo(()=>{});await new Promise(r=>setTimeout(r,1200));source.stopVideo();const file=await recording;
+ const url=URL.createObjectURL(file),video=document.createElement('video');video.src=url;
+ await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=reject;});
+ if(video.videoWidth!==1912||video.videoHeight!==1044||file.size<100)throw Error('Browser-Video enthält Fensterrand oder ist leer');
+ URL.revokeObjectURL(url);source.dispose();clearInterval(interval);
+ return {result:'PASS: Browser-WebM verwendet denselben bestätigten Ausschnitt wie Fotos',width:video.videoWidth,height:video.videoHeight,size:file.size};
 };
 </script></body></html>

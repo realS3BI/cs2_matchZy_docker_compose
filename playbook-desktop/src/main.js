@@ -134,7 +134,7 @@ else {
   const startupDeadline = setTimeout(() => startupFailed(new Error('Innerhalb von 15 Sekunden wurde kein Playbook-Fenster geöffnet.')), 15_000);
   void app.whenReady().then(() => {
     startup.write('Electron ist startbereit.');
-    presentation = new Presentation(consoleConnection, path.join(app.getPath('userData'), 'review-recovery.json'), async () => (await game()).identity);
+    presentation = new Presentation(consoleConnection, path.join(app.getPath('userData'), 'review-recovery.json'), game);
     window = new BrowserWindow({
       width: 1440, height: 1000, minWidth: 950, minHeight: 650, backgroundColor: '#0b1218', title: 'Playbook',
       webPreferences: { preload: path.join(here, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, spellcheck: false },

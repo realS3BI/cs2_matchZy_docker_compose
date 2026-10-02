@@ -13,14 +13,13 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { TeamIcon, GrenadeIcon } from "./nade-icons";
 import { LINEUP_TEAMS, TEAM_LABELS, isLineupTeam } from "../../../shared/lineup-teams";
-import { LineupReview } from "./lineup-review";
 import { ActionButton } from "./action-button";
 import { NadeFlightMap, NadePlacementEditor } from "./map-radar";
 import { FavoriteButton } from "./nade-favorites";
 import { api } from "../lib/api";
 import { copyText } from "../lib/clipboard";
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
-import { findLineup, lineupKey, lineupPath } from "../lib/lineups";
+import { findLineup, lineupKey, lineupPath, lineupReviewPath } from "../lib/lineups";
 import { inferRadarCalibration } from "../lib/nade-radar";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../../../shared/lineup-policy";
 import { THROW_FLAGS, BOOLEAN_THROW_FLAGS, THROW_FLAG_LABELS, CLICK_TYPES, CLICK_LABELS, MOVEMENT_TYPES, MOVEMENT_LABELS, movementType, movementPatch, type MovementType } from "../../../shared/throw-attributes";
@@ -194,7 +193,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
           </dl></details>
         </div>}
         {!creating && !permissions.edit && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
-        {!creating && <Button asChild variant="secondary"><a href="#lineup-review">{nade.official ? "Fotos und Video ansehen" : permissions.submit || permissions.moderate ? "Medien-Review öffnen" : "Aufnahmen ansehen"}</a></Button>}
+        {!creating && <Button variant="secondary" disabled={busy || dirty} onClick={() => navigate(lineupReviewPath(map, nade))}>Review öffnen</Button>}
         {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">
           <ActionButton variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>
           <code className="break-all text-xs text-muted-foreground">.loadnade {nade.name}</code>
@@ -205,7 +204,6 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
         </div>}
       </aside>
     </div>
-    {!creating && <LineupReview nade={nade} user={user} disabled={busy || dirty} mutate={mutate} onEntriesChange={onEntriesChange} />}
     {nade.throwTrace && <details className="lineup-coordinates"><summary>Aufgezeichnete Tasten und Bewegung</summary><pre className="mt-4 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">{formatThrowTrace(nade.throwTrace) || "Keine lesbaren Wurfdaten vorhanden."}</pre></details>}
     {nade.lineupImages?.length > 0 && <section className="lineup-images" aria-label="Bilder zur Anleitung">{nade.lineupImages.map(image => <figure key={image.key || image.url}><img src={image.url} alt={image.name || `Ausrichtung für ${nade.displayName || nade.name}`} loading="lazy" /><figcaption>{image.name}</figcaption></figure>)}</section>}
     <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent><DialogHeader><DialogTitle>Lineup löschen?</DialogTitle><DialogDescription>„{nade.displayName || nade.name}“ wird aus der Bibliothek entfernt. Das lässt sich nicht rückgängig machen.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" disabled={busy} onClick={() => setDeleteOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" icon={Trash2} disabled={busy} onClick={() => mutate("delete")} pendingLabel="Löscht …">Endgültig löschen</ActionButton></DialogFooter></DialogContent></Dialog>

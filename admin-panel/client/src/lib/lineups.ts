@@ -19,6 +19,10 @@ export function lineupPath(map: MapDefinition, nade: LineupReference) {
   return `${mapPath(map)}/lineups/${lineupId(nade)}`;
 }
 
+export function lineupReviewPath(map: MapDefinition, nade: LineupReference) {
+  return `${lineupPath(map, nade)}/review`;
+}
+
 export function findLineup<T extends LineupReference>(nades: T[], id?: string): T | undefined {
   if (!id) return undefined;
   return nades.find(nade => lineupId(nade) === id || legacyLineupId(nade) === id);

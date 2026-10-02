@@ -7,8 +7,11 @@ import { UserManagement } from "./components/user-management";
 import { RconChat } from "./components/rcon-chat";
 import { MapAtlas } from "./components/map-atlas";
 import { LineupPage, NewLineupPage } from "./components/lineup-page";
+import { LineupReviewPage } from "./components/lineup-review-page";
+import { ReviewQueuePage } from "./components/review-queue-page";
+import { REVIEW_QUEUE_PATH } from "./lib/review-queue";
 import { NadeFavoritesProvider } from "./components/nade-favorites";
-import { findLineup } from "./lib/lineups";
+import { findLineup, lineupPath } from "./lib/lineups";
 import { mapPath, mapSlug, mapsForLibrary } from "./lib/maps";
 import { NadeLibrary, LegacyLibraryRedirect } from "./components/nade-library";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +22,7 @@ import {
   BookOpen,
   Boxes,
   CalendarClock,
+  ClipboardCheck,
   Check,
   ChevronRight,
   CircleDot,
@@ -81,6 +85,7 @@ const routePaths = {
   login: "/login",
   overview: "/overview",
   server: "/server",
+  reviews: REVIEW_QUEUE_PATH,
   plugins: "/plugins",
   access: "/access",
   maintenance: "/maintenance",
@@ -97,6 +102,7 @@ const tabs = [
   { id: "maps", path: routePaths.maps, label: "Maps", icon: MapPinned, group: "Training" },
   { id: "overview", path: routePaths.overview, label: "Übersicht", icon: LayoutDashboard, group: "Server" },
   { id: "server", path: routePaths.server, label: "Einstellungen", icon: Server, group: "Server" },
+  { id: "reviews", path: routePaths.reviews, label: "Reviews", icon: ClipboardCheck, group: "Server" },
   { id: "plugins", path: routePaths.plugins, label: "Modi & Plugins", icon: Boxes, group: "Server" },
   { id: "console", path: routePaths.console, label: "Konsole", icon: Terminal, group: "Server" },
   { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Server" },
@@ -108,7 +114,7 @@ const tabs = [
 
 const defaultRoute = routePaths.maps;
 function isMapRoute(pathname) {
-  return Boolean(matchPath("/maps/:mapSlug", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId", pathname));
+  return Boolean(matchPath("/maps/:mapSlug", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId/review", pathname));
 }
 function allowedTabs(role) { return tabs.filter(tab => role === "admin" || tab.group === "Training" || (role === "match_admin" && ["overview", "plugins", "console"].includes(tab.id))); }
 
@@ -178,9 +184,9 @@ function TestLogin() {
   </main>;
 }
 
-function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, operation, status, statusUnavailable, selectedMap, selectedNade }) {
+function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, operation, status, statusUnavailable, selectedMap, selectedNade, reviewing }) {
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
-  const currentPage = selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label);
+  const currentPage = reviewing ? "Review" : selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label);
 
   return (
     <TooltipProvider>
@@ -199,6 +205,7 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   {selectedNade && selectedMap && <><BreadcrumbItem><BreadcrumbLink asChild><NavLink to={mapPath(selectedMap)}>{selectedMap.name}</NavLink></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /></>}
+                  {reviewing && selectedNade && selectedMap && <><BreadcrumbItem><BreadcrumbLink asChild><NavLink to={lineupPath(selectedMap, selectedNade)}>{selectedNade.displayName || selectedNade.name}</NavLink></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /></>}
                   <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate max-w-48 sm:max-w-80">{currentPage}</BreadcrumbPage></BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
@@ -855,15 +862,16 @@ function App() {
   const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs[1];
   const libraryMaps = useMemo(() => mapsForLibrary(settings, status?.mapInventory, nades), [settings, status?.mapInventory, nades]);
   const mapRoute = matchPath("/maps/:mapSlug/*", location.pathname);
-  const lineupRoute = matchPath("/maps/:mapSlug/lineups/:lineupId", location.pathname);
+  const lineupRoute = matchPath("/maps/:mapSlug/lineups/:lineupId/*", location.pathname);
   const selectedMap = libraryMaps.find(map => mapSlug(map) === mapRoute?.params.mapSlug);
   const selectedNade = findLineup(nades, lineupRoute?.params.lineupId);
+  const reviewing = location.pathname.endsWith("/review");
 
   useEffect(() => {
     document.title = authenticated === false
       ? "Anmelden | Playbook"
-      : `${selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | Playbook`;
-  }, [activeTab.label, authenticated, selectedMap?.name, selectedNade]);
+      : `${reviewing ? "Review · " : ""}${selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | Playbook`;
+  }, [activeTab.label, authenticated, selectedMap?.name, selectedNade, reviewing]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -919,6 +927,7 @@ function App() {
       tab={activeTab.id}
       selectedMap={selectedMap}
       selectedNade={selectedNade}
+      reviewing={reviewing}
       dirty={dirty}
       busy={busy}
       operation={operation}
@@ -966,6 +975,7 @@ function App() {
           <Settings settings={settings} setSettings={setSettings} policy={policy} />
           <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />
         </>} />
+        <Route path={routePaths.reviews} element={<ReviewQueuePage maps={libraryMaps} nades={nades} user={user} onRefresh={refreshLibrary} />} />
         <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={user.role === "admin"} /></>} />
         <Route
           path={routePaths.access}
@@ -981,6 +991,7 @@ function App() {
         <Route path="/maps/:mapSlug" element={<NadeLibrary nades={nades} maps={libraryMaps} user={user} />} />
         <Route path="/maps/:mapSlug/lineups/new" element={<NewLineupPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} onRefresh={refreshLibrary} />} />
         <Route path="/maps/:mapSlug/lineups/:lineupId" element={<LineupPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} onRefresh={refreshLibrary} />} />
+        <Route path="/maps/:mapSlug/lineups/:lineupId/review" element={<LineupReviewPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} />} />
         <Route path={routePaths.nades} element={<LegacyLibraryRedirect maps={libraryMaps} />} />
         <Route path={routePaths.console} element={<RconChat />} />
         <Route path={routePaths.logs} element={<DockerLogs active />} />

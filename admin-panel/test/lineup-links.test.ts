@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lineupId, lineupKey, lineupPath, findLineup } from "../client/src/lib/lineups.js";
+import { lineupId, lineupKey, lineupPath, lineupReviewPath, findLineup } from "../client/src/lib/lineups.js";
 import { ACTIVE_DUTY_MAPS } from "../client/src/lib/maps.js";
 
 test("lineup links survive display renames and distinguish owner, map and internal name", () => {
@@ -15,4 +15,5 @@ test("lineup links survive display renames and distinguish owner, map and intern
     assert.notEqual(lineupKey(nade), lineupKey({ ...nade, ...change }));
   }
   assert.match(lineupPath(ACTIVE_DUTY_MAPS[0], nade), /^\/maps\/mirage\/lineups\/[A-Za-z0-9_-]+$/);
+  assert.equal(lineupReviewPath(ACTIVE_DUTY_MAPS[0], nade), `${lineupPath(ACTIVE_DUTY_MAPS[0], nade)}/review`);
 });

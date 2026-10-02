@@ -74,7 +74,7 @@ window.checkClipboard=async(mode='missing')=>{
  document.execCommand=command=>{if(mode==='blocked')return false;if(command!=='copy'||document.activeElement?.tagName!=='TEXTAREA')throw Error('Ungültiger Fallback');copied.push(document.activeElement.value);return true;};
  try{
   document.querySelector('details').open=true;
-  const labels=['Crosshair-Code kopieren','Fotomodus-Befehl kopieren','HUD und Waffe einschalten · Befehl kopieren'];
+  const labels=['Fadenkreuz-Befehle kopieren','Fotomodus-Befehl kopieren','HUD und Waffe einschalten · Befehl kopieren'];
   for(const label of labels){
    const button=[...document.querySelectorAll('button')].find(b=>b.textContent===label);button.focus();button.click();await new Promise(r=>setTimeout(r,80));
    const text=button.parentElement.textContent;
@@ -82,7 +82,7 @@ window.checkClipboard=async(mode='missing')=>{
    else if(button.textContent!=='Kopiert')throw Error('Kopieren fehlgeschlagen: '+text);
    if((mode==='missing'&&document.activeElement!==button)||document.querySelector('textarea[aria-hidden=true]'))throw Error('Fokus/temporäres Textfeld nicht aufgeräumt');
   }
-  if(mode!=='blocked'&&(copied.length!==3||copied[0]!==document.querySelector('input[aria-label="Review-Crosshair-Code"]').value||copied[1]!=='cl_draw_only_deathnotices 1; r_drawviewmodel 0'||copied[2]!=='cl_draw_only_deathnotices 0; r_drawviewmodel 1'))throw Error('Falscher Inhalt kopiert');
+  if(mode!=='blocked'&&(copied.length!==3||copied[0]!==document.querySelector('input[aria-label="Review-Fadenkreuz-Befehle"]').value||copied[1]!=='cl_draw_only_deathnotices 1; r_drawviewmodel 0'||copied[2]!=='cl_draw_only_deathnotices 0; r_drawviewmodel 1'))throw Error('Falscher Inhalt kopiert');
   return {result:'PASS',mode,copies:copied.length};
  }finally{document.execCommand=originalCopy;if(descriptor)Object.defineProperty(navigator,'clipboard',descriptor);else delete navigator.clipboard;}
 };

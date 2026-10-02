@@ -9,6 +9,19 @@ public sealed class ReviewCaptureTests
     private const string Actor = "76561198000000001";
     private static NadeLineup Lineup => new("default", "window", "de_anubis", NadeKind.Smoke, "", new(1, 2, 3), new(4, 5, 6));
     [Theory]
+    [InlineData("photo", "front", true)]
+    [InlineData("photo", "video", false)]
+    [InlineData("video-start", "video", true)]
+    [InlineData("video-stop", "video", true)]
+    [InlineData("video-stop", "aim", false)]
+    [InlineData("quit", "video", false)]
+    public void BrowserRequestsAcceptOnlySupportedPhotoAndVideoActions(string action, string slot, bool valid)
+    {
+        Assert.Equal(valid, ReviewCaptureFiles.ValidRequest(new(new string('a', 32), "session", slot, 1000, action)));
+        Assert.False(ReviewCaptureFiles.ValidRequest(new("../escape", "session", slot, 1000, action)));
+        Assert.Equal("photo", new ReviewPhotoRequest(new string('a', 32), "session", "aim", 1000).Action);
+    }
+    [Theory]
     [InlineData("aim")]
     [InlineData("position")]
     [InlineData("effect")]

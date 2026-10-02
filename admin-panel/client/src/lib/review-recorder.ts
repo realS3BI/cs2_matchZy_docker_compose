@@ -5,10 +5,10 @@ export type PhotoFrame = { width: number; height: number; top: number; right: nu
 
 export function photoRectangle(frame: PhotoFrame, width: number, height: number) {
   if (frame.width !== width || frame.height !== height)
-    throw new Error("Die Größe des Spielbilds hat sich geändert. Bitte den Fotoausschnitt erneut bestätigen.");
+    throw new Error("Die Größe des Spielbilds hat sich geändert. Bitte den Aufnahmeausschnitt erneut bestätigen.");
   const { top, right, bottom, left } = frame;
   if (![top, right, bottom, left].every(value => Number.isInteger(value) && value >= 0) || width - left - right < 64 || height - top - bottom < 64)
-    throw new Error("Der Fotoausschnitt ist ungültig. Bitte die Ränder prüfen.");
+    throw new Error("Der Aufnahmeausschnitt ist ungültig. Bitte die Ränder prüfen.");
   return { x: left, y: top, width: width - left - right, height: height - top - bottom };
 }
 
@@ -22,7 +22,7 @@ export class ReviewRecorder {
   private recording: Promise<File> | null = null;
   private photoFrame: PhotoFrame | null = null;
   private stopVideoFrame: (() => void) | undefined;
-  private preparingDesktopVideo = false;
+  private preparingVideo = false;
   private stopRequested = false;
   get frame() { return this.photoFrame && { ...this.photoFrame }; }
   clearPhotoFrame() { this.photoFrame = null; }
@@ -31,7 +31,7 @@ export class ReviewRecorder {
     this.photoFrame = { ...frame };
   }
   checkPhotoFrame() {
-    if (!this.photoFrame) throw new Error("Bitte zuerst den Fotoausschnitt unter der Spielbild-Vorschau bestätigen.");
+    if (!this.photoFrame) throw new Error("Bitte zuerst den Aufnahmeausschnitt unter der Spielbild-Vorschau bestätigen.");
     return photoRectangle(this.photoFrame, this.video.videoWidth, this.video.videoHeight);
   }
   constructor(readonly stream: MediaStream) {
@@ -79,48 +79,47 @@ export class ReviewRecorder {
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Das Foto konnte nicht aufgenommen werden.")), "image/jpeg", 0.92));
     return new File([blob], `${name}.jpg`, { type: "image/jpeg" });
   }
-  async prepareDesktopVideo(onLimit: () => void): Promise<{ recording: Promise<File> }> {
-    this.preparingDesktopVideo = true;
+  async prepareVideo(onLimit: () => void): Promise<{ recording: Promise<File> }> {
+    this.preparingVideo = true;
     this.stopRequested = false;
-    try { await this.refreshDesktopFrame(); }
-    catch (error) { this.preparingDesktopVideo = false; throw error; }
-    const initial = this.checkPhotoFrame();
-    const canvas = document.createElement("canvas");
-    canvas.width = initial.width; canvas.height = initial.height;
-    const context = canvas.getContext("2d")!;
-    const output = canvas.captureStream(30);
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    let geometryTimer: ReturnType<typeof setTimeout>;
-    this.stopVideoFrame = () => { stopped = true; clearTimeout(timer); clearTimeout(geometryTimer); output.getTracks().forEach(track => track.stop()); };
-    const checkGeometry = async () => {
-      try { await this.refreshDesktopFrame(); }
-      catch (error) { if (!stopped) this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen.")); }
-      if (!stopped) geometryTimer = setTimeout(() => void checkGeometry(), 3000);
-    };
-    const paint = async () => {
-      const Capture = (window as any).ImageCapture;
-      let frame: ImageBitmap | undefined;
-      try {
-        frame = Capture ? await new Capture(this.stream.getVideoTracks()[0]).grabFrame() : undefined;
-        if (stopped) return;
-        const rect = photoRectangle(this.photoFrame!, frame?.width || this.video.videoWidth, frame?.height || this.video.videoHeight);
-        if (rect.width !== initial.width || rect.height !== initial.height) throw new Error("Die Spielgröße hat sich während des Videos geändert. Bitte erneut aufnehmen.");
-        context.drawImage(frame || this.video, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
-      } catch (error) { this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen.")); }
-      finally { frame?.close(); }
-      if (!stopped) timer = setTimeout(() => void paint(), 33);
-    };
-    context.drawImage(this.video, initial.x, initial.y, initial.width, initial.height, 0, 0, canvas.width, canvas.height);
     try {
+      await this.refreshDesktopFrame();
+      const initial = this.checkPhotoFrame();
+      const canvas = document.createElement("canvas");
+      canvas.width = initial.width; canvas.height = initial.height;
+      const context = canvas.getContext("2d")!;
+      const output = canvas.captureStream(30);
+      let stopped = false;
+      let timer: ReturnType<typeof setTimeout>;
+      let geometryTimer: ReturnType<typeof setTimeout>;
+      this.stopVideoFrame = () => { stopped = true; clearTimeout(timer); clearTimeout(geometryTimer); output.getTracks().forEach(track => track.stop()); };
+      const checkGeometry = async () => {
+        try { await this.refreshDesktopFrame(); }
+        catch (error) { if (!stopped) this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen.")); }
+        if (!stopped) geometryTimer = setTimeout(() => void checkGeometry(), 3000);
+      };
+      const paint = async () => {
+        const Capture = (window as any).ImageCapture;
+        let frame: ImageBitmap | undefined;
+        try {
+          frame = Capture ? await new Capture(this.stream.getVideoTracks()[0]).grabFrame() : undefined;
+          if (stopped) return;
+          const rect = photoRectangle(this.photoFrame!, frame?.width || this.video.videoWidth, frame?.height || this.video.videoHeight);
+          if (rect.width !== initial.width || rect.height !== initial.height) throw new Error("Die Spielgröße hat sich während des Videos geändert. Bitte erneut aufnehmen.");
+          context.drawImage(frame || this.video, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
+        } catch (error) { this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen.")); }
+        finally { frame?.close(); }
+        if (!stopped) timer = setTimeout(() => void paint(), 33);
+      };
+      context.drawImage(this.video, initial.x, initial.y, initial.width, initial.height, 0, 0, canvas.width, canvas.height);
       const result = this.startVideo(onLimit, output);
-      this.preparingDesktopVideo = false;
+      this.preparingVideo = false;
       if (this.stopRequested) this.stopVideo();
       void paint();
       geometryTimer = setTimeout(() => void checkGeometry(), 3000);
       return { recording: result.finally(() => { this.stopVideoFrame?.(); this.stopVideoFrame = undefined; }) };
     } catch (error) { this.stopVideoFrame?.(); this.stopVideoFrame = undefined; throw error; }
-    finally { this.preparingDesktopVideo = false; }
+    finally { this.preparingVideo = false; }
   }
   startVideo(onLimit: () => void, source = this.stream): Promise<File> {
     if (this.recorder || this.stream.getVideoTracks()[0]?.readyState !== "live") throw new Error("Eine Aufnahme läuft bereits oder die Bildschirmfreigabe wurde beendet.");
@@ -151,7 +150,7 @@ export class ReviewRecorder {
     return this.recording;
   }
   stopVideo() {
-    if (this.preparingDesktopVideo) this.stopRequested = true;
+    if (this.preparingVideo) this.stopRequested = true;
     if (this.recorder?.state === "recording") this.recorder.stop();
     return this.recording;
   }
