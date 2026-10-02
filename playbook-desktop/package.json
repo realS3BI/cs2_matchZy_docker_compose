@@ -1,7 +1,7 @@
 {
   "name": "playbook-desktop",
   "productName": "Playbook",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Playbook mit automatischer CS2-Review-Aufnahme für Windows",
   "author": "Sebastian Schlosser",
   "private": true,
@@ -10,6 +10,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
+    "test:cs2": "node test/live-cs2.js --offline",
+    "test:desktop": "node test/live-desktop.js",
     "build:native": "dotnet publish native/Playbook.Windows.csproj -c Release -r win-x64 --self-contained true -o native/bin/publish",
     "dist": "npm run test && npm run build:native && electron-builder --win nsis --x64 --publish never"
   },

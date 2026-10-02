@@ -14,7 +14,7 @@ Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 Native.SetProcessDpiAwarenessContext(new nint(-4));
 try
 {
-    if (args.Length == 1 && args[0] == "launch")
+    if (args.Length == 2 && args[0] == "launch" && System.Text.RegularExpressions.Regex.IsMatch(args[1], "^[a-f0-9]{32}$"))
     {
         var running = Process.GetProcessesByName("cs2");
         var alreadyRunning = running.Length > 0;
@@ -27,7 +27,8 @@ try
         // Fixed arguments; no command interpreter or saved Steam options. Let
         // Windows launch the GUI without inheriting this helper's stdout pipe.
         var start = new ProcessStartInfo(steam) { UseShellExecute = true };
-        foreach (var argument in new[] { "-applaunch", "730", "-console", "-netconport", "2121" })
+        var pipe = @"\\.\pipe\playbook_" + args[1];
+        foreach (var argument in new[] { "-applaunch", "730", "-console", "-insecure", "-concommandpipe", pipe + "_cmd," + pipe + "_out" })
             start.ArgumentList.Add(argument);
         using var launched = Process.Start(start) ?? throw new Exception("Steam konnte CS2 nicht starten.");
         Console.WriteLine("{}");

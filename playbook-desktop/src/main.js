@@ -1,25 +1,32 @@
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, powerSaveBlocker, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, powerSaveBlocker, session, shell } from 'electron';
 import updater from 'electron-updater';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { NetConsole } from './netconsole.js';
+import { CommandPipe } from './command-pipe.js';
 import { Presentation } from './presentation.js';
 import { captureFrame } from './geometry.js';
-import { ORIGIN, trusted, loginNavigation } from './security.js';
+import { ORIGIN, trusted, loginNavigation, reviewPermission } from './security.js';
 import { startupLog } from './startup-log.js';
 import { Updates } from './updates.js';
 import { launchAndWait } from './launch.js';
-import { diagnoseCS2 } from './cs2-diagnostics.js';
+import { collectCS2Diagnostics, diagnosticReport } from './cs2-diagnostics.js';
 
 const { autoUpdater } = updater;
 const exec = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 let window, presentation, target, blocker, quitting = false, launching = false;
 const updates = new Updates(autoUpdater, () => app.isPackaged);
-const consoleConnection = new NetConsole();
 const startup = startupLog(app);
+const connectionLog = (name, details, level) => startup.event('CS2', name, details, level);
+const consoleConnection = new CommandPipe({ log: connectionLog, inspect: async id => {
+  const diagnosis = await collectCS2Diagnostics();
+  if (!diagnosis.info?.insecure || diagnosis.info.playbookPipeId !== id) throw Object.assign(new Error('Das laufende CS2 gehört nicht zu dieser Playbook-Command-Pipe. Bitte CS2 vollständig beenden und über Playbook erneut starten.'), { code: 'EPIPEIDENTITY' });
+  if (!diagnosis.info.listenersReadable) throw Object.assign(new Error('Windows kann den CS2-Antwortkanal momentan nicht zuordnen. Bitte die CS2-Verbindung erneut prüfen.'), { code: 'EPORTCHECK' });
+  if (!diagnosis.info.listeners.some(listener => listener.port === 29000 && listener.cs2 && ['127.0.0.1', '0.0.0.0', '::'].includes(listener.address))) throw Object.assign(new Error('CS2 öffnet noch keinen lokalen Antwortkanal auf Port 29000. Bitte auf das Hauptmenü warten und erneut verbinden.'), { code: 'EVCONWAIT' });
+} });
+let lastDiagnosis = '', diagnosing = false, recoveryError;
 
 function startupFailed(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -28,20 +35,57 @@ function startupFailed(error) {
   app.exit(1);
 }
 
-async function native(action) {
+async function native(action, args = []) {
   if (process.platform !== 'win32') throw new Error('Die CS2-Aufnahme benötigt Windows 10 oder 11.');
   const executable = app.isPackaged ? path.join(process.resourcesPath, 'Playbook.Windows.exe') : path.join(here, '../native/bin/publish/Playbook.Windows.exe');
   try {
-    const { stdout } = await exec(executable, action ? [action] : [], { windowsHide: true, timeout: 5000, maxBuffer: 16_384 });
+    const { stdout } = await exec(executable, action ? [action, ...args] : [], { windowsHide: true, timeout: 5000, maxBuffer: 16_384 });
     return JSON.parse(stdout);
-  } catch (error) { throw new Error(error.stderr?.trim() || (action === 'launch' ? 'Steam konnte CS2 nicht starten.' : 'CS2-Fenster nicht gefunden. Bitte CS2 starten und geöffnet lassen.')); }
+  } catch (error) {
+    const failure = Object.assign(new Error(error.stderr?.trim() || (action === 'launch' ? 'Steam konnte CS2 nicht starten.' : 'CS2-Fenster nicht gefunden. Bitte CS2 starten und geöffnet lassen.')), { code: error.killed ? 'ENATIVETIMEOUT' : 'ENATIVE', cause: error });
+    startup.event('Windows', 'helper.failed', { action: action || 'window', code: failure.code, error: failure.message }, 'ERROR');
+    throw failure;
+  }
 }
 const game = () => native();
-async function connectionError(error) {
+async function saveDiagnosis(error, operation, protocolConfirmed = false) {
+  const diagnosis = await collectCS2Diagnostics();
+  const transport = consoleConnection.state();
+  startup.event('Diagnose', operation, { code: error?.code, error: error?.message, protocolConfirmed, transport, summary: diagnosis.summary, ...diagnosis.info }, error ? 'ERROR' : 'INFO');
+  lastDiagnosis = diagnosticReport(diagnosis, { appVersion: app.getVersion(), operation, error, protocolConfirmed, transport });
+  return diagnosis;
+}
+async function connectionError(error, operation) {
   if (process.platform !== 'win32') return error;
-  const diagnosis = await diagnoseCS2();
-  startup.write(`CS2-Verbindung: ${diagnosis}`);
-  return new Error(`${error.message}\n\nStartprüfung: ${diagnosis}`);
+  const diagnosis = await saveDiagnosis(error, operation);
+  return Object.assign(new Error(`${error.message}\n\nStartprüfung: ${diagnosis.summary}\n\nDen vollständigen Bericht findest du unter Playbook → CS2-Diagnose kopieren. Protokoll: ${startup.file}`), { code: error.code, cause: error });
+}
+async function showDiagnosis() {
+  if (diagnosing) return;
+  diagnosing = true;
+  try {
+    let error, confirmed = false;
+    if (launching || presentation.active) error = new Error('Die aktive Aufnahme oder der Spielstart läuft. Die zusätzliche Protokollprüfung wurde übersprungen.');
+    else {
+      try { await consoleConnection.read(['crosshair']); confirmed = true; }
+      catch (failure) { error = failure; }
+    }
+    await saveDiagnosis(error, 'manual', confirmed);
+    const choice = await dialog.showMessageBox(window, { type: confirmed ? 'info' : 'warning', title: 'CS2-Verbindungsdiagnose', message: confirmed ? 'CS2 bestätigt die lokale Steuerung.' : 'CS2-Verbindung nicht bestätigt.', detail: lastDiagnosis, buttons: ['Diagnose kopieren', 'Schließen'], defaultId: 0, cancelId: 1 });
+    if (choice.response === 0) clipboard.writeText(lastDiagnosis);
+  } catch (error) { startup.event('Diagnose', 'manual.failed', { error: error.message }, 'ERROR'); }
+  finally { diagnosing = false; }
+}
+async function launchGame() {
+  if (launching) throw new Error('CS2 wird bereits gestartet. Bitte auf die Verbindung warten.');
+  launching = true;
+  try {
+    if (target || presentation.active) throw new Error('Bitte zuerst den Review beenden und das Spielbild trennen.');
+    await launchAndWait(async () => native('launch', [await consoleConnection.prepare()]), consoleConnection, { log: connectionLog });
+    await presentation.recover();
+    await saveDiagnosis(undefined, 'launch', true);
+  } catch (error) { throw await connectionError(error, 'launch'); }
+  finally { launching = false; }
 }
 async function capturedGame() {
   const next = await game();
@@ -61,7 +105,16 @@ async function disconnect() {
 function handle(name, work) {
   ipcMain.handle('review:' + name, async (event, ...args) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || !trusted(event.senderFrame.url)) throw new Error('Diese Seite darf CS2 nicht steuern.');
-    return work(...args);
+    const start = Date.now(), verbose = !['status', 'frame'].includes(name);
+    if (verbose) startup.event('Review', `${name}.started`);
+    try {
+      const result = await work(...args);
+      if (verbose) startup.event('Review', `${name}.completed`, { elapsedMs: Date.now() - start });
+      return result;
+    } catch (error) {
+      startup.event('Review', `${name}.failed`, { elapsedMs: Date.now() - start, code: error.code, error: error.message }, 'ERROR');
+      throw error;
+    }
   });
 }
 
@@ -94,14 +147,25 @@ else {
         { label: 'Neu laden', role: 'reload' },
         { label: 'Nach Updates suchen', click: () => void updates.check() },
         { label: 'Startprotokoll öffnen', click: () => void shell.openPath(startup.file) },
+        { label: 'CS2-Verbindung prüfen', click: () => void showDiagnosis() },
+        { label: 'CS2-Diagnose kopieren', click: () => lastDiagnosis ? clipboard.writeText(lastDiagnosis) : void showDiagnosis() },
+        { label: 'CS2 für Review ohne VAC starten', click: () => void launchGame().catch(error => dialog.showMessageBox(window, { type: 'error', message: 'CS2 konnte nicht für den Review gestartet werden.', detail: error.message })) },
         { type: 'separator' }, { label: 'Beenden', role: 'quit' },
       ] },
       { label: 'Bearbeiten', submenu: [{ role: 'undo', label: 'Rückgängig' }, { role: 'redo', label: 'Wiederholen' }, { type: 'separator' }, { role: 'cut', label: 'Ausschneiden' }, { role: 'copy', label: 'Kopieren' }, { role: 'paste', label: 'Einfügen' }, { role: 'selectAll', label: 'Alles auswählen' }] },
       { label: 'Ansicht', submenu: [{ role: 'resetZoom', label: 'Originalgröße' }, { role: 'zoomIn', label: 'Vergrößern' }, { role: 'zoomOut', label: 'Verkleinern' }, { role: 'togglefullscreen', label: 'Vollbild' }] },
     ]));
     const browser = session.defaultSession;
-    browser.setPermissionRequestHandler((contents, permission, callback, details) => callback(contents === window.webContents && trusted(details.requestingUrl || '') && ['display-capture', 'clipboard-sanitized-write'].includes(permission)));
-    browser.setPermissionCheckHandler((contents, permission, origin) => contents === window.webContents && trusted(origin) && ['display-capture', 'clipboard-sanitized-write'].includes(permission));
+    browser.setPermissionRequestHandler((contents, permission, callback, details) => {
+      const allowed = contents === window.webContents && trusted(details.requestingUrl || '') && reviewPermission(permission, details, Boolean(target));
+      startup.event('Aufnahme', 'permission.request', { permission, allowed, mainFrame: details.isMainFrame, trusted: trusted(details.requestingUrl || ''), mediaTypes: details.mediaTypes }, allowed ? 'INFO' : 'WARN');
+      callback(allowed);
+    });
+    browser.setPermissionCheckHandler((contents, permission, origin, details) => {
+      const allowed = contents === window.webContents && trusted(origin) && reviewPermission(permission, details, Boolean(target));
+      if (permission === 'display-capture' || permission === 'media') startup.event('Aufnahme', 'permission.check', { permission, allowed, mainFrame: details.isMainFrame, trusted: trusted(origin), mediaType: details.mediaType }, allowed ? 'INFO' : 'WARN');
+      return allowed;
+    });
     browser.setDisplayMediaRequestHandler(async (request, callback) => {
       try {
         if (request.frame !== window.webContents.mainFrame || !trusted(request.securityOrigin) || !target || request.audioRequested) throw new Error('Aufnahme nicht freigegeben.');
@@ -111,7 +175,7 @@ else {
         const source = sources.find(source => source.id.split(':')[1] === current.id);
         if (!source) throw new Error('CS2 ist nicht aufnehmbar.');
         callback({ video: source });
-      } catch { callback({}); }
+      } catch (error) { startup.event('Aufnahme', 'window.failed', { error: error.message }, 'ERROR'); callback({}); }
     }, { useSystemPicker: false });
     window.webContents.on('will-navigate', (event, url) => { if (!loginNavigation(url)) event.preventDefault(); });
     window.webContents.on('will-redirect', (event, url) => { if (!loginNavigation(url)) event.preventDefault(); });
@@ -123,29 +187,24 @@ else {
     window.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
       if (isMainFrame && !isInPlace) void disconnect().catch(() => {});
     });
-    window.webContents.on('render-process-gone', () => { void disconnect().catch(() => {}); });
-    handle('status', async () => ({ appVersion: app.getVersion(), update: updates.status, connected: Boolean(target), recovery: Boolean(await presentation.saved()), active: Boolean(presentation.active) }));
-    handle('launch', async () => {
-      if (launching) throw new Error('CS2 wird bereits gestartet. Bitte auf die Verbindung warten.');
-      launching = true;
-      try {
-        if (target || presentation.active) throw new Error('Bitte zuerst den Review beenden und das Spielbild trennen.');
-        await launchAndWait(() => native('launch'), consoleConnection);
-        await presentation.recover();
-      }
-      catch (error) { throw await connectionError(error); }
-      finally { launching = false; }
+    window.webContents.on('render-process-gone', (_event, details) => {
+      startup.event('Electron', 'renderer.gone', { reason: details.reason, exitCode: details.exitCode }, 'ERROR');
+      void disconnect().catch(error => startup.event('Review', 'recovery.failed', { error: error.message }, 'ERROR'));
     });
+    handle('status', async () => ({ appVersion: app.getVersion(), update: updates.status, connected: Boolean(target), recovery: Boolean(await presentation.saved()), active: Boolean(presentation.active) }));
+    handle('launch', launchGame);
     handle('connect', async () => {
       if (launching) throw new Error('CS2 wird noch gestartet. Bitte kurz warten und anschließend das Spielbild verbinden.');
       if (presentation.active) throw new Error('Bitte die Aufnahme zuerst beenden.');
-      const next = await game();
+      let next;
       try {
+        next = await game();
         await presentation.recover();
         await consoleConnection.read(['crosshair']);
-      } catch (error) { throw await connectionError(error); }
+      } catch (error) { throw await connectionError(error, 'connect'); }
       target = next;
       blocker ??= powerSaveBlocker.start('prevent-display-sleep');
+      await saveDiagnosis(undefined, 'connect', true);
     });
     handle('frame', async (width, height) => captureFrame(await capturedGame(), width, height));
     handle('begin', async slot => {
@@ -169,7 +228,14 @@ else {
     if (app.isPackaged) setInterval(() => { void updates.check(); }, 4 * 60 * 60 * 1000).unref();
     // Recovery after a crash/reload is retried even when the review page is closed.
     setInterval(() => {
-      void presentation.recoverIfIdle().catch(() => {});
+      void presentation.recoverIfIdle().then(() => {
+        if (recoveryError) { startup.event('Review', 'recovery.completed'); recoveryError = undefined; }
+      }).catch(error => {
+        if (!recoveryError || recoveryError.message !== error.message || Date.now() - recoveryError.time > 60_000) {
+          startup.event('Review', 'recovery.pending', { code: error.code, error: error.message }, 'WARN');
+          recoveryError = { message: error.message, time: Date.now() };
+        }
+      });
     }, 5000).unref();
     window.on('close', event => {
       if (quitting) return;
@@ -179,7 +245,7 @@ else {
         if (choice.response === 1) { quitting = true; app.quit(); }
       });
     });
-    app.on('will-quit', () => { globalShortcut.unregisterAll(); consoleConnection.close(); });
+    app.on('will-quit', () => { globalShortcut.unregisterAll(); consoleConnection.shutdown(); });
     void window.loadURL(ORIGIN).then(() => startup.write('Playbook-Seite geladen.')).catch(error => {
       startup.write(`Playbook-Seite konnte nicht geladen werden: ${error.code || 'Ladefehler'}`);
       void dialog.showMessageBox(window, { type: 'error', message: 'Playbook ist momentan nicht erreichbar.', detail: 'Prüfe die Internetverbindung. Über Playbook → Neu laden kannst du es erneut versuchen.' });
