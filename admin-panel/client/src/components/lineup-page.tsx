@@ -20,7 +20,7 @@ import { api } from "../lib/api";
 import { copyText } from "../lib/clipboard";
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
 import { findLineup, lineupKey, lineupPath, lineupReviewPath } from "../lib/lineups";
-import { inferRadarCalibration } from "../lib/nade-radar";
+import { inferRadarCalibration, resolveRadarPoints } from "../lib/nade-radar";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../../../shared/lineup-policy";
 import { THROW_FLAGS, BOOLEAN_THROW_FLAGS, THROW_FLAG_LABELS, CLICK_TYPES, CLICK_LABELS, MOVEMENT_TYPES, MOVEMENT_LABELS, movementType, movementPatch, type MovementType } from "../../../shared/throw-attributes";
 
@@ -59,20 +59,31 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   const permissions = lineupPermissions(nade, user);
   const [draft, setDraft] = useState(() => editableValues(nade));
   const [baseline, setBaseline] = useState(() => JSON.stringify(editableValues(nade)));
+  const [placement, setPlacement] = useState(() => ({ radarFrom: nade.radarFrom ?? null, radarTo: nade.radarTo ?? null }));
+  const [placementBaseline, setPlacementBaseline] = useState(() => JSON.stringify(placement));
+  const [positioning, setPositioning] = useState(creating);
   const [revision, setRevision] = useState(nade.updatedAt || "");
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const dirty = permissions.edit && JSON.stringify(draft) !== baseline;
+  const detailsDirty = permissions.edit && JSON.stringify(draft) !== baseline;
+  const placementDirty = permissions.position && JSON.stringify(placement) !== placementBaseline;
+  const dirty = detailsDirty || placementDirty;
   const canCreate = Boolean(draft.displayName.trim() && draft.lineupPos.trim() && draft.lineupAng.trim());
   const validDuration = draft.flightDuration === null || Number.isFinite(draft.flightDuration) && draft.flightDuration >= 0;
   const stale = dirty && revision !== (nade.updatedAt || "");
-  const calibration = inferRadarCalibration(map, nades.filter(item => mapMatchesNade(map, item.map)));
+  const positionedNade = { ...nade, ...(permissions.edit ? draft : {}), ...placement };
+  const calibration = inferRadarCalibration(map, nades.map(item => lineupKey(item) === lineupKey(nade) ? positionedNade : item));
+  const points = resolveRadarPoints(positionedNade, calibration);
+  const missingPosition = !points.radarFrom || !points.radarTo;
 
   function reset(entry = nade) {
     const values = editableValues(entry);
     setDraft(values);
     setBaseline(JSON.stringify(values));
+    const positions = { radarFrom: entry.radarFrom ?? null, radarTo: entry.radarTo ?? null };
+    setPlacement(positions);
+    setPlacementBaseline(JSON.stringify(positions));
     setRevision(entry.updatedAt || "");
   }
   useEffect(() => {
@@ -98,7 +109,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
     try {
       const result = await api("/api/nades/entry", { method: "POST", body: JSON.stringify({
         ...(creating ? { map: nade.map } : { owner: nade.owner, map: nade.map, name: nade.name,
-          revision: action === "edit" ? revision : nade.updatedAt || "" }), action, ...extra,
+          revision: ["edit", "position"].includes(action) ? revision : nade.updatedAt || "" }), action, ...extra,
       }) });
       if (creating) {
         onEntriesChange(result.entries);
@@ -107,6 +118,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
       }
       const updated = result.entries.find(item => lineupKey(item) === lineupKey(nade));
       if (updated) reset(updated);
+      if (action === "position") setPositioning(false);
       if (action === "delete") navigate(back);
       onEntriesChange(result.entries);
     } finally { running.current = false; setBusy(false); }
@@ -123,9 +135,19 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
     }}><ArrowLeft data-icon="inline-start" />{map.name}</Link></Button></div>
     <div className="lineup-workspace">
       <div className="lineup-radar">
-        {permissions.edit ? <fieldset disabled={busy} className="min-w-0" inert={busy || undefined}>
-          <NadePlacementEditor map={map} value={{ ...nade, ...draft }} onChange={patch} calibration={calibration} />
-        </fieldset> : <><NadeFlightMap map={map} nades={[nade]} calibration={calibration} /><p className="mt-3 text-xs text-muted-foreground">Kreis: Startposition · Raute: Landeposition</p></>}
+        {permissions.position && <div className="mb-3 flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" disabled={busy} aria-expanded={positioning} onClick={() => setPositioning(value => !value)}>{positioning ? "Kartenansicht" : missingPosition ? "Start und Ziel setzen" : "Positionierung bearbeiten"}</Button>
+        </div>}
+        {permissions.position && positioning ? <fieldset disabled={busy} className="min-w-0" inert={busy || undefined}>
+          <NadePlacementEditor map={map} value={positionedNade} onChange={value => setPlacement(current => ({ ...current, ...value }))} calibration={calibration} />
+          {!creating && <div className="mt-3 flex flex-wrap gap-2">
+            <ActionButton icon={Save} disabled={busy || !placementDirty || stale || detailsDirty} onClick={() => mutate("position", { patch: placement })} pendingLabel="Speichert …" successLabel="Gespeichert">Positionierung speichern</ActionButton>
+            {placementDirty && <Button variant="ghost" disabled={busy} onClick={() => { setPlacement(JSON.parse(placementBaseline)); }}>Positionierung verwerfen</Button>}
+          </div>}
+          {detailsDirty && <p className="mt-2 text-xs text-muted-foreground">Speichere die Positionierung zusammen mit deinen weiteren Änderungen über „Speichern“.</p>}
+          {stale && <p className="mt-2 text-xs text-muted-foreground" role="status">Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden.</p>}
+        </fieldset> : <><NadeFlightMap map={map} nades={[positionedNade]} calibration={calibration} /><p className="mt-3 text-xs text-muted-foreground">Kreis: Startposition · Raute: Landeposition</p></>}
+        {!calibration && permissions.position && <p className="mt-3 text-xs text-muted-foreground">{map.mapName === "de_nuke" ? "Auf Nuke werden Start und Ziel wegen der getrennten Stockwerke manuell gesetzt." : "Für diese Map fehlen verlässliche Referenzen. Setze Start und Ziel auf der Karte. Gespeicherte Markierungen mit Spielkoordinaten dienen als Referenzen für weitere Nades und können über „Positionierung bearbeiten“ korrigiert werden."}</p>}
       </div>
       <aside className="lineup-sidebar" aria-label="Lineup und Anleitung">
         <header className="grid gap-3">
@@ -169,10 +191,10 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
                 {textField("landingPos", "Landekoordinaten", "x y z")}
               </FieldGroup></details>
               <div className="flex flex-wrap items-start gap-2">
-                <ActionButton icon={Save} onClick={() => mutate(creating ? "create" : "edit", { patch: draft })} disabled={busy || !validDuration || (creating ? !canCreate : !dirty || stale)} pendingLabel="Speichert …" successLabel="Gespeichert">{creating ? "Nade hinzufügen" : "Speichern"}</ActionButton>
+                <ActionButton icon={Save} onClick={() => mutate(creating ? "create" : detailsDirty ? "edit" : "position", { patch: creating || detailsDirty ? { ...draft, ...placement } : placement })} disabled={busy || !validDuration || (creating ? !canCreate : !dirty || stale)} pendingLabel="Speichert …" successLabel="Gespeichert">{creating ? "Nade hinzufügen" : "Speichern"}</ActionButton>
                 {dirty && <Button variant="ghost" onClick={() => reset()} disabled={busy}>Änderungen verwerfen</Button>}
               </div>
-              {dirty && <p className="text-xs text-muted-foreground" role="status">{creating ? "Ungespeicherter Entwurf. Name, Startkoordinaten und Blickwinkel sind erforderlich." : stale ? "Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden." : "Ungespeicherte Änderungen. Nach dem Speichern kannst du das Lineup erneut zum Review einreichen."}</p>}
+              {dirty && <p className="text-xs text-muted-foreground" role="status">{creating ? "Ungespeicherter Entwurf. Name, Startkoordinaten und Blickwinkel sind erforderlich." : stale ? "Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden." : detailsDirty ? "Ungespeicherte Änderungen. Nach dem Speichern kannst du das Lineup erneut zum Review einreichen." : "Ungespeicherte Kartenpositionen. Der Review-Status bleibt erhalten."}</p>}
             </FieldGroup>
           </fieldset>
         </form> : <div className="grid gap-5">
@@ -194,6 +216,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
         </div>}
         {!creating && !permissions.edit && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
         {!creating && <Button variant="secondary" disabled={busy || dirty} onClick={() => navigate(lineupReviewPath(map, nade))}>Review öffnen</Button>}
+        {!creating && permissions.revoke && (nade.official || nade.reviewStatus === "pending") && <ActionButton variant="ghost" disabled={busy || dirty} onClick={() => mutate("revoke")} successLabel="Zurückgenommen">{nade.official ? "Freigabe zurücknehmen" : "Review zurücknehmen"}</ActionButton>}
         {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">
           <ActionButton variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>
           <code className="break-all text-xs text-muted-foreground">.loadnade {nade.name}</code>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kartenpositionierung prüfen</title></head><body><main id="root" style="max-width:1200px;margin:24px auto;padding:0 16px"></main><script type="module">
+import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {BrowserRouter, Route, Routes} from 'react-router-dom';
+import {LineupPage} from '/src/components/lineup-page.tsx';
+import {NadeFavoritesProvider} from '/src/components/nade-favorites.tsx';
+import {ACTIVE_DUTY_MAPS} from '/src/lib/maps.ts';
+import '/src/index.css';
+const params=new URLSearchParams(location.search);
+const owner='76561198000000001';
+const user={identitySteam64:params.has('foreign')?'76561198000000002':owner,role:params.get('role')||'player'};
+let entries=[{id:'Abc1234',owner,map:'de_mirage',name:'window',displayName:'Fenster vom T-Spawn',type:'Smoke',lineupPos:'-1000 1000 0',landingPos:'1000 -1000 0',lineupAng:'0 90 0',official:true,mustKnow:true,reviewStatus:'approved',updatedAt:'1'}];
+window.requests=[];
+window.fetch=async (url,options)=>{
+ if(String(url).includes('/entry')) {
+  const request=JSON.parse(options.body);window.requests.push(request);
+  entries=entries.map(entry=>({...entry,...(request.action==='position'?request.patch:{official:false,mustKnow:false,reviewStatus:''}),updatedAt:String(Number(entry.updatedAt)+1)}));
+ }
+ return new Response(JSON.stringify(String(url).includes('favorites')?{favorites:[]}:{entries}),{headers:{'Content-Type':'application/json'}});
+};
+history.replaceState(null,'','/maps/mirage/lineups/Abc1234');
+function App(){const [nades,setNades]=useState(entries);window.setRecording=patch=>{entries=entries.map(entry=>({...entry,...patch}));setNades(entries);};return React.createElement(BrowserRouter,null,React.createElement(NadeFavoritesProvider,null,React.createElement(Routes,null,React.createElement(Route,{path:'/maps/:mapSlug/lineups/:lineupId',element:React.createElement(LineupPage,{maps:ACTIVE_DUTY_MAPS,nades,user,onEntriesChange:setNades,onRefresh:async()=>{}})}))));}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+const waitFor=async f=>{for(let i=0;i<100;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
+const assert=(value,message)=>{if(!value)throw Error(message);};
+const button=text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text);
+const clickMap=(x,y)=>{const svg=document.querySelector('.radar-map svg');const point=new DOMPoint(x*svg.viewBox.baseVal.width,y*svg.viewBox.baseVal.height).matrixTransform(svg.getScreenCTM());svg.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:point.x,clientY:point.y}));};
+window.checkPlacement=async()=>{
+ await waitFor(()=>document.querySelector('h1'));
+ if(params.has('foreign')&&user.role!=='admin') {assert(!button('Start und Ziel setzen'),'Fremde Positionierung bearbeitbar');assert(!button('Freigabe zurücknehmen'),'Fremde Freigabe zurücknehmbar');return 'PASS: Fremde Aufnahme geschützt';}
+ for(const type of ['Smoke','Molly','Flash','HE','Decoy']) {
+  window.setRecording({type});await waitFor(()=>document.querySelector('.control-kicker').textContent.includes(type==='Molly'?'Molotov':type));
+  assert(!!button('Start und Ziel setzen'),'Positionierung fehlt: '+type);
+  assert(!button('Start setzen')&&!button('Ziel setzen'),'Editor standardmäßig offen: '+type);
+ }
+ button('Start und Ziel setzen').click();await waitFor(()=>button('Start setzen'));
+ clickMap(.2,.8);await waitFor(()=>document.body.innerText.includes('Start manuell'));
+ clickMap(.8,.2);await waitFor(()=>document.body.innerText.includes('Ziel manuell'));
+ button('Positionierung speichern').click();await waitFor(()=>button('Positionierung bearbeiten'));
+ assert(window.requests[0].action==='position','Keine gesonderte Positionierungsaktion');
+ assert(Object.keys(window.requests[0].patch).sort().join(',')==='radarFrom,radarTo','Wurfdaten im Kartenpatch');
+ assert(document.body.innerText.includes('Offiziell')&&document.body.innerText.includes('Must Know'),'Freigabe verloren');
+ button('Positionierung bearbeiten').click();await waitFor(()=>button('Start setzen'));
+ clickMap(.25,.75);await waitFor(()=>!button('Positionierung speichern').disabled);
+ button('Positionierung speichern').click();await waitFor(()=>window.requests.length===2&&!button('Start setzen'));
+ assert(window.requests[1].patch.radarFrom.x!==window.requests[0].patch.radarFrom.x,'Referenz nicht korrigiert');
+ button('Freigabe zurücknehmen').click();await waitFor(()=>!button('Freigabe zurücknehmen'));
+ assert(!document.body.innerText.includes('Must Know'),'Must Know nach Rücknahme erhalten');
+ if(user.identitySteam64===owner) assert(!!document.querySelector('#lineup-field-displayName'),'Ersteller kann Entwurf nicht bearbeiten');
+ assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
+ return 'PASS: Alle Nade-Arten einheitlich, offizielle Positionierung, Referenzkorrektur und Freigaberücknahme';
+};
+</script></body></html>

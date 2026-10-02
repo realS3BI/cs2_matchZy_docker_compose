@@ -197,7 +197,10 @@ type NadePlacementEditorProps = {
 };
 
 export function NadePlacementEditor({ map, value, onChange, calibration = null }: NadePlacementEditorProps) {
-  const [mode, setMode] = useState<"from" | "to">("from");
+  const [mode, setMode] = useState<"from" | "to">(() => {
+    const points = resolveRadarPoints(value, calibration);
+    return points.radarFrom && !points.radarTo ? "to" : "from";
+  });
   const points = resolveRadarPoints(value, calibration);
 
   function place(point: RadarPoint) {

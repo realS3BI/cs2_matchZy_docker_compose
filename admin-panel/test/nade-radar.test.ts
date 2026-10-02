@@ -35,3 +35,17 @@ test("missing, narrow, inconsistent and wrong-map references cannot calibrate a 
   assert.equal(inferRadarCalibration(map, [...references, { map: map.mapName, lineupPos: "0 0 0", radarFrom: { x: 0.2, y: 0.5 } }]), null);
   assert.equal(inferRadarCalibration(ACTIVE_DUTY_MAPS[2], references.map(n => ({ ...n, map: "de_nuke" }))), null);
 });
+
+test("corrected references move automatic positions while preserving manual overrides across nade types", () => {
+  const corrected = references.map(nade => ({ ...nade, radarFrom: { x: nade.radarFrom.x * .8 + .1, y: nade.radarFrom.y } }));
+  const before = inferRadarCalibration(map, references);
+  const after = inferRadarCalibration(map, corrected);
+  assert.ok(after);
+  for (const type of ["Smoke", "Molly", "Flash", "HE", "Decoy"]) {
+    const nade = { type, lineupPos: "500 -500 0", landingPos: "-500 500 0" };
+    assert.ok(Math.abs(resolveRadarPoints(nade, before).radarFrom!.x - .7) < .00001);
+    assert.ok(Math.abs(resolveRadarPoints(nade, after).radarFrom!.x - .66) < .00001);
+    const manual = { x: .3, y: .7 };
+    assert.deepEqual(resolveRadarPoints({ ...nade, radarFrom: manual }, after).radarFrom, manual);
+  }
+});

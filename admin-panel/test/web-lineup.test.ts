@@ -9,7 +9,7 @@ import { reviewMediaFixture } from "./review-fixtures.js";
 const owner = "76561198000000001";
 const player = { identitySteam64: owner, role: "player" };
 const admin = { identitySteam64: "76561198000000002", role: "admin" };
-const entry = { owner, name: "window", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "0 90 0", desc: "Alt", updatedAt: "2026-09-01T00:00:00.000Z", captureId: "capture-one", lineupImages: [{ key: "image.png", url: "/api/uploads/abc123.png", name: "Ausrichtung" }] };
+const entry = { owner, name: "window", map: "de_mirage", type: "Smoke", lineupPos: "1 2 3", lineupAng: "0 90 0", desc: "Alt", throwFromTitle: "T-Spawn", throwToTitle: "Fenster", updatedAt: "2026-09-01T00:00:00.000Z", captureId: "capture-one", lineupImages: [{ key: "image.png", url: "/api/uploads/abc123.png", name: "Ausrichtung", size: 0, uploadedAt: "2026-09-01T00:00:00.000Z" }] };
 const request = { owner, name: entry.name, map: entry.map, revision: entry.updatedAt, action: "submit" };
 const denied = status => error => error.status === status;
 const creation = { action: "create", map: "de_mirage", patch: {
@@ -124,6 +124,55 @@ test("review transitions separate owner submission from admin approval and Must 
   assert.throws(() => applyWebNadeAction([entry], { ...request, action: "mustKnow", value: true }, admin), denied(400));
 });
 
+test("map placement can bootstrap and correct reviewed recordings without changing their approval or throw data", () => {
+  for (const type of ["Smoke", "Molly", "Flash", "HE", "Decoy"]) {
+    const official = { ...entry, type, official: true, mustKnow: true, reviewStatus: "approved", flightDuration: 3.25, reviewMedia: reviewMediaFixture };
+    for (const user of [player, admin]) {
+      assert.equal(lineupPermissions(official, user).position, true);
+      const patch = { radarFrom: { x: .1, y: .8 }, radarTo: { x: .7, y: .2 } };
+      const [placed] = applyWebNadeAction([official], { ...request, action: "position", patch }, user);
+      assert.deepEqual(placed.radarFrom, patch.radarFrom);
+      assert.deepEqual(placed.radarTo, patch.radarTo);
+      assert.equal(placed.official, true);
+      assert.equal(placed.mustKnow, true);
+      assert.equal(placed.reviewStatus, "approved");
+      assert.equal(placed.lineupPos, entry.lineupPos);
+      assert.equal(placed.flightDuration, 3.25);
+      assert.deepEqual(placed.reviewMedia, reviewMediaFixture);
+      const [corrected] = applyWebNadeAction([placed], { ...request, action: "position", revision: placed.updatedAt, patch: { radarFrom: { x: .2, y: .75 }, radarTo: null } }, user);
+      assert.deepEqual(corrected.radarFrom, { x: .2, y: .75 });
+      assert.equal(corrected.radarTo, undefined);
+      assert.equal(corrected.official, true);
+      assert.throws(() => applyWebNadeAction([placed], { ...request, action: "position", patch }, user), denied(409));
+    }
+  }
+  const imported = { ...entry, owner: "default", official: true };
+  assert.equal(applyWebNadeAction([imported], { ...request, owner: "default", action: "position", patch: { radarFrom: { x: .2, y: .3 } } }, admin)[0].official, true);
+});
+
+test("placement restricts actors and fields, and owners can withdraw their own review or approval", () => {
+  const official = { ...entry, official: true, mustKnow: true, reviewStatus: "approved" };
+  for (const role of ["player", "training_player", "match_admin"]) {
+    const foreign = { ...admin, role };
+    for (const action of ["position", "revoke"]) {
+      assert.throws(() => applyWebNadeAction([official], { ...request, action, role: "admin", patch: { radarFrom: { x: .2, y: .3 } } }, foreign), denied(403));
+      assert.throws(() => applyWebNadeAction([official], { ...request, action }, undefined), denied(403));
+    }
+  }
+  for (const patch of [null, [], {}, { official: false }, { lineupPos: "4 5 6" }, { desc: "Neu" }, { radarFrom: { x: 2, y: 0 } }]) {
+    assert.throws(() => applyWebNadeAction([official], { ...request, action: "position", patch }, player), denied(400));
+  }
+  for (const recording of [official, { ...entry, reviewStatus: "pending" }]) {
+    const [withdrawn] = applyWebNadeAction([recording], { ...request, action: "revoke" }, player);
+    assert.equal(withdrawn.official, false);
+    assert.equal(withdrawn.mustKnow, false);
+    assert.equal(withdrawn.reviewStatus, "");
+    assert.equal(withdrawn.name, entry.name);
+    assert.deepEqual(withdrawn.lineupImages, entry.lineupImages);
+    assert.equal(lineupPermissions(withdrawn, player).edit, true);
+  }
+});
+
 test("authenticated endpoint enforces owner and role from the session, and serializes revisions", async t => {
   let user = player;
   let entries = [{ ...entry, reviewMedia: reviewMediaFixture }];
@@ -156,7 +205,16 @@ test("authenticated endpoint enforces owner and role from the session, and seria
     assert.equal(entries.length, 1);
   }
   user = player;
+  const placement = { ...request, revision: entries[0].updatedAt, action: "position", patch: { radarFrom: { x: .25, y: .75 }, radarTo: { x: .6, y: .2 } } };
+  assert.equal((await send(placement)).status, 200);
+  assert.equal(entries[0]["official"], true);
+  assert.equal(entries[0]["reviewStatus"], "approved");
+  assert.equal((await send(placement)).status, 409);
+  assert.equal((await send({ ...placement, revision: entries[0].updatedAt, patch: { official: false } })).status, 400);
   assert.equal((await send({ ...request, revision: entries[0].updatedAt, action: "edit", patch: { desc: "Trotz Freigabe" } })).status, 403);
+  assert.equal((await send({ ...request, revision: entries[0].updatedAt, action: "revoke" })).status, 200);
+  assert.equal(entries[0]["official"], false);
+  assert.equal(entries[0]["reviewStatus"], "");
   user = admin;
   assert.equal((await send({ ...request, revision: entries[0].updatedAt, action: "delete" })).status, 200);
   assert.equal(entries.length, 0);
