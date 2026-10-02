@@ -29,6 +29,8 @@ Vor dem Build und vor der Installation schließt das Skript laufende Playbook-Fe
 
 Erscheint bei einer älteren Version im Installer **„Playbook kann nicht geschlossen werden“**, zuerst den laufenden Review beenden und Playbook schließen. Bleiben danach Prozesse ohne sichtbares Fenster übrig, im Windows-Task-Manager unter **Details** die Prozesse `Playbook.exe` beenden und im Installer **Wiederholen** wählen. Playbook und das Update-Skript unter demselben Windows-Konto und normalerweise ohne Administratorrechte starten.
 
+Läuft eine ältere App nur als Hintergrundprozess ohne Fenster, diese Prozesse vor dem Update einmal im Task-Manager beenden. Der korrigierte Start wartet erst nach Abschluss des JavaScript-Modulladens auf Electron. Der Build prüft mit echtem Electron, dass tatsächlich ein sichtbares Fenster entsteht. Startfehler erscheinen als Dialog; das lokale Protokoll liegt unter `%APPDATA%\Playbook\logs\startup.log` und lässt sich in der App über **Playbook → Startprotokoll öffnen** aufrufen.
+
 ```powershell
 cd playbook-desktop
 npm ci
