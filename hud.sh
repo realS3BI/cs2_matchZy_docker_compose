@@ -7,7 +7,7 @@ case "$mode" in
   update|release|live|status) ;;
   -h|--help)
     printf '%s\n' 'Auf Windows in Git Bash: ./hud.sh [update|release|live|status]' \
-      'Ohne Argument: Git aktualisieren, lokales HUD installieren und nach Workshop-Release fragen.'
+      'Ohne Argument: Git aktualisieren, Panorama-Panel installieren sowie Playbook bauen und öffnen.'
     exit 0
     ;;
   *) printf 'Unbekannter Modus: %s\n' "$mode" >&2; exit 2 ;;

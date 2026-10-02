@@ -92,8 +92,15 @@ if ($Mode -eq 'update') {
     }
     & (Join-Path $PSScriptRoot 'release.ps1') -Cs2 $Cs2
     & (Join-Path $PSScriptRoot 'panel-source.ps1') local -Cs2 $Cs2 -SkipBuild
-    Write-Output 'Lokales HUD installiert. Im Dashboard Trainings-HUD aktivieren und HUD über Workshop ausliefern ausschalten; Änderungen mit Apply & restart übernehmen.'
-    Write-Output 'Du kannst das aktualisierte HUD anschließend testen: CS2 normal über Steam starten, den Trainingsserver betreten und .nades verwenden.'
+    $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'dist/release.json') -Raw | ConvertFrom-Json -AsHashtable
+    Assert-LocalHud $manifest
+    Write-Output 'Panorama-Panel aktualisiert und geprüft. Im Dashboard Trainings-HUD aktivieren und HUD über Workshop ausliefern ausschalten; Änderungen mit Apply & restart übernehmen.'
+    Write-Output 'Playbook wird jetzt gebaut und geöffnet. Für den Review dort Server → Reviews öffnen und CS2 starten.'
+    $global:LASTEXITCODE = 0
+    & (Join-Path (Split-Path -Parent $PSScriptRoot) 'playbook-desktop/build-and-run.ps1') -LaunchDirect
+    if ($LASTEXITCODE -ne 0) { throw 'Playbook konnte nicht gebaut oder geöffnet werden. Das Panorama-Panel ist bereits aktualisiert; die Fehlermeldung steht oben.' }
+    Write-Output 'Fertig. Panorama-Panel und Playbook sind aktualisiert. Für einen späteren Workshop-Upload hud.cmd -Mode release verwenden.'
+    return
 }
 
 # Check the prepared package and the installed overrides before asking to publish.

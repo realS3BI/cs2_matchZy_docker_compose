@@ -12,10 +12,10 @@ if ($Mode -eq 'update') {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         throw 'Git fehlt. Git for Windows installieren, danach das Skript erneut starten.'
     }
-    Write-Output 'Git-Arbeitskopie aktualisieren ...'
+    Write-Output 'Git-Arbeitskopie für Panorama-Panel und Playbook aktualisieren ...'
     & git -C $repository pull --ff-only
     if ($LASTEXITCODE -ne 0) {
-        throw 'Git-Update fehlgeschlagen. Git-Verbindung, lokale Änderungen und Branch prüfen. Das HUD wurde nicht neu gebaut.'
+        throw 'Git-Update fehlgeschlagen. Git-Verbindung, lokale Änderungen und Branch prüfen. Panorama-Panel und Playbook wurden nicht neu gebaut.'
     }
 }
 

@@ -14,14 +14,17 @@ function Expect-Failure([scriptblock]$Action, [string]$Pattern) {
 function Set-Answers([string[]]$Answers) { $global:HudFlowAnswers = [Collections.Generic.Queue[string]]::new($Answers) }
 
 try {
+    $hudRoot = Join-Path $fixture 'training-hud'
+    $desktopRoot = Join-Path $fixture 'playbook-desktop'
+    New-Item -ItemType Directory -Path $hudRoot, $desktopRoot | Out-Null
     foreach ($name in @('local-release.ps1', 'release.ps1', 'panel-source.ps1')) {
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $fixture
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $hudRoot
     }
-    foreach ($directory in @('layout', 'styles', 'cs2 with spaces/game/csgo')) {
+    foreach ($directory in @('training-hud/layout', 'training-hud/styles', 'cs2 with spaces/game/csgo')) {
         New-Item -ItemType Directory -Force -Path (Join-Path $fixture $directory) | Out-Null
     }
-    'layout-source' | Set-Content -LiteralPath (Join-Path $fixture 'layout/matchzy_training.xml')
-    'styles-source' | Set-Content -LiteralPath (Join-Path $fixture 'styles/matchzy_training.css')
+    'layout-source' | Set-Content -LiteralPath (Join-Path $hudRoot 'layout/matchzy_training.xml')
+    'styles-source' | Set-Content -LiteralPath (Join-Path $hudRoot 'styles/matchzy_training.css')
     @'
 param([string]$Cs2)
 $global:HudFlowBuilds++
@@ -30,7 +33,14 @@ foreach ($part in @(@('layout', 'xml', 'vxml_c'), @('styles', 'css', 'vcss_c')))
     New-Item -ItemType Directory -Force -Path $target | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "$($part[0])/matchzy_training.$($part[1])") -Destination (Join-Path $target "matchzy_training.$($part[2])") -Force
 }
-'@ | Set-Content -LiteralPath (Join-Path $fixture 'build.ps1')
+'@ | Set-Content -LiteralPath (Join-Path $hudRoot 'build.ps1')
+    @'
+param([switch]$LaunchDirect)
+if (-not $LaunchDirect) { throw 'Das lokale Update muss die gebaute App direkt öffnen.' }
+if (-not (Test-Path -LiteralPath $global:HudFlowLocalAsset)) { throw 'Playbook darf erst nach dem Panorama-Update starten.' }
+$global:HudFlowDesktopBuilds++
+$global:LASTEXITCODE = $global:HudFlowDesktopExit
+'@ | Set-Content -LiteralPath (Join-Path $desktopRoot 'build-and-run.ps1')
     @'
 if ($args -contains '+workshop_build_item') {
     $global:HudFlowUploads++
@@ -72,6 +82,8 @@ if ($args -contains '+workshop_build_item') {
         throw 'Test: Download fehlgeschlagen'
     }
     $global:HudFlowBuilds = 0
+    $global:HudFlowDesktopBuilds = 0
+    $global:HudFlowDesktopExit = 0
     $global:HudFlowPacks = 0
     $global:HudFlowLaunches = 0
     $global:HudFlowUploads = 0
@@ -82,22 +94,23 @@ if ($args -contains '+workshop_build_item') {
     $global:HudFlowUploadOutput = 'Success. Uploaded item to Workshop (PublishedFileID 3810441722).'
     $cs2 = Join-Path $fixture 'cs2 with spaces'
     $global:HudFlowLocalAsset = Join-Path $cs2 'game/csgo/panorama/layout/custom_game/matchzy_training.vxml_c'
-    $script = Join-Path $fixture 'local-release.ps1'
+    $script = Join-Path $hudRoot 'local-release.ps1'
     $parameters = @{ Cs2 = $cs2; SteamCmd = (Join-Path $fixture 'steamcmd.ps1'); SteamUsername = 'test_owner' }
-    $proof = Join-Path $fixture 'dist/release.json'
+    $proof = Join-Path $hudRoot 'dist/release.json'
 
     Set-Answers @()
     Expect-Failure { & $script @parameters -Mode release } 'Release-Nachweis fehlt'
     Assert ($global:HudFlowLogins -eq 0) 'Ohne Build darf keine Steam-Anmeldung starten.'
 
-    Set-Answers @('n')
+    Set-Answers @()
     & $script @parameters | Out-Null
     Assert ($global:HudFlowBuilds -eq 1 -and $global:HudFlowPacks -eq 1) 'Aktualisierung muss einmal bauen und packen.'
+    Assert ($global:HudFlowDesktopBuilds -eq 1 -and $global:HudFlowAnswers.Count -eq 0) 'Das Standardupdate muss Playbook ohne Workshop-Rückfrage bauen und öffnen.'
     Assert ($global:HudFlowLaunches -eq 0) 'Eine Aktualisierung darf CS2 nicht selbst starten.'
     Assert (Test-Path -LiteralPath $global:HudFlowLocalAsset) 'Lokales HUD wurde nicht installiert.'
-    Assert ($global:HudFlowUploads -eq 0 -and $global:HudFlowLogins -eq 0) 'Abgelehnter Release darf Steam nicht aufrufen.'
+    Assert ($global:HudFlowUploads -eq 0 -and $global:HudFlowLogins -eq 0) 'Das Standardupdate darf SteamCMD nicht aufrufen.'
     $prepared = Get-Content -LiteralPath $proof -Raw | ConvertFrom-Json
-    $settingsPath = Join-Path $fixture '.local/settings.json'
+    $settingsPath = Join-Path $hudRoot '.local/settings.json'
     $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
     Assert ($settings.cs2 -eq $cs2) 'CS2-Pfad wurde nicht gespeichert.'
 
@@ -105,6 +118,7 @@ if ($args -contains '+workshop_build_item') {
     & $script @parameters -Mode release | Out-Null
     $published = Get-Content -LiteralPath $proof -Raw | ConvertFrom-Json
     Assert ($global:HudFlowBuilds -eq 1 -and $global:HudFlowPacks -eq 1) 'Späterer Release muss den getesteten Build wiederverwenden.'
+    Assert ($global:HudFlowDesktopBuilds -eq 1) 'Der Workshop-Release darf Playbook nicht erneut bauen.'
     Assert ($global:HudFlowUploads -eq 1 -and $global:HudFlowLogins -eq 1) 'Release muss erst anmelden und dann hochladen.'
     Assert ($published.sha256 -eq $prepared.sha256 -and $published.builtAtUtc -eq $prepared.builtAtUtc) 'Veröffentlichtes Paket weicht vom getesteten Paket ab.'
     Assert ($published.visibility -eq 'public' -and $published.changeNote -eq 'Größe kompakt geprüft') 'Release-Metadaten wurden nicht übernommen.'
@@ -115,9 +129,9 @@ if ($args -contains '+workshop_build_item') {
     Expect-Failure { & $script @parameters -Mode release } 'Lokales HUD stimmt nicht'
     Assert ($global:HudFlowUploads -eq 1 -and $global:HudFlowLogins -eq 1) 'Nach Änderung während des Tests darf Steam nicht aufgerufen werden.'
     $global:HudFlowMutateOnApproval = $false
-    Copy-Item -LiteralPath (Join-Path $fixture 'dist/panorama/layout/custom_game/matchzy_training.vxml_c') -Destination $global:HudFlowLocalAsset -Force
+    Copy-Item -LiteralPath (Join-Path $hudRoot 'dist/panorama/layout/custom_game/matchzy_training.vxml_c') -Destination $global:HudFlowLocalAsset -Force
 
-    Set-Answers @('n')
+    Set-Answers @()
     & $script @parameters | Out-Null
     $global:HudFlowLoginExit = 1
     Set-Answers @('j', '', '')
@@ -156,15 +170,18 @@ if ($args -contains '+workshop_build_item') {
     Assert (@(Get-ChildItem -LiteralPath (Join-Path $cs2 'matchzy-hud-backups') -Recurse -File).Count -ge 2) 'Lokale Overrides müssen vor dem Entfernen gesichert werden.'
     Assert ($global:HudFlowBuilds -eq $builds) 'Live/Status dürfen keinen Build starten.'
 
-    # Complete the default update-and-release flow, including the first username prompt.
+    # Updating launches Playbook without Steam prompts; publishing is a separate action.
     $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json -AsHashtable
     $settings.Remove('steamUsername') | Out-Null
     $settings | ConvertTo-Json | Set-Content -LiteralPath $settingsPath
     $global:HudFlowUploadOutput = 'Success. Uploaded item to Workshop (PublishedFileID 3810441722).'
     $uploads = $global:HudFlowUploads
-    Set-Answers @('j', 'Alles im Spiel geprüft', '', 'test_owner')
+    Set-Answers @()
     & $script -SteamCmd $parameters.SteamCmd | Out-Null
-    Assert ($global:HudFlowBuilds -eq ($builds + 1) -and $global:HudFlowPacks -eq ($builds + 1)) 'Der vollständige Ablauf darf nur einmal vor der Release-Frage bauen.'
+    Assert ($global:HudFlowBuilds -eq ($builds + 1) -and $global:HudFlowPacks -eq ($builds + 1)) 'Das Standardupdate darf nur einmal bauen.'
+    Assert ($global:HudFlowUploads -eq $uploads -and $global:HudFlowAnswers.Count -eq 0) 'Das Standardupdate muss ohne Steam-Rückfragen fertig werden.'
+    Set-Answers @('j', 'Alles im Spiel geprüft', '', 'test_owner')
+    & $script -Mode release -SteamCmd $parameters.SteamCmd | Out-Null
     Assert ($global:HudFlowUploads -eq ($uploads + 1)) 'Bestätigter Release muss den Upload ausführen.'
     $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
     Assert ($settings.steamUsername -eq 'test_owner') 'Erstellerkonto muss für spätere Releases gespeichert werden.'
@@ -173,8 +190,14 @@ if ($args -contains '+workshop_build_item') {
     Assert ($global:HudFlowUploads -eq ($uploads + 2) -and $global:HudFlowBuilds -eq ($builds + 1)) 'Gespeicherte Pfade und Anmeldung müssen ohne weitere Rückfragen wiederverwendet werden.'
     Assert ($global:HudFlowLaunches -eq 0) 'Auch eine bestätigte Veröffentlichung darf CS2 nicht automatisch starten.'
     Assert ($global:HudFlowAnswers.Count -eq 0) 'Nicht alle Testeingaben wurden verwendet.'
-    Write-Output 'Lokaler Ablauf geprüft: bauen/installieren, Release ablehnen, optional veröffentlichen, Änderungen erkennen, Login-/Upload-/Download-Fehler und Live-Wechsel.'
+    $global:HudFlowDesktopExit = 1
+    Set-Answers @()
+    Expect-Failure { & $script @parameters } 'Playbook konnte nicht gebaut oder geöffnet werden'
+    Assert (Test-Path -LiteralPath $global:HudFlowLocalAsset) 'Ein App-Buildfehler muss das bereits aktualisierte Panorama-Panel erhalten.'
+    Assert ($global:HudFlowUploads -eq ($uploads + 2)) 'Ein App-Buildfehler darf keinen Workshop-Upload auslösen.'
+    Write-Output 'Lokaler Ablauf geprüft: Panorama installieren, Playbook ohne Rückfrage starten, App-Buildfehler, separater Workshop-Release, Änderungen erkennen und Live-Wechsel.'
 } finally {
+    Assert ((Split-Path -Parent $fixture) -eq [IO.Path]::GetTempPath().TrimEnd([IO.Path]::DirectorySeparatorChar)) 'Testverzeichnis muss im temporären Ordner liegen.'
     Remove-Item -LiteralPath $fixture -Recurse -Force
     foreach ($name in @('dotnet', 'git', 'Get-Process', 'Start-Process', 'Read-Host', 'Invoke-WebRequest')) {
         Remove-Item -LiteralPath "Function:\$name" -ErrorAction SilentlyContinue

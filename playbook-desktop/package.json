@@ -13,6 +13,7 @@
     "test:cs2": "node test/live-cs2.js --offline",
     "test:desktop": "node test/live-desktop.js",
     "build:native": "dotnet publish native/Playbook.Windows.csproj -c Release -r win-x64 --self-contained true -o native/bin/publish",
+    "build:app": "npm run test && npm run build:native && electron-builder --win --dir --x64 --publish never",
     "dist": "npm run test && npm run build:native && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {

@@ -33,11 +33,13 @@ Version 0.1.5 behebt die Verbindung der Version 0.1.4: Aktuelles CS2 hat `-netco
 
 Voraussetzungen: Windows 10/11 x64, Node.js 22+, .NET SDK 10. Die App benötigt Internet für Playbook und UploadThing, Steam und einen laufenden Trainingsserver mit dem aktuellen Review-Plugin. `r_drawviewmodel` benötigt die auf dem Trainingsserver erlaubten Cheats; die App ändert keine globalen Serverregeln.
 
-Für lokale Updates unter Windows genügt ein Doppelklick auf **[`playbook.cmd`](../playbook.cmd)** im Projekt-Root. Die Datei führt `git pull --ff-only` auf dem aktuellen Branch aus, installiert die Build-Abhängigkeiten, testet und baut den Windows-Installer und öffnet ihn anschließend. Nach der Installation startet Playbook automatisch. Vorher laufende Reviews beenden und Playbook schließen.
+Für den vollständigen lokalen Review-Stand unter Windows genügt ein Doppelklick auf **[`hud.cmd`](../hud.cmd)** im Projekt-Root. Die Datei führt `git pull --ff-only` auf dem aktuellen Branch aus, baut und installiert das Panorama-Panel, installiert die App-Abhängigkeiten, testet und baut Playbook und öffnet die frisch gebaute Electron-App direkt. Es ist kein Installationsschritt nötig. Die App liegt unter `playbook-desktop/dist/win-unpacked/Playbook.exe`. Vorher laufende Reviews beenden und CS2 vollständig schließen. In der geöffneten App **Server → Reviews** wählen, CS2 starten und das Spielbild freigeben.
+
+Dieser vollständige Ablauf benötigt zusätzlich PowerShell 7 und die CS2 Workshop Tools. Nur die App als installierte Windows-Version aktualisieren: **[`playbook.cmd`](../playbook.cmd)** ausführen. Dieser Aufruf holt ebenfalls den Git-Stand, testet und baut den Windows-Installer und öffnet ihn anschließend. Nach der Installation startet Playbook automatisch.
 
 Git for Windows, Node.js 22 oder neuer inklusive npm und das **.NET SDK 10** müssen installiert sein. Das Skript verwendet die in Windows enthaltene PowerShell; PowerShell 7 ist dafür nicht nötig. Bei Fehlern bleibt das Fenster mit der Fehlermeldung offen. Ein fehlgeschlagenes Update oder ein Build-Fehler startet keinen älteren Installer.
 
-Vor dem Build und vor der Installation schließt das Skript laufende Playbook-Fenster regulär und wartet bis zu 30 Sekunden auf das Ende aller Playbook-Prozesse. So kann die App ihre CS2-Einstellungen wiederherstellen. Falls Prozesse weiterlaufen oder bereits ein Installer offen ist, hält das Skript vor dem nächsten Schritt an und nennt die Blockade. Eine Rückfrage in Playbook muss gegebenenfalls noch beantwortet werden.
+Vor dem App-Build und vor dem Öffnen der App bzw. der Installation schließt das Skript laufende Playbook-Fenster regulär und wartet bis zu 30 Sekunden auf das Ende aller Playbook-Prozesse. So kann die App ihre CS2-Einstellungen wiederherstellen. Falls Prozesse weiterlaufen oder bereits ein Installer offen ist, hält das Skript vor dem nächsten Schritt an und nennt die Blockade. Eine Rückfrage in Playbook muss gegebenenfalls noch beantwortet werden. Ein fehlgeschlagener Build öffnet keine ältere App.
 
 Erscheint bei einer älteren Version im Installer **„Playbook kann nicht geschlossen werden“**, zuerst den laufenden Review beenden und Playbook schließen. Bleiben danach Prozesse ohne sichtbares Fenster übrig, im Windows-Task-Manager unter **Details** die Prozesse `Playbook.exe` beenden und im Installer **Wiederholen** wählen. Playbook und das Update-Skript unter demselben Windows-Konto und normalerweise ohne Administratorrechte starten.
 
@@ -48,6 +50,8 @@ cd playbook-desktop
 npm ci
 npm run build:native
 npm start
+# App ohne Installer bauen, einschließlich Tests
+npm run build:app
 # Installer, einschließlich Tests
 npm run dist
 ```

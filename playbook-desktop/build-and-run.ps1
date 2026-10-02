@@ -1,6 +1,8 @@
 ﻿#Requires -Version 5.1
+param([switch]$LaunchDirect)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
+$entryPoint = if ($LaunchDirect) { 'hud.cmd' } else { 'playbook.cmd' }
 
 function Invoke-BuildCommand {
     param([string]$Executable, [string[]]$Arguments)
@@ -15,7 +17,7 @@ function Close-PlaybookForUpdate {
     $installers = @(Get-Process -Name 'Playbook-Setup-*' -ErrorAction SilentlyContinue |
         Where-Object { $_.SessionId -eq $currentSessionId })
     if ($installers.Count -gt 0) {
-        throw 'Ein Playbook-Installer ist bereits geöffnet. Bitte die laufende Installation abschließen oder dort Abbrechen wählen und playbook.cmd erneut starten.'
+        throw "Ein Playbook-Installer ist bereits geöffnet. Bitte die laufende Installation abschließen oder dort Abbrechen wählen und $entryPoint erneut starten."
     }
 
     $processes = @(Get-Process -Name 'Playbook', 'Playbook.Windows' -ErrorAction SilentlyContinue)
@@ -37,7 +39,7 @@ function Close-PlaybookForUpdate {
         Start-Sleep -Milliseconds 500
     }
     $details = ($remaining | ForEach-Object { "$($_.ProcessName), PID $($_.Id), Sitzung $($_.SessionId)" }) -join '; '
-    throw "Playbook läuft weiterhin: $details. Bitte Playbook und mögliche Rückfragen schließen. Falls kein Fenster mehr sichtbar ist, nach dem Beenden deines Reviews die genannten Prozesse im Task-Manager beenden. Danach playbook.cmd erneut starten."
+    throw "Playbook läuft weiterhin: $details. Bitte Playbook und mögliche Rückfragen schließen. Falls kein Fenster mehr sichtbar ist, nach dem Beenden deines Reviews die genannten Prozesse im Task-Manager beenden. Danach $entryPoint erneut starten."
 }
 
 try {
@@ -47,7 +49,7 @@ try {
         @{ Command = 'dotnet.exe'; Name = '.NET SDK 10' }
     )) {
         if (-not (Get-Command $requirement.Command -ErrorAction SilentlyContinue)) {
-            throw "$($requirement.Name) fehlt. Bitte installieren und playbook.cmd erneut öffnen."
+            throw "$($requirement.Name) fehlt. Bitte installieren und $entryPoint erneut öffnen."
         }
     }
 
@@ -66,20 +68,43 @@ try {
         Write-Host '[2/4] Build-Abhängigkeiten installieren ...'
         Invoke-BuildCommand -Executable 'npm.cmd' -Arguments @('ci', '--include=dev')
 
-        Write-Host '[3/4] Playbook testen und Windows-Installer bauen ...'
-        Invoke-BuildCommand -Executable 'npm.cmd' -Arguments @('run', 'dist')
+        if ($LaunchDirect) {
+            Write-Host '[3/4] Playbook testen und Windows-App bauen ...'
+            Invoke-BuildCommand -Executable 'npm.cmd' -Arguments @('run', 'build:app')
+        } else {
+            Write-Host '[3/4] Playbook testen und Windows-Installer bauen ...'
+            Invoke-BuildCommand -Executable 'npm.cmd' -Arguments @('run', 'dist')
+        }
 
-        $package = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-        $installer = Join-Path $PSScriptRoot "dist\Playbook-Setup-$($package.version).exe"
-        if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
-            throw "Der gebaute Installer wurde nicht gefunden: $installer"
+        if ($LaunchDirect) {
+            $application = Join-Path $PSScriptRoot 'dist\win-unpacked\Playbook.exe'
+            if (-not (Test-Path -LiteralPath $application -PathType Leaf)) {
+                throw "Die gebaute App wurde nicht gefunden: $application"
+            }
+        } else {
+            $package = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            $installer = Join-Path $PSScriptRoot "dist\Playbook-Setup-$($package.version).exe"
+            if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+                throw "Der gebaute Installer wurde nicht gefunden: $installer"
+            }
         }
 
         # The user may have reopened Playbook during the build.
         Close-PlaybookForUpdate
-        Write-Host '[4/4] Installer starten ...'
-        Start-Process -FilePath $installer
-        Write-Host 'Der Installer ist geöffnet. Playbook startet nach der Installation automatisch.'
+        if ($LaunchDirect) {
+            Write-Host '[4/4] Playbook öffnen ...'
+            $nodeMode = $env:ELECTRON_RUN_AS_NODE
+            try {
+                $env:ELECTRON_RUN_AS_NODE = $null
+                Start-Process -FilePath $application -WorkingDirectory (Split-Path -Parent $application)
+            }
+            finally { $env:ELECTRON_RUN_AS_NODE = $nodeMode }
+            Write-Host 'Die frisch gebaute Playbook-App ist geöffnet.'
+        } else {
+            Write-Host '[4/4] Installer starten ...'
+            Start-Process -FilePath $installer
+            Write-Host 'Der Installer ist geöffnet. Playbook startet nach der Installation automatisch.'
+        }
     }
     finally { Pop-Location }
 }

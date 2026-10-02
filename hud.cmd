@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 rem Read the whole block before git pull can update this launcher.
 (
     where pwsh.exe >nul 2>nul
