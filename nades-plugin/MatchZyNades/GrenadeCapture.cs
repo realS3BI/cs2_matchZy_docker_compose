@@ -233,8 +233,10 @@ public sealed partial class MatchZyNadesPlugin
         {
             if (!TrainingEnabled || !entity.IsValid) return;
             var projectile = new CBaseCSGrenadeProjectile(entity.Handle);
+            if (projectile.Globalname == GrenadeRethrowHistory.Marker) return;
             var player = projectile.Thrower.Value?.Controller.Value?.As<CCSPlayerController>();
             if (player is { IsValid: true, IsBot: false }) {
+                if (StandaloneTraining) RememberGrenade(player, projectile);
                 _capture.Projectile((int)entity.Index, player.Slot, player.SteamID, kind, Server.CurrentTime);
                 _flightTimes.Projectile((int)entity.Index, player.Slot, player.SteamID, kind, Server.CurrentTime);
             }

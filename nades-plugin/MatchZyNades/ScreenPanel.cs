@@ -27,8 +27,8 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
         }
         Text("training_page", $"{menu.Page + 1}/{menu.PageCount}");
         Text("training_breadcrumb", menu.Breadcrumb);
-        Class("training_previous", "unavailable", menu.Page == 0);
-        Class("training_next", "unavailable", menu.Page == menu.PageCount - 1);
+        Class("training_previous", "unavailable", menu.PageCount == 1);
+        Class("training_next", "unavailable", menu.PageCount == 1);
         var rows = menu.Visible.ToArray();
         for (var i = 0; i < InGameMenu.PageSize; i++)
         {

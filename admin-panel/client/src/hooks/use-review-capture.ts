@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { ReviewRecorder } from "../lib/review-recorder";
+import { desktop } from "../lib/playbook-desktop";
 import { type ReviewSlot } from "../../../shared/review-media";
 
 export function useReviewCapture({ nade, admin, upload, onStep, onError, disabled }) {
@@ -12,6 +13,7 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
   const currentCapture = useRef<ReviewRecorder>(undefined);
   const videoUpload = useRef<Promise<void>>(undefined);
   const takingPhoto = useRef(false);
+  const preparingVideo = useRef(false);
   const requestedPhoto = useRef<{ id: string; expiresAt: number } | undefined>(undefined);
   const mounted = useRef(true);
   const current = useRef({ nade, upload, onStep, onError, disabled, recording });
@@ -23,6 +25,7 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
     requestedPhoto.current = undefined;
     currentCapture.current?.dispose();
     currentCapture.current = undefined;
+    if (desktop) void desktop.disconnect().catch(error => { if (mounted.current) current.current.onError(error.message); });
     if (id) void fetch("/api/nades/review/capture/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: id }), keepalive: true }).catch(() => {});
     if (mounted.current) { setCapture(null); setRecording(false); }
   }
@@ -53,14 +56,15 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
   }
   async function photo(slot: ReviewSlot, countdown = false, command?: { id: string; presentation?: string }) {
     if (!currentCapture.current || slot === "video") throw new Error("Bitte zuerst das Spielbild verbinden.");
-    if (takingPhoto.current || videoUpload.current || countdown && requestedPhoto.current) throw new Error("Eine Aufnahme läuft bereits.");
+    if (takingPhoto.current || preparingVideo.current || videoUpload.current || countdown && requestedPhoto.current) throw new Error("Eine Aufnahme läuft bereits.");
+    currentCapture.current.checkPhotoFrame();
     if (admin && countdown) {
       const data = await api("/api/nades/review/capture/photo", { method: "POST", body: JSON.stringify({ sessionId: session.current, slot }) });
       requestedPhoto.current = data.request;
       setNotice("CS2 bereitet HUD und Kamera vor. Wechsle zum Spiel und halte den Bildausschnitt ruhig.");
       return;
     }
-    if (admin && command?.presentation !== "review-v1") throw new Error("Bitte das Server-Plugin aktualisieren. Das Foto benötigt die automatische HUD- und Kamera-Vorbereitung.");
+    if (admin && command?.presentation !== "review-v2") throw new Error("Bitte das Server-Plugin aktualisieren. Die ältere Version blendet das echte Fadenkreuz noch aus.");
     takingPhoto.current = true;
     try {
       current.current.onStep(slot);
@@ -71,13 +75,25 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       }
       if (!mounted.current || currentCapture.current !== source) return;
       let file: File;
-      try { file = await source.photo(slot, command?.presentation === "review-v1" && slot !== "front"); }
+      let token: string | undefined;
+      try {
+        if (desktop) {
+          token = await desktop.begin(slot);
+          // Let CS2 render the verified local settings before grabbing pixels.
+          await new Promise(resolve => setTimeout(resolve, 350));
+        }
+        if (currentCapture.current !== source) throw new Error("Die Aufnahme wurde beendet.");
+        file = await source.photo(slot);
+      }
       finally {
         // Release the game's camera/HUD immediately after grabbing the frame,
         // before the potentially slow upload. Errors also release the game.
-        if (command && session.current) await api("/api/nades/review/capture/captured", {
-          method: "POST", body: JSON.stringify({ sessionId: session.current, commandId: command.id }),
-        });
+        try { if (token) await desktop!.end(token); }
+        finally {
+          if (command && session.current) await api("/api/nades/review/capture/captured", {
+            method: "POST", body: JSON.stringify({ sessionId: session.current, commandId: command.id }),
+          });
+        }
       }
       await current.current.upload(slot, file);
       if (mounted.current) setNotice("Foto gespeichert. Du kannst die nächste Perspektive aufnehmen.");
@@ -86,18 +102,29 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       throw error;
     } finally { takingPhoto.current = false; }
   }
-  function startVideo() {
-    if (!currentCapture.current || videoUpload.current || takingPhoto.current) throw new Error("Bitte zuerst das Spielbild verbinden oder die laufende Aufnahme beenden.");
-    current.current.onStep("video");
-    const result = currentCapture.current.startVideo(() => setNotice("Zwei Minuten erreicht. Das Video wird gespeichert."));
-    setRecording(true);
-    videoUpload.current = result.then(async file => {
-      if (!mounted.current) return;
-      setRecording(false);
-      await current.current.upload("video", file);
-    }).finally(() => { videoUpload.current = undefined; if (mounted.current) setRecording(false); });
-    // The stop command also awaits this promise so the game receives upload failures.
-    void videoUpload.current.catch(error => { if (mounted.current && currentCapture.current) current.current.onError(error.message); });
+  async function startVideo() {
+    if (!currentCapture.current || videoUpload.current || takingPhoto.current || preparingVideo.current) throw new Error("Bitte zuerst das Spielbild verbinden oder die laufende Aufnahme beenden.");
+    preparingVideo.current = true;
+    const source = currentCapture.current;
+    let token: string | undefined;
+    try {
+      if (desktop) token = await desktop.begin("video");
+      if (currentCapture.current !== source) throw new Error("Die Aufnahme wurde beendet.");
+      current.current.onStep("video");
+      const onLimit = () => setNotice("Zwei Minuten erreicht. Das Video wird gespeichert.");
+      const result = desktop ? (await source.prepareDesktopVideo(onLimit)).recording : source.startVideo(onLimit);
+      setRecording(true);
+      videoUpload.current = result.finally(async () => {
+        if (token) await desktop!.end(token);
+      }).then(async file => {
+        if (!mounted.current) return;
+        setRecording(false);
+        await current.current.upload("video", file);
+      }).finally(() => { videoUpload.current = undefined; if (mounted.current) setRecording(false); });
+      // The stop command also awaits this promise so the game receives upload failures.
+      void videoUpload.current.catch(error => { if (mounted.current && currentCapture.current) current.current.onError(error.message); });
+    } catch (error) { if (token) await desktop!.end(token); throw error; }
+    finally { preparingVideo.current = false; }
   }
   async function stopVideo() {
     if (!videoUpload.current) throw new Error("Es läuft keine Videoaufnahme.");
@@ -106,6 +133,9 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
   }
   const operations = useRef({ photo, startVideo, stopVideo });
   operations.current = { photo, startVideo, stopVideo };
+  useEffect(() => desktop?.onStopVideo(() => {
+    if (videoUpload.current) void operations.current.stopVideo().catch(error => current.current.onError(error.message));
+  }), []);
   useEffect(() => {
     if (!capture || !admin) return;
     let stopped = false;
@@ -126,7 +156,7 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       try {
         if (current.current.disabled) throw new Error("Bitte Änderungen zuerst speichern.");
         if (command.action === "photo") await operations.current.photo(command.slot, false, command);
-        else if (command.action === "video-start") operations.current.startVideo();
+        else if (command.action === "video-start") await operations.current.startVideo();
         else await operations.current.stopVideo();
         ok = true;
       } catch (error) { if (!stopped) current.current.onError(error.message); }

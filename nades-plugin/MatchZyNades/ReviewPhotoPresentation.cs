@@ -8,7 +8,9 @@ public readonly record struct ReviewCameraPose(Coordinates Position, Coordinates
 
 public static class ReviewPhotoFraming
 {
-    public const uint HiddenHud = 4 | 128 | 256; // All HUD, chat and the player's crosshair.
+    // Never set HIDEHUD_ALL in first person: it also suppresses the real crosshair.
+    // The local photo-mode command hides the remaining HUD and viewmodel.
+    public static uint HiddenHud(string slot) => slot == "front" ? 4u | 128u | 256u : 128u;
     public const uint FieldOfView = 90;
     public static ReviewCameraPose Front(Coordinates origin, float yaw, bool crouched)
     {
@@ -20,12 +22,14 @@ public static class ReviewPhotoFraming
     }
 }
 
-// Owns only a short photo interval on the original pawn. Local crosshair cvars
-// never change; the browser adds the standard crosshair to the captured frame.
+// Owns only a short photo interval on the original pawn. The reviewer imports
+// the crosshair in CS2; the browser only crops the actual game image.
 internal sealed class ReviewPhotoPresentation : IDisposable
 {
     private readonly CCSPlayerPawn _pawn;
     private readonly uint _hud;
+    private readonly uint _photoHud;
+    private readonly bool _front;
     private readonly uint _view;
     private readonly CCSPlayerBase_CameraServices _cameraServices;
     private readonly uint _fov, _fovStart;
@@ -44,6 +48,8 @@ internal sealed class ReviewPhotoPresentation : IDisposable
         _cameraServices = pawn.CameraServices?.As<CCSPlayerBase_CameraServices>()
             ?? throw new InvalidOperationException("Die Spielkamera ist noch nicht bereit.");
         _hud = pawn.HideHUD;
+        _front = slot == "front";
+        _photoHud = _hud | ReviewPhotoFraming.HiddenHud(slot);
         _view = _cameraServices.ViewEntity.Raw;
         _fov = _cameraServices.FOV; _fovStart = _cameraServices.FOVStart;
         _fovTime = _cameraServices.FOVTime; _fovRate = _cameraServices.FOVRate;
@@ -51,12 +57,14 @@ internal sealed class ReviewPhotoPresentation : IDisposable
         _nextAttack = pawn.WeaponServices!.As<CCSPlayer_WeaponServices>().NextAttack;
         if (_cameraServices.ViewEntity.IsValid) throw new InvalidOperationException("Bitte zuerst die andere aktive Kamera beenden.");
         try {
-            pawn.HideHUD = _hud | ReviewPhotoFraming.HiddenHud;
+            pawn.HideHUD = _photoHud;
             Utilities.SetStateChanged(pawn, "CBasePlayerPawn", "m_iHideHUD");
-            _cameraServices.FOV = ReviewPhotoFraming.FieldOfView;
-            _cameraServices.FOVStart = ReviewPhotoFraming.FieldOfView;
-            _cameraServices.FOVRate = 0;
-            _cameraServices.FOVTime = Server.CurrentTime;
+            if (_front) {
+                _cameraServices.FOV = ReviewPhotoFraming.FieldOfView;
+                _cameraServices.FOVStart = ReviewPhotoFraming.FieldOfView;
+                _cameraServices.FOVRate = 0;
+                _cameraServices.FOVTime = Server.CurrentTime;
+            }
             pawn.MoveType = MoveType_t.MOVETYPE_NONE;
             pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
             pawn.WeaponServices.As<CCSPlayer_WeaponServices>().NextAttack = _attackLock;
@@ -83,11 +91,11 @@ internal sealed class ReviewPhotoPresentation : IDisposable
         _disposed = true;
         try {
             if (!_pawn.IsValid || _pawn.EntityHandle.Raw != PawnHandle) return;
-            if (_pawn.HideHUD == (_hud | ReviewPhotoFraming.HiddenHud)) _pawn.HideHUD = _hud;
+            if (_pawn.HideHUD == _photoHud) _pawn.HideHUD = _hud;
             Utilities.SetStateChanged(_pawn, "CBasePlayerPawn", "m_iHideHUD");
             if (_camera is { IsValid: true } && _cameraServices.ViewEntity.Raw == _camera.EntityHandle.Raw)
                 _cameraServices.ViewEntity.Raw = _view;
-            if (_cameraServices.FOV == ReviewPhotoFraming.FieldOfView) {
+            if (_front && _cameraServices.FOV == ReviewPhotoFraming.FieldOfView) {
                 _cameraServices.FOV = _fov; _cameraServices.FOVStart = _fovStart;
                 _cameraServices.FOVTime = _fovTime; _cameraServices.FOVRate = _fovRate;
             }

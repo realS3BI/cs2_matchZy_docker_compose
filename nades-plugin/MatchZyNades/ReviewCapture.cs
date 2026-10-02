@@ -60,14 +60,14 @@ public static class ReviewMenu
         };
         var items = definitions.Select((step, i) => new MenuItem($"{i + 1}. {step.Item2}{(slots.Contains(step.Item1) ? " [Foto vorhanden]" : "")}", step.Item3,
             Page: new($"{i + 1}/6 · {step.Item2}", step.Item3, [
-                new("Foto aufnehmen & hochladen", "Blendet HUD und Panel aus und stellt das Review-Foto ein. Nach dem Foto kommen HUD, Fadenkreuz und diese Menüseite zurück. Der Upload läuft im Hintergrund.", Request: new(TrainingAction.ReviewPhoto, lineup, Setting: step.Item1)),
+                new("Foto aufnehmen & hochladen", "Die Windows-App stellt HUD, Waffe und Fadenkreuz automatisch ein. Im Browser vorher der Vorbereitung folgen. Nach dem Foto öffnet sich diese Menüseite wieder.", Request: new(TrainingAction.ReviewPhoto, lineup, Setting: step.Item1)),
                 new("Lineup laden", "Teleportiert dich zum gespeicherten Start und richtet den Blick aus. Danach die gewünschte Perspektive selbst einstellen.", Request: new(TrainingAction.LoadLineup, lineup)),
                 new("Aufnahme-Hilfe anzeigen", step.Item3, Request: new(TrainingAction.ReviewHelp, lineup, Setting: step.Item1))
             ], Key: $"review-{step.Item1}:{lineup.Owner}:{lineup.Map}:{lineup.Name}"))).ToList();
-        items.Add(new($"5. Video{(slots.Contains("video") ? " [Vorhanden]" : "")}", "Zum Start laufen, zielen, werfen und mit Noclip die Wirkung zeigen. Aufnahme erfolgt im Browser, ohne Ton, maximal zwei Minuten.",
-            Page: new("5/6 · Video", "Nach dem Start drei Sekunden warten. Panel wird ausgeblendet. Mit F8 stoppen, sobald der Review-Bind eingerichtet ist.", [
-                new("Video starten", "Browser-Aufnahme starten. Erst nach der Chat-Bestätigung zum Startpunkt loslaufen.", Request: new(TrainingAction.ReviewVideoStart, lineup)),
-                new("Video stoppen & hochladen", "Beendet die Aufnahme und lädt das Video hoch. Bind: bind F8 css_training_review_stop", Request: new(TrainingAction.ReviewVideoStop, lineup))
+        items.Add(new($"5. Video{(slots.Contains("video") ? " [Vorhanden]" : "")}", "Zum Start laufen, zielen, werfen und mit Noclip die Wirkung zeigen. Aufnahme in Playbook, ohne Ton, maximal zwei Minuten.",
+            Page: new("5/6 · Video", "Nach dem Start drei Sekunden warten. Panel wird ausgeblendet. Die Windows-App aktiviert F8 automatisch; im Browser ist der Review-Bind nötig.", [
+                new("Video starten", "Playbook-Aufnahme starten. Erst nach der Chat-Bestätigung zum Startpunkt loslaufen.", Request: new(TrainingAction.ReviewVideoStart, lineup)),
+                new("Video stoppen & hochladen", "Beendet die Aufnahme und lädt das Video hoch. Windows-App: F8. Browser: bind F8 css_training_review_stop", Request: new(TrainingAction.ReviewVideoStop, lineup))
             ], Key: $"review-video:{lineup.Owner}:{lineup.Map}:{lineup.Name}")));
         items.Add(new("6. Prüfen & freigeben", "Die fünf Aufnahmen zuerst in der Website ansehen. Nur vollständige Reviews können offiziell freigegeben werden.",
             Page: new("6/6 · Freigabe", $"{slots.Length}/5 Medien vorhanden. Bilder und Video vor der Freigabe auf der Website prüfen.", [
@@ -78,7 +78,7 @@ public static class ReviewMenu
                     ], Key: $"review-approve:{lineup.Owner}:{lineup.Map}:{lineup.Name}"), Enabled: ReviewCaptureFiles.Slots.All(slots.Contains)),
                 new("Überarbeitung anfragen", "Gibt die eingereichte Aufnahme an den Ersteller zurück.", Request: new(TrainingAction.ReviewReject, lineup), Enabled: lineup.ReviewStatus == "pending")
             ], Key: $"review-finish:{lineup.Owner}:{lineup.Map}:{lineup.Name}")));
-        return new("Medien-Review", "Browser: dieses Lineup öffnen und Spielbild verbinden. Danach hier die Perspektiven aufnehmen. Dateien werden automatisch hochgeladen.", items,
+        return new("Medien-Review", "In der Playbook-App oder im Browser dieses Lineup öffnen und Spielbild verbinden. Danach hier die Perspektiven aufnehmen. Dateien werden automatisch hochgeladen.", items,
             Key: $"review:{lineup.Owner}:{lineup.Map}:{lineup.Name}");
     }
 }
@@ -104,8 +104,8 @@ public sealed partial class MatchZyNadesPlugin
         }
         if (request.Action == TrainingAction.ReviewHelp)
         {
-            Tell(player, "Browser geöffnet lassen und CS2-Fenster freigeben. In Windows CS2 im randlosen Fenstermodus verwenden. Fotos benötigen einen ruhigen Bildausschnitt.");
-            Tell(player, "Fotos: HUD wird ausgeblendet, Vorderansicht automatisch eingestellt. F8 stoppt das Video nach einmaliger Einrichtung: bind F8 css_training_review_stop");
+            Tell(player, "Playbook-App oder Browser geöffnet lassen und Spielbild verbinden. Die Windows-App übernimmt Fensterausschnitt, HUD, Waffe und Fadenkreuz automatisch. Im Browser der Vorbereitung auf der Website folgen.");
+            Tell(player, "Die Vorderansicht wird automatisch eingestellt. Windows-App: F8 stoppt das Video. Browser: einmal bind F8 css_training_review_stop einrichten.");
             return true;
         }
         var action = request.Action == TrainingAction.ReviewPhoto ? "photo" : request.Action == TrainingAction.ReviewVideoStart ? "video-start" : "video-stop";
@@ -135,7 +135,7 @@ public sealed partial class MatchZyNadesPlugin
                 presentation = new ReviewPhotoPresentation(player.PlayerPawn.Value!, request.Setting, lineup.Angles.Y);
             }
             var command = ReviewCaptureFiles.Issue(ReviewDirectory, player.SteamID.ToString(), lineup, action, request.Setting,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v1");
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), commandId, presentation == null ? "" : "review-v2");
             _reviewPending[player.SteamID] = new(command.SessionId, command.Id, action, command.ExpiresAt + 180_000);
             if (presentation != null) {
                 _reviewPhotos[player.SteamID] = new(command.SessionId, command.Id, command.ExpiresAt, presentation, panel, focused);

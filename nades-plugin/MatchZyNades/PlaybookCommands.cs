@@ -13,7 +13,7 @@ public static class PlaybookCommands
     public static readonly HashSet<string> TrainingCommands = [
         "css_help", "css_loadnade", "css_ln", "css_listnades", "css_lin", "css_last", "css_savepos", "css_loadpos",
         "css_noclip", "css_clear", "css_traj", "css_impacts", "css_noflash", "css_noblind", "css_god",
-        "css_bot", "css_cbot", "css_crouchbot", "css_nobots"
+        "css_bot", "css_cbot", "css_crouchbot", "css_nobots", "css_rethrow", "css_rt"
     ];
     private static readonly HashSet<string> PracticeCommands = [
         "css_back", "css_bestctspawn", "css_bestspawn", "css_besttspawn", "css_boost",
@@ -99,6 +99,8 @@ public static class PlaybookCommands
         ["sv_cheats"] = "1", ["sv_infinite_ammo"] = "1", ["sv_grenade_trajectory_prac_pipreview"] = "1",
         ["sv_grenade_trajectory_prac_trailtime"] = "3", ["sv_showimpacts"] = "0",
         ["mp_limitteams"] = "0", ["mp_autoteambalance"] = "0", ["mp_freezetime"] = "0",
+        // Join training promptly instead of waiting 15 seconds for team selection.
+        ["mp_force_pick_time"] = "1",
         // Teammates can pass through each other while still supporting boosts.
         ["mp_solid_teammates"] = "2", ["mp_solid_enemies"] = "0",
         ["mp_roundtime"] = "60", ["mp_roundtime_defuse"] = "60", ["mp_roundtime_hostage"] = "60",

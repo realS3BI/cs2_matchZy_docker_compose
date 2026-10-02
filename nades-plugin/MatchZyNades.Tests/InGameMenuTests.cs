@@ -25,18 +25,97 @@ public sealed class InGameMenuTests
             Assert.True(menu.Back());
             Assert.Equal(i / 9, menu.Page);
             Assert.Equal(i % 9, menu.Cursor);
-            menu.Move(1);
+            if (i + 1 < library.Length) menu.Move(1);
         }
         Assert.Equal(library, seen);
         Assert.Null(menu.Select(5));
         Assert.Null(menu.Select(0));
         Assert.Null(menu.Select(6));
-        menu.ChangePage(-100);
+        menu.ChangePage(-1);
         Assert.Equal(0, menu.Page);
         Assert.True(menu.Back());
         Assert.True(menu.Back());
         Assert.True(menu.Back());
         Assert.False(menu.Back());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(9)]
+    [InlineData(10)]
+    [InlineData(13)]
+    [InlineData(18)]
+    [InlineData(19)]
+    public void SelectionWrapsAcrossAllPagesWithoutSelectingEmptyRows(int count)
+    {
+        var items = Enumerable.Range(1, count).Select(i => new MenuItem($"Eintrag {i}")).ToArray();
+        var menu = new InGameMenu(new("Liste", "", items), "de_mirage");
+        var lastIndex = Math.Max(0, count - 1);
+
+        menu.Move(-1);
+        Assert.Equal(lastIndex, menu.Index);
+        Assert.Equal(lastIndex / InGameMenu.PageSize, menu.Page);
+        Assert.Equal(lastIndex % InGameMenu.PageSize, menu.Cursor);
+        menu.Move(1);
+        Assert.Equal(0, menu.Index);
+        for (var i = 1; i < count; i++)
+        {
+            menu.Move(1);
+            Assert.Equal(i, menu.Index);
+        }
+        menu.Move(1);
+        Assert.Equal(0, menu.Index);
+        if (count == 0) Assert.Null(menu.Selected);
+        else Assert.NotNull(menu.Selected);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(9)]
+    [InlineData(10)]
+    [InlineData(13)]
+    [InlineData(18)]
+    [InlineData(19)]
+    public void PagesWrapInBothDirectionsAndSelectTheFirstRow(int count)
+    {
+        var items = Enumerable.Range(1, count).Select(i => new MenuItem($"Eintrag {i}")).ToArray();
+        var menu = new InGameMenu(new("Liste", "", items), "de_mirage");
+
+        menu.ChangePage(-1);
+        Assert.Equal(menu.PageCount - 1, menu.Page);
+        Assert.Equal(0, menu.Cursor);
+        menu.ChangePage(1);
+        Assert.Equal(0, menu.Page);
+        for (var page = 1; page < menu.PageCount; page++)
+        {
+            menu.ChangePage(1);
+            Assert.Equal(page, menu.Page);
+        }
+        menu.ChangePage(1);
+        Assert.Equal(0, menu.Page);
+        Assert.Equal(0, menu.Cursor);
+    }
+
+    [Fact]
+    public void RepeatedBackStopsAtHomeAndPreservesItsSelection()
+    {
+        var menu = TrainingMenu.Create([], "de_mirage", true, null);
+        menu.Select(3);
+        menu.Select(6);
+        Assert.True(menu.Back());
+        Assert.True(menu.Back());
+        var home = menu.Current;
+        var index = menu.Index;
+
+        for (var i = 0; i < 10; i++)
+        {
+            Assert.False(menu.Back());
+            Assert.True(menu.IsRoot);
+            Assert.Same(home, menu.Current);
+            Assert.Equal(index, menu.Index);
+        }
     }
 
     [Fact]

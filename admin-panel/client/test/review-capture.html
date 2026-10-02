@@ -8,13 +8,15 @@ import { ReviewRecorder } from '/src/lib/review-recorder.ts';
 const nade={owner:'76561198000000001',map:'de_anubis',name:'ct_to_a_main'};
 const events=[],errors=[];let command=null,releaseUpload,lastPhoto;
 const canvas=document.createElement('canvas');canvas.width=1920;canvas.height=1080;
-const ctx=canvas.getContext('2d');ctx.fillStyle='#315173';ctx.fillRect(0,0,1920,1080);
-const interval=setInterval(()=>ctx.fillRect(0,0,1920,1080),50);
+const ctx=canvas.getContext('2d'); let photoSlot='aim';
+const draw=()=>{ctx.fillStyle='#c02020';ctx.fillRect(0,0,1920,1080);ctx.fillStyle='#315173';ctx.fillRect(4,32,1912,1044);
+ if(photoSlot!=='front'){ctx.fillStyle='#fff';ctx.fillRect(950,553,21,3);ctx.fillRect(959,544,3,21);}};
+draw();const interval=setInterval(draw,50);
 ReviewRecorder.share=async()=>{const recorder=new ReviewRecorder(canvas.captureStream(30));await recorder.video.play();return recorder;};
 window.fetch=async(url,options)=>{
  const input=options?.body?JSON.parse(options.body):{};let output={ok:true};
  if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
- else if(String(url).endsWith('/photo')){events.push('prepare');command={id:'a'.repeat(32),slot:input.slot,action:'photo',presentation:'review-v1'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/photo')){events.push('prepare');command={id:'a'.repeat(32),slot:input.slot,action:'photo',presentation:'review-v2'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
  else if(String(url).endsWith('/poll'))output={command};
  else if(String(url).endsWith('/captured'))events.push('captured');
  else if(String(url).endsWith('/ack')){events.push('ack');command=null;}
@@ -24,16 +26,25 @@ function App(){const capture=useReviewCapture({nade,admin:true,disabled:false,on
 createRoot(document.getElementById('root')).render(React.createElement(App));
 const waitFor=async f=>{for(let i=0;i<150;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+JSON.stringify({events,errors}));};
 window.checkPhoto=async(slot='aim')=>{
- await waitFor(()=>window.capture);await window.capture.connect();await waitFor(()=>window.capture.capture);
+ photoSlot=slot;draw();await waitFor(()=>window.capture);await window.capture.connect();await waitFor(()=>window.capture.capture);
+ let rejected=false;try{await window.capture.photo(slot,true);}catch(e){rejected=e.message.includes('Fotoausschnitt');}
+ if(!rejected||events.length)throw Error('Nicht bestätigter Ausschnitt hat eine Aufnahme ausgelöst');
+ window.capture.capture.setPhotoFrame({width:1920,height:1080,top:32,right:4,bottom:4,left:4});
  await window.capture.photo(slot,true);await waitFor(()=>releaseUpload);
  if(events.join(',')!=='prepare,captured,upload')throw Error('HUD-Freigabe kommt nicht vor Upload: '+events.join(','));
- const bitmap=await createImageBitmap(lastPhoto),photo=document.createElement('canvas');photo.width=1920;photo.height=1080;photo.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
- const pixel=photo.getContext('2d').getImageData(966,540,1,1).data;
- const green=pixel[1]>180&&pixel[1]>pixel[2];
- if(green!==(slot!=='front'))throw Error('Falsches Fadenkreuz: '+slot+' '+Array.from(pixel));
+ const bitmap=await createImageBitmap(lastPhoto),photo=document.createElement('canvas');
+ if(bitmap.width!==1912||bitmap.height!==1044)throw Error('Fensterrand nicht entfernt');
+ photo.width=bitmap.width;photo.height=bitmap.height;photo.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+ const pixel=(x,y)=>Array.from(photo.getContext('2d').getImageData(x,y,1,1).data);
+ const gameCrosshair=pixel(962,522);
+ if((gameCrosshair[0]>210)!==(slot!=='front'))throw Error('Echtes Crosshair verschoben oder entfernt: '+gameCrosshair);
+ const wrongCenter=pixel(962,508);
+ if(wrongCenter[1]>150)throw Error('Zusätzliches Fadenkreuz: '+wrongCenter);
+ const corner=pixel(10,10);
+ if(corner[0]>100)throw Error('Fensterrand im Foto: '+corner);
  releaseUpload();await waitFor(()=>events.includes('ack'));
  if(errors.length)throw Error(errors.join(';'));
  window.capture.disconnect();clearInterval(interval);
- return {result:'PASS: Vorbereitung → Foto → HUD-Freigabe → Upload → Bestätigung',slot,events,crosshair:green};
+ return {result:'PASS: Vorbereitung → Foto → HUD-Freigabe → Upload → Bestätigung',slot,events,gameCrosshair,wrongCenter,size:[photo.width,photo.height]};
 };
 </script></body></html>

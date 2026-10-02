@@ -33,7 +33,7 @@ public static class MenuRenderer
         if (string.IsNullOrWhiteSpace(hint)) hint = menu.Current.Description;
         html.Append($"<font color='{Muted}'>{Escape(hint, 100)}</font><br>")
             .Append($"<font color='{Accent}'>W/S Auswahl &nbsp; E / USE Bestätigen<br>")
-            .Append($"G / INSPECT {(menu.IsRoot ? "Schließen" : "Zurück")} &nbsp; A/D Seite</font>");
+            .Append("G / INSPECT Zurück &nbsp; A/D Seite</font>");
         return html.ToString();
     }
 

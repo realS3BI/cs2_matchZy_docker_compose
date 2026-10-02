@@ -101,7 +101,7 @@ public sealed partial class MatchZyNadesPlugin
             case "up": session.Menu.Move(-1); break;
             case "down": session.Menu.Move(1); break;
             case "select": Select(player, session.Menu.Cursor + 1); break;
-            case "back": if (!session.Menu.Back()) SetFocus(session, false); break;
+            case "back": session.Menu.Back(); break;
             case "previous": session.Menu.ChangePage(-1); break;
             case "next": session.Menu.ChangePage(1); break;
             case "home": session.Menu.Home(); break;

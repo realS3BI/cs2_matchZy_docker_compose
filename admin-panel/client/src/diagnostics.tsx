@@ -9,6 +9,7 @@ import {
   X
 } from "lucide-react";
 import { api } from "./lib/api";
+import { copyText } from "./lib/clipboard";
 import { fetchDiagnostics } from "./lib/admin-data";
 import { cn } from "./lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
@@ -211,7 +212,7 @@ export function Diagnostics({ active, onOpenLogs }) {
 
   async function copyReport() {
     if (!reportText) return;
-    await navigator.clipboard.writeText(reportText);
+    await copyText(reportText);
     setMessage("Diagnostic report copied.");
   }
 

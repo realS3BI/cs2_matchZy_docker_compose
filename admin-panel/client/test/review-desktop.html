@@ -1,0 +1,76 @@
+<!doctype html>
+<!-- Integration fixture: actual UI, capture hook, JPEG/WebM encoder; simulated Windows bridge, game and API. -->
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows-Review prüfen</title></head>
+<body><main id="root" style="max-width:1200px;margin:40px auto;padding:0 20px"></main><div id="hook" hidden></div>
+<script>
+window.events=[];window.errors=[];
+let token=0;const stopListeners=new Set();
+window.playbookDesktop={version:1,
+ status:async()=>({appVersion:'0.1.0',update:{state:'ready',message:'Version 0.2.0 ist bereit. Nach dem Review neu starten.'},connected:false,recovery:false,active:false}),
+ launch:async()=>{},connect:async()=>events.push('connect'),disconnect:async()=>events.push('disconnect'),
+ frame:async(width,height)=>{if(window.frameFailure)throw Error('CS2 ist minimiert.');return {width,height,left:4,top:32,right:4,bottom:4};},
+ begin:async(slot)=>{events.push('begin:'+slot);window.photoSlot=slot;return String(++token);},
+ end:async()=>events.push('restore'),recover:async()=>{},checkUpdate:async()=>{},installUpdate:async()=>{},
+ onStopVideo:callback=>{stopListeners.add(callback);window.pressF8=()=>stopListeners.forEach(callback=>callback());return()=>stopListeners.delete(callback);}
+};
+</script>
+<script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {LineupReview} from '/src/components/lineup-review.tsx';
+import {useReviewCapture} from '/src/hooks/use-review-capture.ts';
+import '/src/index.css';
+const nade={owner:'76561198000000001',map:'de_anubis',name:'ct_to_a_main',displayName:'CT zu A Main',type:'Smoke',updatedAt:'2026-10-02T08:00:00Z',reviewStatus:'pending',throwFromTitle:'CT',throwToTitle:'A Main'};
+const canvas=document.createElement('canvas');canvas.width=1920;canvas.height=1080;
+const ctx=canvas.getContext('2d');window.photoSlot='aim';
+const draw=()=>{ctx.fillStyle='#c02020';ctx.fillRect(0,0,1920,1080);ctx.fillStyle='#315173';ctx.fillRect(4,32,1912,1044);
+ if(window.photoSlot!=='front'){ctx.fillStyle='#fff';ctx.fillRect(950,553,21,3);ctx.fillRect(959,544,3,21);}};
+draw();const timer=setInterval(draw,30);
+Object.defineProperty(navigator,'mediaDevices',{value:{getDisplayMedia:async()=>canvas.captureStream(30)},configurable:true});
+let command=null,serial=0,releaseUpload,lastFile;
+window.fetch=async(url,options)=>{
+ const input=options?.body?JSON.parse(options.body):{};let output={ok:true,uploadEnabled:true};
+ if(String(url).endsWith('/start'))output={session:{id:'test-session'}};
+ else if(String(url).endsWith('/photo')){events.push('prepare');command={id:String(++serial).padStart(32,'0'),slot:input.slot,action:'photo',presentation:'review-v2'};output={request:{id:command.id,expiresAt:Date.now()+30000}};}
+ else if(String(url).endsWith('/poll'))output={command};
+ else if(String(url).endsWith('/captured'))events.push('captured');
+ else if(String(url).endsWith('/ack')){events.push('ack:'+input.ok);command=null;}
+ return new Response(JSON.stringify(output),{headers:{'Content-Type':'application/json'}});
+};
+function App(){const capture=useReviewCapture({nade,admin:true,disabled:false,onStep:()=>{},onError:e=>errors.push(e),upload:async(slot,file)=>{lastFile=file;events.push('upload:'+slot);await new Promise(r=>releaseUpload=r);events.push('uploaded');}});window.capture=capture;return null;}
+createRoot(document.getElementById('hook')).render(React.createElement(App));
+createRoot(document.getElementById('root')).render(React.createElement(LineupReview,{nade,user:{identitySteam64:'76561198000000002',role:'admin'},disabled:false,mutate:async()=>{},onEntriesChange:()=>{}}));
+const waitFor=async f=>{for(let i=0;i<250;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+JSON.stringify({events,errors}));};
+const assert=(condition,message)=>{if(!condition)throw Error(message+': '+JSON.stringify({events,errors}));};
+async function connect(){await waitFor(()=>window.capture);await window.capture.connect();await waitFor(()=>window.capture.capture);events.length=0;}
+window.checkPhoto=async(slot='aim',fail=false)=>{
+ await connect();window.frameFailure=fail;
+ await window.capture.photo(slot,true);
+ if(fail){await waitFor(()=>events.includes('ack:false'));assert(events.includes('restore')&&events.includes('captured')&&!events.includes('upload:'+slot),'Fehler hat Spiel nicht freigegeben');window.frameFailure=false;window.capture.disconnect();return {result:'PASS: Aufnahmefehler stellt CS2 wieder her und bestätigt keinen Upload',events};}
+ await waitFor(()=>releaseUpload);
+ assert(events.join(',')===`prepare,begin:${slot},restore,captured,upload:${slot}`,'Wiederherstellung muss vor Panel-Freigabe und Upload erfolgen');
+ const bitmap=await createImageBitmap(lastFile),photo=document.createElement('canvas');
+ assert(bitmap.width===1912&&bitmap.height===1044,'Fensterrand nicht entfernt');photo.width=bitmap.width;photo.height=bitmap.height;photo.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+ const pixel=(x,y)=>Array.from(photo.getContext('2d').getImageData(x,y,1,1).data);
+ assert((pixel(962,522)[0]>210)===(slot!=='front'),'Echtes Fadenkreuz verschoben/Frontfoto falsch');
+ assert(pixel(962,508)[1]<150&&pixel(10,10)[0]<100,'Overlay oder Fensterrahmen im Bild');
+ releaseUpload();await waitFor(()=>events.includes('ack:true'));assert(!errors.length,'Unerwarteter Fehler');window.capture.disconnect();
+ return {result:'PASS: Desktop-Foto, automatische Ränder, echtes Fadenkreuz, Wiederherstellung vor Upload',slot,events};
+};
+window.checkVideo=async()=>{
+ await connect();await window.capture.startVideo();await new Promise(r=>setTimeout(r,1200));window.pressF8();await waitFor(()=>releaseUpload);
+ assert(events.join(',')==='begin:video,restore,upload:video','F8 oder Wiederherstellung fehlerhaft');
+ const url=URL.createObjectURL(lastFile),video=document.createElement('video');video.src=url;
+ await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=reject;});
+ assert(video.videoWidth===1912&&video.videoHeight===1044,'Video enthält Fensterrand');
+ const size=lastFile.size;assert(size>100,'Leeres Video');URL.revokeObjectURL(url);releaseUpload();await waitFor(()=>!window.capture.recording);assert(!errors.length,'Videofehler');window.capture.disconnect();
+ return {result:'PASS: echtes WebM, automatische Ränder, F8, Wiederherstellung vor Upload',size,events};
+};
+window.checkVideoAbort=async()=>{
+ await connect();await window.capture.startVideo();window.frameFailure=true;
+ await waitFor(()=>errors.some(error=>error.includes('minimiert')));
+ assert(events.includes('restore')&&!events.includes('upload:video'),'Abgebrochenes Video wurde hochgeladen oder Einstellungen blieben verändert');
+ window.frameFailure=false;window.capture.disconnect();return {result:'PASS: Verlorenes Spielfenster verwirft Video und stellt CS2 wieder her',events};
+};
+window.checkUI=()=>{const text=document.body.innerText;assert(text.includes('Review mit Playbook für Windows'),'Desktop-Einrichtung fehlt');assert(!text.includes('Fotomodus-Befehl kopieren'),'Manuelle Befehle in Desktop-App');assert(document.querySelectorAll('.review-step').length===6,'Stepper fehlt');assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');return 'PASS: Desktop-Einrichtung, Update-Button, sechs Schritte';};
+</script></body></html>

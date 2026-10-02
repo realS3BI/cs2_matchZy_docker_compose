@@ -1,0 +1,28 @@
+{
+  "name": "playbook-desktop",
+  "productName": "Playbook",
+  "version": "0.1.0",
+  "description": "Playbook mit automatischer CS2-Review-Aufnahme für Windows",
+  "author": "Sebastian Schlosser",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "build:native": "dotnet publish native/Playbook.Windows.csproj -c Release -r win-x64 --self-contained true -o native/bin/publish",
+    "dist": "npm run test && npm run build:native && electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": { "electron-updater": "6.8.9" },
+  "devDependencies": { "electron": "44.5.1", "electron-builder": "26.15.3" },
+  "build": {
+    "appId": "at.schlossers.playbook",
+    "artifactName": "Playbook-Setup-${version}.${ext}",
+    "directories": { "output": "dist" },
+    "files": ["src/**", "package.json"],
+    "extraResources": [{ "from": "native/bin/publish/Playbook.Windows.exe", "to": "Playbook.Windows.exe" }],
+    "win": { "target": "nsis", "icon": "icon.png" },
+    "nsis": { "oneClick": true, "perMachine": false, "deleteAppDataOnUninstall": false },
+    "publish": [{ "provider": "github", "owner": "realS3BI", "repo": "cs2_matchZy_docker_compose", "releaseType": "release" }]
+  }
+}

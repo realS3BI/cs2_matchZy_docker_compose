@@ -18,6 +18,7 @@ import { ActionButton } from "./action-button";
 import { NadeFlightMap, NadePlacementEditor } from "./map-radar";
 import { FavoriteButton } from "./nade-favorites";
 import { api } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
 import { findLineup, lineupKey, lineupPath } from "../lib/lineups";
 import { inferRadarCalibration } from "../lib/nade-radar";
@@ -195,7 +196,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
         {!creating && !permissions.edit && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
         {!creating && <Button asChild variant="secondary"><a href="#lineup-review">{nade.official ? "Fotos und Video ansehen" : permissions.submit || permissions.moderate ? "Medien-Review öffnen" : "Aufnahmen ansehen"}</a></Button>}
         {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">
-          <ActionButton variant="secondary" icon={Copy} onClick={() => navigator.clipboard.writeText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>
+          <ActionButton variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>
           <code className="break-all text-xs text-muted-foreground">.loadnade {nade.name}</code>
           <div className="mt-2 flex flex-wrap gap-2">
             <ActionButton variant="ghost" size="sm" icon={RefreshCw} onClick={onRefresh} disabled={busy} successLabel="Aktualisiert">Aktualisieren</ActionButton>

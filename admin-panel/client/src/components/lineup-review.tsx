@@ -14,6 +14,9 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
+import { ReviewPhotoFrame } from "./review-photo-frame";
+import { ReviewGameSetup } from "./review-game-setup";
+import { desktop } from "../lib/playbook-desktop";
 
 const { uploadFiles } = genUploader<ReviewFileRouter>({ url: "/api/uploadthing" });
 const steps = [...REVIEW_STEPS, { id: "finish", title: "Alles bereit für den Review", short: "Prüfung", description: "Prüfe die Aufnahmen und die Wurfdaten. Die offizielle Freigabe übernimmt ein Plattform-Admin." }] as const;
@@ -96,14 +99,17 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange }) 
       </li>)}</ol>
     </nav>
 
+    {editable && <ReviewGameSetup />}
     {editable && <div className="review-capture-bar">
-      <div className="review-capture-copy"><MonitorUp aria-hidden="true" /><div><strong>{capture.capture ? "Spielbild verbunden" : "Direkt aus CS2 aufnehmen"}</strong><p>{capture.capture ? "Fotos und Video werden nach der Aufnahme direkt hochgeladen. Video ohne Ton, maximal zwei Minuten." : "In Chrome oder Edge dein CS2-Fenster freigeben. Die Review-Seite bleibt während des Spiels offen."}</p></div></div>
+      <div className="review-capture-copy"><MonitorUp aria-hidden="true" /><div><strong>{capture.capture ? "Spielbild verbunden" : "Direkt aus CS2 aufnehmen"}</strong><p>{capture.capture ? "Fotos und Video werden nach der Aufnahme direkt hochgeladen. Video ohne Ton, maximal zwei Minuten." : desktop ? "Playbook erkennt dein CS2-Fenster automatisch. Die App bleibt während des Reviews geöffnet." : "In Chrome oder Edge dein CS2-Fenster freigeben. Die Review-Seite bleibt während des Spiels offen."}</p></div></div>
       <div className="flex flex-wrap gap-2">
         {capture.recording && <Button disabled={uploading} onClick={() => run(capture.stopVideo)}><Square data-icon="inline-start" />Video stoppen und hochladen</Button>}
         {capture.capture ? <Button variant="outline" disabled={uploading || capture.recording} onClick={capture.disconnect}>Freigabe beenden</Button> : <Button variant="outline" disabled={!enabled || locked || capture.connecting} onClick={() => run(capture.connect)}><MonitorUp data-icon="inline-start" />{capture.connecting ? "Verbindet …" : "Spielbild verbinden"}</Button>}
       </div>
       {capture.capture && <video ref={preview} autoPlay muted playsInline className="review-live-preview" aria-label="Vorschau des freigegebenen Spielbilds" />}
       {capture.notice && <p className="review-capture-notice" role="status">{capture.notice}</p>}
+      {capture.capture && !desktop && <ReviewPhotoFrame capture={capture.capture} disabled={locked || capture.recording} />}
+      {capture.capture && desktop && <p className="review-capture-notice">Der Fensterrand wird bei Fotos und Videos automatisch entfernt.</p>}
     </div>}
     {enabled === false && editable && <Alert><AlertTitle>Uploads noch nicht eingerichtet</AlertTitle><AlertDescription>{permissions.moderate ? "Hinterlege UPLOADTHING_TOKEN in der Serverumgebung und starte das Webpanel neu. Danach sind Datei-Uploads und die Browser-Aufnahme verfügbar." : "Ein Plattform-Admin muss den Upload-Dienst noch einrichten."}</AlertDescription></Alert>}
     {disabled && editable && <Alert><AlertTitle>Änderungen zuerst speichern</AlertTitle><AlertDescription>Speichere deine Wurfdaten, bevor du Medien ergänzt oder den Review abschließt.</AlertDescription></Alert>}
@@ -125,9 +131,9 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange }) 
         <CardContent className="flex flex-col gap-5">
           <div className="review-position"><span>{nade.throwFromTitle || "Startposition"}</span><ArrowRight aria-hidden="true" /><span>{nade.throwToTitle || "Zielposition"}</span></div>
           {step.id === "front" && editable && <p className="text-sm text-muted-foreground">{permissions.moderate ? "Der Spielserver lädt den Startpunkt und stellt eine feste Vorderansicht ohne Fadenkreuz ein. Nach dem Foto kehren Kamera, HUD und Panel zurück." : "Zeige die Spielfigur von vorne in Third Person. Für die automatische Kamera ist ein Plattform-Admin im Spiel nötig."}</p>}
-          {step.id !== "video" && editable && permissions.moderate && <p className="text-sm text-muted-foreground">CS2 im randlosen Fenstermodus aufnehmen. HUD und persönliches Fadenkreuz werden kurz ausgeblendet. Die Ego-Fotos erhalten das einheitliche Review-Fadenkreuz.</p>}
+          {step.id !== "video" && editable && permissions.moderate && <p className="text-sm text-muted-foreground">{desktop ? "Playbook stellt das Fadenkreuz direkt in CS2 ein und entfernt den Fensterrand automatisch. Deine bisherigen Einstellungen kehren nach dem Foto zurück." : "Die Ego-Fotos verwenden dein echtes CS2-Fadenkreuz. Bestätige vor dem ersten Foto den Fotoausschnitt, damit kein Fensterrand mit aufgenommen wird."}</p>}
           {step.id === "video" && <ol className="review-video-sequence"><li>Zum Startpunkt laufen</li><li>Auf den Lineup-Punkt zielen</li><li>Granate abwerfen</li><li>Mit Noclip zum Ziel fliegen</li><li>Die Wirkung zeigen</li></ol>}
-          {step.id === "video" && editable && permissions.moderate && <p className="text-sm text-muted-foreground">Einmal in der CS2-Konsole eingeben: <code>bind "F8" "css_training_review_stop"</code>. Danach stoppt F8 die Aufnahme auch bei geschlossenem Panel und startet den Upload.</p>}
+          {step.id === "video" && editable && (desktop ? <p className="text-sm text-muted-foreground">Mit <kbd>F8</kbd> stoppst du das Video direkt im Spiel. Playbook lädt es anschließend hoch.</p> : permissions.moderate && <p className="text-sm text-muted-foreground">Einmal in der CS2-Konsole eingeben: <code>bind "F8" "css_training_review_stop"</code>. Danach stoppt F8 die Aufnahme auch bei geschlossenem Panel und startet den Upload.</p>)}
           {editable && <>
             <input ref={fileInput} className="sr-only" type="file" tabIndex={-1} aria-label={step.id === "video" ? "Video-Datei" : "Foto-Datei"} accept={step.id === "video" ? "video/mp4,video/webm" : "image/jpeg,image/png,image/webp"} disabled={!enabled || locked || capture.recording} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void run(() => upload(step.id as ReviewSlot, file)); }} />
             <div className="flex flex-col gap-2">

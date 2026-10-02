@@ -12,7 +12,7 @@ In diesem Stand starten Berechtigungsabgleich und Statusmeldungen erst beim erst
 
 Im Nades-Modus startet Playbook sein eigenes Training ohne MatchZy. Im MatchZy-Modus funktioniert das Panel nur, wenn die geladene MatchZy-Instanz `isPractice == true` und `matchStarted == false` meldet. Dort aktiviert `.prac` das Training. Bloßes `sv_cheats 1` schaltet das Panel in anderen Modi nicht frei. Bei `.exitprac`, Competitive-Start oder MatchZy-Unload schließt es sich im MatchZy-Modus. [Modi, verfügbare Werkzeuge und Befehle](playbook.md).
 
-Im eigenständigen Nades-Modus fehlen bewusst Rethrow, Bot-Platzierung, Wurfhistorie und Colored Smokes. Diese MatchZy-Funktionen werden weder angeboten noch an ein fehlendes Plugin weitergeleitet.
+Im eigenständigen Nades-Modus bietet Playbook unter Trainingswerkzeuge „Letzten Wurf wiederholen“ sowie Bot-Platzierung an. `.rethrow` oder `.rt` wiederholt die eigene zuletzt geworfene Granate, ohne den Spieler zu teleportieren. Wurfhistorie und Colored Smokes sind weiterhin nicht verfügbar.
 
 Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. Ohne installierte HUD-Dateien kann das Plugin keine sichtbare Oberfläche garantieren. Einmalige Bind-Einrichtung: [Feste Keybinds](../training-hud/README.md#feste-keybinds). Freie Tastenzuweisungen und Navigation über W/S/Use sind entfernt. Bestehende Favoriten werden beim Laden alter Profile erhalten.
 

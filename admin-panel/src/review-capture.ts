@@ -85,7 +85,7 @@ export class ReviewCaptureBridge {
           !Number.isFinite(command.expiresAt) || !Number.isFinite(command.notBefore) ||
           !["photo", "video-start", "video-stop"].includes(command.action) ||
           (command.action === "photo" && (!isReviewSlot(command.slot) || command.slot === "video"))) return null;
-      return { id: command.id, action: command.action, slot: command.slot, ...(command.presentation === "review-v1" ? { presentation: command.presentation } : {}) };
+      return { id: command.id, action: command.action, slot: command.slot, ...(command.presentation === "review-v2" ? { presentation: command.presentation } : {}) };
     });
   }
   async requestPhoto(actor: string, id: string, slot: unknown, now = Date.now()) {

@@ -10,6 +10,14 @@ window.fetch=async()=>new Response(JSON.stringify({uploadEnabled:true}),{headers
 const nade={owner:'76561198000000001',map:'de_anubis',name:'window',displayName:'Fenster-Smoke',type:'Smoke',updatedAt:'2026-10-02T08:00:00.000Z',reviewStatus:'pending',throwFromTitle:'T-Spawn',throwToTitle:'Fenster'};
 function Fixture(){const [entry,setEntry]=React.useState(nade);return React.createElement(LineupReview,{nade:entry,user:{identitySteam64:'76561198000000002',role:'admin'},disabled:false,mutate:async()=>{},onEntriesChange:entries=>setEntry(entries[0])});}
 createRoot(document.getElementById('root')).render(React.createElement(Fixture));
+window.connectMockGame=async()=>{
+ const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;
+ const ctx=canvas.getContext('2d');const draw=()=>{ctx.fillStyle='#20232a';ctx.fillRect(0,0,640,360);ctx.fillStyle='#528597';ctx.fillRect(2,24,636,334);};
+ draw();const timer=setInterval(draw,100);
+ ReviewRecorder.share=async()=>{const r=new ReviewRecorder(canvas.captureStream(30));await r.video.play();r.stream.getVideoTracks()[0].addEventListener('ended',()=>clearInterval(timer));window.fixtureRecorder=r;return r;};
+ window.fetch=async()=>new Response(JSON.stringify({session:{id:'fixture'},command:null,uploadEnabled:true}),{headers:{'Content-Type':'application/json'}});
+ [...document.querySelectorAll('button')].find(b=>b.textContent==='Spielbild verbinden').click();
+};
 window.checkReview=async()=>{
  const tick=()=>new Promise(r=>setTimeout(r,80));
  const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
@@ -26,7 +34,7 @@ window.checkRecorder=async()=>{
  const ctx=canvas.getContext('2d');let frame=0;
  const paint=setInterval(()=>{ctx.fillStyle=frame++%2?'#4b8977':'#786248';ctx.fillRect(0,0,640,360);},30);
  const recorder=new ReviewRecorder(canvas.captureStream(30));
- try{await recorder.video.play();await new Promise(r=>setTimeout(r,100));const photo=await recorder.photo('aim');if(photo.type!=='image/jpeg'||!photo.size)throw Error('Foto leer');
+ try{await recorder.video.play();await new Promise(r=>setTimeout(r,100));recorder.setPhotoFrame({width:640,height:360,top:0,right:0,bottom:0,left:0});const photo=await recorder.photo('aim');if(photo.type!=='image/jpeg'||!photo.size)throw Error('Foto leer');
  const result=recorder.startVideo(()=>{});await new Promise(r=>setTimeout(r,1300));recorder.stopVideo();const video=await result;if(video.type!=='video/webm'||!video.size)throw Error('Video leer');return {photo:photo.size,video:video.size,result:'PASS: echte JPEG- und WebM-Aufnahme'};
  }finally{recorder.dispose();clearInterval(paint);}
 };
@@ -56,5 +64,26 @@ window.checkStaleRetry=async(changedSetup=false)=>{
  await waitFor(()=>attempts.length>=(changedSetup?1:2));
  if(attempts.at(-1).revision!==current.updatedAt)throw Error('Upload erneut versuchen sendet weiterhin die veraltete Version: '+JSON.stringify({attempts,reads}));
  return {result:changedSetup?'PASS: Geänderte Wurfdaten verlangen Prüfung vor dem Upload':'PASS: Retry aktualisiert die Version und behält das Foto',attempts:attempts.length,reads};
+};
+// Exercise the actual three copy buttons with unavailable/denied Clipboard API.
+window.checkClipboard=async(mode='missing')=>{
+ const descriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard');
+ const originalCopy=document.execCommand;const copied=[];
+ const api=mode==='missing'?undefined:{writeText:async text=>{if(mode==='modern'){copied.push(text);return;}throw new DOMException('Denied','NotAllowedError');}};
+ Object.defineProperty(navigator,'clipboard',{configurable:true,value:api});
+ document.execCommand=command=>{if(mode==='blocked')return false;if(command!=='copy'||document.activeElement?.tagName!=='TEXTAREA')throw Error('Ungültiger Fallback');copied.push(document.activeElement.value);return true;};
+ try{
+  document.querySelector('details').open=true;
+  const labels=['Crosshair-Code kopieren','Fotomodus-Befehl kopieren','HUD und Waffe einschalten · Befehl kopieren'];
+  for(const label of labels){
+   const button=[...document.querySelectorAll('button')].find(b=>b.textContent===label);button.focus();button.click();await new Promise(r=>setTimeout(r,80));
+   const text=button.parentElement.textContent;
+   if(mode==='blocked'){if(!text.includes('Bitte den Text markieren')||text.includes('Kopiert'))throw Error('Fehlermeldung oder Erfolg falsch');}
+   else if(button.textContent!=='Kopiert')throw Error('Kopieren fehlgeschlagen: '+text);
+   if((mode==='missing'&&document.activeElement!==button)||document.querySelector('textarea[aria-hidden=true]'))throw Error('Fokus/temporäres Textfeld nicht aufgeräumt');
+  }
+  if(mode!=='blocked'&&(copied.length!==3||copied[0]!==document.querySelector('input[aria-label="Review-Crosshair-Code"]').value||copied[1]!=='cl_draw_only_deathnotices 1; r_drawviewmodel 0'||copied[2]!=='cl_draw_only_deathnotices 0; r_drawviewmodel 1'))throw Error('Falscher Inhalt kopiert');
+  return {result:'PASS',mode,copies:copied.length};
+ }finally{document.execCommand=originalCopy;if(descriptor)Object.defineProperty(navigator,'clipboard',descriptor);else delete navigator.clipboard;}
 };
 </script></body></html>

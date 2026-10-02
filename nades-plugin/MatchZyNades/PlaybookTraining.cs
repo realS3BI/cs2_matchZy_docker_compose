@@ -153,7 +153,7 @@ public sealed partial class MatchZyNadesPlugin
         if (!TrainingEnabled) { Tell(player, "Training wird noch gestartet."); return; }
         if (command == "css_help")
         {
-            Tell(player, ".nades · .loadnade <Name> · .last · .savepos · .loadpos · .noclip · .bot · .crouchbot / .cbot · .nobots · .clear · .traj · .impacts · .noflash · .god");
+            Tell(player, ".nades · .loadnade <Name> · .rethrow / .rt · .last · .savepos · .loadpos · .noclip · .bot · .crouchbot / .cbot · .nobots · .clear · .traj · .impacts · .noflash · .god");
             return;
         }
         if (command is "css_listnades" or "css_lin")
@@ -166,6 +166,7 @@ public sealed partial class MatchZyNadesPlugin
         ReleaseControl(player.Slot);
         switch (command)
         {
+            case "css_rethrow": case "css_rt": RethrowGrenade(player); return;
             case "css_bot": AddTrainingBot(player, false); return;
             case "css_cbot": case "css_crouchbot": AddTrainingBot(player, true); return;
             case "css_nobots": RemoveTrainingBots(); Tell(player, "Alle Trainingsbots entfernt."); return;
@@ -207,12 +208,12 @@ public sealed partial class MatchZyNadesPlugin
 
     private void ForgetTraining(ulong steamId)
     {
-        _positions.Remove(steamId); _throwPositions.Remove(steamId); _noFlash.Remove(steamId); _god.Remove(steamId);
+        _positions.Remove(steamId); _throwPositions.Remove(steamId); _rethrows.Forget(steamId); _noFlash.Remove(steamId); _god.Remove(steamId);
     }
 
     private void ResetTraining()
     {
-        _positions.Clear(); _throwPositions.Clear(); _noFlash.Clear(); _god.Clear();
+        _positions.Clear(); _throwPositions.Clear(); _rethrows.Clear(); _noFlash.Clear(); _god.Clear();
         ResetTrainingBots();
     }
 

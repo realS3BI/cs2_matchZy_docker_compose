@@ -90,13 +90,15 @@ public sealed class InGameMenu(MenuPage root, string map)
     public void Move(int direction)
     {
         Notice = "";
-        Index = Math.Clamp(Index + direction, 0, Math.Max(0, Current.Items.Count - 1));
+        Index = Wrap((long)Index + direction, Math.Max(1, Current.Items.Count));
     }
     public void ChangePage(int direction)
     {
         Notice = "";
-        Index = Math.Clamp(Page + direction, 0, PageCount - 1) * PageSize;
+        Index = Wrap((long)Page + direction, PageCount) * PageSize;
     }
+
+    private static int Wrap(long index, int count) => (int)((index % count + count) % count);
 
     public MenuRequest? Select(int key)
     {
@@ -114,7 +116,7 @@ public sealed class InGameMenu(MenuPage root, string map)
         return item.Request;
     }
 
-    // False means the user is leaving the root. Child pages restore the exact selection.
+    // At the root, stay on Home and return false. Child pages restore the exact selection.
     public bool Back()
     {
         Notice = "";

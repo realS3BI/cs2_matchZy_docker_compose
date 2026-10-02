@@ -14,7 +14,6 @@ public sealed class PlaybookTrainingTests
     [InlineData(".match")]
     [InlineData(".prac")]
     [InlineData(".savenade test")]
-    [InlineData(".rethrow")]
     [InlineData("get5_loadmatch fixture.json")]
     [InlineData("matchzy_autostart_mode 1")]
     [InlineData("sm_pause")]
@@ -34,6 +33,11 @@ public sealed class PlaybookTrainingTests
     [InlineData("!cbot")]
     [InlineData("/crouchbot")]
     [InlineData("css_nobots")]
+    [InlineData(".rethrow")]
+    [InlineData("!rethrow")]
+    [InlineData("/rethrow")]
+    [InlineData("css_rethrow")]
+    [InlineData(".rt")]
     public void NadesAllowsItsImplementedCommands(string command) =>
         Assert.False(PlaybookCommands.Blocks("nades", true, command));
 
@@ -58,7 +62,7 @@ public sealed class PlaybookTrainingTests
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null, standalone: true);
         var items = Descendants(menu.Current).ToArray();
-        Assert.DoesNotContain(items, item => item.Request?.Action is TrainingAction.Rethrow);
+        Assert.Contains(items, item => item.Request?.Action == TrainingAction.Rethrow);
         Assert.Contains(items, item => item.Request?.Action == TrainingAction.Bot);
         Assert.Contains(items, item => item.Request?.Action == TrainingAction.CrouchBot);
         Assert.Contains(items, item => item.Request?.Action == TrainingAction.RemoveBots);

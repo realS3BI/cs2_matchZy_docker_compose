@@ -1,0 +1,59 @@
+name: Playbook für Windows
+on:
+  workflow_dispatch:
+  push:
+    tags: ['playbook-v*']
+  pull_request:
+    paths: ['playbook-desktop/**', '.github/workflows/playbook-desktop.yml']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: playbook-desktop/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Abhängigkeiten installieren
+        working-directory: playbook-desktop
+        run: npm ci
+      - name: Windows-Installer bauen und testen
+        working-directory: playbook-desktop
+        run: npm run dist
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Playbook-Windows
+          path: |
+            playbook-desktop/dist/*.exe
+            playbook-desktop/dist/*.blockmap
+            playbook-desktop/dist/latest.yml
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/playbook-v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Playbook-Windows
+          path: installer
+      - name: Version prüfen und Update veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          VERSION=$(node -p 'JSON.parse(require("fs").readFileSync("playbook-desktop/package.json")).version')
+          test "$RELEASE_TAG" = "playbook-v$VERSION"
+          gh release create "$RELEASE_TAG" installer/* --verify-tag --title "Playbook $VERSION" --generate-notes

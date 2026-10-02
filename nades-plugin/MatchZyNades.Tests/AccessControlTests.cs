@@ -22,6 +22,8 @@ public sealed class AccessControlTests
     [InlineData("!cbot")]
     [InlineData("/crouchbot")]
     [InlineData("css_nobots")]
+    [InlineData(".rethrow")]
+    [InlineData(".rt")]
     public void TrainingPlayerCanUsePanelWithoutAdminRights(string command) =>
         Assert.False(PlatformRoles.Blocks("training_player", command));
 
@@ -65,6 +67,8 @@ public sealed class AccessControlTests
     [InlineData("css_training_visible")]
     [InlineData("css_map de_dust2")]
     [InlineData("noclip")]
+    [InlineData(".rethrow")]
+    [InlineData(".rt")]
     public void PlayerCannotExecutePluginCommands(string command) => Assert.True(PlatformRoles.Blocks("player", command));
 
     [Theory]

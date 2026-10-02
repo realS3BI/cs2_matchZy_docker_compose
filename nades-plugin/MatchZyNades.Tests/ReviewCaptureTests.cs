@@ -9,6 +9,15 @@ public sealed class ReviewCaptureTests
     private const string Actor = "76561198000000001";
     private static NadeLineup Lineup => new("default", "window", "de_anubis", NadeKind.Smoke, "", new(1, 2, 3), new(4, 5, 6));
     [Theory]
+    [InlineData("aim")]
+    [InlineData("position")]
+    [InlineData("effect")]
+    public void FirstPersonPhotosKeepTheGameCrosshair(string slot)
+    {
+        Assert.Equal(0u, ReviewPhotoFraming.HiddenHud(slot) & (4u | 16u | 256u));
+        Assert.NotEqual(0u, ReviewPhotoFraming.HiddenHud("front") & 256u);
+    }
+    [Theory]
     [InlineData(0, 130, 20, -180)]
     [InlineData(90, 10, 140, -90)]
     [InlineData(180, -110, 20, 0)]
@@ -34,10 +43,10 @@ public sealed class ReviewCaptureTests
             void SaveSession(ReviewSession value) => File.WriteAllText(Path.Combine(folder, "session.json"), JsonSerializer.Serialize(value, ReviewCaptureFiles.Json));
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "aim", 1000));
             SaveSession(session);
-            var command = ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "aim", 1000, "a".PadLeft(32, 'a'), "review-v1");
+            var command = ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "aim", 1000, "a".PadLeft(32, 'a'), "review-v2");
             Assert.Equal(4000, command.NotBefore);
             Assert.Equal(new string('a', 32), command.Id);
-            Assert.Equal("review-v1", command.Presentation);
+            Assert.Equal("review-v2", command.Presentation);
             Assert.Equal(session.Id, command.SessionId);
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "effect", 2000));
             File.WriteAllText(Path.Combine(folder, "result.json"), JsonSerializer.Serialize(new ReviewResult(session.Id, command.Id, true, "Gespeichert"), ReviewCaptureFiles.Json));

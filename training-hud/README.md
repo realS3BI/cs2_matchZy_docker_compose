@@ -86,6 +86,8 @@ Unter **Keybinds** stehen die unveränderlichen Tasten. Alte persönliche Belegu
 | Zurück | BACKSPACE |
 | Vorherige / nächste Seite | LEFTARROW / RIGHTARROW |
 
+Auswahl und Seitenwechsel laufen im Kreis. Hoch beim ersten Eintrag wählt den letzten Eintrag auf der letzten Seite; runter beim letzten Eintrag wählt den ersten auf der ersten Seite. Links auf der ersten Seite führt zur letzten, rechts auf der letzten zur ersten. Jede Seite reserviert weiterhin neun Listenplätze. Zurück bleibt auf Home stehen und hält die Panelbedienung aktiv, auch bei wiederholtem Drücken. Mit KP_0 oder dem Spielen-Button wechselst du zur Spielsteuerung.
+
 Der erste Eintrag unter **Keybinds**, **Alle Keybinds in Konsole ausgeben**, schreibt ausschließlich zwei kopierbare Befehlszeilen in die Client-Konsole. Das geht auch direkt mit `css_training_binds`. Die erste Zeile enthält alle acht Panel-Binds, mit Semikolon getrennt. Der kurze Plugin-Befehl `css_tk` hält die gesamte Zeile unter 240 UTF-8-Bytes, damit sie in der Client-Konsole angezeigt werden kann. Dafür muss auch das Server-Plugin aktualisiert sein. Die zweite lautet `bind "n" "noclip"` und ist optional: `n` darf durch eine selbst gewählte, freie Taste ersetzt werden. Noclip benötigt `sv_cheats 1`. Jede gewünschte Zeile einzeln kopieren und ausführen.
 
 Alternativ [matchzy_training.cfg](matchzy_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec matchzy_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen; auch das Server-Plugin lädt keine lokale Spieler-CFG. Die optionale Noclip-Zeile ist in der Datei auskommentiert.

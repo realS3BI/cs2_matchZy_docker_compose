@@ -1,0 +1,137 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import net from 'node:net';
+import { commandPacket, PacketReader, readValue, VConsole } from '../src/vconsole.js';
+import { Presentation, NAMES, profile, validSnapshot } from '../src/presentation.js';
+import { captureFrame } from '../src/geometry.js';
+import { trusted, loginNavigation } from '../src/security.js';
+
+function printPacket(text) {
+  const packet = Buffer.alloc(41 + Buffer.byteLength(text));
+  packet.write('PRNT'); packet.writeUInt16BE(packet.length, 8); packet.write(text, 40);
+  return packet;
+}
+test('VConsole2 uses current binary version and handles split/coalesced packets', () => {
+  const packet = commandPacket('crosshair');
+  assert.equal(packet.readUInt32BE(4), 0x00d40000);
+  assert.equal(packet.readUInt16BE(8), packet.length);
+  assert.equal(packet.subarray(12).toString(), 'crosshair\0');
+  const bytes = Buffer.concat([printPacket('eins\n'), printPacket('zwei\n')]);
+  const reader = new PacketReader(); const messages = [];
+  for (const byte of bytes) messages.push(...reader.push(Buffer.from([byte])));
+  assert.deepEqual(messages, ['eins\n', 'zwei\n']);
+  assert.throws(() => new PacketReader().push(Buffer.alloc(12)), /Ungültige/);
+});
+test('console values are numeric only and names must match exactly', () => {
+  assert.equal(readValue('"cl_crosshair_gap" = "-2.5" (def. "0")\n', 'cl_crosshair_gap'), '-2.5');
+  assert.equal(readValue('crosshair = true\n', 'crosshair'), 'true');
+  assert.throws(() => readValue('other_crosshair = 1', 'crosshair'));
+  assert.throws(() => readValue('crosshair = exec evil', 'crosshair'));
+  assert.equal(validSnapshot({ version: 1, game: '1', values: Object.fromEntries(NAMES.map(name => [name, '1;quit'])) }), false);
+});
+test('console roundtrip rejects denied changes and serializes overlapping requests', async t => {
+  const state = { crosshair: 'true', r_drawviewmodel: 'true' };
+  const server = net.createServer(socket => {
+    let pending = Buffer.alloc(0);
+    socket.on('data', bytes => {
+      pending = Buffer.concat([pending, bytes]);
+      while (pending.length >= 12 && pending.length >= pending.readUInt16BE(8)) {
+        const size = pending.readUInt16BE(8);
+        const command = pending.subarray(12, size - 1).toString(); pending = pending.subarray(size);
+        const [name, value] = command.split(' ');
+        if (name === 'echo') socket.write(printPacket(value + '\n'));
+        else if (value === undefined) socket.write(printPacket(`${name} = ${state[name]}\n`));
+        else if (name !== 'r_drawviewmodel') state[name] = value;
+      }
+    });
+  });
+  await new Promise(resolve => server.listen(29000, '127.0.0.1', resolve));
+  const console = new VConsole();
+  t.after(() => { console.close(); server.close(); });
+  assert.deepEqual(await Promise.all([console.read(['crosshair']), console.read(['r_drawviewmodel'])]), [{ crosshair: 'true' }, { r_drawviewmodel: 'true' }]);
+  await console.write({ crosshair: 'false' });
+  assert.equal(state.crosshair, 'false');
+  await assert.rejects(console.write({ r_drawviewmodel: 'false' }), /erlaubt r_drawviewmodel/);
+});
+
+async function fixture(t) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'playbook-review-'));
+  const file = path.join(directory, 'recovery.json');
+  const original = Object.fromEntries(NAMES.map((name, index) => [name, String(index / 2)]));
+  let state = { ...original }, writes = 0, fail = 0;
+  const console = {
+    async read() { return { ...state }; },
+    async write(values) {
+      assert.ok(JSON.parse(await readFile(file, 'utf8')).values, 'journal exists before mutation');
+      writes++; state = { ...values };
+      if (fail-- > 0) throw new Error('Verbindung unterbrochen');
+    },
+  };
+  const presentation = new Presentation(console, file, async () => 'game:1');
+  t.after(async () => { clearTimeout(presentation.timer); await rm(directory, { recursive: true, force: true }); });
+  return { presentation, console, file, original, state: () => state, writes: () => writes, fail: n => { fail = n; } };
+}
+test('all photo/video profiles restore exact originals, including unusual values', async t => {
+  const f = await fixture(t);
+  for (const slot of ['aim', 'position', 'front', 'effect', 'video']) {
+    const token = await f.presentation.begin(slot);
+    assert.deepEqual(f.state(), profile(slot));
+    assert.equal(f.state().crosshair, slot === 'front' ? 'false' : 'true');
+    assert.equal(f.state().r_drawviewmodel, slot === 'video' ? 'true' : 'false');
+    await f.presentation.end(token);
+    assert.deepEqual(f.state(), f.original);
+    assert.equal(await f.presentation.saved(), undefined);
+  }
+});
+test('idle recovery cannot restore an active capture and stale tokens cannot end it', async t => {
+  const f = await fixture(t);
+  const starting = f.presentation.begin('aim');
+  const idle = f.presentation.recoverIfIdle();
+  const token = await starting; await idle;
+  assert.deepEqual(f.state(), profile('aim'));
+  await assert.rejects(f.presentation.begin('front'), /läuft bereits/);
+  await assert.rejects(f.presentation.end('stale'), /nicht mehr aktiv/);
+  await f.presentation.end(token);
+});
+test('partial prepare failure restores settings; lost connection survives app restart', async t => {
+  const f = await fixture(t);
+  f.fail(1);
+  await assert.rejects(f.presentation.begin('aim'), /unterbrochen/);
+  assert.deepEqual(f.state(), f.original);
+  assert.equal(await f.presentation.saved(), undefined);
+  f.fail(2);
+  await assert.rejects(f.presentation.begin('front'), /lokal gesichert/);
+  assert.ok(await f.presentation.saved());
+  const restarted = new Presentation(f.console, f.file, async () => 'game:2');
+  await restarted.recover();
+  assert.deepEqual(f.state(), f.original);
+  assert.equal(await restarted.saved(), undefined);
+});
+test('physical pixel crop removes window borders and keeps the true aim point', () => {
+  const game = { client: { left: 104, top: 132, right: 2016, bottom: 1176 }, window: { left: 100, top: 100, right: 2020, bottom: 1180 } };
+  assert.deepEqual(captureFrame(game, 1920, 1080), { width: 1920, height: 1080, left: 4, top: 32, right: 4, bottom: 4 });
+  assert.deepEqual(captureFrame(game, 1912, 1044), { width: 1912, height: 1044, left: 0, top: 0, right: 0, bottom: 0 });
+  assert.throws(() => captureFrame(game, 1280, 720), /nicht eindeutig/);
+  assert.throws(() => captureFrame({ ...game, minimized: true }, 1920, 1080), /minimiert/);
+  assert.throws(() => captureFrame({ ...game, visible: { left: 101, top: 100, right: 2021, bottom: 1180 } }, 1920, 1080), /nicht eindeutig/);
+});
+test('failed restoration releases capture lock but retains journal for automatic retry', async t => {
+  const f = await fixture(t);
+  const token = await f.presentation.begin('aim');
+  f.fail(1);
+  await assert.rejects(f.presentation.end(token), /unterbrochen/);
+  assert.equal(f.presentation.active, undefined);
+  assert.ok(await f.presentation.saved());
+  await f.presentation.recoverIfIdle();
+  assert.equal(await f.presentation.saved(), undefined);
+  assert.deepEqual(f.state(), f.original);
+});
+test('only the exact HTTPS Playbook origin gets native access; Steam can navigate for login', () => {
+  assert.ok(trusted('https://playbook.schlossers.at/maps/anubis'));
+  for (const url of ['http://playbook.schlossers.at', 'https://playbook.schlossers.at.evil.test', 'https://user@playbook.schlossers.at', 'file:///tmp/a', 'https://steamcommunity.com']) assert.equal(trusted(url), false);
+  assert.ok(loginNavigation('https://steamcommunity.com/openid/login'));
+  assert.equal(loginNavigation('https://steamcommunity.com.evil.test'), false);
+});

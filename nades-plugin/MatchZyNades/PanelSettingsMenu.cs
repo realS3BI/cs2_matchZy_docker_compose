@@ -7,12 +7,12 @@ public static class PanelSettingsMenu
         var hints = new Dictionary<string, string> {
             ["focus"] = "Wechselt zwischen Mausbedienung im HUD und freiem Zielen. Öffnet das Panel, wenn es geschlossen ist.",
             ["visible"] = "Blendet das Panel aus oder wieder ein. Deine Menüposition bleibt erhalten.",
-            ["up"] = "Wählt den vorherigen Eintrag auf der aktuellen Seite.",
-            ["down"] = "Wählt den nächsten Eintrag auf der aktuellen Seite.",
+            ["up"] = "Wählt den vorherigen Eintrag. Vom ersten Eintrag geht es zum letzten auf der letzten Seite.",
+            ["down"] = "Wählt den nächsten Eintrag. Vom letzten Eintrag geht es zum ersten auf der ersten Seite.",
             ["select"] = "Öffnet den ausgewählten Eintrag oder führt seine Aktion aus.",
-            ["back"] = "Geht eine Menüebene zurück. Auf Home wird die Spielsteuerung freigegeben.",
-            ["previous"] = "Zeigt die vorherigen neun Einträge dieser Liste.",
-            ["next"] = "Zeigt die nächsten neun Einträge dieser Liste."
+            ["back"] = "Geht eine Menüebene zurück. Auf Home bleibt die Panelbedienung aktiv.",
+            ["previous"] = "Zeigt die vorherige Seite. Von der ersten Seite geht es zur letzten.",
+            ["next"] = "Zeigt die nächste Seite. Von der letzten Seite geht es zur ersten."
         };
         var keys = PlayerPanelSettings.Labels.Select(action => new MenuItem(
             $"{action.Value}: {PlayerPanelSettings.DefaultKeys[action.Key]}", hints[action.Key])).ToList();

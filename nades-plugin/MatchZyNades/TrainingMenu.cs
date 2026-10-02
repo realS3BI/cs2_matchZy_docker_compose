@@ -117,14 +117,10 @@ public static class TrainingMenu
             new("Bots", "Stehenden oder duckenden Bot platzieren oder Trainingsbots entfernen.", Page: bots),
             new("Trainingshilfen", "Flugbahnvorschau, Einschläge, Flashschutz und God Mode ein- oder ausschalten.", Page: switches),
             Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt deine aktuellen Koordinaten und Blickwinkel im Beschreibungsbereich.")], Key: "tools");
-        if (standalone)
-            tools = tools with { Items = tools.Items.Where(item =>
-                item.Request?.Action != TrainingAction.Rethrow).ToArray(),
-                Description = "Positionen merken, Bots platzieren und Trainingshilfen bedienen." };
         var home = new List<MenuItem> {
             new("Granaten-Bibliothek", $"{library.Count} verfügbare Granaten auf {map}. Wähle zuerst den Granatentyp und danach deine Sammlung. {libraryError}", Page: new("Granaten-Bibliothek", "Granatentyp auswählen.", categories), Enabled: practice),
             new($"Must Know ({mustKnow.Length})", "Starte hier: wichtige Lineups für diese Map, vom Plattform-Admin ausgewählt.", Page: Lineups("Must Know", mustKnow, "must-know"), Enabled: practice),
-            new("Trainingswerkzeuge", standalone ? "Positionen merken, Bots platzieren und Trainingshilfen einstellen." : "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
+            new("Trainingswerkzeuge", "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
             new("Neue Nade aufnehmen", "Aufnahme starten, eine Granate werfen und nach ihrer Wirkung speichern. Sie erscheint unter Alle und ist noch nicht offiziell geprüft.",
                 Page: new("Nade aufnehmen", "Nach dem Wurf mit KP_0 zurück ins Panel wechseln und Aufnahme speichern wählen.", [
                     Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von drei Minuten eine Granate. Abwurfpunkt, Blickwinkel, Jumpthrow, Ducken, Bewegung, Maustaste, Ziel und Flugzeit werden automatisch erfasst."),
