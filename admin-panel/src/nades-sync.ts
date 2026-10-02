@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
-import { applyPlayerNadeRequest } from "./nade-review.js";
+import { applyPlayerNadeRequest, applyGameReviewDecision } from "./nade-review.js";
 import { THROW_ATTRIBUTE_FIELDS } from "../shared/throw-attributes.js";
 import {
   matchZySavedNadesConfigToNades,
@@ -22,6 +22,7 @@ function stableNades(entries) {
     mustKnow: entry.mustKnow === true,
     official: entry.official === true,
     reviewStatus: entry.reviewStatus || "",
+    reviewMedia: entry.reviewMedia,
     landingPos: entry.landingPos,
     captureId: entry.captureId,
     throwTechnique: entry.throwTechnique,
@@ -49,7 +50,8 @@ function preservePanelMetadata(importedEntries, currentEntries) {
     const merged: any = {
       ...entry,
       id: current.id || entry.id,
-      lineupImages: current.lineupImages || []
+      lineupImages: current.lineupImages || [],
+      ...(current.reviewMedia ? { reviewMedia: current.reviewMedia } : {}),
     };
     for (const key of ["displayName", "team", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo", ...THROW_ATTRIBUTE_FIELDS, "flightDuration"]) {
       // A cleared flight time must stay empty when the game rewrites an older snapshot.
@@ -403,6 +405,7 @@ export class NadesSyncService {
     await writeJsonFileAtomic(`${dirname(this.liveFile)}/savednades.metadata.json`, entries.map(entry => ({
       owner: entry.owner, map: entry.map, name: entry.name, team: entry.team, displayName: entry.displayName || "",
       mustKnow: entry.mustKnow === true, official: entry.official === true, reviewStatus: entry.reviewStatus || "", updatedAt: entry.updatedAt,
+      reviewMediaSlots: Object.keys(entry.reviewMedia || {}),
       ...Object.fromEntries([...THROW_ATTRIBUTE_FIELDS, "flightDuration", "throwFromTitle", "throwToTitle", "throwTechnique"].map(key => [key, entry[key]])),
     })));
   }
@@ -445,7 +448,11 @@ export class NadesSyncService {
       const { value: request } = await readJsonFile(path);
       const current = await this.store.getNades();
       let next;
-      try { next = applyPlayerNadeRequest(current, request); }
+      try {
+        next = ["approve", "reject"].includes(request.action)
+          ? applyGameReviewDecision(current, request, await this.store.getUser(request.actor))
+          : applyPlayerNadeRequest(current, request);
+      }
       catch (error) {
         await writeJsonFileAtomic(receipt, { ok: false, message: error.message });
         await writeJsonFileAtomic(`${directory}/results/${file}`, { ok: false, message: error.message });

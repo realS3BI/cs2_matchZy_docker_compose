@@ -10,6 +10,15 @@ const OPENID_NS = "http://specs.openid.net/auth/2.0";
 export const tokenHash = (token: string, secret: string) => crypto.createHmac("sha256", secret).update(token).digest("hex");
 const newToken = () => crypto.randomBytes(32).toString("base64url");
 
+export async function authenticatedUser(req, config, store) {
+  const token = req.cookies?.[SESSION_COOKIE];
+  const session = typeof token === "string" && /^[\w-]{43}$/.test(token) ? await store.getSession(tokenHash(token, config.sessionSecret)) : null;
+  if (!session || !["user", "test"].includes(session.purpose) ||
+      (session.purpose === "test" && (!config.testLoginPassword || session.steamId !== TEST_USER_ID))) return null;
+  const user = await store.getUser(session.steamId);
+  return user && (session.purpose === "test" ? { ...user, role: "player", flags: [] } : user);
+}
+
 export async function verifySteam(query, returnTo: string, fetcher = fetch) {
   const fields = ["op_endpoint", "claimed_id", "identity", "return_to", "response_nonce", "assoc_handle"];
   if (Object.values(query).some(value => typeof value !== "string") ||
@@ -106,14 +115,9 @@ export function installAuth(app: Express, { config, store, loginLimiter, steamVe
   });
   app.use("/api", async (req, res, next) => {
     try {
-      const token = req.cookies[SESSION_COOKIE];
-      const session = typeof token === "string" && /^[\w-]{43}$/.test(token) ? await store.getSession(hash(token)) : null;
-      if (!session || !["user", "test"].includes(session.purpose) ||
-          (session.purpose === "test" && (!config.testLoginPassword || session.steamId !== TEST_USER_ID)))
-        return res.status(401).json({ error: "Bitte anmelden." });
-      const user = await store.getUser(session.steamId);
-      if (!user) return res.status(401).json({ error: "Benutzer nicht gefunden." });
-      res.locals.user = session.purpose === "test" ? { ...user, role: "player", flags: [] } : user;
+      const user = await authenticatedUser(req, config, store);
+      if (!user) return res.status(401).json({ error: "Bitte anmelden." });
+      res.locals.user = user;
       next();
     } catch (error) { next(error); }
   });

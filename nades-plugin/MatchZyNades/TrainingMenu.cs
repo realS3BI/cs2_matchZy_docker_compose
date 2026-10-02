@@ -21,6 +21,7 @@ public static class TrainingMenu
                 new("Lineup laden & trainieren", "Teleportiert dich zum Abwurfpunkt, stellt die Blickrichtung ein und rüstet die passende Granate aus. Danach selbst werfen.", Request: new(TrainingAction.LoadLineup, n)),
                 new(settings.IsFavorite(n) ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen", "Speichert diese Granate in deiner persönlichen Favoritenliste für diese Map.", Request: new(TrainingAction.ToggleFavorite, n))
             };
+            if (canWriteNades && !n.Official) items.Add(new("Medien-Review", "Vier Fotos und ein Video aufnehmen, anschließend prüfen und freigeben. Verbinde vorher das Spielbild auf der Lineup-Seite im Browser.", Page: ReviewMenu.Create(n)));
             if (own)
             {
                 items.Add(new("Name bearbeiten", "Wähle diesen Eintrag und schreibe den neuen Namen in den Chat. Mit abbrechen beenden. Der interne Name bleibt erhalten.", Request: new(TrainingAction.EditName, n)));
@@ -82,6 +83,8 @@ public static class TrainingMenu
                     Filter(kind, "Must Know", n => n.MustKnow, "must-know", "Vom Admin ausgewählte Grundlagen, die du auf dieser Map beherrschen solltest."),
                     Filter(kind, "Alle", _ => true, "all", "Alle für dich verfügbaren Granaten: alle Spieleraufnahmen und offizielle Lineups.")
                 ], Key: $"category:{kind}"))).ToArray();
+        if (canWriteNades) categories = [..categories, new("Medien-Reviews", "Aufnahmen dieser Map dokumentieren und prüfen. Eingereichte Reviews stehen zuerst.",
+            Page: Lineups("Medien-Reviews", library.Where(n => !n.Official).OrderByDescending(n => n.ReviewStatus == "pending"), "reviews"))];
         var favoriteEntries = library.Where(settings.IsFavorite).ToArray();
         var mustKnow = library.Where(n => n.MustKnow).ToArray();
         var spawnMenu = new MenuPage("Competitive-Spawns", "CT- oder T-Seite wählen. Teleportiert dich, ohne dein Team zu ändern.",

@@ -320,8 +320,8 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
           <CardContent className="grid gap-5">
             <div className="grid gap-1">
               <p className="text-xs text-muted-foreground">Next maintenance</p>
-              <p className="text-2xl font-semibold tracking-tight">{maintenance?.enabled ? maintenance.time : "Disabled"}</p>
-              <p className="text-xs text-muted-foreground">{maintenance?.timezone || settings.restartTimezone}</p>
+              <p className="text-2xl font-semibold tracking-tight">{maintenance?.enabled ? "Alle 2 Stunden" : "Deaktiviert"}</p>
+              <p className="text-xs text-muted-foreground">Bei Spielern: neuer Versuch in 1 Stunde</p>
             </div>
             <Separator />
             <div className="grid gap-1">
@@ -510,25 +510,22 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
   const [restartOpen, setRestartOpen] = useState(false);
   return (
     <>
-      <PageHeader eyebrow="Uptime policy" title="Maintenance" description="Schedule a daily process restart without redeploying the Coolify resource." />
+      <PageHeader eyebrow="Serverbetrieb" title="Wartung" description="Automatischer Neustart alle zwei Stunden, sobald keine Spieler verbunden sind." />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>
-          <CardHeader><CardTitle>Daily server recycle</CardTitle><CardDescription>The panel claims one restart slot in MongoDB, so duplicate panel instances cannot restart the server twice.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Automatischer Serverneustart</CardTitle><CardDescription>Nach einem automatischen Neustart wartet das Panel zwei Stunden. Sind noch Spieler verbunden, versucht es den Neustart eine Stunde später erneut.</CardDescription></CardHeader>
           <CardContent className="grid gap-5">
-            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatic restart</FieldLabel><FieldDescription className="mt-1 block">Disconnects active players at the chosen local time.</FieldDescription></span><Switch aria-label="Automatic restart" checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, automaticRestartEnabled: next }))} /></Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field><FieldLabel>Local time</FieldLabel><Input type="time" value={settings.restartTime || "05:00"} disabled={!enabled} onChange={(event) => setSettings((current) => ({ ...current, restartTime: event.target.value }))} /></Field>
-              <Field><FieldLabel>IANA timezone</FieldLabel><Input value={settings.restartTimezone || "Europe/Vienna"} disabled={!enabled} onChange={(event) => setSettings((current) => ({ ...current, restartTimezone: event.target.value }))} /><FieldDescription>Example: Europe/Vienna; daylight-saving changes are handled automatically.</FieldDescription></Field>
-            </div>
-            <Alert variant="warning"><AlertTitle>Operational mitigation</AlertTitle><AlertDescription>This restart limits problems that accumulate over uptime. It does not claim a confirmed engine tick-counter overflow.</AlertDescription></Alert>
+            <Field className="flex grid-cols-[1fr_auto] items-center rounded-lg border border-border bg-muted/30 p-4"><span><FieldLabel>Automatischer Neustart</FieldLabel><FieldDescription className="mt-1 block">Nur bei leerem Server. Bots zählen nicht als Spieler.</FieldDescription></span><Switch aria-label="Automatischer Neustart" checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, automaticRestartEnabled: next }))} /></Field>
+            <Alert><AlertTitle>Spielerprüfung vor jedem Neustart</AlertTitle><AlertDescription>Kann die Spielerzahl nicht geprüft werden, wartet das Panel ebenfalls eine Stunde. Der nächste Versuch bleibt auch nach einem Panel-Neustart gespeichert.</AlertDescription></Alert>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Schedule state</CardTitle><CardDescription>Reported by the running scheduler.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Zeitplan</CardTitle><CardDescription>Aktueller Stand des automatischen Neustarts.</CardDescription></CardHeader>
           <CardContent className="grid gap-4 text-sm">
-            <div className="rounded-lg border border-border bg-muted/30 p-4"><span className="text-muted-foreground">Next run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.nextRunAt)}</p></div>
-            <div className="rounded-lg border border-border bg-muted/30 p-4"><span className="text-muted-foreground">Last run</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.lastRun?.lastRunAt)}</p></div>
-            <Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button>
+            <div className="rounded-lg border border-border bg-muted/30 p-4"><span className="text-muted-foreground">Nächster Versuch</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.nextRunAt)}</p></div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4"><span className="text-muted-foreground">Letzter Versuch</span><p className="mt-1 font-semibold">{formatDate(status?.maintenance?.lastRun?.lastRunAt)}</p></div>
+            {status?.maintenance?.lastRun?.lastMessage && <p className="text-muted-foreground">{status.maintenance.lastRun.lastMessage}</p>}
+            <Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Jetzt neu starten</Button>
           </CardContent>
         </Card>
       </div>

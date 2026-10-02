@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { applyWebNadeAction } from "../src/nade-review.js";
 import { createApp } from "../src/app.js";
 import { lineupPermissions } from "../shared/lineup-policy.js";
+import { reviewMediaFixture } from "./review-fixtures.js";
 
 const owner = "76561198000000001";
 const player = { identitySteam64: owner, role: "player" };
@@ -107,7 +108,7 @@ test("platform admins can delete all recordings while other roles retain owner r
 });
 
 test("review transitions separate owner submission from admin approval and Must Know", () => {
-  const [submitted] = applyWebNadeAction([entry], request, { ...player, role: "match_admin" });
+  const [submitted] = applyWebNadeAction([{ ...entry, reviewMedia: reviewMediaFixture }], request, { ...player, role: "match_admin" });
   assert.equal(submitted.reviewStatus, "pending");
   const [rejected] = applyWebNadeAction([submitted], { ...request, revision: submitted.updatedAt, action: "reject" }, admin);
   assert.equal(rejected.reviewStatus, "rejected");
@@ -125,7 +126,7 @@ test("review transitions separate owner submission from admin approval and Must 
 
 test("authenticated endpoint enforces owner and role from the session, and serializes revisions", async t => {
   let user = player;
-  let entries = [entry];
+  let entries = [{ ...entry, reviewMedia: reviewMediaFixture }];
   const app = createApp({ config: { sessionSecret: "test-secret" }, compose: {}, nadesSync: null, store: {
     getSession: async () => ({ purpose: "user", steamId: user.identitySteam64 }),
     getUser: async () => user,

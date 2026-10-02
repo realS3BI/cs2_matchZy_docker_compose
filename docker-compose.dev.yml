@@ -23,6 +23,7 @@ services:
       ADMIN_PANEL_ADMIN_STEAM_ID: ${ADMIN_PANEL_ADMIN_STEAM_ID:-}
       ADMIN_PANEL_TEST_USERNAME: ${ADMIN_PANEL_TEST_USERNAME:-test}
       ADMIN_PANEL_TEST_PASSWORD: ${ADMIN_PANEL_TEST_PASSWORD:-}
+      UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:-}
     volumes:
       - runtime:/runtime
       - uploads:/uploads

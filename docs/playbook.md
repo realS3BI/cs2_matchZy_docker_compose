@@ -24,6 +24,8 @@ Der Nades-Modus startet direkt eine 60-Minuten-Trainingsrunde. Automatisches Onl
 
 Beide Teams spawnen mit SSG 08, ihrer Standardpistole, Messer und allen fünf Granatentypen. CT erhalten eine Brandgranate, T einen Molotov. Ohne God Mode bleibt normaler Schaden messbar. CS2s `buddha 1` mit `buddha_reset_hp 100` verhindert den Tod und setzt Spieler beim tödlichen Treffer sofort auf 100 HP zurück. Das entspricht [MatchZys Practice-Konfiguration](https://github.com/shobhit-pathak/MatchZy/blob/main/PracticeMode.cs). God Mode verhindert Schaden vollständig. Bots bleiben durch `buddha_ignore_bots 1` verwundbar und respawnen an ihrer gespeicherten Position.
 
+Spieler können im Nades-Modus durch Teamkollegen und Gegner hindurchlaufen. `mp_solid_teammates 2` erlaubt weiterhin, auf den Köpfen von Teamkollegen zu stehen und sich zu boosten. Für Gegner gilt `mp_solid_enemies 0`; Boosts über Teamgrenzen hinweg sind damit nicht möglich. Beim Entladen des Plugins werden die vorherigen Einstellungen wiederhergestellt.
+
 Chatbefehle funktionieren mit `.`, `!` und `/`. Die entsprechende Konsole verwendet `css_`, beispielsweise `.loadnade smoke` und `css_loadnade smoke`.
 
 | Befehl | Funktion |
@@ -69,5 +71,35 @@ Automatische Tests prüfen Modus- und Rollenregeln, Menüumfang, Bootstrap-Entfe
 8. Einen leeren Nades-Server starten, erstmals beitreten und anschließend die Map wechseln. Ohne zweiminütiges Warmup oder Freezezeit mit SSG 08, Standardpistole und allen Granaten spawnen. Ein zweiter Join darf die laufende Runde nicht neu starten.
 9. Ohne God Mode HE, Molotov, Fallschaden und einen tödlichen Schuss prüfen. HP sinken bei gewöhnlichen Treffern und springen beim tödlichen Treffer auf 100, ohne Tod oder Teleport. Granatenschaden im Chat bleibt messbar. God Mode blockiert Schaden weiterhin vollständig.
 10. Über das HUD und `.bot`, `.cbot`, `.crouchbot` stehende und duckende Ziele platzieren. Danach wegbewegen, Flash- und HE-Schaden prüfen, Bots töten und Respawn an gleicher Position mit gleichem Duckzustand prüfen. `.nobots`, volle Teams, Disconnect während der Platzierung und Mapwechsel dürfen keine verspäteten Platzierungen verursachen.
+11. Mit zwei Spielern im selben Team durcheinanderlaufen und einen stehenden sowie duckenden Boost prüfen. Danach einen Spieler ins gegnerische Team wechseln und weiterhin durcheinanderlaufen. Nach Mapwechsel müssen beide Einstellungen erhalten bleiben.
 
 Quellen für die Abgrenzung: [MatchZy-Funktionen](https://shobhit-pathak.github.io/MatchZy/), [MatchZy-Befehle](https://shobhit-pathak.github.io/MatchZy/commands/), [CounterStrikeSharp-Spieler-API](https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.CCSPlayerPawn.html).
+
+## Medien-Review mit UploadThing
+
+Der Review ist ein Modul des bestehenden Playbook-Plugins. Es verwendet dessen Lineup-IDs, Rollen, Trainingszustand und kompaktes Panel mit neun Listenplätzen. Ein zweites Plugin ist dafür nicht nötig. Der dedizierte CS2-Server rendert kein Spielbild: Die Fotos und Videos entstehen im freigegebenen CS2-Fenster auf deinem Windows-Rechner. Der Server sendet Aufnahmebefehle an die offene Review-Seite.
+
+### Einrichten
+
+1. In [UploadThing](https://uploadthing.com/dashboard) eine App anlegen und deren `UPLOADTHING_TOKEN` in der `.env` des Deployments hinterlegen. Der Token bleibt ausschließlich im Webpanel-Backend; er gehört weder in den Browser noch ins CS2-Plugin.
+2. Webpanel und CS2-Image neu bauen und starten. `ADMIN_PANEL_PUBLIC_URL` muss auf die öffentlich erreichbare HTTPS-Adresse des Panels zeigen. UploadThing muss `/api/uploadthing` für signierte Upload-Bestätigungen erreichen können. Ein vorgeschalteter Login-Proxy darf diese Bestätigungen nicht blockieren; die SDK-Signaturprüfung schützt den Callback.
+3. Die Detailseite eines noch nicht offiziellen Lineups öffnen. Ist UploadThing eingerichtet, sind Datei-Uploads und „Spielbild verbinden“ verfügbar. Ohne Token zeigt die Seite den fehlenden Einrichtungsschritt an.
+
+Die Dateien liegen bei UploadThing, die Zuordnung zum Lineup in MongoDB. Die Medien verwenden öffentliche Datei-URLs und sind für Leser der Lineup-Anleitung sichtbar. Hochladen dürfen der Ersteller seiner noch nicht offiziellen Aufnahme sowie Plattform-Admins. Änderungen am Lineup werden während eines Uploads über die Versionsprüfung erkannt. Die Freigabe ist erst mit allen fünf Medien möglich; eine Review-Anfrage darf schon vorher gestellt werden, damit ein Admin die Aufnahmen ergänzen kann.
+
+### Aufnahme auf Windows
+
+1. Chrome oder Edge öffnen, mit demselben Steam-Konto wie im Spiel anmelden und die Lineup-Detailseite öffnen. Als Plattform-Admin „Spielbild verbinden“ wählen und das CS2-Fenster freigeben. CS2 im randlosen Fenstermodus verwenden und die Browserseite während des Reviews offen lassen. Bei schwarzer Vorschau die Bildschirmfreigabe erneut einrichten; bei Freigabe des ganzen Bildschirms werden auch andere sichtbare Fenster aufgenommen.
+2. Im Trainingspanel das Lineup öffnen und „Medien-Review“ wählen. Unter der Bibliothek gibt es für Plattform-Admins zusätzlich „Medien-Reviews“. Die Sitzung gehört genau zu diesem Lineup und diesem Steam-Konto; nur eine Browserseite kann sie gleichzeitig steuern.
+3. **Ausrichtung:** Lineup laden und das Fadenkreuz auf den gespeicherten Orientierungspunkt richten. „Foto aufnehmen & hochladen“ blendet das Panel aus und löst nach mindestens drei Sekunden aus. Den Bildausschnitt ruhig halten, bis die Bestätigung im Chat erscheint.
+4. **Standposition:** Den Boden und die Kanten zeigen, an denen der Spieler steht. Den Bildausschnitt selbst einstellen und das nächste Foto auslösen.
+5. **Vorderansicht:** Die Aufnahme-Hilfe zeigt Konsolenbefehle für Third Person (`thirdperson; cam_idealyaw 180; cam_idealdist 120`). Diese lokal im Training ausführen und die Vorschau prüfen. Die Befehle hängen von den verfügbaren Client-Cvars und Trainingsrechten ab und werden nicht vom Server erzwungen. Anschließend mit `firstperson; cam_idealyaw 0` zurückwechseln.
+6. **Wirkung:** Die Granate werfen, mit Noclip zum Ziel fliegen und die entfaltete Smoke bzw. Granatenwirkung aufnehmen.
+7. **Video:** „Video starten“ wählen und die Chat-Bestätigung abwarten. Zum Startpunkt laufen, ausrichten, werfen, mit Noclip zum Ziel fliegen und die Wirkung zeigen. Danach im Panel „Video stoppen & hochladen“ wählen. Alternativ im Browser stoppen. Die Browseraufnahme hat keinen Ton und endet spätestens nach zwei Minuten. Die Freigabe erst nach dem Upload beenden; wird das Teilen oder die Seite vorher geschlossen, wird die laufende Aufnahme verworfen.
+8. **Prüfung:** Alle vier Fotos und das Video auf der Website ansehen. Anschließend dort oder über die Bestätigung im Ingame-Panel offiziell freigeben. Rolle, Lineup-Version und Vollständigkeit werden im Backend erneut geprüft. „Must Know“ bleibt Plattform-Admins vorbehalten.
+
+Die fünf Medienslots lassen sich auch einzeln per Dateiauswahl oder Drag-and-drop füllen: JPEG/PNG/WebP bis 8 MB pro Foto, MP4/WebM bis 128 MB pro Video. Bei einem fehlgeschlagenen Upload bleibt die Aufnahme auf der geöffneten Seite für einen erneuten Versuch erhalten. Ein bereits offizielles Lineup benötigt vor Änderungen am Review eine zurückgenommene Freigabe.
+
+Der Ablauf führt durch die Aufnahmen und automatisiert deren Auslösung, Upload und Zuordnung. Das Einstellen der Kamera, der Laufweg, der Wurf und der Noclip-Flug bleiben im Spiel beim Reviewer. Eine vollständig autonome Kamerafahrt ist hier nicht implementiert. Browser können Hintergrundseiten verzögert ausführen; deshalb immer die Aufnahmebestätigung abwarten.
+
+Technische Grundlage: [UploadThing-Express-Adapter](https://docs.uploadthing.com/backend-adapters/express), [Browser-Bildschirmfreigabe](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia), [MediaRecorder](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder).

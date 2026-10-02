@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- Browser regression fixture. Start pnpm dev:client, open this file through
+     http://localhost:5173/test/radar-browser.html, then call checkSingle() or checkSelection() in a fresh page.
+     Both checks exercise the actual NadeLibrary and RadarBrowser components.
+     The favorites endpoint is stubbed; no Steam login or backend is required. -->
+<html lang="de"><head><meta charset="UTF-8"><title>Radarinteraktion prüfen</title></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { NadeLibrary } from '/src/components/nade-library.tsx';
+import { NadeFavoritesProvider } from '/src/components/nade-favorites.tsx';
+import { ACTIVE_DUTY_MAPS } from '/src/lib/maps.ts';
+import '/src/index.css';
+window.fetch = async () => new Response(JSON.stringify({entries: []}), {headers:{'Content-Type':'application/json'}});
+const map = ACTIVE_DUTY_MAPS.find(m => m.key === 'anubis');
+const nade = (name, from, to) => ({ owner:'test',map:'de_anubis',name,displayName:name,type:'Smoke',radarFrom:from,radarTo:to,throwFromTitle:from.x===.2?'Start A':'Start B',throwToTitle:to.x===.7?'Ziel A':'Ziel B' });
+const nades = [nade('Einzeln',{x:.5,y:.8},{x:.7,y:.6}),nade('Variante 1',{x:.2,y:.3},{x:.7,y:.6}),nade('Variante 2',{x:.2,y:.3},{x:.7,y:.6}),nade('Anderes Ziel',{x:.2,y:.3},{x:.1,y:.9})];
+function Location(){ const loc=useLocation();window.currentPath=loc.pathname+loc.search;return null; }
+createRoot(document.getElementById('root')).render(React.createElement(MemoryRouter,{initialEntries:['/maps/anubis']},React.createElement(NadeFavoritesProvider,null,React.createElement(Location),React.createElement(Routes,null,React.createElement(Route,{path:'/maps/:mapSlug',element:React.createElement(NadeLibrary,{nades,maps:[map],user:{role:'player'}})}),React.createElement(Route,{path:'/maps/:mapSlug/lineups/:id',element:React.createElement('p',null,'Detailseite')})))));
+window.checkSingle = async () => {const click = prefix => { const b=[...document.querySelectorAll('.radar-spot')].find(b=>b.getAttribute('aria-label').startsWith(prefix));if(!b)throw Error('Fehlender Marker '+prefix);b.click();};const tick=()=>new Promise(r=>setTimeout(r,100));click('Ziel: Ziel A');await tick();click('Start: Start B');await tick();if(!/^\/maps\/anubis\/lineups\/[^?]+$/.test(window.currentPath))throw Error('Keine direkte Detailseite: '+window.currentPath);return 'PASS: Gegenposition öffnet saubere Detail-URL';};
+window.checkSelection = async () => {
+ const tick=()=>new Promise(r=>setTimeout(r,120));
+ const click=prefix=>{const el=[...document.querySelectorAll('.radar-spot')].find(b=>b.getAttribute('aria-label').startsWith(prefix));if(!el)throw Error('Fehlender Marker '+prefix);el.click();};
+ const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
+ assert(!document.querySelector('.map-explorer-toolbar, .map-explorer-legend'),'Überflüssige Kartenbeschriftung');
+ click('Ziel: Ziel A');await tick();click('Start: Start A');await tick();
+ assert(document.querySelector('[role="dialog"]'),'Popup fehlt');
+ assert(document.querySelector('[role="dialog"]').textContent.includes('Variante 1')&&document.querySelector('[role="dialog"]').textContent.includes('Variante 2'),'Varianten fehlen');
+ assert(document.querySelectorAll('[role="dialog"] a').length===2,'Popup enthält anderes Start/Ziel');
+ assert([...document.querySelectorAll('[role="dialog"] a')].every(a=>!a.getAttribute('href').includes('?')),'Popup-Link enthält Query');
+ document.querySelector('[role="dialog"] button').click();await tick();
+ document.querySelector('.radar-browser-image').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await tick();
+ assert(document.querySelectorAll('.radar-spot').length===2&&!window.currentPath.includes('spot='),'Kartenklick setzt Auswahl nicht zurück');
+ click('Ziel: Ziel A');await tick();document.querySelector('h1').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await tick();
+ assert(!window.currentPath.includes('spot='),'Klick außerhalb setzt Auswahl nicht zurück');
+ document.querySelector('[aria-label="Positionen zuerst anzeigen"] button:nth-child(2)').click();await tick();
+ click('Start: Start A');await tick();click('Ziel: Ziel A');await tick();assert(document.querySelectorAll('[role="dialog"] a').length===2,'Starts-Popup fehlt');
+ document.querySelector('[role="dialog"] button').click();await tick();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await tick();assert(!window.currentPath.includes('spot='),'Escape setzt Auswahl nicht zurück');
+ click('Start: Start A');await tick();click('Ziel: Ziel B');await tick();assert(/^\/maps\/anubis\/lineups\/[^?]+$/.test(window.currentPath),'Starts öffnet keine saubere Detailseite');
+ return 'PASS: Popup in beiden Richtungen, saubere Links, Klick innerhalb/außerhalb, Escape und Starts → Ziel → Detail';
+};
+</script></body></html>

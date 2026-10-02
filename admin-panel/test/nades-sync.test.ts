@@ -1,3 +1,4 @@
+import { reviewMediaFixture } from "./review-fixtures.js";
 import { assignNadeIds } from "../src/nade-ids.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -521,4 +522,30 @@ test("team assignments survive game sync, captures and web revisions", async t =
   assert.equal(store.entries[0].team, "both");
   const merged = mergeNadeCaptures(store.entries, [{ ...store.entries[0], captureId: "new-capture", landingPos: "10 20 30", capturedAt: new Date().toISOString() }]);
   assert.equal(merged[0].team, "both");
+});
+
+
+test("review media survive game rewrites and only current platform admins approve via the game queue", async t => {
+  const actor = "76561198000000002";
+  const [entry] = sanitizeNades([sampleEntry({ owner: "76561198000000001", reviewMedia: reviewMediaFixture })]);
+  const { service, store } = await createHarness(t, [entry]);
+  let role = "match_admin";
+  Object.assign(store, { getUser: async steamId => steamId === actor ? { identitySteam64: actor, role } : null });
+  await service.writeFromMongo([entry]);
+  await writeJson(service.liveFile, sampleConfig({ owner: entry.owner, desc: "Im Spiel aktualisiert" }));
+  await service.poll();
+  assert.deepEqual(store.entries[0].reviewMedia, reviewMediaFixture);
+  const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
+  assert.deepEqual(metadata[0].reviewMediaSlots.sort(), Object.keys(reviewMediaFixture).sort());
+  assert.equal(metadata[0].reviewMedia, undefined);
+  const directory = join(dirname(service.liveFile), "savednades.requests");
+  const request = { id: "f".repeat(32), actor, owner: entry.owner, map: entry.map, name: entry.name, revision: store.entries[0].updatedAt, action: "approve" };
+  await writeJson(join(directory, request.id + ".json"), request);
+  await service.poll();
+  assert.notEqual(store.entries[0].official, true);
+  role = "admin";
+  await writeJson(join(directory, "a".repeat(32) + ".json"), { ...request, id: "a".repeat(32) });
+  await service.poll();
+  assert.equal(store.entries[0].official, true);
+  assert.deepEqual(store.entries[0].reviewMedia, reviewMediaFixture);
 });

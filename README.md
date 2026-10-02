@@ -227,7 +227,7 @@ Die Radarpositionen werden normiert zwischen `0` und `1` gespeichert. Dadurch bl
 
 ## Wartung und Diagnose
 
-Der geplante Neustart ist standardmaessig taeglich um `05:00` in `Europe/Vienna` aktiv und kann im Dashboard geaendert oder deaktiviert werden. MongoDB stellt sicher, dass mehrere Panel-Instanzen denselben Tages-Slot nicht doppelt ausfuehren.
+Der automatische Neustart ist standardmäßig alle zwei Stunden aktiv und kann unter „Wartung“ deaktiviert werden. Der erste Versuch erfolgt zwei Stunden nach Aktivierung des neuen Schedulers. Vor jedem Versuch prüft das Panel per RCON die verbundenen Spieler. Sind noch Spieler verbunden, wird der Neustart übersprungen und eine Stunde später erneut geprüft. Bots verhindern den Neustart nicht. Bei fehlgeschlagener oder nicht auswertbarer Spielerprüfung sowie einem fehlgeschlagenen Neustart wartet das Panel ebenfalls eine Stunde. Nach einem erfolgreichen Neustart beginnt der Zwei-Stunden-Takt erneut. MongoDB speichert den nächsten Versuch auch über Panel-Neustarts hinweg und verhindert doppelte Ausführungen durch mehrere Panel-Instanzen. Die bisherigen Einstellungen `restartTime` und `restartTimezone` werden für diesen Takt nicht mehr verwendet.
 
 Diagnostics prueft:
 

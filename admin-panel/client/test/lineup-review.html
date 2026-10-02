@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- Development fixture: actual review components, mocked API, real canvas/MediaRecorder capture. -->
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medien-Review prüfen</title></head><body><main id="root" style="max-width:1200px;margin:40px auto;padding:0 20px"></main><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {LineupReview} from '/src/components/lineup-review.tsx';
+import {ReviewRecorder} from '/src/lib/review-recorder.ts';
+import '/src/index.css';
+window.fetch=async()=>new Response(JSON.stringify({uploadEnabled:true}),{headers:{'Content-Type':'application/json'}});
+const nade={owner:'76561198000000001',map:'de_anubis',name:'window',displayName:'Fenster-Smoke',type:'Smoke',updatedAt:'2026-10-02T08:00:00.000Z',reviewStatus:'pending',throwFromTitle:'T-Spawn',throwToTitle:'Fenster'};
+createRoot(document.getElementById('root')).render(React.createElement(LineupReview,{nade,user:{identitySteam64:'76561198000000002',role:'admin'},disabled:false,mutate:async()=>{},onEntriesChange:()=>{}}));
+window.checkReview=async()=>{
+ const tick=()=>new Promise(r=>setTimeout(r,80));
+ const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
+ const steps=[...document.querySelectorAll('.review-step')];
+ assert(steps.length===6,'Sechs Schritte fehlen');
+ for(let i=0;i<steps.length;i++){steps[i].click();await tick();assert(document.querySelector('[aria-current="step"]')===steps[i],'Schrittnavigation fehlt');}
+ assert(document.querySelectorAll('.review-checklist button').length===5,'Checkliste fehlt');
+ assert([...document.querySelectorAll('button')].find(b=>b.textContent==='Offiziell freigeben').disabled,'Unvollständiger Review freigebbar');
+ assert(document.documentElement.scrollWidth<=innerWidth,'Seite läuft horizontal über');
+ steps[0].click();await tick();return 'PASS: sechs Schritte, Checkliste, Freigabesicherung, kein horizontaler Seitenüberlauf';
+};
+window.checkRecorder=async()=>{
+ const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;
+ const ctx=canvas.getContext('2d');let frame=0;
+ const paint=setInterval(()=>{ctx.fillStyle=frame++%2?'#4b8977':'#786248';ctx.fillRect(0,0,640,360);},30);
+ const recorder=new ReviewRecorder(canvas.captureStream(30));
+ try{await recorder.video.play();await new Promise(r=>setTimeout(r,100));const photo=await recorder.photo('aim');if(photo.type!=='image/jpeg'||!photo.size)throw Error('Foto leer');
+ const result=recorder.startVideo(()=>{});await new Promise(r=>setTimeout(r,1300));recorder.stopVideo();const video=await result;if(video.type!=='video/webm'||!video.size)throw Error('Video leer');return {photo:photo.size,video:video.size,result:'PASS: echte JPEG- und WebM-Aufnahme'};
+ }finally{recorder.dispose();clearInterval(paint);}
+};
+</script></body></html>

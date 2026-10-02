@@ -59,6 +59,15 @@ export function executeRcon({ host, port = 27015, password, command, timeoutMs =
   });
 }
 
+export function humanPlayersFromStatus(output: string): number | null {
+  const legacy = output.match(/^\s*(?:\[[^\]]+\]\s*)?players\s*:\s*(\d+)\s+humans\s*,\s*\d+\s+bots\b/im);
+  if (legacy) return Number(legacy[1]);
+  const current = output.match(/^\s*(?:\[[^\]]+\]\s*)?players\s*:\s*(\d+)\s*\((\d+)\s+bots?\)/im);
+  if (!current) return null;
+  const humans = Number(current[1]) - Number(current[2]);
+  return humans >= 0 ? humans : null;
+}
+
 export function currentMapFromStatus(output: string) {
   return output.match(/^\s*map\s*:\s*([a-z0-9_\/-]+)/im)?.[1]
     || output.match(/\bmap\s*:\s*"([a-z0-9_\/-]+)"/i)?.[1]

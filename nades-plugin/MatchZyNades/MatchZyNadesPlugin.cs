@@ -285,7 +285,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         if (!CanControl(player) || !TrainingEnabled || !Alive(player)) return;
         if (!CanWriteNades(player) && request.Action is TrainingAction.StartCapture or TrainingAction.SaveCapture or TrainingAction.EditName or TrainingAction.EditDescription or TrainingAction.DeleteLineup or TrainingAction.RequestReview)
         { Tell(player, "Nades sind für deine Rolle schreibgeschützt."); return; }
-        if (HandleLineupAction(player, request) || HandleMapAction(player, request)) return;
+        if (HandleReviewAction(player, request) || HandleLineupAction(player, request) || HandleMapAction(player, request)) return;
         if (request.Action == TrainingAction.Close)
         { if (_menus.TryGetValue(player.Slot, out var panel)) Hide(panel); return; }
         if (request.Action == TrainingAction.ToggleFavorite) { ToggleFavorite(player, request.Lineup); return; }

@@ -166,10 +166,18 @@ export class Store {
   async consumeSession(id, purpose) { return this.sessions.findOneAndDelete({ _id: id, purpose, expiresAt: { $gt: new Date() } }); }
   async deleteSession(id) { await this.sessions.deleteOne({ _id: id }); }
 
-  async claimScheduledRestart(slot) {
+  async ensureScheduledRestart(nextRunAt) {
+    await this.maintenance.updateOne(
+      { _id: "scheduled-restart", nextRunAt: { $exists: false } },
+      { $set: { nextRunAt } }
+    );
+    return this.getMaintenanceState();
+  }
+
+  async claimScheduledRestart(slot, now = new Date()) {
     const result = await this.maintenance.findOneAndUpdate(
-      { _id: "scheduled-restart", lastClaimedSlot: { $ne: slot } },
-      { $set: { lastClaimedSlot: slot, claimedAt: new Date(), state: "running" } },
+      { _id: "scheduled-restart", nextRunAt: slot, lastClaimedSlot: { $ne: slot } },
+      { $set: { lastClaimedSlot: slot, claimedAt: now, state: "running", nextRunAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString() } },
       { returnDocument: "after" }
     );
     return Boolean(result);
@@ -178,7 +186,7 @@ export class Store {
   async completeScheduledRestart(slot, result) {
     await this.maintenance.updateOne(
       { _id: "scheduled-restart", lastClaimedSlot: slot },
-      { $set: { state: result.ok ? "success" : "failed", lastRunAt: new Date(), lastMessage: String(result.message || "") } }
+      { $set: { state: result.state || (result.ok ? "success" : "failed"), nextRunAt: result.nextRunAt, lastRunAt: new Date(), lastMessage: String(result.message || "") } }
     );
   }
 

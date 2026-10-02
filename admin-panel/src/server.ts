@@ -34,7 +34,7 @@ await writeServerRuntimeFiles(
 );
 
 const compose = new Compose(config);
-const restartScheduler = new RestartScheduler({ store, compose });
+const restartScheduler = new RestartScheduler({ store, compose, config });
 restartScheduler.start();
 
 const app = createApp({

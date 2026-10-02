@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Copy, RefreshCw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -13,6 +13,7 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { TeamIcon, GrenadeIcon } from "./nade-icons";
 import { LINEUP_TEAMS, TEAM_LABELS, isLineupTeam } from "../../../shared/lineup-teams";
+import { LineupReview } from "./lineup-review";
 import { ActionButton } from "./action-button";
 import { NadeFlightMap, NadePlacementEditor } from "./map-radar";
 import { FavoriteButton } from "./nade-favorites";
@@ -192,19 +193,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
           </dl></details>
         </div>}
         {!creating && !permissions.edit && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
-        {!creating && (permissions.submit || permissions.moderate) && <section className="lineup-review" aria-label="Review">
-          <h2 className="text-sm font-medium">Review</h2>
-          <div className="flex flex-wrap gap-2">
-            {permissions.submit && <ActionButton variant="secondary" icon={Send} disabled={busy || dirty || nade.reviewStatus === "pending"} onClick={() => mutate("submit")} pendingLabel="Reicht ein …" successLabel="Eingereicht">{nade.reviewStatus === "pending" ? "Im Review" : "Zum Review einreichen"}</ActionButton>}
-            {permissions.moderate && (nade.official ? <>
-              <ActionButton variant="secondary" disabled={busy || dirty} onClick={() => mutate("mustKnow", { value: !nade.mustKnow })} successLabel="Gespeichert">{nade.mustKnow ? "Must Know entfernen" : "Als Must Know markieren"}</ActionButton>
-              <ActionButton variant="ghost" disabled={busy || dirty} onClick={() => mutate("revoke")} successLabel="Zurückgenommen">Freigabe zurücknehmen</ActionButton>
-            </> : <>
-              <ActionButton variant="secondary" disabled={busy || dirty} onClick={() => mutate("approve")} successLabel="Freigegeben">Offiziell freigeben</ActionButton>
-              {nade.reviewStatus === "pending" && <ActionButton variant="ghost" disabled={busy || dirty} onClick={() => mutate("reject")} successLabel="Zurückgegeben">Überarbeitung anfragen</ActionButton>}
-            </>)}
-          </div>
-        </section>}
+        {!creating && <Button asChild variant="secondary"><a href="#lineup-review">{nade.official ? "Fotos und Video ansehen" : permissions.submit || permissions.moderate ? "Medien-Review öffnen" : "Aufnahmen ansehen"}</a></Button>}
         {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">
           <ActionButton variant="secondary" icon={Copy} onClick={() => navigator.clipboard.writeText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>
           <code className="break-all text-xs text-muted-foreground">.loadnade {nade.name}</code>
@@ -215,6 +204,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
         </div>}
       </aside>
     </div>
+    {!creating && <LineupReview nade={nade} user={user} disabled={busy || dirty} mutate={mutate} onEntriesChange={onEntriesChange} />}
     {nade.throwTrace && <details className="lineup-coordinates"><summary>Aufgezeichnete Tasten und Bewegung</summary><pre className="mt-4 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">{formatThrowTrace(nade.throwTrace) || "Keine lesbaren Wurfdaten vorhanden."}</pre></details>}
     {nade.lineupImages?.length > 0 && <section className="lineup-images" aria-label="Bilder zur Anleitung">{nade.lineupImages.map(image => <figure key={image.key || image.url}><img src={image.url} alt={image.name || `Ausrichtung für ${nade.displayName || nade.name}`} loading="lazy" /><figcaption>{image.name}</figcaption></figure>)}</section>}
     <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent><DialogHeader><DialogTitle>Lineup löschen?</DialogTitle><DialogDescription>„{nade.displayName || nade.name}“ wird aus der Bibliothek entfernt. Das lässt sich nicht rückgängig machen.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" disabled={busy} onClick={() => setDeleteOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" icon={Trash2} disabled={busy} onClick={() => mutate("delete")} pendingLabel="Löscht …">Endgültig löschen</ActionButton></DialogFooter></DialogContent></Dialog>

@@ -26,6 +26,7 @@ export function getConfig() {
     liveMatchZyNadesFile: "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
     liveMatchZyConfigFile: "/cs2-data/game/csgo/cfg/MatchZy/config.cfg",
     uploadDir: "/uploads",
+    uploadthingToken: process.env.UPLOADTHING_TOKEN || "",
     nadesSyncEnabled: true,
     nadesSyncIntervalMs: 2000,
     controlMode: "docker",

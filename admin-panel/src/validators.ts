@@ -1,4 +1,5 @@
 import { assignNadeIds } from "./nade-ids.js";
+import { sanitizeReviewMedia } from "./review-media.js";
 import { isLineupTeam } from "../shared/lineup-teams.js";
 import { CLICK_TYPES, THROW_FLAGS, THROW_ATTRIBUTE_FIELDS, MOVEMENT_FLAGS, movementType, movementPatch } from "../shared/throw-attributes.js";
 import { flagsForRole, SETTING_KEYS } from "./policy.js";
@@ -209,6 +210,7 @@ export function sanitizeNades(entries) {
       updatedAt: String(entry.updatedAt ?? "").trim() || new Date().toISOString()
     };
     if (isLineupTeam(entry.team)) cleanEntry.team = entry.team;
+    if (entry.reviewMedia !== undefined) cleanEntry.reviewMedia = sanitizeReviewMedia(entry.reviewMedia);
     for (const key of THROW_ATTRIBUTE_FIELDS) if (entry[key] !== undefined) cleanEntry[key] = entry[key];
     if (MOVEMENT_FLAGS.some(key => entry[key] !== undefined)) Object.assign(cleanEntry, movementPatch(movementType(entry)));
     if (entry.flightDuration !== undefined) cleanEntry.flightDuration = entry.flightDuration;

@@ -23,6 +23,7 @@ services:
       ADMIN_PANEL_SESSION_SECRET: ${ADMIN_PANEL_SESSION_SECRET:?ADMIN_PANEL_SESSION_SECRET is required}
       ADMIN_PANEL_TEST_USERNAME: ${ADMIN_PANEL_TEST_USERNAME:-test}
       ADMIN_PANEL_TEST_PASSWORD: ${ADMIN_PANEL_TEST_PASSWORD:-}
+      UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:-}
     volumes:
       - admin_panel_runtime:/runtime
       - admin_panel_uploads:/uploads

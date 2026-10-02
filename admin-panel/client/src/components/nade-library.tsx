@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Crosshair, Plus, Star, Target, X, Zap } from "lucide-react";
+import { ArrowRight, Check, Crosshair, Plus, Star, Target, Zap } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia } from "./ui/empty";
@@ -42,6 +43,7 @@ export function NadeLibrary({ nades, maps, user }) {
   const { mapSlug: slug } = useParams();
   const [search, setSearch] = useSearchParams();
   const favorites = useNadeFavorites();
+  const [expandedId, setExpandedId] = useState<string>();
   const map = maps.find(map => mapSlug(map) === slug);
   const query = search.get("q") || "";
   const kind = kinds.some(kind => kind.value === search.get("type")) ? search.get("type") : "all";
@@ -57,6 +59,7 @@ export function NadeLibrary({ nades, maps, user }) {
     `${nade.displayName || nade.name} ${nade.desc || ""} ${nade.throwFromTitle || ""} ${nade.throwToTitle || ""}`.toLowerCase().includes(query.trim().toLowerCase())
   );
   function filter(key, value) {
+    setExpandedId(undefined);
     setSearch(current => {
       const next = new URLSearchParams(current);
       if (!value || value === "all") next.delete(key); else next.set(key, value);
@@ -70,27 +73,22 @@ export function NadeLibrary({ nades, maps, user }) {
   const groups = groupRadarNades(filtered, side, map, calibration);
   const selected = findRadarGroup(groups, search.get("spot"));
   const counterparts = selected ? groupRadarNades(selected.nades, side === "from" ? "to" : "from", map, calibration) : [];
-  const expanded = findRadarGroup(counterparts, search.get("via"));
+  const expanded = findRadarGroup(counterparts, expandedId);
   const visible = expanded?.nades || selected?.nades || filtered;
-  const href = nade => `${lineupPath(map, nade)}${search.size ? `?${search}` : ""}`;
-  function selectSpot(id?: string, secondary = false) {
+  const href = nade => lineupPath(map, nade);
+  function selectSpot(id?: string) {
+    setExpandedId(undefined);
     setSearch(current => {
       const next = new URLSearchParams(current);
-      const key = secondary ? "via" : "spot";
-      if (id && next.get(key) !== id) next.set(key, id); else next.delete(key);
-      if (!secondary) next.delete("via");
+      if (id && next.get("spot") !== id) next.set("spot", id); else next.delete("spot");
+      next.delete("via");
       return next;
     });
   }
   return <div className="playbook-page map-explorer-page">
     <div className="map-explorer-layout">
       <section className="map-explorer-stage" aria-label="Positionen auf der Karte">
-        <div className="map-explorer-toolbar">
-          <span>{selected ? `${selected.title} · ${selected.nades.length} Lineups` : `${groups.length} ${side === "from" ? "Startpositionen" : "Landepositionen"}`}</span>
-          {selected && <Button variant="ghost" size="sm" onClick={() => selectSpot()}><X data-icon="inline-start" />Auswahl aufheben</Button>}
-        </div>
-        <RadarBrowser map={map} side={side} groups={groups} selected={selected} counterparts={counterparts} expanded={expanded} onSelect={group => selectSpot(group.id)} onExpand={group => selectSpot(group.id, true)} href={href} />
-        <div className="map-explorer-legend"><span><Target />Landeposition</span><span><Crosshair />Startposition</span><span>Zahl = mehrere Lineups</span></div>
+        <RadarBrowser map={map} side={side} groups={groups} selected={selected} counterparts={counterparts} expanded={expanded} onSelect={group => selectSpot(group.id)} onExpand={group => setExpandedId(group.id)} onDismiss={() => selectSpot()} onCloseOptions={() => setExpandedId(undefined)} href={href} />
       </section>
       <aside className="map-explorer-sidebar" aria-label="Radarfilter und Lineup-Auswahl">
         <header className="map-explorer-heading"><h1>{map.name}</h1>{user?.role === "admin" && map.mapName && <Button asChild size="sm"><Link to={`${mapPath(map)}/lineups/new`}><Plus data-icon="inline-start" />Nade hinzufügen</Link></Button>}</header>

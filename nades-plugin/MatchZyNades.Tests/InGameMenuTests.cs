@@ -107,6 +107,7 @@ public sealed class InGameMenuTests
             TrainingAction.RepeatLineup, TrainingAction.CheckPosition, TrainingAction.StartCapture,
             TrainingAction.SaveCapture, TrainingAction.CancelCapture, TrainingAction.RefreshLibrary, TrainingAction.ToggleFavorite, TrainingAction.TeleportSpawn,
             TrainingAction.GiveGrenade, TrainingAction.Settings, TrainingAction.BindKey,
+            TrainingAction.ReviewPhoto, TrainingAction.ReviewVideoStart, TrainingAction.ReviewVideoStop, TrainingAction.ReviewHelp, TrainingAction.ReviewApprove, TrainingAction.ReviewReject,
             TrainingAction.ToggleGameButtons, TrainingAction.ExportBindings, TrainingAction.EditName, TrainingAction.EditDescription, TrainingAction.EditField, TrainingAction.RequestReview, TrainingAction.DeleteLineup, TrainingAction.StartMapVote, TrainingAction.VoteYes, TrainingAction.VoteNo };
         foreach (var action in Enum.GetValues<TrainingAction>().Except(local))
             Assert.Matches("^(css_[a-z]+|noclip)$", TrainingMenu.Command(action)!);

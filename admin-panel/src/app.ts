@@ -16,6 +16,8 @@ import { ADMIN_ROLES, MATCH_ADMIN_SETTINGS, settingsForRole, buildControlModel, 
 import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
 import { currentMapFromStatus, executeRcon, mapChangeCommand } from "./rcon.js";
 import { applyWebNadeAction } from "./nade-review.js";
+import { installReviewUploads } from "./uploadthing.js";
+import { installReviewCapture } from "./review-capture.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -63,6 +65,16 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
 
+  // One write queue for edits and upload callbacks, including installations without sync.
+  let lineupWrites: Promise<unknown> = Promise.resolve();
+  async function changeEntries(change) {
+    if (nadesSync) return nadesSync.changeFromPanel(change);
+    const pending = lineupWrites.then(async () => store.saveNades(change(await store.getNades())));
+    lineupWrites = pending.catch(() => {});
+    return pending;
+  }
+  installReviewUploads(app, { config, store, changeEntries });
+
   const loginLimiter = rateLimit({
     windowMs: 5 * 60 * 1000,
     limit: 10,
@@ -78,13 +90,16 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   app.use("/api", (req, res, next) => {
     const role = res.locals.user.role;
     const route = `${req.method} ${req.path}`;
-    const shared = ["GET /control", "GET /nades", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites", "POST /nades/entry"];
+    const shared = ["GET /control", "GET /nades", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites", "POST /nades/entry", "GET /nades/review/config"];
     const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
     if (role === "admin" || shared.includes(route) ||
         (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
         (role === "match_admin" && operator.includes(route))) return next();
     res.status(403).json({ error: "Für diese Aktion fehlt dir die Berechtigung." });
   });
+
+  app.get("/api/nades/review/config", (_req, res) => res.json({ uploadEnabled: !!config.uploadthingToken }));
+  installReviewCapture(app, { config, store });
 
   async function controlSettings(req, res) {
     const input: any = sanitizeSettings(req.body?.settings);
@@ -240,17 +255,10 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
 
   // Use the sync queue so web edits cannot race an ingame capture or approval.
   // The local queue also serializes requests in installations without file sync.
-  let lineupWrites: Promise<unknown> = Promise.resolve();
   app.post("/api/nades/entry", async (req, res) => {
     try {
       const change = entries => applyWebNadeAction(entries, req.body, res.locals.user);
-      let entries;
-      if (nadesSync) entries = await nadesSync.changeFromPanel(change);
-      else {
-        const pending = lineupWrites.then(async () => store.saveNades(change(await store.getNades())));
-        lineupWrites = pending.catch(() => {});
-        entries = await pending;
-      }
+      const entries = await changeEntries(change);
       res.json({ entries, ...(req.body?.action === "create" ? { entry: entries.at(-1) } : {}) });
     } catch (error) { res.status(error.status || 400).json({ error: error.message }); }
   });

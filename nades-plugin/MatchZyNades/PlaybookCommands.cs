@@ -99,6 +99,8 @@ public static class PlaybookCommands
         ["sv_cheats"] = "1", ["sv_infinite_ammo"] = "1", ["sv_grenade_trajectory_prac_pipreview"] = "1",
         ["sv_grenade_trajectory_prac_trailtime"] = "3", ["sv_showimpacts"] = "0",
         ["mp_limitteams"] = "0", ["mp_autoteambalance"] = "0", ["mp_freezetime"] = "0",
+        // Teammates can pass through each other while still supporting boosts.
+        ["mp_solid_teammates"] = "2", ["mp_solid_enemies"] = "0",
         ["mp_roundtime"] = "60", ["mp_roundtime_defuse"] = "60", ["mp_roundtime_hostage"] = "60",
         ["mp_warmup_online_enabled"] = "0", ["mp_warmup_offline_enabled"] = "0", ["mp_do_warmup_period"] = "0",
         ["mp_warmup_pausetimer"] = "0", ["mp_timelimit"] = "0", ["mp_maxrounds"] = "0",

@@ -23,7 +23,7 @@ public readonly record struct Coordinates(float X, float Y, float Z)
 public sealed record NadeLineup(string Owner, string Name, string Map, NadeKind Kind,
     string Description, Coordinates Position, Coordinates Angles, string DisplayName = "", string ThrowTrace = "", bool MustKnow = false,
     bool Official = false, string ReviewStatus = "", string Revision = "", string Team = "", string ThrowFromTitle = "",
-    string ThrowToTitle = "", string Technique = "", ThrowAttributes? Attributes = null, float? FlightDuration = null)
+    string ThrowToTitle = "", string Technique = "", ThrowAttributes? Attributes = null, float? FlightDuration = null, string[]? ReviewMediaSlots = null)
 {
     public string Title => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }
@@ -73,7 +73,9 @@ public static class NadeCatalog
                         Official = Flag(title, "official"), ReviewStatus = Field(title, "reviewStatus"), Revision = Field(title, "updatedAt"),
                         Team = Field(title, "team"), ThrowFromTitle = Field(title, "throwFromTitle"), ThrowToTitle = Field(title, "throwToTitle"),
                         Technique = Field(title, "throwTechnique"), Attributes = Attributes(title) ?? result[index].Attributes,
-                        FlightDuration = Duration(title)
+                        FlightDuration = Duration(title),
+                        ReviewMediaSlots = title.TryGetProperty("reviewMediaSlots", out var slots) && slots.ValueKind == JsonValueKind.Array
+                            ? slots.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.String && ReviewCaptureFiles.Slots.Contains(s.GetString())).Select(s => s.GetString()!).Distinct().ToArray() : []
                     };
                 }
         }

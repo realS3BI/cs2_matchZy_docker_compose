@@ -2,6 +2,7 @@ import { sanitizeNades } from "./validators.js";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
 import { THROW_FLAGS, MOVEMENT_FLAGS, MOVEMENT_TYPES, movementPatch, type MovementType } from "../shared/throw-attributes.js";
 import { randomUUID } from "node:crypto";
+import { missingReviewMedia } from "../shared/review-media.js";
 
 function reject(status: number, message: string): never {
   throw Object.assign(new Error(message), { status });
@@ -49,7 +50,10 @@ export function applyWebNadeAction(entries, request, user) {
   if (request.action === "edit") {
     patch = { ...validateWebNadePatch(request.patch), reviewStatus: "" };
   } else if (request.action === "submit") patch = { reviewStatus: "pending" };
-  else if (request.action === "approve") patch = { official: true, reviewStatus: "approved" };
+  else if (request.action === "approve") {
+    if (missingReviewMedia(entry).length) reject(400, "Vor der Freigabe bitte die vier Review-Fotos und das Video ergänzen.");
+    patch = { official: true, reviewStatus: "approved" };
+  }
   else if (request.action === "reject") {
     if (entry.official || entry.reviewStatus !== "pending") reject(400, "Nur eingereichte Aufnahmen können abgelehnt werden.");
     patch = { official: false, mustKnow: false, reviewStatus: "rejected" };
@@ -67,6 +71,13 @@ export function applyWebNadeAction(entries, request, user) {
   }
   if (["lineupPos", "lineupAng", "type"].some(key => entry[key] !== next[index][key]) && !Object.hasOwn(patch, "flightDuration")) delete next[index].flightDuration;
   return next;
+}
+
+export function applyGameReviewDecision(entries, request, user) {
+  if (!request || !/^[0-9a-f]{32}$/.test(request.id || "") || !/^[0-9]{17}$/.test(request.actor || "") ||
+      !["approve", "reject"].includes(request.action) || user?.role !== "admin" || user.identitySteam64 !== request.actor)
+    reject(403, "Nur Plattform-Admins dürfen Reviews abschließen.");
+  return applyWebNadeAction(entries, request, user);
 }
 
 function validateWebNadePatch(patch) {
