@@ -6,7 +6,7 @@ Die App enthält die vollständige Website unter `https://playbook.schlossers.at
 
 1. Den Windows-Installer `Playbook-Setup-<Version>.exe` aus den GitHub-Releases installieren. Es sind keine Administratorrechte nötig.
 2. Playbook öffnen und mit dem eigenen Steam-Konto anmelden. Die vorhandenen Berechtigungen gelten auch hier.
-3. Beim Lineup den Medien-Review öffnen. CS2 über **CS2 mit lokaler Steuerung starten** starten. Wenn CS2 schon läuft, vorher regulär beenden. Der Button verwendet Steam mit der Startoption `-vconsole`.
+3. Beim Lineup den Medien-Review öffnen. CS2 über **CS2 mit lokaler Steuerung starten** starten. Wenn CS2 schon läuft, vorher regulär beenden. Der Button ruft die installierte Steam-Anwendung mit `-applaunch 730 -console -vconsole -vconport 29000` auf und prüft bis zu einer Minute, ob CS2 die lokale Steuerung bestätigt. Eine Startabfrage in Steam gegebenenfalls bestätigen. Gespeicherte Steam-Startoptionen werden nicht verändert.
 4. Mit dem Trainingsserver verbinden. In CS2 vorzugsweise **Vollbild im Fenster** verwenden. **Spielbild verbinden** erkennt genau das CS2-Fenster; ein Bildschirm-Auswahldialog entfällt.
 5. Die vier Fotos und das Video über die Website oder als Plattform-Admin über das bestehende Ingame-Panel aufnehmen. Das Server-Plugin steuert weiterhin Position, Frontkamera, Panel und Review-Schritte. Die App übernimmt HUD, Waffe, Fadenkreuz, Fensterausschnitt und Upload über die bestehende Website.
 6. Das Video mit **F8** beenden. Dafür muss kein Bind in CS2 gespeichert werden. Nach dem Upload abschließend prüfen und einreichen bzw. als Plattform-Admin freigeben.
@@ -16,6 +16,12 @@ Bei Fotos wird ein kleines weißes, statisches CS2-Fadenkreuz mit schwarzer Kont
 Die App liest alle Einstellungen, die sie verändert, und schreibt vor der Änderung eine lokale Wiederherstellungsdatei. Nach der Aufnahme stellt sie die gelesenen Werte wieder her und prüft sie. Bei einer Verbindungsunterbrechung bleibt die Sicherung erhalten; die App versucht die Wiederherstellung erneut. Ein ungeplanter Prozessabbruch lässt sich nicht synchron behandeln, deshalb wird beim nächsten App-Start aus der Datei wiederhergestellt. Die Datei und persönliche Fadenkreuzwerte werden nicht hochgeladen. Während einer Aufnahme Einstellungen nicht parallel in CS2 ändern.
 
 Der eingebaute Desktop-Stil ist unabhängig vom manuell hinterlegten Share-Code der Browser-Variante. Der Browser-Review funktioniert weiterhin ohne Windows-App.
+
+Die Steam-Anmeldung erfolgt weiterhin im App-Fenster. Browser und App haben getrennte Sitzungen; eine Anmeldung im Browser würde die App ohne zusätzliche sichere Übergabe nicht anmelden.
+
+Zeigt die App **„Noch kein App-Update veröffentlicht“**, gibt es im GitHub-Release-Verzeichnis noch kein Paket für den automatischen Updater. Die App bleibt benutzbar; lokale Builds werden bis dahin über `playbook.cmd` aktualisiert. Netzwerkfehler werden weiterhin separat gemeldet.
+
+Bei **„CS2 nimmt keine lokale Verbindung an“** das Spiel vollständig beenden, über den Start-Button öffnen und auf das Hauptmenü warten. Anschließend das Spielbild verbinden. Die Fehlermeldung enthält den lokalen Port und den Verbindungsfehler, etwa `ECONNREFUSED`. Ein bereits laufendes Spiel übernimmt zusätzliche Startoptionen nicht nachträglich. Den Port nicht in der Firewall freigeben.
 
 ## Entwickeln und ausliefern
 
@@ -58,7 +64,7 @@ Optional die Repository-Secrets `WINDOWS_CSC_LINK` und `WINDOWS_CSC_KEY_PASSWORD
 ## Grenzen und Prüfung
 
 - Kein Zugriff auf CS2-Speicher, keine DLL-Injektion, keine Änderung an Steam-Konfigurationsdateien. Lokale Steuerung läuft ausschließlich über CS2s VConsole2 auf `127.0.0.1:29000`. Diesen Port nicht im Router oder in der Firewall für andere Rechner freigeben.
-- Der Windows-Prozess liest nur Fenstergeometrie und Prozessidentität. Das Bild kommt aus Electron/Chromium-Fensteraufnahme. Bei unklarer Geometrie wird abgebrochen, statt einen Fensterrand zu schätzen. Minimiertes CS2 oder ein Größenwechsel während des Videos bricht die Aufnahme ab.
+- Der Windows-Prozess liest Fenstergeometrie und Prozessidentität. Auf Anforderung startet er außerdem Steam mit festen CS2-Startoptionen. Das Bild kommt aus Electron/Chromium-Fensteraufnahme. Bei unklarer Geometrie wird abgebrochen, statt einen Fensterrand zu schätzen. Minimiertes CS2 oder ein Größenwechsel während des Videos bricht die Aufnahme ab.
 - Vor Verwendung in echten Reviews einmal auf Windows prüfen: Foto mit ungewöhnlichem persönlichen Fadenkreuz aufnehmen, HUD/Waffe/Fadenkreuz nach dem Foto vergleichen, Frontfoto prüfen, F8 im Spiel testen, CS2-Verbindung während eines Fotos unterbrechen und Wiederherstellung prüfen. Diese Interaktion lässt sich auf einem Mac nicht mit einem echten Windows-CS2 validieren.
 - `npm test` prüft Paketfragmentierung und Konsolenantworten, verweigerte Einstellungen, exakte Wiederherstellung, Abbruch und Neustart, Herkunftsprüfung und Fensterausschnitte. Die Browser-Fixture `admin-panel/client/test/review-desktop.html` prüft den vollständigen Aufnahmeablauf mit simuliertem Spiel und der echten Review-Oberfläche.
 

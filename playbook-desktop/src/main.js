@@ -9,12 +9,14 @@ import { Presentation } from './presentation.js';
 import { captureFrame } from './geometry.js';
 import { ORIGIN, trusted, loginNavigation } from './security.js';
 import { startupLog } from './startup-log.js';
+import { Updates } from './updates.js';
+import { launchAndWait } from './launch.js';
 
 const { autoUpdater } = updater;
 const exec = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
-let window, presentation, target, blocker, quitting = false;
-let update = { state: 'idle', message: 'Updates werden automatisch gesucht.' };
+let window, presentation, target, blocker, quitting = false, launching = false;
+const updates = new Updates(autoUpdater, () => app.isPackaged);
 const consoleConnection = new VConsole();
 const startup = startupLog(app);
 
@@ -25,14 +27,15 @@ function startupFailed(error) {
   app.exit(1);
 }
 
-async function game() {
+async function native(action) {
   if (process.platform !== 'win32') throw new Error('Die CS2-Aufnahme benötigt Windows 10 oder 11.');
   const executable = app.isPackaged ? path.join(process.resourcesPath, 'Playbook.Windows.exe') : path.join(here, '../native/bin/publish/Playbook.Windows.exe');
   try {
-    const { stdout } = await exec(executable, [], { windowsHide: true, timeout: 5000, maxBuffer: 16_384 });
+    const { stdout } = await exec(executable, action ? [action] : [], { windowsHide: true, timeout: 5000, maxBuffer: 16_384 });
     return JSON.parse(stdout);
-  } catch (error) { throw new Error(error.stderr?.trim() || 'CS2-Fenster nicht gefunden. Bitte CS2 starten und geöffnet lassen.'); }
+  } catch (error) { throw new Error(error.stderr?.trim() || (action === 'launch' ? 'Steam konnte CS2 nicht starten.' : 'CS2-Fenster nicht gefunden. Bitte CS2 starten und geöffnet lassen.')); }
 }
+const game = () => native();
 async function capturedGame() {
   const next = await game();
   if (!target || next.identity !== target.identity || next.id !== target.id) throw new Error('Das CS2-Fenster hat sich geändert. Bitte das Spielbild erneut verbinden.');
@@ -53,20 +56,6 @@ function handle(name, work) {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || !trusted(event.senderFrame.url)) throw new Error('Diese Seite darf CS2 nicht steuern.');
     return work(...args);
   });
-}
-function configureUpdates() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = false;
-  autoUpdater.allowPrerelease = false;
-  autoUpdater.on('checking-for-update', () => { update = { state: 'checking', message: 'Suche nach Updates …' }; });
-  autoUpdater.on('update-available', info => { update = { state: 'downloading', message: `Version ${info.version} wird heruntergeladen.` }; });
-  autoUpdater.on('update-not-available', () => { update = { state: 'current', message: 'Die App ist aktuell.' }; });
-  autoUpdater.on('update-downloaded', info => { update = { state: 'ready', message: `Version ${info.version} ist bereit. Nach dem Review neu starten.` }; });
-  autoUpdater.on('error', () => { update = { state: 'error', message: 'Update derzeit nicht erreichbar. Du kannst weiterarbeiten und es später erneut versuchen.' }; });
-  if (app.isPackaged) {
-    void autoUpdater.checkForUpdates().catch(() => {});
-    setInterval(() => { void autoUpdater.checkForUpdates().catch(() => {}); }, 4 * 60 * 60 * 1000).unref();
-  }
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -96,7 +85,7 @@ else {
       { label: 'Playbook', submenu: [
         { label: 'Startseite', click: () => void window.loadURL(ORIGIN) },
         { label: 'Neu laden', role: 'reload' },
-        { label: 'Nach Updates suchen', click: () => void autoUpdater.checkForUpdates().catch(() => {}) },
+        { label: 'Nach Updates suchen', click: () => void updates.check() },
         { label: 'Startprotokoll öffnen', click: () => void shell.openPath(startup.file) },
         { type: 'separator' }, { label: 'Beenden', role: 'quit' },
       ] },
@@ -128,12 +117,19 @@ else {
       if (isMainFrame && !isInPlace) void disconnect().catch(() => {});
     });
     window.webContents.on('render-process-gone', () => { void disconnect().catch(() => {}); });
-    handle('status', async () => ({ appVersion: app.getVersion(), update, connected: Boolean(target), recovery: Boolean(await presentation.saved()), active: Boolean(presentation.active) }));
+    handle('status', async () => ({ appVersion: app.getVersion(), update: updates.status, connected: Boolean(target), recovery: Boolean(await presentation.saved()), active: Boolean(presentation.active) }));
     handle('launch', async () => {
-      // Fixed Steam URI, no renderer-provided arguments or shell commands.
-      await shell.openExternal('steam://run/730//-vconsole/');
+      if (launching) throw new Error('CS2 wird bereits gestartet. Bitte auf die Verbindung warten.');
+      launching = true;
+      try {
+        if (target || presentation.active) throw new Error('Bitte zuerst den Review beenden und das Spielbild trennen.');
+        await launchAndWait(() => native('launch'), consoleConnection);
+        await presentation.recover();
+      }
+      finally { launching = false; }
     });
     handle('connect', async () => {
+      if (launching) throw new Error('CS2 wird noch gestartet. Bitte kurz warten und anschließend das Spielbild verbinden.');
       if (presentation.active) throw new Error('Bitte die Aufnahme zuerst beenden.');
       const next = await game();
       await presentation.recover();
@@ -153,13 +149,14 @@ else {
     handle('end', async token => { if (typeof token !== 'string' || token.length > 100) throw new Error('Ungültige Aufnahme.'); await presentation.end(token); globalShortcut.unregister('F8'); });
     handle('disconnect', disconnect);
     handle('recover', async () => { await presentation.recover(); globalShortcut.unregister('F8'); });
-    handle('update-check', async () => { if (!app.isPackaged) throw new Error('Updates sind im installierten Windows-Paket verfügbar.'); await autoUpdater.checkForUpdates(); });
+    handle('update-check', () => updates.check());
     handle('update-install', async () => {
       if (target || presentation.active || await presentation.saved()) throw new Error('Bitte den Review beenden und die Spieleinstellungen wiederherstellen, bevor die App neu startet.');
-      if (update.state !== 'ready') throw new Error('Es ist noch kein Update bereit.');
+      if (updates.status.state !== 'ready') throw new Error('Es ist noch kein Update bereit.');
       quitting = true; autoUpdater.quitAndInstall(false, true);
     });
-    configureUpdates();
+    void updates.check();
+    if (app.isPackaged) setInterval(() => { void updates.check(); }, 4 * 60 * 60 * 1000).unref();
     // Recovery after a crash/reload is retried even when the review page is closed.
     setInterval(() => {
       void presentation.recoverIfIdle().catch(() => {});

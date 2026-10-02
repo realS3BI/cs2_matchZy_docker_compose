@@ -1,11 +1,35 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.Win32;
+using System.Runtime.Versioning;
+
+[assembly: SupportedOSPlatform("windows")]
 
 // Separate process: physical pixel coordinates, independent of Electron's DPI mode.
 Native.SetProcessDpiAwarenessContext(new nint(-4));
 try
 {
+    if (args.Length == 1 && args[0] == "launch")
+    {
+        var running = Process.GetProcessesByName("cs2");
+        var alreadyRunning = running.Length > 0;
+        foreach (var process in running) process.Dispose();
+        if (alreadyRunning) throw new Exception("CS2 läuft bereits. Beende das Spiel vollständig und klicke dann erneut auf „CS2 mit lokaler Steuerung starten“. Startoptionen werden erst beim Spielstart übernommen.");
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+        var steam = key?.GetValue("SteamExe") as string;
+        if (string.IsNullOrWhiteSpace(steam) || !File.Exists(steam))
+            throw new Exception("Steam wurde nicht gefunden. Öffne Steam einmal mit deinem Windows-Konto und versuche es erneut.");
+        // Fixed arguments; no command interpreter or saved Steam options. Let
+        // Windows launch the GUI without inheriting this helper's stdout pipe.
+        var start = new ProcessStartInfo(steam) { UseShellExecute = true };
+        foreach (var argument in new[] { "-applaunch", "730", "-console", "-vconsole", "-vconport", "29000" })
+            start.ArgumentList.Add(argument);
+        using var launched = Process.Start(start) ?? throw new Exception("Steam konnte CS2 nicht starten.");
+        Console.WriteLine("{}");
+        return;
+    }
+    if (args.Length != 0) throw new Exception("Unbekannte Playbook-Aktion.");
     var games = Process.GetProcessesByName("cs2").Where(p => p.MainWindowHandle != 0).ToArray();
     if (games.Length != 1) throw new Exception("Bitte genau ein CS2-Fenster öffnen.");
     using var game = games[0];

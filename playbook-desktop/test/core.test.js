@@ -8,6 +8,7 @@ import { commandPacket, PacketReader, readValue, VConsole } from '../src/vconsol
 import { Presentation, NAMES, profile, validSnapshot } from '../src/presentation.js';
 import { captureFrame } from '../src/geometry.js';
 import { trusted, loginNavigation } from '../src/security.js';
+import { launchAndWait } from '../src/launch.js';
 
 function printPacket(text) {
   const packet = Buffer.alloc(41 + Buffer.byteLength(text));
@@ -48,13 +49,49 @@ test('console roundtrip rejects denied changes and serializes overlapping reques
       }
     });
   });
-  await new Promise(resolve => server.listen(29000, '127.0.0.1', resolve));
-  const console = new VConsole();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const console = new VConsole({ port: server.address().port });
   t.after(() => { console.close(); server.close(); });
   assert.deepEqual(await Promise.all([console.read(['crosshair']), console.read(['r_drawviewmodel'])]), [{ crosshair: 'true' }, { r_drawviewmodel: 'true' }]);
   await console.write({ crosshair: 'false' });
   assert.equal(state.crosshair, 'false');
   await assert.rejects(console.write({ r_drawviewmodel: 'false' }), /erlaubt r_drawviewmodel/);
+});
+
+test('launch waits for a real console reply after the game starts listening', async t => {
+  const server = net.createServer(socket => {
+    let pending = Buffer.alloc(0);
+    socket.on('data', bytes => {
+      pending = Buffer.concat([pending, bytes]);
+      while (pending.length >= 12 && pending.length >= pending.readUInt16BE(8)) {
+        const size = pending.readUInt16BE(8);
+        const command = pending.subarray(12, size - 1).toString();
+        pending = pending.subarray(size);
+        socket.write(printPacket(command.startsWith('echo ') ? command.slice(5) + '\n' : 'crosshair = true\n'));
+      }
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  const console = new VConsole({ port });
+  let timer;
+  t.after(() => { clearTimeout(timer); console.close(); server.close(); });
+  await assert.rejects(console.read(['crosshair']), /ECONNREFUSED/);
+  await launchAndWait(async () => {
+    timer = setTimeout(() => server.listen(port, '127.0.0.1'), 100);
+  }, console, { timeoutMs: 2000, retryMs: 20 });
+  // A retry after refusal must remain usable, including after the old socket closes.
+  assert.deepEqual(await console.read(['crosshair']), { crosshair: 'true' });
+});
+
+test('launch refuses an already running game and never reports unconfirmed success', async () => {
+  let closed = false;
+  const console = { close: () => { closed = true; }, read: async () => { throw new Error('ECONNREFUSED'); } };
+  await assert.rejects(launchAndWait(async () => { throw new Error('CS2 läuft bereits.'); }, console), /läuft bereits/);
+  assert.equal(closed, false);
+  await assert.rejects(launchAndWait(async () => {}, console, { timeoutMs: 10, retryMs: 1 }), /noch nicht bestätigt.*ECONNREFUSED/);
+  assert.equal(closed, true);
 });
 
 async function fixture(t) {

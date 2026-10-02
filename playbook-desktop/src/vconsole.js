@@ -43,22 +43,32 @@ export class VConsole {
   pending;
   connectPromise;
   queue = Promise.resolve();
+  constructor({ port = 29000 } = {}) { this.port = port; }
   async connect() {
-    if (this.socket && !this.socket.destroyed && !this.socket.connecting) return;
     if (this.connectPromise) return this.connectPromise;
+    if (this.socket && !this.socket.destroyed && !this.socket.connecting) return;
     this.connectPromise = new Promise((resolve, reject) => {
-      const socket = net.createConnection({ host: '127.0.0.1', port: 29000 });
+      const socket = net.createConnection({ host: '127.0.0.1', port: this.port });
       this.socket = socket;
       const reader = new PacketReader();
-      const timer = setTimeout(() => socket.destroy(new Error('CS2 ist nicht erreichbar. Starte es über Playbook mit lokaler Steuerung.')), 3000);
+      const timer = setTimeout(() => socket.destroy(Object.assign(new Error('Zeitüberschreitung'), { code: 'ETIMEDOUT' })), 3000);
       socket.once('connect', () => { clearTimeout(timer); resolve(); });
       socket.on('data', bytes => {
         try {
-          for (const message of reader.push(bytes)) this.pending?.receive(message);
+          for (const message of reader.push(bytes)) if (this.socket === socket) this.pending?.receive(message);
         } catch (error) { socket.destroy(error); }
       });
-      socket.on('error', () => { clearTimeout(timer); reject(new Error('CS2 ist nicht erreichbar. Starte es über Playbook mit lokaler Steuerung.')); });
-      socket.on('close', () => { clearTimeout(timer); this.pending?.fail(new Error('Verbindung zu CS2 unterbrochen. Die Wiederherstellung bleibt vorgemerkt.')); });
+      socket.on('error', error => {
+        clearTimeout(timer);
+        const reason = error.code === 'ECONNREFUSED' ? 'CS2 nimmt keine lokale Verbindung an.' : 'Die lokale Verbindung zu CS2 ist fehlgeschlagen.';
+        reject(new Error(`${reason} Beende CS2 vollständig und starte es über „CS2 mit lokaler Steuerung starten“. Warte anschließend auf das Hauptmenü. Diagnose: 127.0.0.1:${this.port}, ${error.code || 'Verbindungsfehler'}.`));
+      });
+      socket.on('close', () => {
+        clearTimeout(timer);
+        const error = new Error('Verbindung zu CS2 unterbrochen. Die Wiederherstellung bleibt vorgemerkt.');
+        reject(error);
+        if (this.socket === socket) this.pending?.fail(error);
+      });
     }).finally(() => { this.connectPromise = undefined; });
     return this.connectPromise;
   }

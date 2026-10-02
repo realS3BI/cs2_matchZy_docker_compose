@@ -19,10 +19,10 @@ export function ReviewDesktopSetup() {
     <CardContent className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">Fotos ohne Fensterrahmen, HUD und Waffe. Playbook stellt ein kleines weißes Fadenkreuz mit schwarzer Kontur direkt in CS2 ein und stellt deine bisherigen Werte nach jeder Aufnahme wieder her. Die Frontansicht bleibt ohne Fadenkreuz. Im Video ist die Waffe sichtbar; mit <kbd>F8</kbd> beendest du die Aufnahme und startest den Upload.</p>
       <div className="flex flex-wrap gap-3">
-        <ActionButton icon={Play} disabled={status?.connected || status?.active} onClick={() => desktop!.launch()} successLabel="Steam geöffnet">CS2 mit lokaler Steuerung starten</ActionButton>
+        <ActionButton icon={Play} disabled={status?.connected || status?.active} onClick={() => desktop!.launch()} successLabel="Start abgeschlossen">CS2 mit lokaler Steuerung starten</ActionButton>
         <ActionButton variant="outline" icon={RotateCcw} disabled={status?.active} onClick={() => desktop!.recover()} successLabel="Wiederhergestellt">Einstellungen wiederherstellen</ActionButton>
       </div>
-      <p className="text-xs text-muted-foreground">Falls CS2 bereits ohne lokale Steuerung läuft, beende das Spiel einmal und starte es über diesen Button. Lass CS2 während der Aufnahme geöffnet. „Vollbild im Fenster“ vermeidet Aufnahmeprobleme; Steam-Overlays bei Bedarf schließen.</p>
+      <p className="text-xs text-muted-foreground">Falls CS2 bereits ohne lokale Steuerung läuft, beende das Spiel einmal und starte es über diesen Button. Bestätige gegebenenfalls die Startabfrage in Steam. Playbook prüft die Verbindung bis zu einer Minute. Lass CS2 während der Aufnahme geöffnet. „Vollbild im Fenster“ vermeidet Aufnahmeprobleme; Steam-Overlays bei Bedarf schließen.</p>
       {status?.recovery && !status.active && <p role="status" className="text-sm text-muted-foreground">Deine ursprünglichen Spieleinstellungen sind noch gesichert. Playbook stellt sie wieder her, sobald CS2 erreichbar ist.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {status && <div className="flex flex-wrap items-center gap-3 border-t pt-3">
