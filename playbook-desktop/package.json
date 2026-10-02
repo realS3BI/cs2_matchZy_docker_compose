@@ -22,7 +22,7 @@
     "files": ["src/**", "package.json"],
     "extraResources": [{ "from": "native/bin/publish/Playbook.Windows.exe", "to": "Playbook.Windows.exe" }],
     "win": { "target": "nsis", "icon": "icon.png" },
-    "nsis": { "oneClick": true, "perMachine": false, "deleteAppDataOnUninstall": false },
+    "nsis": { "oneClick": true, "perMachine": false, "deleteAppDataOnUninstall": false, "runAfterFinish": true },
     "publish": [{ "provider": "github", "owner": "realS3BI", "repo": "cs2_matchZy_docker_compose", "releaseType": "release" }]
   }
 }

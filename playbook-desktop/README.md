@@ -21,6 +21,10 @@ Der eingebaute Desktop-Stil ist unabhängig vom manuell hinterlegten Share-Code 
 
 Voraussetzungen: Windows 10/11 x64, Node.js 22+, .NET SDK 10. Die App benötigt Internet für Playbook und UploadThing, Steam und einen laufenden Trainingsserver mit dem aktuellen Review-Plugin. `r_drawviewmodel` benötigt die auf dem Trainingsserver erlaubten Cheats; die App ändert keine globalen Serverregeln.
 
+Für lokale Updates unter Windows genügt ein Doppelklick auf **[`playbook.cmd`](../playbook.cmd)** im Projekt-Root. Die Datei führt `git pull --ff-only` auf dem aktuellen Branch aus, installiert die Build-Abhängigkeiten, testet und baut den Windows-Installer und öffnet ihn anschließend. Nach der Installation startet Playbook automatisch. Vorher laufende Reviews beenden und Playbook schließen.
+
+Git for Windows, Node.js 22 oder neuer inklusive npm und das **.NET SDK 10** müssen installiert sein. Das Skript verwendet die in Windows enthaltene PowerShell; PowerShell 7 ist dafür nicht nötig. Bei Fehlern bleibt das Fenster mit der Fehlermeldung offen. Ein fehlgeschlagenes Update oder ein Build-Fehler startet keinen älteren Installer.
+
 ```powershell
 cd playbook-desktop
 npm ci
