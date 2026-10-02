@@ -96,7 +96,7 @@ export class ReviewCaptureBridge {
   async selection(actor: string, id: string, now = Date.now()) {
     await this.session(actor, id, now);
     const selection = await read(this.path(actor, "selection"));
-    if (selection?.sessionId !== id || selection.actor !== actor || !["overview", "aim", "position", "front", "effect", "video", "finish"].includes(selection.step) ||
+    if (selection?.sessionId !== id || selection.actor !== actor || !["overview", "aim", "position", "front", "effect", "video", "details", "finish"].includes(selection.step) ||
         ![selection.owner, selection.map, selection.name].every(value => typeof value === "string" && value.length > 0 && value.length <= 500)) return null;
     return selection;
   }

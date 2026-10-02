@@ -40,6 +40,9 @@ window.checkSession=async()=>{
  assert(document.body.innerText.includes('Fenster vom T-Spawn'),'Ingame-Lineup fehlt');
  window.selectReview(0,'effect');await waitFor(()=>document.querySelector('[aria-current="step"]')?.textContent.includes('Wirkung'));
  assert(document.body.innerText.includes('ohne Fadenkreuz'),'Wirkung-Hilfe fehlt');
+ window.selectReview(0,'details');await waitFor(()=>document.querySelector('[aria-current="step"]')?.textContent.includes('Angaben'));
+ assert(document.body.innerText.includes('Aktueller Schritt: Angaben vervollständigen'),'Angaben-Schritt wird nicht synchronisiert');
+ assert(document.body.innerText.includes('Startposition *')&&document.body.innerText.includes('Endposition *'),'Pflichtangaben fehlen im Review');
  window.selectReview(1,'video');await waitFor(()=>document.body.innerText.includes('Eigenes Fenster')&&document.querySelector('[aria-current="step"]')?.textContent.includes('Video'));
  assert(!document.body.innerText.includes('Fenster vom T-Spawn'),'Owner beim gleichnamigen Lineup verwechselt');
  window.failPoll=true;await waitFor(()=>document.body.innerText.includes('kurz unterbrochen'));window.failPoll=false;

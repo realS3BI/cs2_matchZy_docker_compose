@@ -47,6 +47,19 @@ window.checkPhoto=async(slot='aim')=>{
  window.capture.disconnect();clearInterval(interval);
  return {result:'PASS: Vorbereitung → Foto → HUD-Freigabe → Upload → Bestätigung',slot,events,gameCrosshair,wrongCenter,size:[photo.width,photo.height]};
 };
+window.checkVideoContinuity=async(includeData=false)=>{
+ const scene=document.createElement('canvas');scene.width=256;scene.height=144;
+ const ctx=scene.getContext('2d');let step=0;
+ const draw=()=>{ctx.fillStyle='#234567';ctx.fillRect(0,0,256,144);ctx.fillStyle='#fff';ctx.fillRect((step++*3)%220,50,30,30);};
+ draw();const animation=setInterval(draw,33);
+ const source=new ReviewRecorder(scene.captureStream(30));await source.video.play();
+ source.setPhotoFrame({width:256,height:144,top:0,right:0,bottom:0,left:0});
+ const {recording}=await source.prepareVideo(()=>{});
+ await new Promise(r=>setTimeout(r,7000));source.stopVideo();const file=await recording;
+ clearInterval(animation);source.dispose();
+ const data=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.readAsDataURL(file);});
+ return {result:'PASS: bewegtes Testvideo über zwei Geometrieprüfungen aufgenommen',size:file.size,...(includeData?{data}:{})};
+};
 window.checkVideoCrop=async()=>{
  const source=new ReviewRecorder(canvas.captureStream(30));await source.video.play();
  let refused=false;try{await source.prepareVideo(()=>{});}catch(error){refused=error.message.includes('Aufnahmeausschnitt');}

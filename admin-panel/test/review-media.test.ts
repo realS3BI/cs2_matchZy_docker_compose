@@ -4,7 +4,7 @@ import { attachReviewMedia, reviewEntry, sanitizeReviewMedia } from "../src/revi
 import { applyGameReviewDecision, applyWebNadeAction } from "../src/nade-review.js";
 import { sanitizeNades } from "../src/validators.js";
 import { reviewMediaFixture } from "./review-fixtures.js";
-import { missingReviewMedia, reviewFileError, reviewPresentationError, VIDEO_LIMIT } from "../shared/review-media.js";
+import { missingReviewMedia, reviewFileError, reviewPresentationError, reviewUploadName, VIDEO_LIMIT } from "../shared/review-media.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { installReviewUploads, createReviewFileRouter } from "../src/uploadthing.js";
@@ -13,6 +13,15 @@ const owner = { identitySteam64: "76561198000000001", role: "player" };
 const admin = { identitySteam64: "76561198000000002", role: "admin" };
 const entry = { owner: owner.identitySteam64, map: "de_anubis", name: "window", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6", updatedAt: "2026-10-02T08:00:00.000Z" };
 const input = { owner: entry.owner, map: entry.map, name: entry.name, slot: "aim", revision: entry.updatedAt };
+
+test("upload names identify the map, lineup, slot and capture time without exposing paths", () => {
+  const time = Date.parse("2026-10-02T10:11:12.345Z");
+  assert.equal(reviewUploadName({ map: "de_anubis", name: "ct_to_a_main" }, "video", "video/webm", time), "de_anubis__ct_to_a_main__video__20261002T101112345Z.webm");
+  assert.equal(reviewUploadName({ map: "de_mirage", name: "Küche → Fenster" }, "front", "image/jpeg", time), "de_mirage__Küche-Fenster__front__20261002T101112345Z.jpg");
+  const safe = reviewUploadName({ map: "../de_anubis", name: "../../" + "漢".repeat(200) }, "aim", "image/png", time);
+  assert.doesNotMatch(safe, /[\\/]/);
+  assert.ok(new TextEncoder().encode(safe).length < 200);
+});
 const file = reviewMediaFixture.aim!;
 
 test("front photos require the corrected server camera while other photos keep v2 compatibility", () => {
@@ -59,7 +68,11 @@ test("media validation rejects forged storage URLs, wrong slots, formats and ove
 test("web and game approval require all perspectives and the current platform admin", () => {
   const request = { ...input, action: "approve", id: "a".repeat(32), actor: admin.identitySteam64 };
   assert.throws(() => applyWebNadeAction([entry], request, admin), /vier Review-Fotos/);
-  const complete = { ...entry, reviewMedia: reviewMediaFixture };
+  const complete = { ...entry, desc: "Vom CT-Start nach A Main werfen.", throwFromTitle: "CT", throwToTitle: "A Main", reviewMedia: reviewMediaFixture };
+  for (const field of ["desc", "throwFromTitle", "throwToTitle"]) {
+    assert.throws(() => applyGameReviewDecision([{ ...complete, [field]: "   " }], request, admin), { status: 400 });
+    assert.throws(() => applyWebNadeAction([{ ...complete, [field]: "" }], request, admin), { status: 400 });
+  }
   assert.equal(applyGameReviewDecision([complete], request, admin)[0].official, true);
   for (const user of [owner, { ...admin, role: "match_admin" }, undefined]) assert.throws(() => applyGameReviewDecision([complete], request, user), { status: 403 });
   assert.throws(() => applyGameReviewDecision([complete], { ...request, revision: "stale" }, admin), { status: 409 });

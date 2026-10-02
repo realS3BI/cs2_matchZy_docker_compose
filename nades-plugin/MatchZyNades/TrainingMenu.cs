@@ -21,7 +21,7 @@ public static class TrainingMenu
                 new("Lineup laden & trainieren", "Teleportiert dich zum Abwurfpunkt, stellt die Blickrichtung ein und rüstet die passende Granate aus. Danach selbst werfen.", Request: new(TrainingAction.LoadLineup, n)),
                 new(settings.IsFavorite(n) ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen", "Speichert diese Granate in deiner persönlichen Favoritenliste für diese Map.", Request: new(TrainingAction.ToggleFavorite, n))
             };
-            if (canWriteNades && !n.Official) items.Add(new("Medien-Review", "Vier Fotos und ein Video aufnehmen, anschließend prüfen und freigeben. Verbinde vorher das Spielbild auf der Lineup-Seite im Browser.", Page: ReviewMenu.Create(n)));
+            if (canWriteNades && !n.Official) items.Add(new("Medien-Review", "Vier Fotos und ein Video aufnehmen, anschließend prüfen und freigeben. Verbinde vorher das Spielbild auf der Lineup-Seite im Browser.", Page: ReviewMenu.Create(n, own)));
             if (own)
             {
                 items.Add(new("Name bearbeiten", "Wähle diesen Eintrag und schreibe den neuen Namen in den Chat. Mit abbrechen beenden. Der interne Name bleibt erhalten.", Request: new(TrainingAction.EditName, n)));
@@ -133,6 +133,11 @@ public static class TrainingMenu
             Action("Panel ausblenden", TrainingAction.Close, "Blendet das Panel aus und gibt die Spielsteuerung frei. Mit .nades im Chat erneut öffnen.")
         };
         if (!canWriteNades) home.RemoveAll(item => item.Label == "Neue Nade aufnehmen");
+        if (canWriteNades) {
+            var pending = library.Where(n => n.Map == map && !n.Official && n.ReviewStatus == "pending").ToArray();
+            home.Insert(7, new($"Reviews ({pending.Length})", "Ausstehende Reviews dieser Map öffnen, Angaben und Medien prüfen und anschließend freigeben.",
+                Page: Lineups("Ausstehende Reviews", pending, "home-reviews"), Enabled: practice));
+        }
         return new(new("Playbook", "Practice-Werkzeuge und Granaten für die aktuelle Map.", home), map);
     }
 

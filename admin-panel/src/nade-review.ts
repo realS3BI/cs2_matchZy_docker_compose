@@ -2,7 +2,7 @@ import { sanitizeNades } from "./validators.js";
 import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
 import { THROW_FLAGS, MOVEMENT_FLAGS, MOVEMENT_TYPES, movementPatch, type MovementType } from "../shared/throw-attributes.js";
 import { randomUUID } from "node:crypto";
-import { missingReviewMedia } from "../shared/review-media.js";
+import { missingReviewMedia, missingReviewDetails } from "../shared/review-media.js";
 
 function reject(status: number, message: string): never {
   throw Object.assign(new Error(message), { status });
@@ -52,6 +52,8 @@ export function applyWebNadeAction(entries, request, user) {
   } else if (request.action === "submit") patch = { reviewStatus: "pending" };
   else if (request.action === "approve") {
     if (missingReviewMedia(entry).length) reject(400, "Vor der Freigabe bitte die vier Review-Fotos und das Video ergänzen.");
+    const missing = missingReviewDetails(entry);
+    if (missing.length) reject(400, `Vor der Freigabe bitte ergänzen: ${missing.join(", ")}.`);
     patch = { official: true, reviewStatus: "approved" };
   }
   else if (request.action === "reject") {

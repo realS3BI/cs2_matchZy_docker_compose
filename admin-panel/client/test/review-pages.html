@@ -39,7 +39,7 @@ window.checkPages=async()=>{
  [...document.querySelectorAll('[role="option"]')].find(option=>option.textContent==='Mirage').click();
  await waitFor(()=>document.querySelectorAll('a[href*="/review?"]').length===2);
  assert(!document.body.innerText.includes('Garage'),'Mapfilter ignoriert');
- document.querySelector('a[href*="Abc1234/review?"]').click();await waitFor(()=>document.querySelectorAll('.review-step').length===6);
+ document.querySelector('a[href*="Abc1234/review?"]').click();await waitFor(()=>document.querySelectorAll('.review-step').length===7);
  assert(location.pathname.endsWith('/review'),'Review hat keine eigene Route');
  assert(document.querySelector('h1').textContent==='Fenster vom T-Spawn','Lineup-Titel fehlt');
  assert(document.querySelector('.review-stepper').getBoundingClientRect().top<450,'Stepper zu weit unten');

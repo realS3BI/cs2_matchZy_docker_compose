@@ -39,7 +39,7 @@ public sealed class FavoritesAndSpawnsTests
         var own = Lineup("window", "7656");
         var settings = new PlayerPanelSettings().ToggleFavorite(favorite);
         var menu = TrainingMenu.Create([favorite, own], "de_mirage", true, null, settings: settings);
-        Assert.Equal(9, menu.Current.Items.Count);
+        Assert.Equal(10, menu.Current.Items.Count);
         Assert.Equal("Home", menu.Breadcrumb);
         menu.Select(1);
         menu.Select(1);

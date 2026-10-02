@@ -97,8 +97,8 @@ export function useReviewCapture({ nade, admin, upload, onStep, onError, disable
       current.current.onStep(slot);
       const source = currentCapture.current;
       if (countdown) {
-        setNotice("Foto in drei Sekunden. Wechsle jetzt zu CS2 und halte den Bildausschnitt ruhig.");
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        setNotice("Foto in einer Sekunde. Halte den Bildausschnitt ruhig.");
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       if (!mounted.current || currentCapture.current !== source) return;
       let file: File;

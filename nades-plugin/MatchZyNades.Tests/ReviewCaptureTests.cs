@@ -59,13 +59,15 @@ public sealed class ReviewCaptureTests
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "aim", 1000));
             SaveSession(session);
             var command = ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "aim", 1000, "a".PadLeft(32, 'a'), "review-v2");
-            Assert.Equal(4000, command.NotBefore);
+            Assert.Equal(2000, command.NotBefore);
             Assert.Equal(new string('a', 32), command.Id);
             Assert.Equal("review-v2", command.Presentation);
             Assert.Equal(session.Id, command.SessionId);
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup, "photo", "effect", 2000));
             File.WriteAllText(Path.Combine(folder, "result.json"), JsonSerializer.Serialize(new ReviewResult(session.Id, command.Id, true, "Gespeichert"), ReviewCaptureFiles.Json));
-            Assert.Equal("video-start", ReviewCaptureFiles.Issue(directory, Actor, Lineup, "video-start", "", 3000).Action);
+            var video = ReviewCaptureFiles.Issue(directory, Actor, Lineup, "video-start", "", 3000);
+            Assert.Equal("video-start", video.Action);
+            Assert.Equal(4000, video.NotBefore);
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup with { Name = "other" }, "photo", "aim", 40_000));
             Assert.Throws<InvalidOperationException>(() => ReviewCaptureFiles.Issue(directory, Actor, Lineup with { Official = true }, "photo", "aim", 40_000));
             SaveSession(session with { ExpiresAt = 4000 });
@@ -138,18 +140,42 @@ public sealed class ReviewCaptureTests
         Assert.Equal(Lineup, menu.Current.ReviewLineup);
     }
     [Fact]
-    public void ReviewHasSixStepsAndApprovalRequiresAllFiveUploads()
+    public void ReviewHasSevenStepsAndApprovalRequiresMediaAndDetails()
     {
         var menu = ReviewMenu.Create(Lineup);
-        Assert.Equal(6, menu.Items.Count);
-        Assert.False(menu.Items[5].Page!.Items[0].Enabled);
-        var complete = ReviewMenu.Create(Lineup with { ReviewMediaSlots = ReviewCaptureFiles.Slots });
-        Assert.True(complete.Items[5].Page!.Items[0].Enabled);
+        Assert.Equal(7, menu.Items.Count);
+        Assert.False(menu.Items[6].Page!.Items[0].Enabled);
+        var complete = ReviewMenu.Create(Lineup with { ReviewMediaSlots = ReviewCaptureFiles.Slots, Description = "Eine Smoke", ThrowFromTitle = "CT", ThrowToTitle = "A" });
+        Assert.True(complete.Items[6].Page!.Items[0].Enabled);
         var playerMenu = TrainingMenu.Create([Lineup], "de_anubis", true, null, canWriteNades: false);
         playerMenu.Select(1);
         Assert.DoesNotContain(playerMenu.Current.Items, item => item.Page?.Key == "reviews");
         playerMenu.Select(1); playerMenu.Select(4); playerMenu.Select(1);
         Assert.DoesNotContain(playerMenu.Current.Items, item => item.Page?.Key.StartsWith("review:") == true);
         Assert.Equal(9, InGameMenu.PageSize);
+    }
+
+    [Fact]
+    public void HomeReviewsShowOnlyPendingCurrentMapEntriesAndRespectPermissions()
+    {
+        var pending = Lineup with { ReviewStatus = "pending" };
+        var library = new[] { pending, pending with { Name = "official", Official = true }, pending with { Name = "other", Map = "de_mirage" }, Lineup with { Name = "draft" } };
+        var home = TrainingMenu.Create(library, Lineup.Map, true, null).Current;
+        var reviews = Assert.Single(home.Items, item => item.Page?.Key == "home-reviews");
+        Assert.Single(reviews.Page!.Items);
+        Assert.DoesNotContain(TrainingMenu.Create(library, Lineup.Map, true, null, canWriteNades: false).Current.Items, item => item.Page?.Key == "home-reviews");
+        Assert.False(TrainingMenu.Create(library, Lineup.Map, false, null).Current.Items.Single(item => item.Page?.Key == "home-reviews").Enabled);
+    }
+
+    [Fact]
+    public void RequiredDetailsRemainBlockedUntilAllDescriptionsExist()
+    {
+        var media = Lineup with { ReviewMediaSlots = ReviewCaptureFiles.Slots };
+        Assert.False(ReviewMenu.Create(media).Items[6].Page!.Items[0].Enabled);
+        Assert.Equal(new[] { "Beschreibung", "Startposition", "Endposition" }, ReviewMenu.MissingDetails(media));
+        var complete = media with { Description = "Smoke", ThrowFromTitle = "CT", ThrowToTitle = "A" };
+        Assert.True(ReviewMenu.Create(complete).Items[6].Page!.Items[0].Enabled);
+        Assert.All(ReviewMenu.Create(complete).Items[5].Page!.Items, item => Assert.False(item.Enabled));
+        Assert.All(ReviewMenu.Create(complete, true).Items[5].Page!.Items, item => Assert.True(item.Enabled));
     }
 }

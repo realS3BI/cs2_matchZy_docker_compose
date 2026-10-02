@@ -64,7 +64,7 @@ export function ReviewSessionWorkspace({ nades, user, onEntriesChange }) {
       </CardContent>
     </Card>
     {nade ? <div className="grid min-w-0 gap-4">
-      <header aria-live="polite"><p className="control-kicker">{nade.map} · Ingame-Review</p><h2 className="mt-2 break-words text-xl font-semibold">{nade.displayName || nade.name}</h2><p className="mt-1 text-sm text-muted-foreground">Aktueller Schritt: {step === "overview" ? "Review-Übersicht" : step === "finish" ? "Prüfung und Freigabe" : REVIEW_STEPS.find(item => item.id === step)?.title}</p></header>
+      <header aria-live="polite"><p className="control-kicker">{nade.map} · Ingame-Review</p><h2 className="mt-2 break-words text-xl font-semibold">{nade.displayName || nade.name}</h2><p className="mt-1 text-sm text-muted-foreground">Aktueller Schritt: {step === "overview" ? "Review-Übersicht" : step === "finish" ? "Prüfung und Freigabe" : step === "details" ? "Angaben vervollständigen" : REVIEW_STEPS.find(item => item.id === step)?.title}</p></header>
       <LineupReview {...{ nade, user, mutate, onEntriesChange }} disabled={busy} externalCapture={capture} externalUpload={uploader} syncedStep={step} />
     </div> : <p role="status" className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{capture.capture ? "Warte auf deine Auswahl im Ingame-Panel. Öffne bei einer Granate den Medien-Review." : "Nach der Spielbild-Freigabe erscheint dein Ingame-Review hier."}</p>}
   </section>;

@@ -24,6 +24,7 @@ export class ReviewRecorder {
   private stopVideoFrame: (() => void) | undefined;
   private preparingVideo = false;
   private stopRequested = false;
+  private imageCapture: any;
   get frame() { return this.photoFrame && { ...this.photoFrame }; }
   clearPhotoFrame() { this.photoFrame = null; }
   setPhotoFrame(frame: PhotoFrame) {
@@ -44,7 +45,7 @@ export class ReviewRecorder {
     if (desktop) await desktop.connect();
     let capture: ReviewRecorder | undefined;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, ...(desktop ? { width: { ideal: 16384 }, height: { ideal: 16384 } } : {}) }, audio: false });
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 }, ...(desktop ? { width: { ideal: 16384 }, height: { ideal: 16384 } } : {}) }, audio: false });
       capture = new ReviewRecorder(stream);
       await capture.video.play();
       if (desktop) await capture.refreshDesktopFrame();
@@ -64,7 +65,8 @@ export class ReviewRecorder {
     if (!Capture) return undefined;
     let expired = false;
     let timer: ReturnType<typeof setTimeout>;
-    const frame = new Capture(this.stream.getVideoTracks()[0]).grabFrame().then((bitmap: ImageBitmap) => {
+    this.imageCapture ||= new Capture(this.stream.getVideoTracks()[0]);
+    const frame = this.imageCapture.grabFrame().then((bitmap: ImageBitmap) => {
       if (expired) { bitmap.close(); throw new Error("Spielbild kurz unterbrochen."); }
       return bitmap;
     });
@@ -116,15 +118,38 @@ export class ReviewRecorder {
       await this.refreshDesktopFrame();
       const initial = this.checkPhotoFrame();
       const canvas = document.createElement("canvas");
-      canvas.width = initial.width; canvas.height = initial.height;
-      const context = canvas.getContext("2d")!;
-      const output = canvas.captureStream(30);
+      const scale = Math.min(1, 1920 / initial.width, 1080 / initial.height);
+      canvas.width = Math.max(2, Math.floor(initial.width * scale / 2) * 2);
+      canvas.height = Math.max(2, Math.floor(initial.height * scale / 2) * 2);
+      const context = canvas.getContext("2d", { alpha: false })!;
+      const output = canvas.captureStream(0);
+      const outputTrack = output.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
+      const manualFrames = typeof outputTrack.requestFrame === "function";
+      if (!manualFrames) { outputTrack.stop(); output.removeTrack(outputTrack); output.addTrack(canvas.captureStream(30).getVideoTracks()[0]); }
+      // Chromium exposes the processor on Window. Other browsers use the
+      // existing ImageCapture fallback. Read real frames without adding a
+      // timer after each asynchronous read and keep only the latest frame.
+      const Processor = (window as any).MediaStreamTrackProcessor;
+      let inputTrack: MediaStreamTrack | undefined;
+      let reader: ReadableStreamDefaultReader<VideoFrame> | undefined;
+      if (Processor) {
+        try {
+          inputTrack = this.stream.getVideoTracks()[0].clone();
+          reader = new Processor({ track: inputTrack, maxBufferSize: 1 }).readable.getReader();
+        } catch { inputTrack?.stop(); inputTrack = undefined; }
+      }
       let stopped = false;
       let timer: ReturnType<typeof setTimeout>;
       let geometryTimer: ReturnType<typeof setTimeout>;
       let geometryInterrupted = 0;
       let frameInterrupted = 0;
-      this.stopVideoFrame = () => { stopped = true; clearTimeout(timer); clearTimeout(geometryTimer); output.getTracks().forEach(track => track.stop()); };
+      let lastFrame = Date.now();
+      this.stopVideoFrame = () => {
+        if (stopped) return;
+        stopped = true; clearTimeout(timer); clearTimeout(geometryTimer);
+        void reader?.cancel().catch(() => {});
+        inputTrack?.stop(); output.getTracks().forEach(track => track.stop());
+      };
       const checkGeometry = async () => {
         try { await this.refreshDesktopFrame(); geometryInterrupted = 0; }
         catch (error) {
@@ -132,18 +157,28 @@ export class ReviewRecorder {
           if (!stopped && (this.stream.getVideoTracks()[0]?.readyState !== "live" || Date.now() - geometryInterrupted >= 5000))
             this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen."));
         }
+        if (!stopped && Date.now() - lastFrame >= 5000) this.cancelVideo(new Error("Spielbild länger als fünf Sekunden unterbrochen. Bitte erneut aufnehmen."));
         if (!stopped) geometryTimer = setTimeout(() => void checkGeometry(), geometryInterrupted ? 250 : 3000);
       };
       const paint = async () => {
-        let frame: ImageBitmap | undefined;
+        const started = performance.now();
+        let frame: ImageBitmap | VideoFrame | undefined;
         try {
           if (this.stream.getVideoTracks()[0]?.readyState !== "live" || this.stream.getVideoTracks()[0].muted)
             throw new Error("Spielbild unterbrochen.");
-          frame = await this.gameFrame();
+          if (reader) {
+            const next = await reader.read();
+            if (next.done) throw new Error("Spielbild unterbrochen.");
+            frame = next.value;
+          } else frame = await this.gameFrame();
           if (stopped) return;
-          const rect = photoRectangle(this.photoFrame!, frame?.width || this.video.videoWidth, frame?.height || this.video.videoHeight);
+          const width = frame ? ("displayWidth" in frame ? frame.displayWidth : frame.width) : this.video.videoWidth;
+          const height = frame ? ("displayHeight" in frame ? frame.displayHeight : frame.height) : this.video.videoHeight;
+          const rect = photoRectangle(this.photoFrame!, width, height);
           if (rect.width !== initial.width || rect.height !== initial.height) throw new Error("Die Spielgröße hat sich während des Videos geändert. Bitte erneut aufnehmen.");
           context.drawImage(frame || this.video, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
+          if (manualFrames) outputTrack.requestFrame();
+          lastFrame = Date.now();
           frameInterrupted = 0;
         } catch (error) {
           frameInterrupted ||= Date.now();
@@ -151,10 +186,14 @@ export class ReviewRecorder {
             this.cancelVideo(error instanceof Error ? error : new Error("Spielbild unterbrochen."));
         }
         finally { frame?.close(); }
-        if (!stopped) timer = setTimeout(() => void paint(), frameInterrupted ? 150 : 33);
+        if (!stopped) {
+          if (reader && !frameInterrupted) void paint();
+          else timer = setTimeout(() => void paint(), frameInterrupted ? 150 : Math.max(0, 1000 / 30 - (performance.now() - started)));
+        }
       };
       context.drawImage(this.video, initial.x, initial.y, initial.width, initial.height, 0, 0, canvas.width, canvas.height);
       const result = this.startVideo(onLimit, output);
+      if (manualFrames) outputTrack.requestFrame();
       this.preparingVideo = false;
       if (this.stopRequested) this.stopVideo();
       void paint();
@@ -166,7 +205,7 @@ export class ReviewRecorder {
   startVideo(onLimit: () => void, source = this.stream): Promise<File> {
     if (this.recorder || this.stream.getVideoTracks()[0]?.readyState !== "live") throw new Error("Eine Aufnahme läuft bereits oder die Bildschirmfreigabe wurde beendet.");
     if (typeof MediaRecorder === "undefined") throw new Error("Dieser Browser unterstützt keine Videoaufnahme. Bitte eine Videodatei hochladen.");
-    const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find(type => MediaRecorder.isTypeSupported(type));
+    const mimeType = ["video/webm;codecs=vp8", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(type => MediaRecorder.isTypeSupported(type));
     if (!mimeType) throw new Error("Kein unterstütztes Aufnahmeformat. Bitte eine MP4- oder WebM-Datei hochladen.");
     this.chunks = [];
     let size = 0;

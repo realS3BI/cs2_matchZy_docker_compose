@@ -38,7 +38,7 @@ public static class ReviewCaptureFiles
         if (commandId != null && (!Guid.TryParseExact(commandId, "N", out _) || commandId.Length != 32))
             throw new InvalidOperationException("Ungültige Aufnahme-Anfrage.");
         var command = new ReviewCommand(commandId ?? Guid.NewGuid().ToString("N"), session.Id, action, slot,
-            now + (action == "video-stop" ? 0 : 3000), now + 30_000, presentation, lineup.Owner, lineup.Map, lineup.Name, cameraPitch);
+            now + (action == "video-stop" ? 0 : 1000), now + 30_000, presentation, lineup.Owner, lineup.Map, lineup.Name, cameraPitch);
         var path = Path.Combine(folder, "command.json");
         File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(command, Json));
         File.Move(path + ".tmp", path, true);
@@ -53,7 +53,7 @@ public static class ReviewCaptureFiles
 
 public static class ReviewMenu
 {
-    public static MenuPage Create(NadeLineup lineup)
+    public static MenuPage Create(NadeLineup lineup, bool canEdit = false)
     {
         var slots = lineup.ReviewMediaSlots ?? [];
         var definitions = new[] {
@@ -63,7 +63,7 @@ public static class ReviewMenu
             ("effect", "Wirkung", "Teleportiert dich beim Öffnen zum gespeicherten Ziel und schaltet Noclip ein. Herausfliegen, den Bildausschnitt wählen und die Wirkung ohne Fadenkreuz aufnehmen.")
         };
         var items = definitions.Select((step, i) => new MenuItem($"{i + 1}. {step.Item2}{(slots.Contains(step.Item1) ? " [Foto vorhanden]" : "")}", step.Item3,
-            Page: new($"{i + 1}/6 · {step.Item2}", step.Item3, [
+            Page: new($"{i + 1}/7 · {step.Item2}", step.Item3, [
                 new("Foto aufnehmen & hochladen", "Die Windows-App stellt HUD, Waffe und Fadenkreuz automatisch ein. Im Browser vorher der Vorbereitung folgen. Nach dem Foto öffnet sich diese Menüseite wieder.", Request: new(TrainingAction.ReviewPhoto, lineup, Setting: step.Item1)),
                 new("Lineup laden", "Teleportiert dich zum gespeicherten Start und richtet den Blick aus. Danach die gewünschte Perspektive selbst einstellen.", Request: new(TrainingAction.LoadLineup, lineup)),
                 .. (step.Item1 == "effect" ? new MenuItem[] {
@@ -75,25 +75,38 @@ public static class ReviewMenu
             ], Key: $"review-{step.Item1}:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: step.Item1),
             Request: step.Item1 == "effect" ? new(TrainingAction.ReviewTeleportEffect, lineup) : null)).ToList();
         items.Add(new($"5. Video{(slots.Contains("video") ? " [Vorhanden]" : "")}", "Zum Start laufen, zielen, werfen und mit Noclip die Wirkung zeigen. Aufnahme in Playbook, ohne Ton, maximal zwei Minuten.",
-            Page: new("5/6 · Video", "Nach dem Start drei Sekunden warten. Panel wird ausgeblendet. Die Windows-App aktiviert F8 automatisch; im Browser ist der Review-Bind nötig.", [
+            Page: new("5/7 · Video", "Nach dem Start eine Sekunde warten. Panel wird ausgeblendet. Die Windows-App aktiviert F8 automatisch; im Browser ist der Review-Bind nötig.", [
                 new("Video starten", "Playbook-Aufnahme starten. Erst nach der Chat-Bestätigung zum Startpunkt loslaufen.", Request: new(TrainingAction.ReviewVideoStart, lineup)),
                 new("Video stoppen & hochladen", "Beendet die Aufnahme und lädt das Video hoch. Windows-App: F8. Browser: bind F8 css_training_review_stop", Request: new(TrainingAction.ReviewVideoStop, lineup)),
                 new("Lineup laden", "Lädt den gespeicherten Start und die Blickrichtung für den nächsten Versuch.", Request: new(TrainingAction.LoadLineup, lineup)),
                 new("Zur Ausrichtung", "Zum Lineup-Schritt zurückkehren.", Page: items[0].Page),
                 new("Noclip umschalten", "Zum Ziel fliegen und die Wirkung zeigen.", Request: new(TrainingAction.Noclip))
             ], Key: $"review-video:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "video")));
-        items.Add(new("6. Prüfen & freigeben", "Die fünf Aufnahmen zuerst in der Website ansehen. Nur vollständige Reviews können offiziell freigegeben werden.",
-            Page: new("6/6 · Freigabe", $"{slots.Length}/5 Medien vorhanden. Bilder und Video vor der Freigabe auf der Website prüfen.", [
+        var missingDetails = MissingDetails(lineup);
+        items.Add(new($"6. Angaben{(missingDetails.Length == 0 ? " [Vollständig]" : " [Offen]")}", "Name, Beschreibung, Startposition und Endposition prüfen und ergänzen.",
+            Page: new("6/7 · Angaben", canEdit ? "Feld auswählen, Chat öffnen und den Wert eingeben. Mit abbrechen beenden." : "Nur der Ersteller kann diese Angaben bearbeiten. Fehlende Angaben vor der Freigabe ergänzen lassen.", [
+                new($"Name: {lineup.Title}", "Anzeigenamen im Chat eingeben.", Request: new(TrainingAction.EditName, lineup), Enabled: canEdit),
+                new($"Beschreibung: {(string.IsNullOrWhiteSpace(lineup.Description) ? "Offen" : lineup.Description)}", "Beschreibung im Chat eingeben.", Request: new(TrainingAction.EditDescription, lineup), Enabled: canEdit),
+                new($"Startposition: {(string.IsNullOrWhiteSpace(lineup.ThrowFromTitle) ? "Offen" : lineup.ThrowFromTitle)}", "Bezeichnung des Abwurfbereichs im Chat eingeben.", Request: new(TrainingAction.EditField, lineup, Setting: "throwFromTitle"), Enabled: canEdit),
+                new($"Endposition: {(string.IsNullOrWhiteSpace(lineup.ThrowToTitle) ? "Offen" : lineup.ThrowToTitle)}", "Bezeichnung des Zielbereichs im Chat eingeben.", Request: new(TrainingAction.EditField, lineup, Setting: "throwToTitle"), Enabled: canEdit)
+            ], Key: $"review-details:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "details")));
+        items.Add(new("7. Prüfen & freigeben", "Die fünf Aufnahmen zuerst in der Website ansehen. Nur vollständige Reviews können offiziell freigegeben werden.",
+            Page: new("7/7 · Freigabe", $"{slots.Length}/5 Medien vorhanden. Angaben: {(missingDetails.Length == 0 ? "vollständig" : "Fehlt: " + string.Join(", ", missingDetails))}. Bilder und Video vor der Freigabe auf der Website prüfen.", [
                 new("Offiziell freigeben", "Bestätigt die Prüfung von Wurf, Fotos und Video. Die Website prüft Rolle, Version und Vollständigkeit erneut.",
                     Page: new("Freigabe bestätigen", "Hast du alle vier Fotos und das Video auf der Website geprüft?", [
                         new("Abbrechen", Request: new(TrainingAction.Back)),
                         new("Geprüft und offiziell freigeben", Request: new(TrainingAction.ReviewApprove, lineup))
-                    ], Key: $"review-approve:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "finish"), Enabled: ReviewCaptureFiles.Slots.All(slots.Contains)),
+                    ], Key: $"review-approve:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "finish"), Enabled: ReviewCaptureFiles.Slots.All(slots.Contains) && missingDetails.Length == 0),
                 new("Überarbeitung anfragen", "Gibt die eingereichte Aufnahme an den Ersteller zurück.", Request: new(TrainingAction.ReviewReject, lineup), Enabled: lineup.ReviewStatus == "pending")
             ], Key: $"review-finish:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "finish")));
         return new("Medien-Review", "Server → Reviews öffnen, CS2 starten und Spielbild verbinden. Lineup und Schritt erscheinen dort automatisch. Danach den Review hier steuern.", items,
             Key: $"review:{lineup.Owner}:{lineup.Map}:{lineup.Name}", ReviewLineup: lineup, ReviewStep: "overview");
     }
+    public static string[] MissingDetails(NadeLineup lineup) => new[] {
+        ("Name", lineup.Title), ("Beschreibung", lineup.Description),
+        ("Startposition", lineup.ThrowFromTitle), ("Endposition", lineup.ThrowToTitle)
+    }.Where(field => string.IsNullOrWhiteSpace(field.Item2)).Select(field => field.Item1).ToArray();
+
 }
 
 public sealed partial class MatchZyNadesPlugin
@@ -133,6 +146,13 @@ public sealed partial class MatchZyNadesPlugin
         }
         if (request.Action is TrainingAction.ReviewApprove or TrainingAction.ReviewReject) {
             if (selected?.Revision != lineup.Revision) { Tell(player, "Das Lineup wurde geändert. Bitte den Review erneut öffnen und prüfen."); return true; }
+            if (request.Action == TrainingAction.ReviewApprove) {
+                var missing = ReviewMenu.MissingDetails(lineup);
+                if (missing.Length > 0 || !ReviewCaptureFiles.Slots.All((lineup.ReviewMediaSlots ?? []).Contains)) {
+                    Tell(player, "Vor der Freigabe alle fünf Medien und Angaben ergänzen" + (missing.Length > 0 ? ": " + string.Join(", ", missing) : "."));
+                    return true;
+                }
+            }
             QueueReviewDecision(player, lineup, request.Action); return true;
         }
         if (request.Action == TrainingAction.ReviewHelp)
@@ -160,7 +180,13 @@ public sealed partial class MatchZyNadesPlugin
             if (panel != null) Hide(panel);
             if (action == "photo") {
                 if (request.Setting == "front") {
+                    var wasNoclip = player.PlayerPawn.Value!.MoveType == MoveType_t.MOVETYPE_NOCLIP;
                     LoadLineup(player, lineup);
+                    if (wasNoclip) {
+                        var pawn = player.PlayerPawn.Value!;
+                        pawn.MoveType = pawn.ActualMoveType = MoveType_t.MOVETYPE_NOCLIP;
+                        Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
+                    }
                     var origin = player.PlayerPawn.Value?.AbsOrigin;
                     if (origin == null || Math.Abs(origin.X - lineup.Position.X) > 2 || Math.Abs(origin.Y - lineup.Position.Y) > 2 || Math.Abs(origin.Z - lineup.Position.Z) > 5)
                         throw new InvalidOperationException("Der Startpunkt konnte nicht geladen werden. Bitte das Lineup erneut laden.");
@@ -175,7 +201,7 @@ public sealed partial class MatchZyNadesPlugin
                 // Chat stays silent during a photo, including the countdown.
             } else {
                 if (action == "video-start") _reviewVideos[player.SteamID] = new(command.SessionId, panel, focused, lineup);
-                Tell(player, action == "video-start" ? "Video startet nach drei Sekunden. Warte auf die Bestätigung, dann loslaufen. F8 stoppt mit eingerichtetem Review-Bind." : "Video wird beendet und hochgeladen. Bitte warten.");
+                Tell(player, action == "video-start" ? "Video startet nach einer Sekunde. Warte auf die Bestätigung, dann loslaufen. F8 stoppt mit eingerichtetem Review-Bind." : "Video wird beendet und hochgeladen. Bitte warten.");
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)

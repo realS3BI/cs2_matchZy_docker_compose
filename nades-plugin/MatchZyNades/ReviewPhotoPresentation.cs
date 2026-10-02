@@ -22,6 +22,7 @@ internal sealed class ReviewPhotoPresentation : IDisposable
     private readonly float _attackLock = Server.CurrentTime + 45f;
     private readonly Coordinates _frontAngles;
     private bool _frontPoseApplied;
+    private bool _freezeApplied;
     private bool _disposed;
     public uint PawnHandle { get; }
     public float CameraPitch => ReviewPhotoFraming.CameraPitch(_frontAngles.X);
@@ -52,14 +53,22 @@ internal sealed class ReviewPhotoPresentation : IDisposable
                 _cameraServices.FOVRate = 0;
                 _cameraServices.FOVTime = Server.CurrentTime;
             }
-            pawn.MoveType = MoveType_t.MOVETYPE_NONE;
-            pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
-            pawn.WeaponServices.As<CCSPlayer_WeaponServices>().NextAttack = _attackLock;
-            Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
-            if (slot == "front") {
-                _frontPoseApplied = true;
+            // Keep noclip on both server and client throughout the photo.
+            // Freeze input instead of switching to a different movement mode.
+            if (_move != MoveType_t.MOVETYPE_NOCLIP) {
+                pawn.MoveType = MoveType_t.MOVETYPE_NONE;
+                pawn.ActualMoveType = MoveType_t.MOVETYPE_NONE;
+                Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
+            }
+            if (_front || _move == MoveType_t.MOVETYPE_NOCLIP) {
+                _freezeApplied = true;
                 pawn.Flags |= (uint)PlayerFlags.FL_FROZEN;
                 Utilities.SetStateChanged(pawn, "CBaseEntity", "m_fFlags");
+            }
+            pawn.AbsVelocity.X = pawn.AbsVelocity.Y = pawn.AbsVelocity.Z = 0;
+            pawn.WeaponServices.As<CCSPlayer_WeaponServices>().NextAttack = _attackLock;
+            if (slot == "front") {
+                _frontPoseApplied = true;
                 pawn.Teleport(null, new QAngle(_frontAngles.X, _frontAngles.Y, _frontAngles.Z), new Vector());
                 PlayerBodyRotation.Repair(pawn);
             }
@@ -80,11 +89,11 @@ internal sealed class ReviewPhotoPresentation : IDisposable
         if (_disposed) return;
         _disposed = true;
         if (!_pawn.IsValid || _pawn.EntityHandle.Raw != PawnHandle) return;
+        if (_freezeApplied && !_wasFrozen) {
+            _pawn.Flags &= ~(uint)PlayerFlags.FL_FROZEN;
+            Utilities.SetStateChanged(_pawn, "CBaseEntity", "m_fFlags");
+        }
         if (_frontPoseApplied) {
-            if (!_wasFrozen) {
-                _pawn.Flags &= ~(uint)PlayerFlags.FL_FROZEN;
-                Utilities.SetStateChanged(_pawn, "CBaseEntity", "m_fFlags");
-            }
             if (!_cameraServices.ViewEntity.IsValid && _eyeAngles is { } eyes && _pawn.Health > 0) {
                 _pawn.Teleport(null, new QAngle(eyes.X, eyes.Y, eyes.Z), new Vector());
                 PlayerBodyRotation.Repair(_pawn);

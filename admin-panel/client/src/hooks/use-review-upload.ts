@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { genUploader } from "uploadthing/client";
 import type { ReviewFileRouter } from "../../../src/uploadthing";
-import { canUploadReviewMedia, reviewFileError, type ReviewSlot } from "../../../shared/review-media";
+import { canUploadReviewMedia, reviewFileError, reviewUploadName, type ReviewSlot } from "../../../shared/review-media";
 import { THROW_ATTRIBUTE_FIELDS } from "../../../shared/throw-attributes";
 import { api } from "../lib/api";
 
@@ -41,7 +41,7 @@ export function useReviewUpload({ nade, user, disabled, onEntriesChange }) {
         throw new Error("Die Wurfdaten wurden geändert und sind jetzt aktualisiert. Prüfe, ob die Aufnahme noch passt, bevor du den Upload erneut versuchst.");
       }
       const options = {
-        files: [file], input: { owner, map, name, revision: entry.updatedAt, slot }, onUploadProgress: ({ totalProgress }) => setProgress(totalProgress),
+        files: [new File([file], reviewUploadName({ map, name }, slot, file.type, file.lastModified), { type: file.type, lastModified: file.lastModified })], input: { owner, map, name, revision: entry.updatedAt, slot }, onUploadProgress: ({ totalProgress }) => setProgress(totalProgress),
       };
       const result = await uploadFiles(slot === "video" ? "reviewVideo" : "reviewPhoto", options);
       if (!result?.[0]?.serverData?.saved) throw new Error("Die Datei wurde nicht bestätigt. Bitte erneut versuchen.");

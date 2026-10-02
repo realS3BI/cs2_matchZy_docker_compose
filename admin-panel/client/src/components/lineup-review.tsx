@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, Circle, Crosshair, Film, MonitorUp, Play, Send, ShieldCheck, Square, Upload } from "lucide-react";
-import { REVIEW_STEPS, canUploadReviewMedia, missingReviewMedia, type ReviewSlot } from "../../../shared/review-media";
+import { REVIEW_STEPS, REVIEW_DETAIL_FIELDS, canUploadReviewMedia, missingReviewMedia, missingReviewDetails, type ReviewSlot } from "../../../shared/review-media";
 import { lineupPermissions } from "../../../shared/lineup-policy";
 import { useReviewUpload } from "../hooks/use-review-upload";
 import { useReviewCapture } from "../hooks/use-review-capture";
@@ -14,13 +14,15 @@ import { Progress } from "./ui/progress";
 import { ReviewPhotoFrame } from "./review-photo-frame";
 import { ReviewGameSetup } from "./review-game-setup";
 import { desktop } from "../lib/playbook-desktop";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
 
-const steps = [...REVIEW_STEPS, { id: "finish", title: "Alles bereit für den Review", short: "Prüfung", description: "Prüfe die Aufnahmen und die Wurfdaten. Die offizielle Freigabe übernimmt ein Plattform-Admin." }] as const;
+const steps = [...REVIEW_STEPS, { id: "details", title: "Angaben vervollständigen", short: "Angaben", description: "Name, Beschreibung, Startposition und Endposition müssen vor der Freigabe ausgefüllt sein." }, { id: "finish", title: "Alles bereit für den Review", short: "Prüfung", description: "Prüfe die Aufnahmen und die Wurfdaten. Die offizielle Freigabe übernimmt ein Plattform-Admin." }] as const;
 
 export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, onBusyChange = (_busy: boolean) => {}, externalCapture = null, externalUpload = null, syncedStep = "" }) {
   const [index, setIndex] = useState(() => {
     const missing = REVIEW_STEPS.findIndex(step => !nade.reviewMedia?.[step.id]);
-    return missing < 0 ? REVIEW_STEPS.length : missing;
+    return missing < 0 ? REVIEW_STEPS.length + (missingReviewDetails(nade).length ? 0 : 1) : missing;
   });
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -28,6 +30,9 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
   const permissions = lineupPermissions(nade, user);
   const editable = canUploadReviewMedia(nade, user);
   const missing = missingReviewMedia(nade);
+  const missingDetails = missingReviewDetails(nade);
+  const [draft, setDraft] = useState({ displayName: nade.displayName || nade.name, desc: nade.desc || "", throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" });
+  useEffect(() => setDraft({ displayName: nade.displayName || nade.name, desc: nade.desc || "", throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" }), [nade.owner, nade.map, nade.name, nade.displayName, nade.desc, nade.throwFromTitle, nade.throwToTitle]);
   const step = steps[index];
   const media = nade.reviewMedia?.[step.id];
   const ownUpload = useReviewUpload({ nade, user, disabled, onEntriesChange });
@@ -50,7 +55,7 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
     try { await action(); } catch (error) { setError(error.message || "Die Aufnahme konnte nicht gespeichert werden."); }
   }
   const completed = REVIEW_STEPS.length - missing.length;
-  const stepComplete = (id: string) => id === "finish" ? nade.official : !!nade.reviewMedia?.[id];
+  const stepComplete = (id: string) => id === "finish" ? nade.official : id === "details" ? missingDetails.length === 0 : !!nade.reviewMedia?.[id];
   return <section id="lineup-review" className="review-workspace" aria-labelledby="review-title">
     <header className="review-heading">
       <div><p className="review-eyebrow">{nade.official ? "Geprüfte Anleitung" : "Lineup dokumentieren"}</p><h2 id="review-title">Review</h2></div>
@@ -81,7 +86,17 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
     {error && <Alert variant="destructive"><AlertTitle>Aufnahme nicht abgeschlossen</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
     {retry && !uploading && <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">{retry.file.name} für „{retry.reference.displayName || retry.reference.name}“ bleibt zum erneuten Upload bereit.</span><Button variant="secondary" disabled={locked} onClick={() => run(() => upload(retry.slot, retry.file, retry.reference))}>Upload erneut versuchen</Button></div>}
 
-    {step.id !== "finish" ? <div className="review-step-layout">
+    {step.id === "details" ? <Card>
+      <CardHeader><CardTitle>{step.title}</CardTitle><CardDescription>{step.description}</CardDescription></CardHeader>
+      <CardContent className="grid gap-4">
+        {REVIEW_DETAIL_FIELDS.map(field => <label key={field.key} className="grid gap-2 text-sm">
+          <span>{field.label} *</span>
+          {field.key === "desc" ? <Textarea value={draft[field.key]} disabled={navigationLocked || !permissions.edit} maxLength={4000} onChange={event => setDraft(value => ({ ...value, [field.key]: event.target.value }))} /> : <Input value={draft[field.key]} disabled={navigationLocked || !permissions.edit} maxLength={120} onChange={event => setDraft(value => ({ ...value, [field.key]: event.target.value }))} />}
+        </label>)}
+        {permissions.edit ? <ActionButton disabled={navigationLocked || missingReviewDetails({ ...draft, name: "" }).length > 0} onClick={() => run(() => mutate("edit", { patch: draft }))} successLabel="Gespeichert">Angaben speichern</ActionButton> : <p className="text-sm text-muted-foreground">Nur der Ersteller kann die Angaben bearbeiten. Fehlende Angaben vor der Freigabe ergänzen lassen.</p>}
+        <p className="text-sm">{missingDetails.length ? `Noch offen: ${missingDetails.join(", ")}` : "Alle Pflichtangaben sind gespeichert."}</p>
+      </CardContent>
+    </Card> : step.id !== "finish" ? <div className="review-step-layout">
       <div className={cn("review-media-stage", dragging && "review-media-dragging")}
         onDragOver={event => { if (editable && !locked && enabled) { event.preventDefault(); setDragging(true); } }}
         onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); if (editable && !locked && enabled && event.dataTransfer.files[0]) void run(() => upload(step.id as ReviewSlot, event.dataTransfer.files[0])); }}>
@@ -111,11 +126,12 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
         </CardContent>
       </Card>
     </div> : <Card>
-      <CardHeader><CardTitle>{nade.official ? "Dieses Lineup ist freigegeben" : "Aufnahmen prüfen und abschließen"}</CardTitle><CardDescription>{nade.official ? "Die Anleitung wurde von einem Plattform-Admin freigegeben." : missing.length ? "Ergänze die fehlenden Perspektiven vor der offiziellen Freigabe. Du kannst den Review bereits anfragen, damit ein Admin die Aufnahmen vervollständigt." : "Alle Perspektiven sind vorhanden. Prüfe, ob sie zu den gespeicherten Wurfdaten passen."}</CardDescription></CardHeader>
+      <CardHeader><CardTitle>{nade.official ? "Dieses Lineup ist freigegeben" : "Aufnahmen prüfen und abschließen"}</CardTitle><CardDescription>{nade.official ? "Die Anleitung wurde von einem Plattform-Admin freigegeben." : missing.length || missingDetails.length ? "Ergänze die fehlenden Medien und Pflichtangaben vor der offiziellen Freigabe. Du kannst den Review bereits anfragen, damit ein Admin die Aufnahmen vervollständigt." : "Alle Perspektiven sind vorhanden. Prüfe, ob sie zu den gespeicherten Wurfdaten passen."}</CardDescription></CardHeader>
       <CardContent className="flex flex-col gap-5"><div className="review-checklist">{REVIEW_STEPS.map((item, i) => <button key={item.id} type="button" disabled={navigationLocked} onClick={() => setIndex(i)}>{nade.reviewMedia?.[item.id] ? <CheckCircle2 /> : <Circle />}<span>{item.title}</span><span>{nade.reviewMedia?.[item.id] ? "Ansehen" : "Fehlt"}</span></button>)}</div>
+        <div className="review-checklist">{REVIEW_DETAIL_FIELDS.map(field => <button key={field.key} type="button" disabled={navigationLocked} onClick={() => setIndex(REVIEW_STEPS.length)}>{missingDetails.includes(field.label) ? <Circle /> : <CheckCircle2 />}<span>{field.label}</span><span>{missingDetails.includes(field.label) ? "Fehlt" : "Vorhanden"}</span></button>)}</div>
         <div className="flex flex-wrap gap-2">
           {permissions.submit && <ActionButton icon={Send} disabled={locked || capture.recording || nade.reviewStatus === "pending"} onClick={() => mutate("submit")} pendingLabel="Reicht ein …" successLabel="Eingereicht">{nade.reviewStatus === "pending" ? "Review angefragt" : "Zum Review einreichen"}</ActionButton>}
-          {permissions.moderate && (nade.official ? <><ActionButton variant="secondary" disabled={locked} onClick={() => mutate("mustKnow", { value: !nade.mustKnow })}>{nade.mustKnow ? "Must Know entfernen" : "Als Must Know markieren"}</ActionButton><ActionButton variant="ghost" disabled={locked} onClick={() => mutate("revoke")}>Freigabe zurücknehmen</ActionButton></> : <><ActionButton icon={ShieldCheck} disabled={locked || capture.recording || missing.length > 0} onClick={() => mutate("approve")} successLabel="Freigegeben">Offiziell freigeben</ActionButton>{nade.reviewStatus === "pending" && <ActionButton variant="ghost" disabled={locked || capture.recording} onClick={() => mutate("reject")}>Überarbeitung anfragen</ActionButton>}</>)}
+          {permissions.moderate && (nade.official ? <><ActionButton variant="secondary" disabled={locked} onClick={() => mutate("mustKnow", { value: !nade.mustKnow })}>{nade.mustKnow ? "Must Know entfernen" : "Als Must Know markieren"}</ActionButton><ActionButton variant="ghost" disabled={locked} onClick={() => mutate("revoke")}>Freigabe zurücknehmen</ActionButton></> : <><ActionButton icon={ShieldCheck} disabled={locked || capture.recording || missing.length > 0 || missingDetails.length > 0} onClick={() => mutate("approve")} successLabel="Freigegeben">Offiziell freigeben</ActionButton>{nade.reviewStatus === "pending" && <ActionButton variant="ghost" disabled={locked || capture.recording} onClick={() => mutate("reject")}>Überarbeitung anfragen</ActionButton>}</>)}
         </div>
       </CardContent>
     </Card>}

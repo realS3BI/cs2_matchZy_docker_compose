@@ -228,8 +228,9 @@ public sealed class InGameMenuTests
         Assert.True(menu.Back());
         Assert.Contains(menu.Current.Items, item => item.Page?.Key == "favorites");
         Assert.Contains(menu.Current.Items, item => item.Page?.Key == "spawns");
-        Assert.Equal(TrainingAction.Settings, menu.Select(8)!.Action);
-        Assert.Equal(TrainingAction.Close, menu.Select(9)!.Action);
+        Assert.Equal(TrainingAction.Settings, menu.Select(9)!.Action);
+        menu.ChangePage(1);
+        Assert.Equal(TrainingAction.Close, menu.Select(1)!.Action);
         var inactive = TrainingMenu.Create([], "de_mirage", false, null);
         Assert.Null(inactive.Select(6));
         Assert.True(inactive.IsRoot);
