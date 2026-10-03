@@ -84,6 +84,9 @@ window.checkRadarPreview=async(mode='to')=>{
  assert(!document.querySelector('.radar-preview-heading'),'Hinweiszeile ist noch sichtbar');
  await waitFor(()=>document.querySelector('.radar-preview-video video')?.readyState>=2);
  const previewVideo=document.querySelector('.radar-preview-video video');
+ window.setRecording({desc:'Aktualisierte Anleitung während der Wiedergabe'});
+ await new Promise(resolve=>setTimeout(resolve,200));
+ assert(previewVideo.isConnected&&document.querySelector('.radar-preview-video video')===previewVideo,'Datenaktualisierung schließt die laufende Vorschau');
  assert(previewVideo.autoplay&&previewVideo.loop&&!previewVideo.controls,'Vorschau startet oder wiederholt nicht automatisch');
  await waitFor(()=>!previewVideo.paused);
  let lastPreviewTime=previewVideo.currentTime,previewLoops=0;

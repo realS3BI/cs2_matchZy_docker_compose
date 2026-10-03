@@ -44,9 +44,25 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
   }
   useEffect(() => {
     cancelTimer(); setPreview(null);
-  }, [selected, side, expanded, groups]);
+  }, [selected?.id, side, expanded?.id, map.key]);
   useEffect(() => {
-    const close = () => { cancelTimer(); setPreview(null); };
+    // Live updates rebuild radar groups. Keep the player mounted while its
+    // marker and officially reviewed recording are still available.
+    setPreview(current => {
+      if (!current) return null;
+      const group = counterparts.find(group => group.id === current.group.id);
+      const candidates = group?.nades.filter(nade => nade.official && nade.reviewMedia?.video);
+      if (!group || !candidates?.length) return null;
+      const previous = current.group.nades.filter(nade => nade.official && nade.reviewMedia?.video)[current.index];
+      const index = previous ? candidates.findIndex(nade => lineupKey(nade) === lineupKey(previous)) : 0;
+      return { ...current, group, index: Math.max(0, index) };
+    });
+  }, [counterparts]);
+  useEffect(() => {
+    const close = (event?: Event) => {
+      if (event?.type === "scroll" && event.target instanceof Element && event.target.closest(".radar-preview")) return;
+      cancelTimer(); setPreview(null);
+    };
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);

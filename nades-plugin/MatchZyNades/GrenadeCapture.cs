@@ -25,6 +25,7 @@ public sealed partial class MatchZyNadesPlugin
             var player = e.Userid;
             if (player == null || !TrainingEnabled) return HookResult.Continue;
             var kind = ThrownKind(e.Weapon);
+            if (kind == NadeKind.Fire) _fireEffectOrigins.Begin(player.SteamID, Server.CurrentTime);
             if (StandaloneTraining)
                 Logger.LogInformation("[Rethrow] grenade_thrown empfangen: SteamID={SteamId}, Waffe={Weapon}, Typ={Type}, Simulationszeit={Time}",
                     player.SteamID, e.Weapon, kind, Server.CurrentTime);
@@ -233,6 +234,14 @@ public sealed partial class MatchZyNadesPlugin
 
     private void CaptureProjectile(CEntityInstance entity)
     {
+        // Clear stale identities on index reuse, while preserving a synthetic projectile
+        // whose spawn callback is delivered after its creation method returns.
+        var index = (int)entity.Index;
+        var handle = entity.EntityHandle.Raw;
+        if (_syntheticProjectiles.TryGetValue(index, out var previous) && previous != handle)
+            _syntheticProjectiles.Remove(index);
+        if (_rethrowObservations.TryGetValue(index, out var observation) && observation.Handle != handle)
+            _rethrowObservations.Remove(index);
         var kind = ProjectileKind(entity.DesignerName);
         if (!TrainingEnabled || kind == NadeKind.Other) return;
         // The thrower is assigned after spawn; grenade_thrown identifies a real player throw.
@@ -260,7 +269,11 @@ public sealed partial class MatchZyNadesPlugin
 
     private HookResult CompleteCapture(int entityId, CCSPlayerController? player, NadeKind kind, Coordinates target)
     {
+        var current = Utilities.GetEntityFromIndex<CBaseCSGrenadeProjectile>(entityId);
+        var synthetic = _syntheticProjectiles.TryGetValue(entityId, out var expectedHandle) &&
+            (current is not { IsValid: true } || current.EntityHandle.Raw == expectedHandle);
         LogRethrowEffect(entityId, kind, target);
+        if (synthetic) return HookResult.Continue;
         if (player is not { IsValid: true } && _capture.Thrower(entityId) is { } thrower)
             player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.Slot == thrower.Slot && p.SteamID == thrower.SteamId);
         if (!TrainingEnabled || player is not { IsValid: true } ||
@@ -296,10 +309,27 @@ public sealed partial class MatchZyNadesPlugin
 
     private HookResult CompleteFireCapture(CCSPlayerController? player, Coordinates target)
     {
-        if (_rethrowObservations.Values.Any(observation => observation.Type == "molotov_projectile"))
-            Logger.LogInformation("[Rethrow] Molotov-Wirkungsereignis ohne Projektil-ID: SteamID={SteamId}, Position={Position}. Keine sichere Zuordnung zu einem Wiederholungsversuch möglich.",
-                player?.SteamID, RethrowCoordinates(target));
         if (!TrainingEnabled || player is not { IsValid: true }) return HookResult.Continue;
+        var route = _fireEffectOrigins.Complete(player.SteamID, Server.CurrentTime);
+        if (route.Origin == FireEffectOrigin.Synthetic)
+        {
+            if (route.Attempt is { } attempt)
+            {
+                var synthetic = _rethrowObservations.Values.FirstOrDefault(o => o.Id == attempt);
+                if (synthetic != null) synthetic.EffectLogged = true;
+            }
+            Logger.LogInformation("[Rethrow] Molotov-Wirkung eines Wiederholungswurfs: Versuch={Attempt}, SteamID={SteamId}, Position={Position}. Ohne Projektil-ID; Zuordnung nur bei einzelnem offenen Wurf.",
+                route.Attempt, player.SteamID, RethrowCoordinates(target));
+            return HookResult.Continue;
+        }
+        if (route.Origin != FireEffectOrigin.Real)
+        {
+            Logger.LogWarning("[Rethrow] Molotov-Ereignis nicht eindeutig: Herkunft={Origin}, SteamID={SteamId}, Position={Position}. Keine Aufnahme oder Flugzeit abgeschlossen.",
+                route.Origin, player.SteamID, RethrowCoordinates(target));
+            if (route.Origin == FireEffectOrigin.Ambiguous)
+                Tell(player, "Überlappende Molotov-Würfe: Wirkung nicht eindeutig zuordenbar. Für die Aufnahme genau einen Wurf verwenden.");
+            return HookResult.Continue;
+        }
         CompleteFlightTime(null, player, NadeKind.Fire);
         // Molotov detonation does not expose a projectile entity id in the CS# event.
         var captured = _capture.CompleteMeasuredByThrower(player.Slot, player.SteamID, NadeKind.Fire, Server.MapName, Server.CurrentTime);
@@ -318,6 +348,8 @@ public sealed partial class MatchZyNadesPlugin
     {
         _capture.Clear();
         _flightTimes.Clear();
+        _fireEffectOrigins.Clear();
+        _syntheticProjectiles.Clear();
         _saveRequests.Clear();
         _saveSamples.Clear();
         _draftNameRequests.Clear();

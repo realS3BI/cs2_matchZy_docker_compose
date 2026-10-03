@@ -283,7 +283,13 @@ Die Chatmeldung bestätigt nur die Projektil-Erzeugung; sie bestätigt keine Wir
 docker compose logs --since 5m cs2
 ```
 
-Ab `2.3.15` erhalten Wiederholungsprojektile den Spieler-Pawn als `OwnerEntity` vor und nach dem Spawn. `Thrower` und `OriginalThrower` bleiben bewusst leer, damit synthetische Wirkungsereignisse keine echten Aufnahmen oder Flugzeitmessungen abschließen. Die Diagnose unterscheidet jetzt eine ungültige Entity von einem geänderten Handle und protokolliert `OnEntityDeleted`; dieser Callback liefert keinen Löschgrund. Ob die Besitzerkorrektur ein konkretes Verschwinden verhindert, muss im laufenden Spiel geprüft werden.
+Ab `2.3.15` unterscheidet die Diagnose eine ungültige Entity von einem geänderten Handle und protokolliert `OnEntityDeleted`; dieser Callback liefert keinen Löschgrund.
+
+Ab `2.3.16` schreiben die regelmäßigen Trainingsaufgaben ConVars nur bei abweichenden Werten. Die beiden Ein-Sekunden-Timer für Bots und Trainingssitzung melden Laufzeiten ab 2 ms unter `[TrainingPerformance]`, höchstens einmal je Aufgabe pro 10 Simulationssekunden. Diese Laufzeitmessung umfasst auch mögliche Thread-Unterbrechungen und beweist allein keine CPU-Auslastung durch das Plugin. Für die Diagnose von Frame-Spikes diese Meldungen zusammen mit den Engine-Zeitwerten und den `[Rethrow]`-Einträgen sichern.
+
+Ab `2.3.17` erzeugt `.rt` Smoke, HE, Molotov/Incendiary und Decoy mit den jeweiligen nativen Engine-Funktionen; Flashbangs erhalten einen typisierten Spawn. Alle Typen setzen `OwnerEntity`, `Thrower` und `OriginalThrower` auf den Spieler-Pawn. Das Image enthält `playbook-nades.json`; der Bootstrap installiert die Signaturen unter `addons/counterstrikesharp/gamedata/` auch ohne MatchZy im Nades-Modus. Bei fehlender Signatur bricht der Versuch mit einem Fehler im `[Rethrow]`-Log ab, statt ein unvollständig initialisiertes Ersatzprojektil zu erzeugen. Nach Updates ist ein Neubau und ein neuer CS2-Container erforderlich; die nativen Signaturen müssen zum CS2-Build passen.
+
+Wiederholte Wirkungsereignisse mit Entity-ID schließen keine echte Aufnahme oder Flugzeitmessung ab. Bei Molotov-Ereignissen ohne Entity-ID unterscheidet Playbook echte und synthetische Würfe pro Steam-ID. Ein einzelner synthetischer Wurf kann seinem Versuch zugeordnet werden; überlappende Wiederholungswürfe werden ohne erfundene Versuch-ID protokolliert. Überlappen echte Würfe mit anderen Molotov-Würfen desselben Spielers, wird keine Aufnahme abgeschlossen und eine Meldung fordert einen einzelnen Wurf für die Aufnahme an. Die Wirkung im Spiel wird dadurch nicht unterdrückt. Diese Engine-Änderung muss auf dem laufenden CS2-Server für jeden Granatentyp geprüft werden.
 
 ```bash
 docker compose config

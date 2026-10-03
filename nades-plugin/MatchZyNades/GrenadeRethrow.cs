@@ -9,6 +9,10 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin
 {
     private readonly GrenadeRethrowHistory _rethrows = new();
+    private readonly GrenadeProjectileFactory _projectileFactory = new();
+    private readonly FireEffectOrigins _fireEffectOrigins = new();
+    // Capture protection outlives the bounded diagnostic observations. Clear on index reuse.
+    private readonly Dictionary<int, uint> _syntheticProjectiles = [];
     private long _rethrowSequence;
     private sealed class RethrowObservation(long id, ulong steamId, CBaseCSGrenadeProjectile entity, float started)
     {
@@ -71,12 +75,13 @@ public sealed partial class MatchZyNadesPlugin
             RethrowCoordinates(grenade.Velocity), RethrowCoordinates(grenade.AngularVelocity), grenade.ItemIndex, grenade.Incendiary);
 
         CBaseCSGrenadeProjectile? projectile = null;
-        var phase = "CreateEntityByName";
+        var phase = "Engine-Projektil-Erzeugung";
         try
         {
 
-            // Keep the current entity-based creation path; diagnostics expose its initialization.
-            projectile = Utilities.CreateEntityByName<CBaseCSGrenadeProjectile>(grenade.DesignerName);
+            if (player.PlayerPawn.Value is not { IsValid: true })
+                throw new InvalidOperationException("Kein gültiger Spieler-Pawn für den Wiederholungswurf.");
+            projectile = _projectileFactory.Create(grenade, player.TeamNum);
             if (projectile is not { IsValid: true })
             {
                 Logger.LogWarning("[Rethrow] Versuch={Attempt}: {Phase} lieferte kein gültiges Projektil", id, phase);
@@ -90,27 +95,22 @@ public sealed partial class MatchZyNadesPlugin
                 Logger.LogInformation("[Rethrow] Versuch={Attempt}: Beobachtung wegen Limit von 64 Versuchen beendet", oldest.Value.Id);
             }
             var observation = new RethrowObservation(id, player.SteamID, projectile, Server.CurrentTime);
+            _syntheticProjectiles[(int)projectile.Index] = projectile.EntityHandle.Raw;
             _rethrowObservations[(int)projectile.Index] = observation;
-            LogRethrowState(observation, "erzeugt, vor Spawn");
-            phase = "Eigenschaften vor Spawn";
+            LogRethrowState(observation, "durch Engine erzeugt und gespawnt");
+            phase = "Werfer und Eigenschaften nach Spawn";
             projectile.Globalname = GrenadeRethrowHistory.Marker;
             projectile.ItemIndex = grenade.ItemIndex;
             projectile.TeamNum = player.TeamNum;
-            if (player.PlayerPawn.Value is not { IsValid: true })
-                throw new InvalidOperationException("Kein gültiger Spieler-Pawn für den Projektilbesitzer.");
-            // Owner controls projectile ownership/collision independently of detonation attribution.
-            // Keep Thrower/OriginalThrower unset so synthetic fire events cannot complete a real capture.
             projectile.OwnerEntity.Raw = player.PlayerPawn.Raw;
+            projectile.Thrower.Raw = player.PlayerPawn.Raw;
+            projectile.OriginalThrower.Raw = player.PlayerPawn.Raw;
             if (grenade.DesignerName == "molotov_projectile")
                 new CMolotovProjectile(projectile.Handle).IsIncGrenade = grenade.Incendiary;
-            phase = "DispatchSpawn";
-            projectile.DispatchSpawn();
-            LogRethrowState(observation, "nach Spawn, vor Teleport");
-            if (!projectile.IsValid) throw new InvalidOperationException("Projektil ist nach DispatchSpawn ungültig.");
             phase = "Wurfdaten und Teleport";
-            projectile.OwnerEntity.Raw = player.PlayerPawn.Raw;
-            Logger.LogInformation("[Rethrow] Versuch={Attempt}: Besitzer gesetzt, Owner={Owner}; Thrower und OriginalThrower bleiben zur Trennung von echten Aufnahmen absichtlich leer",
-                id, projectile.OwnerEntity.Raw);
+            Logger.LogInformation("[Rethrow] Versuch={Attempt}: Engine-Pfad={Path}, Owner={Owner}, Thrower={Thrower}, OriginalThrower={OriginalThrower}",
+                id, grenade.DesignerName == "flashbang_projectile" ? "Flashbang-Spawn" : "native Granaten-Factory",
+                projectile.OwnerEntity.Raw, projectile.Thrower.Raw, projectile.OriginalThrower.Raw);
 
             var p = grenade.Position;
             var v = grenade.Velocity;
@@ -126,8 +126,8 @@ public sealed partial class MatchZyNadesPlugin
             projectile.AngVelocity.Y = spin.Y;
             projectile.AngVelocity.Z = spin.Z;
             projectile.Teleport(new Vector(p.X, p.Y, p.Z), new QAngle(a.X, a.Y, a.Z), new Vector(v.X, v.Y, v.Z));
-            // Leave Thrower unset. Synthetic detonation events must not complete a real throw's
-            // capture or flight measurement, especially molotov events without an entity id.
+            if (grenade.DesignerName == "molotov_projectile")
+                _fireEffectOrigins.Begin(player.SteamID, Server.CurrentTime, id);
             LogRethrowState(observation, "nach Teleport");
             Server.NextFrame(() => ObserveRethrow(observation, "nächster Frame"));
             foreach (var seconds in new[] { 0.25f, 1f, 3f, 10f, 30f })

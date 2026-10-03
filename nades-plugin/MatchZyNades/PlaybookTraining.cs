@@ -5,6 +5,7 @@ using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace MatchZyNades;
 
@@ -22,15 +23,16 @@ public sealed partial class MatchZyNadesPlugin
     private readonly HashSet<ulong> _god = [];
     private readonly Dictionary<string, string> _practiceDefaults = [];
     private readonly PracticeWarmup _practiceWarmup = new();
+    private readonly Dictionary<string, float> _slowMaintenanceLoggedAt = [];
 
     private void RegisterStandaloneTraining(bool hotReload)
     {
         if (!StandaloneTraining) return;
         // Map/game configs and the engine quota manager can overwrite training
         // settings after startup. Keep team rules and the tracked bot count fixed.
-        AddTimer(1f, EnforceTrainingBots, TimerFlags.REPEAT);
+        AddTimer(1f, () => MeasureTrainingMaintenance("Bots", EnforceTrainingBots), TimerFlags.REPEAT);
         // Late game configs can start warmup after the map-start callback.
-        AddTimer(1f, MaintainPracticeSession, TimerFlags.REPEAT);
+        AddTimer(1f, () => MeasureTrainingMaintenance("Sitzung", MaintainPracticeSession), TimerFlags.REPEAT);
         foreach (var name in PlaybookCommands.TrainingCommands)
             AddCommand(name, "Playbook-Training", (player, command) => RunTrainingCommand(player, name, command.ArgString));
         AddCommandListener("noclip", (player, _) =>
@@ -134,9 +136,28 @@ public sealed partial class MatchZyNadesPlugin
             if (sessionOnly && !PlaybookCommands.PracticeSessionSettings.Contains(name)) continue;
             if (ConVar.Find(name) is not { } variable) continue;
             _practiceDefaults.TryAdd(name, variable.StringValue);
-            variable.StringValue = name == "bot_quota"
+            var desired = name == "bot_quota"
                 ? (TrainingBotCount() + (_addingTrainingBot ? 1 : 0)).ToString()
                 : value.Trim('"');
+            if (variable.StringValue != desired) variable.StringValue = desired;
+        }
+    }
+
+    private void MeasureTrainingMaintenance(string task, Action action)
+    {
+        var started = Stopwatch.GetTimestamp();
+        try { action(); }
+        finally
+        {
+            var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var now = Server.CurrentTime;
+            // Avoid adding a stream of synchronous log writes during sustained stalls.
+            if (elapsed >= 2 && (!_slowMaintenanceLoggedAt.TryGetValue(task, out var last) || now < last || now - last >= 10))
+            {
+                _slowMaintenanceLoggedAt[task] = now;
+                Logger.LogWarning("[TrainingPerformance] Aufgabe={Task}, DauerMs={Duration}, Simulationszeit={Time}, Map={Map}. Laufzeit umfasst mögliche Thread-Unterbrechungen; Meldungen je Aufgabe höchstens alle 10 Simulationssekunden.",
+                    task, Math.Round(elapsed, 3), now, Server.MapName);
+            }
         }
     }
 
@@ -282,6 +303,7 @@ public sealed partial class MatchZyNadesPlugin
     private void ForgetTraining(ulong steamId)
     {
         _positions.Remove(steamId); _throwPositions.Remove(steamId); _rethrows.Forget(steamId); _noFlash.Remove(steamId); _god.Remove(steamId);
+        _fireEffectOrigins.Forget(steamId);
     }
 
     private void ResetTraining()
@@ -289,6 +311,7 @@ public sealed partial class MatchZyNadesPlugin
         if (_rethrowObservations.Count > 0)
             Logger.LogInformation("[Rethrow] Beobachtungen wegen Trainings-/Map-Reset beendet: Anzahl={Count}", _rethrowObservations.Count);
         _rethrowObservations.Clear();
+        _slowMaintenanceLoggedAt.Clear();
         _positions.Clear(); _throwPositions.Clear(); _rethrows.Clear(); _noFlash.Clear(); _god.Clear();
         ResetTrainingBots();
     }

@@ -17,6 +17,8 @@ let server;
   server = await createServer({ configFile: path.join(root, 'client/vite.config.ts'), root: path.join(root, 'client'), server: { host: '127.0.0.1', port, strictPort: true } });
   await server.listen();
   const cases = [
+    ['lineup-presentation?overview=1', 'checkRadarPreview()'],
+    ['lineup-presentation?overview=1', 'checkRadarPreview("from")'],
     ['lineup-placement', 'checkPlacement()'], ['lineup-placement', 'checkPlacement()', 375],
     ['lineup-placement?foreign=1', 'checkPlacement()'], ['lineup-placement?foreign=1&role=admin', 'checkPlacement()'],
     ['review-desktop', 'checkConnectFailure()'],

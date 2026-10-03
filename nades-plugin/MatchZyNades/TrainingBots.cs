@@ -99,7 +99,10 @@ public sealed partial class MatchZyNadesPlugin
         foreach (var name in new[] { "mp_autoteambalance", "mp_limitteams", "bot_quota_mode",
                      "bot_join_after_player", "bot_stop", "bot_freeze", "bot_zombie" })
             if (ConVar.Find(name) is { } variable)
-                variable.StringValue = PlaybookCommands.PracticeSettings[name];
+            {
+                var desired = PlaybookCommands.PracticeSettings[name];
+                if (variable.StringValue != desired) variable.StringValue = desired;
+            }
     }
 
     private void EnforceTrainingBots()
@@ -107,7 +110,10 @@ public sealed partial class MatchZyNadesPlugin
         if (!TrainingEnabled) return;
         ApplyTrainingBotSettings();
         if (ConVar.Find("bot_quota") is { } quota)
-            quota.SetValue(TrainingBotCount() + (_addingTrainingBot ? 1 : 0));
+        {
+            var desired = TrainingBotCount() + (_addingTrainingBot ? 1 : 0);
+            if (quota.GetPrimitiveValue<int>() != desired) quota.SetValue(desired);
+        }
         if (_addingTrainingBot) return;
         // Also catch opposite-team and late arrivals from a single bot_add.
         foreach (var bot in Utilities.GetPlayers().Where(p => p.IsValid && p.IsBot && !p.IsHLTV &&

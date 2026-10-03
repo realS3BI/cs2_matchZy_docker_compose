@@ -666,10 +666,14 @@ _matchzy_bootstrap_main() (
   install_matchzy_nades() {
     local mode="$1"
     local source_file="/opt/matchzy-nades/MatchZyNades.dll"
+    local gamedata_file="/opt/matchzy-nades/playbook-nades.json"
     local destination_dir="$CSS_DIR/plugins/MatchZyNades"
     [[ -f "$source_file" ]] || fail "Bundled Playbook plugin not found: $source_file"
+    [[ -f "$gamedata_file" ]] || fail "Bundled Playbook grenade gamedata not found: $gamedata_file"
     mkdir -p "$destination_dir"
     copy_file_atomic "$source_file" "$destination_dir/MatchZyNades.dll"
+    mkdir -p "$CSS_DIR/gamedata"
+    copy_file_atomic "$gamedata_file" "$CSS_DIR/gamedata/playbook-nades.json"
     log "Installed bundled Playbook plugin (.nades menu)"
   }
 
