@@ -283,6 +283,8 @@ Die Chatmeldung bestätigt nur die Projektil-Erzeugung; sie bestätigt keine Wir
 docker compose logs --since 5m cs2
 ```
 
+Ab `2.3.15` erhalten Wiederholungsprojektile den Spieler-Pawn als `OwnerEntity` vor und nach dem Spawn. `Thrower` und `OriginalThrower` bleiben bewusst leer, damit synthetische Wirkungsereignisse keine echten Aufnahmen oder Flugzeitmessungen abschließen. Die Diagnose unterscheidet jetzt eine ungültige Entity von einem geänderten Handle und protokolliert `OnEntityDeleted`; dieser Callback liefert keinen Löschgrund. Ob die Besitzerkorrektur ein konkretes Verschwinden verhindert, muss im laufenden Spiel geprüft werden.
+
 ```bash
 docker compose config
 docker compose ps

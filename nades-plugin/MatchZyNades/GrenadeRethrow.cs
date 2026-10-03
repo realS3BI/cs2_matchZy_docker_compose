@@ -20,6 +20,7 @@ public sealed partial class MatchZyNadesPlugin
         public float Started { get; } = started;
         public bool MissingLogged { get; set; }
         public bool EffectLogged { get; set; }
+        public bool DeletedLogged { get; set; }
     }
     private readonly Dictionary<int, RethrowObservation> _rethrowObservations = [];
 
@@ -95,6 +96,11 @@ public sealed partial class MatchZyNadesPlugin
             projectile.Globalname = GrenadeRethrowHistory.Marker;
             projectile.ItemIndex = grenade.ItemIndex;
             projectile.TeamNum = player.TeamNum;
+            if (player.PlayerPawn.Value is not { IsValid: true })
+                throw new InvalidOperationException("Kein gültiger Spieler-Pawn für den Projektilbesitzer.");
+            // Owner controls projectile ownership/collision independently of detonation attribution.
+            // Keep Thrower/OriginalThrower unset so synthetic fire events cannot complete a real capture.
+            projectile.OwnerEntity.Raw = player.PlayerPawn.Raw;
             if (grenade.DesignerName == "molotov_projectile")
                 new CMolotovProjectile(projectile.Handle).IsIncGrenade = grenade.Incendiary;
             phase = "DispatchSpawn";
@@ -102,6 +108,9 @@ public sealed partial class MatchZyNadesPlugin
             LogRethrowState(observation, "nach Spawn, vor Teleport");
             if (!projectile.IsValid) throw new InvalidOperationException("Projektil ist nach DispatchSpawn ungültig.");
             phase = "Wurfdaten und Teleport";
+            projectile.OwnerEntity.Raw = player.PlayerPawn.Raw;
+            Logger.LogInformation("[Rethrow] Versuch={Attempt}: Besitzer gesetzt, Owner={Owner}; Thrower und OriginalThrower bleiben zur Trennung von echten Aufnahmen absichtlich leer",
+                id, projectile.OwnerEntity.Raw);
 
             var p = grenade.Position;
             var v = grenade.Velocity;
@@ -160,11 +169,13 @@ public sealed partial class MatchZyNadesPlugin
     private void ReadRethrowState(RethrowObservation observation, string phase)
     {
         var entity = observation.Entity;
-        if (!entity.IsValid || entity.EntityHandle.Raw != observation.Handle)
+        var valid = entity.IsValid;
+        var currentHandle = valid ? (uint?)entity.EntityHandle.Raw : null;
+        if (!valid || currentHandle != observation.Handle)
         {
             if (!observation.MissingLogged)
-                Logger.LogInformation("[Rethrow] Versuch={Attempt}: {Phase}, Projektil nicht mehr vorhanden, Alter={Age}s. Entfernung allein bestätigt keine Detonation.",
-                    observation.Id, phase, Server.CurrentTime - observation.Started);
+                Logger.LogInformation("[Rethrow] Versuch={Attempt}: {Phase}, ursprüngliches Projektil nicht mehr erreichbar, EntityGültig={Valid}, GespeicherterHandle={Expected}, AktuellerHandle={Actual}, Löschereignis={Deleted}, Alter={Age}s. Ungültige Entity oder geänderter Handle bestätigt keine Detonation.",
+                    observation.Id, phase, valid, observation.Handle, currentHandle, observation.DeletedLogged, Server.CurrentTime - observation.Started);
             observation.MissingLogged = true;
             return;
         }
@@ -189,5 +200,19 @@ public sealed partial class MatchZyNadesPlugin
         observation.EffectLogged = true;
         Logger.LogInformation("[Rethrow] Versuch={Attempt}: Wirkungsereignis, Entity={Entity}, Typ={Type}, Position={Position}, Alter={Age}s",
             observation.Id, entityId, kind, RethrowCoordinates(target), Server.CurrentTime - observation.Started);
+    }
+
+    private void LogRethrowDeletion(CEntityInstance entity)
+    {
+        try
+        {
+            if (!_rethrowObservations.TryGetValue((int)entity.Index, out var observation)) return;
+            if (entity.EntityHandle.Raw != observation.Handle) return;
+            observation.DeletedLogged = true;
+            Logger.LogInformation("[Rethrow] Versuch={Attempt}: OnEntityDeleted, Entity={Entity}, Handle={Handle}, Typ={Type}, Alter={Age}s. Der Löschgrund wird von diesem Callback nicht geliefert.",
+                observation.Id, entity.Index, observation.Handle, observation.Type, Server.CurrentTime - observation.Started);
+        }
+        catch (Exception error)
+        { Logger.LogWarning(error, "[Rethrow] Löschereignis konnte nicht gelesen werden"); }
     }
 }

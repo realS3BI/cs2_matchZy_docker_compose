@@ -65,7 +65,7 @@ window.checkPlacement=async()=>{
  await waitFor(()=>document.querySelector('h1'));
  if(params.has('foreign')&&user.role!=='admin') {assert(!button('Start und Ziel setzen'),'Fremde Positionierung bearbeitbar');assert(!button('Freigabe zurücknehmen'),'Fremde Freigabe zurücknehmbar');return 'PASS: Fremde Aufnahme geschützt';}
  for(const type of ['Smoke','Molly','Flash','HE','Decoy']) {
-  window.setRecording({type});await waitFor(()=>document.querySelector('.control-kicker').textContent.includes(type==='Molly'?'Molotov':type));
+  window.setRecording({type});await waitFor(()=>document.querySelector('h1').textContent.includes(type==='Molly'?'Molotov':type));
   assert(!!button('Start und Ziel setzen'),'Positionierung fehlt: '+type);
   assert(!button('Start setzen')&&!button('Ziel setzen'),'Editor standardmäßig offen: '+type);
  }

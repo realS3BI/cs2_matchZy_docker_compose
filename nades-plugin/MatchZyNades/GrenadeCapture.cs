@@ -19,6 +19,7 @@ public sealed partial class MatchZyNadesPlugin
     private void RegisterCapture()
     {
         RegisterListener<Listeners.OnEntitySpawned>(CaptureProjectile);
+        RegisterListener<Listeners.OnEntityDeleted>(LogRethrowDeletion);
         RegisterEventHandler<EventGrenadeThrown>((e, _) =>
         {
             var player = e.Userid;
