@@ -26,6 +26,30 @@ test("Nuke groups upper and lower positions separately and displays recordings t
   assert.equal(targets.flatMap(group => group.nades).length, 3);
 });
 
+test("Nuke outside wall keeps successive smoke targets separate while retaining variants at the same target", () => {
+  const nuke = ACTIVE_DUTY_MAPS.find(map => map.key === "nuke")!;
+  const entries = [
+    { name: "wall1", landingPos: "650 -1500 -400" },
+    { name: "wall1variant", landingPos: "662 -1512 -400" },
+    { name: "wall2", landingPos: "790 -1640 -400" },
+    { name: "wall3", landingPos: "930 -1780 -400" },
+  ].map(entry => ({ ...entry, owner: "player", map: "de_nuke", type: "Smoke", lineupPos: "0 -1500 -400" }));
+  const calibration = inferRadarCalibration(nuke, entries);
+  const targets = groupRadarNades(entries, "to", nuke, calibration);
+  assert.deepEqual(targets.map(group => group.nades.map(nade => nade.name)), [["wall1", "wall1variant"], ["wall2"], ["wall3"]]);
+  assert.deepEqual(targets, groupRadarNades([...entries].reverse(), "to", nuke, calibration));
+  assert.equal(groupRadarNades(entries, "from", nuke, calibration).length, 1);
+  assert.deepEqual(groupRadarNades(targets[0].nades, "to", nuke, calibration)[0].point, targets[0].point);
+});
+
+test("target grouping accounts for image aspect ratio and never absorbs a chain of adjacent targets", () => {
+  const entries = [nade("a", undefined, { x: .1, y: .1 }), nade("b", undefined, { x: .109, y: .1 }), nade("c", undefined, { x: .118, y: .1 })];
+  assert.deepEqual(groupRadarNades(entries, "to", map, null).map(group => group.nades.length), [2, 1]);
+  const wide = { ...map, radarWidth: 2000, radarHeight: 1000 };
+  assert.equal(groupRadarNades([nade("a", undefined, { x: .1, y: .1 }), nade("b", undefined, { x: .1, y: .118 })], "to", wide, null).length, 1);
+  assert.equal(groupRadarNades([nade("a", undefined, { x: .1, y: .1 }), nade("b", undefined, { x: .1, y: .123 })], "to", wide, null).length, 2);
+});
+
 test("targets group first, then identical starts retain every individual lineup", () => {
   const nades = [nade("a"), nade("b"), nade("c", { x: 0.5, y: 0.8 }), nade("d", undefined, { x: 0.1, y: 0.9 })];
   const targets = groupRadarNades(nades, "to", map, null);

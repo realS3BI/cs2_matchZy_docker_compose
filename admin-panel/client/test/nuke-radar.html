@@ -14,11 +14,17 @@ import { inferRadarCalibration } from '/src/lib/nade-radar.ts';
 import '/src/index.css';
 window.fetch = async () => new Response(JSON.stringify({ entries: [] }), { headers: { 'Content-Type': 'application/json' } });
 const map = ACTIVE_DUTY_MAPS.find(map => map.key === 'nuke');
-const nades = [
+const floorNades = [
   { owner: 'test', map: 'de_nuke', name: 'oben', displayName: 'A Smoke', type: 'Smoke', lineupPos: '650 -700 -400', landingPos: '650 -1100 -400' },
   { owner: 'test', map: 'de_nuke', name: 'unten', displayName: 'B Smoke', type: 'Smoke', lineupPos: '650 -700 -768', landingPos: '650 -1100 -768' },
   { owner: 'test', map: 'de_nuke', name: 'wechsel', displayName: 'Oben nach unten', type: 'Smoke', lineupPos: '0 -1500 -400', landingPos: '650 -1100 -768' },
 ];
+const outsideWall = [
+  { name: 'outside1', displayName: 'Outside Wall 1', landingPos: '650 -1500 -400' },
+  { name: 'outside2', displayName: 'Outside Wall 2', landingPos: '790 -1640 -400' },
+  { name: 'outside3', displayName: 'Outside Wall 3', landingPos: '930 -1780 -400' },
+].map(nade => ({ ...nade, owner: 'test', map: 'de_nuke', type: 'Smoke', team: 't', lineupPos: '0 -1500 -400' }));
+const nades = new URLSearchParams(location.search).has('wall') ? outsideWall : floorNades;
 function App() {
   const [placement, setPlacement] = useState({});
   window.placement = placement;
@@ -32,6 +38,19 @@ function App() {
       }))));
 }
 createRoot(document.getElementById('root')).render(React.createElement(App));
+window.checkOutsideWall = async () => {
+  const frame = document.querySelector('.radar-browser-image');
+  const markers = [...frame.querySelectorAll('.radar-spot')];
+  if (markers.length !== 3) throw Error('Outside Wall muss drei einzelne Zielmarker zeigen');
+  if (markers.some(marker => marker.querySelector('.radar-marker-label'))) throw Error('Verschiedene Wall-Ziele wurden gebündelt');
+  const positions = markers.map(marker => parseFloat(marker.style.left)).sort((a, b) => a - b);
+  if (!(positions[0] < positions[1] && positions[1] < positions[2])) throw Error('Wall-Positionen fehlen');
+  markers[1].click();
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const starts = [...frame.querySelectorAll('.radar-spot')].filter(marker => marker.getAttribute('aria-label').startsWith('Start:'));
+  if (starts.length !== 1 || starts[0].tagName !== 'A') throw Error('Einzelner Wall-Wurf muss direkt erreichbar sein');
+  return 'PASS: Drei einzelne Outside-Wall-Ziele mit direktem Zugriff auf den jeweiligen Wurf';
+};
 window.checkNukeRadar = async () => {
   const assert = (value, message) => { if (!value) throw Error(message); };
   const tick = () => new Promise(resolve => setTimeout(resolve, 100));
