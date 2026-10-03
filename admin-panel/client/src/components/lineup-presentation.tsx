@@ -31,22 +31,28 @@ export function CrosshairView({ nade, open, onOpenChange }) {
   </Dialog>;
 }
 
-export function useHeldShift() {
-  const [held, setHeld] = useState(false);
+export function useHeldReviewSlot() {
+  const [held, setHeld] = useState({ shift: false, alt: false });
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
-      if (event.key !== "Shift" || event.target instanceof Element && event.target.closest("input, textarea, [contenteditable=true]")) return;
-      setHeld(true);
+      if (!["Shift", "Alt"].includes(event.key) || event.target instanceof Element && event.target.closest("input, textarea, [contenteditable=true]")) return;
+      if (event.key === "Alt") event.preventDefault();
+      const key = event.key === "Shift" ? "shift" : "alt";
+      setHeld(current => ({ ...current, [key]: true }));
     };
-    const up = (event: KeyboardEvent) => { if (event.key === "Shift") setHeld(false); };
-    const reset = () => setHeld(false);
+    const up = (event: KeyboardEvent) => {
+      if (!["Shift", "Alt"].includes(event.key)) return;
+      const key = event.key === "Shift" ? "shift" : "alt";
+      setHeld(current => ({ ...current, [key]: false }));
+    };
+    const reset = () => setHeld({ shift: false, alt: false });
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", reset);
     document.addEventListener("visibilitychange", reset);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", reset); document.removeEventListener("visibilitychange", reset); };
   }, []);
-  return held;
+  return held.alt ? held.shift ? "effect" : "position" : held.shift ? "aim" : null;
 }
 
 export function ThrowFacts({ nade }) {
@@ -66,10 +72,11 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
   const [view, setView] = useState(nade.reviewMedia?.video ? "video" : "lineup");
   const [photoSlot, setPhotoSlot] = useState("aim");
   const [zoomOpen, setZoomOpen] = useState(false);
-  const shift = useHeldShift();
+  const heldSlot = useHeldReviewSlot();
   const videoRef = useRef<HTMLVideoElement>(null);
   const resumeVideo = useRef(false);
-  const activeView = shift && nade.reviewMedia?.aim && !zoomOpen ? "lineup" : view;
+  const shortcutSlot = !zoomOpen && heldSlot && nade.reviewMedia?.[heldSlot] ? heldSlot : null;
+  const activeView = shortcutSlot ? "lineup" : view;
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -82,7 +89,7 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
     { slot: "front", title: "Vorderansicht", Icon: PersonStanding },
     { slot: "effect", title: "Wirkung am Ziel", Icon: Target },
   ].filter(photo => nade.reviewMedia?.[photo.slot]);
-  const selectedPhoto = photos.find(photo => photo.slot === (shift ? "aim" : photoSlot)) || photos[0];
+  const selectedPhoto = photos.find(photo => photo.slot === (shortcutSlot || photoSlot)) || photos[0];
   return <article className="playbook-page lineup-page official-lineup-detail">
     <header className="official-lineup-heading"><Link to={back} onClick={onBack} aria-label={`Zurück zu ${map.name}`}><ArrowLeft /></Link><h1>{map.name} · {nade.type === "Molly" ? "Molotov" : nade.type}: {nade.displayName || nade.name}</h1></header>
     <div className="official-lineup-layout">
@@ -91,8 +98,8 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
           {nade.reviewMedia?.video && <video ref={videoRef} hidden={activeView !== "video"} className="lineup-hero-video" src={nade.reviewMedia.video.url} poster={nade.reviewMedia?.aim?.url} controls playsInline preload="metadata" aria-label={`Wurfvideo: ${nade.displayName || nade.name}`} />}
           {activeView === "video" && !nade.reviewMedia?.video && <p className="official-media-empty">Für dieses Lineup ist noch kein Video vorhanden.</p>}
           {activeView === "lineup" && (selectedPhoto ? <figure className="official-lineup-photo">
-            <div className="official-photo-viewport"><img src={nade.reviewMedia[selectedPhoto.slot].url} alt={`${selectedPhoto.title}: ${nade.displayName || nade.name}`} style={{ transform: shift && selectedPhoto.slot === "aim" ? "scale(3)" : undefined }} /></div>
-            <figcaption>{selectedPhoto.title}{shift && " · Fadenkreuz-Zoom"}</figcaption>
+            <div className="official-photo-viewport"><img src={nade.reviewMedia[selectedPhoto.slot].url} alt={`${selectedPhoto.title}: ${nade.displayName || nade.name}`} style={{ transform: shortcutSlot === "aim" ? "scale(3)" : undefined }} /></div>
+            <figcaption>{selectedPhoto.title}{shortcutSlot === "aim" && " · Fadenkreuz-Zoom"}</figcaption>
             {selectedPhoto.slot === "aim" && <Button className="official-photo-zoom" variant="secondary" size="sm" onClick={() => setZoomOpen(true)}><ZoomIn />Fadenkreuz-Zoom</Button>}
           </figure> : <p className="official-media-empty">Für dieses Lineup sind noch keine Bilder vorhanden.</p>)}
         </div>
@@ -105,7 +112,7 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
         <ToggleGroup type="single" variant="outline" value={activeView} onValueChange={value => { if (value) setView(value); }} className="official-view-switch" aria-label="Video oder Lineup anzeigen"><ToggleGroupItem value="video"><Film />Video</ToggleGroupItem><ToggleGroupItem value="lineup"><Crosshair />Lineup</ToggleGroupItem></ToggleGroup>
         <ThrowFacts nade={nade} />
         <div className="official-lineup-labels"><Badge variant="success">Offiziell</Badge>{nade.mustKnow && <Badge>Must Know</Badge>}</div>
-        <section className="official-lineup-instructions" aria-label="Anleitung"><h2><GrenadeIcon type={nade.type} />So wirfst du dieses Lineup</h2><p className="official-lineup-route">{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Zielposition"}</p>{nade.desc && <p className="throw-description">{nade.desc}</p>}{nade.reviewMedia?.aim && <p className="official-shift-hint"><kbd>Shift</kbd> halten: Ausrichtung mit Fadenkreuz-Zoom</p>}</section>
+        <section className="official-lineup-instructions" aria-label="Anleitung"><h2><GrenadeIcon type={nade.type} />So wirfst du dieses Lineup</h2><p className="official-lineup-route">{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Zielposition"}</p>{nade.desc && <p className="throw-description">{nade.desc}</p>}</section>
         <details className="official-lineup-management"><summary>Verwalten und Wurfdaten</summary><div>{management}</div></details>
       </aside>
     </div>

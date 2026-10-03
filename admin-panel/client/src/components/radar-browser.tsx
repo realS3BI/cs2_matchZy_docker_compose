@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { ArrowUp, MapPin, Mouse, ZoomIn } from "lucide-react";
 import { Button } from "./ui/button";
-import { CrosshairView, useHeldShift } from "./lineup-presentation";
+import { CrosshairView, useHeldReviewSlot } from "./lineup-presentation";
+import { REVIEW_STEPS } from "../../../shared/review-media";
 import { type MapDefinition } from "../lib/maps";
 import { lineupKey } from "../lib/lineups";
 import { type RadarGroup, type RadarLineup, type RadarSide } from "../lib/radar-groups";
@@ -25,7 +26,7 @@ type Props = {
 
 export function RadarBrowser({ map, side, groups, selected, counterparts, expanded, onSelect, onExpand, onDismiss, onCloseOptions, href }: Props) {
   const optionsTrigger = useRef<HTMLButtonElement>(null);
-  const shift = useHeldShift();
+  const heldSlot = useHeldReviewSlot();
   const [preview, setPreview] = useState<{ group: RadarGroup; index: number; left: number; top: number } | null>(null);
   const [zoomNade, setZoomNade] = useState<RadarLineup | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -38,7 +39,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
     const rect = element.getBoundingClientRect();
     hoverTimer.current = setTimeout(() => setPreview({ group, index: 0,
       left: Math.max(8, Math.min(rect.left + rect.width / 2 - 198, window.innerWidth - 404)),
-      top: Math.max(8, Math.min(rect.bottom + 10, window.innerHeight - 365)),
+      top: Math.max(8, Math.min(rect.bottom + 10, window.innerHeight - 310)),
     }), 160);
   }
   useEffect(() => {
@@ -93,7 +94,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
       "aria-haspopup": "dialog" as const,
     } : {};
     const openAim = (event: React.MouseEvent<HTMLElement>) => {
-      if (!event.shiftKey || !aimNade || side !== "to" || !secondary) return false;
+      if (!event.shiftKey || event.altKey || !aimNade || side !== "to" || !secondary) return false;
       event.preventDefault(); cancelTimer(); setPreview(null); previewTrigger.current = event.currentTarget; setZoomNade(aimNade); return true;
     };
     if (secondary && group.nades.length === 1) return <Link key={`true-${group.id}`} to={href(group.nades[0])}
@@ -117,22 +118,21 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
       {(selected ? [selected] : groups).map(group => marker(group, side))}
       {selected && counterparts.map(group => marker(group, side === "from" ? "to" : "from", true))}
     </div>
-    {side === "to" && selected && counterparts.some(group => group.nades.some(nade => nade.official && (nade.reviewMedia?.video || nade.reviewMedia?.aim))) && <p className="radar-preview-hint">Maus über Startposition: Video · Shift halten: Lineup · Shift-Klick: Fadenkreuz-Zoom</p>}
     {preview && createPortal(<div className="radar-preview" role="dialog" aria-label="Lineup-Vorschau" style={{ left: preview.left, top: preview.top }} onMouseEnter={cancelTimer} onMouseLeave={hidePreview} onFocus={cancelTimer} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) hidePreview(); }}>
       {(() => {
         const candidates = preview.group.nades.filter(nade => nade.official && nade.reviewMedia?.video);
         const nade = candidates[preview.index] || candidates[0];
         if (!nade) return null;
+        const previewImage = heldSlot && nade.reviewMedia?.[heldSlot];
+        const previewTitle = REVIEW_STEPS.find(step => step.id === heldSlot)?.title;
         return <>
-          <div className="radar-preview-heading"><Link to={href(nade)}>Ganzes Video öffnen</Link>{nade.reviewMedia?.aim && <span><kbd>Shift</kbd> halten: Lineup</span>}</div>
-          <Link className="radar-preview-media" to={href(nade)} aria-label={shift ? "Lineup mit Fadenkreuz-Zoom öffnen" : "Vollständiges Wurfvideo öffnen"} onClick={event => { if (event.shiftKey && nade.reviewMedia?.aim) { event.preventDefault(); cancelTimer(); setPreview(null); setZoomNade(nade); } }}>
-            <HoverVideo key={nade.reviewMedia!.video!.key} nade={nade} active={!shift || !nade.reviewMedia?.aim} />
-            {shift && nade.reviewMedia?.aim && <div className="radar-preview-aim"><img src={nade.reviewMedia.aim.url} alt={`Ausrichtung: ${nade.displayName || nade.name}`} /></div>}
+          <div className="radar-preview-heading"><Link to={href(nade)}>Klick: ganzes Video</Link>{nade.reviewMedia?.aim && <span>Shift: Lineup</span>}</div>
+          <Link className="radar-preview-media" to={href(nade)} aria-label={previewImage ? `${previewTitle}: Lineup öffnen` : "Vollständiges Wurfvideo öffnen"} onClick={event => { if (event.shiftKey && !event.altKey && nade.reviewMedia?.aim) { event.preventDefault(); cancelTimer(); setPreview(null); setZoomNade(nade); } }}>
+            <HoverVideo key={nade.reviewMedia!.video!.key} nade={nade} active={!previewImage} />
+            {previewImage && <div className={cn("radar-preview-photo", heldSlot === "aim" && "radar-preview-photo-zoom")}><img src={previewImage.url} alt={`${previewTitle}: ${nade.displayName || nade.name}`} /></div>}
           </Link>
           <div className="radar-preview-technique">{nade.is_jumpthrow && <ArrowUp aria-label="Jumpthrow" />}<Mouse aria-hidden="true" /><span>{throwAttributeSummary(nade)}</span></div>
-          <strong>{nade.displayName || nade.name}</strong>
-          {candidates.length > 1 && <div className="flex flex-wrap gap-1" aria-label="Lineup für die Vorschau auswählen">{candidates.map((candidate, index) => <Button key={lineupKey(candidate)} size="sm" variant={index === preview.index ? "default" : "secondary"} aria-label={candidate.displayName || candidate.name} onClick={() => setPreview(current => current && { ...current, index })}>{index + 1}</Button>)}</div>}
-          <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="secondary"><Link to={href(nade)}>Lineup öffnen</Link></Button>{nade.reviewMedia?.aim && <Button size="sm" variant="ghost" onClick={() => { cancelTimer(); setPreview(null); setZoomNade(nade); }}><ZoomIn />Fadenkreuz-Zoom</Button>}</div>
+          {candidates.length > 1 && <div className="flex flex-wrap gap-1" aria-label="Lineup für die Vorschau auswählen">{candidates.map((candidate, index) => <Button key={lineupKey(candidate)} size="sm" variant={index === preview.index ? "default" : "secondary"} aria-pressed={index === preview.index} aria-label={candidate.displayName || candidate.name} onClick={() => setPreview(current => current && { ...current, index })}>{index + 1}</Button>)}</div>}
         </>;
       })()}
     </div>, document.body)}

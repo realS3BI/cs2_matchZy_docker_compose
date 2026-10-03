@@ -29,19 +29,28 @@ const waitFor=async fn=>{for(let i=0;i<120;i++){if(fn())return;await new Promise
 const assert=(value,message)=>{if(!value)throw Error(message);};
 const button=text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text);
 const shift=type=>window.dispatchEvent(new KeyboardEvent(type,{key:'Shift',bubbles:true}));
+const alt=type=>window.dispatchEvent(new KeyboardEvent(type,{key:'Alt',bubbles:true,cancelable:true}));
 window.checkDetail=async()=>{
  await waitFor(()=>document.querySelector('.lineup-hero-video')?.readyState>=2);
  const video=document.querySelector('.lineup-hero-video');
  assert(!video.hidden,'Video nicht im Vordergrund');
  assert(!document.querySelector('.official-photo-picker'),'Bilder trotz Videoansicht geöffnet');
+ assert(!document.querySelector('.official-lineup-instructions').textContent.includes('Shift'),'Shift-Hinweis steht in der Anleitung');
  video.muted=true;video.loop=true;await video.play();
  shift('keydown');await waitFor(()=>document.querySelector('.official-photo-viewport img')?.style.transform==='scale(3)');
  assert(video.hidden&&video.paused,'Video läuft hinter der Shift-Ansicht weiter');
+ alt('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Wirkung am Ziel');
+ assert(!document.querySelector('.official-photo-viewport img').style.transform,'Wirkung wird ungewollt gezoomt');
+ shift('keyup');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
+ shift('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Wirkung am Ziel');
+ alt('keyup');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent.includes('Fadenkreuz-Zoom'));
  shift('keyup');await waitFor(()=>!video.hidden&&!video.paused);
+ alt('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
+ alt('keyup');await waitFor(()=>!video.hidden&&!video.paused);
  button('Lineup').click();await waitFor(()=>document.querySelectorAll('.official-photo-picker button').length===4);
- button('Standposition').click();await waitFor(()=>document.querySelector('.official-lineup-photo figcaption').textContent==='Standposition');
- shift('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption').textContent.includes('Fadenkreuz-Zoom'));
- shift('keyup');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption').textContent==='Standposition');
+ button('Standposition').click();await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
+ shift('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent.includes('Fadenkreuz-Zoom'));
+ shift('keyup');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
  button('Ausrichtung').click();await waitFor(()=>button('Fadenkreuz-Zoom'));
  button('Fadenkreuz-Zoom').click();await waitFor(()=>document.querySelector('.crosshair-viewport img'));
  assert(document.querySelector('.crosshair-viewport img').style.transform==='scale(3)','Dialogzoom fehlt');
@@ -51,15 +60,21 @@ window.checkDetail=async()=>{
  window.setRecording({official:false});await waitFor(()=>!document.querySelector('.official-lineup-detail'));
  assert(!document.querySelector('.official-view-switch'),'Neue Ansicht gilt für Entwürfe');
  window.setRecording({official:true});await waitFor(()=>document.querySelector('.official-view-switch'));
- return 'PASS: Video, Pausieren und Fortsetzen, Shift-Zoom, Bildauswahl, Zoomdialog, Entwurfsgrenze und Layout';
+ return 'PASS: Video, Pausieren und Fortsetzen, Shift/Alt/Shift+Alt, Bildauswahl, Zoomdialog, Entwurfsgrenze und Layout';
 };
 window.checkRadarPreview=async()=>{
  await waitFor(()=>document.querySelector('.radar-spot'));
  document.querySelector('.radar-spot').click();await waitFor(()=>document.querySelector('.radar-spot-from'));
  const marker=document.querySelector('.radar-spot-from');
  marker.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await waitFor(()=>document.querySelector('.radar-preview-media'));
- shift('keydown');await waitFor(()=>document.querySelector('.radar-preview-aim img'));
- shift('keyup');await waitFor(()=>!document.querySelector('.radar-preview-aim'));
+ assert(!document.querySelector('.radar-preview strong')&&!document.querySelector('.radar-preview button'),'Vorschau enthält Namen oder Zusatzbuttons');
+ shift('keydown');await waitFor(()=>document.querySelector('.radar-preview-photo img')?.alt.startsWith('Ausrichtung'));
+ alt('keydown');await waitFor(()=>document.querySelector('.radar-preview-photo img')?.alt.startsWith('Wirkung am Ziel'));
+ assert(!document.querySelector('.radar-preview-photo-zoom'),'Wirkung wird gezoomt');
+ shift('keyup');await waitFor(()=>document.querySelector('.radar-preview-photo img')?.alt.startsWith('Standposition'));
+ alt('keyup');await waitFor(()=>!document.querySelector('.radar-preview-photo'));
+ alt('keydown');await waitFor(()=>document.querySelector('.radar-preview-photo img')?.alt.startsWith('Standposition'));
+ alt('keyup');await waitFor(()=>!document.querySelector('.radar-preview-photo'));
  marker.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,shiftKey:true}));await waitFor(()=>document.querySelector('.crosshair-viewport'));
  document.querySelector('.crosshair-dialog button:has(.sr-only)').click();await waitFor(()=>!document.querySelector('.crosshair-viewport'));
  assert(document.querySelector('.radar-spot-from'),'Kartenauswahl geht beim Schließen verloren');
@@ -69,8 +84,8 @@ window.checkRadarPreview=async()=>{
  window.setRecording({official:true});await new Promise(resolve=>setTimeout(resolve,100));
  window.setEntries([entries[0],{...entries[0],id:'Demo124',name:'second',displayName:'Zweite Smoke',reviewMedia:{...reviewMedia,video:{...reviewMedia.video,key:'second-video'}}}]);await waitFor(()=>document.querySelector('.radar-spot-from button')||document.querySelector('.radar-spot-from .radar-marker-label'));
  document.querySelector('.radar-spot-from').dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await waitFor(()=>document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]'));
- document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]').click();await waitFor(()=>document.querySelector('.radar-preview strong')?.textContent==='Zweite Smoke');
+ document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]').click();await waitFor(()=>document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]').getAttribute('aria-pressed')==='true');
  assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
- return 'PASS: Hover, Shift halten, Shift-Klick, geschützte Kartenauswahl, Entwurfsgrenze und gestapelte Lineups';
+ return 'PASS: Kompakte Vorschau, Shift/Alt/Shift+Alt, Shift-Klick, geschützte Kartenauswahl, Entwurfsgrenze und gestapelte Lineups';
 };
 </script></body></html>
