@@ -24,35 +24,39 @@ public static class TrainingMenu
             if (canWriteNades && !n.Official) items.Add(new("Medien-Review", "Vier Fotos und ein Video aufnehmen, anschließend prüfen und freigeben. Verbinde vorher das Spielbild auf der Lineup-Seite im Browser.", Page: ReviewMenu.Create(n, own)));
             if (own)
             {
-                items.Add(new("Name bearbeiten", "Wähle diesen Eintrag und schreibe den neuen Namen in den Chat. Mit abbrechen beenden. Der interne Name bleibt erhalten.", Request: new(TrainingAction.EditName, n)));
-                items.Add(new("Beschreibung bearbeiten", "Wähle diesen Eintrag und beschreibe im Chat Standpunkt, Ziel und Wurftechnik. Mit abbrechen beenden.", Request: new(TrainingAction.EditDescription, n)));
-                MenuItem Edit(string field, string label, string value) => new($"{label}: {value}", LineupEditFields.Prompt(field),
-                    Request: new(TrainingAction.EditField, n, Setting: field));
-                var attributes = n.Attributes;
-                var fields = new List<MenuItem> {
-                    Edit("team", "Seite", n.Team switch { "ct" => "CT", "t" => "T", "both" => "Beide", _ => "Offen" }),
-                    Edit("throwFromTitle", "Startposition", string.IsNullOrEmpty(n.ThrowFromTitle) ? "Offen" : n.ThrowFromTitle),
-                    Edit("throwToTitle", "Endposition", string.IsNullOrEmpty(n.ThrowToTitle) ? "Offen" : n.ThrowToTitle),
-                };
-                fields.AddRange(LineupEditFields.Flags.Select(flag => Edit(flag.Key, flag.Value, attributes == null ? "Offen" : attributes.Flag(flag.Key) ? "Ja" : "Nein")));
-                fields.Add(Edit("movement", "Bewegung", attributes?.MovementLabel ?? "Offen"));
-                fields.Add(Edit("click_type", "Maustaste", attributes?.ClickType switch { "left" => "Links", "right" => "Rechts", "both" => "Beide", _ => "Offen" }));
-                fields.Add(Edit("flightDuration", "Flugzeit", n.FlightDuration is { } editableSeconds ? FormattableString.Invariant($"{editableSeconds:0.00} s") : "Noch nicht erfasst"));
-                fields.Add(Edit("type", "Granatentyp", NadeCatalog.Label(n.Kind)));
-                fields.Add(new("Koordinaten bearbeiten", "Startpunkt, Blickwinkel und Endpunkt als drei Zahlen im Chat eingeben.", Page: new("Koordinaten", "Eine neue Startposition oder Blickrichtung erfordert eine neue Flugzeitmessung.", [
-                    Edit("lineupPos", "Start", NadeCaptureFile.Vector(n.Position)),
-                    Edit("lineupAng", "Blickwinkel", NadeCaptureFile.Vector(n.Angles)),
-                    Edit("landingPos", "Ende", "Im Chat eingeben")], Key: $"coordinates:{n.Owner}:{n.Map}:{n.Name}")));
-                items.Add(new("Lineup-Einstellungen", "Seite, Startposition, Endposition und feste Wurfattribute bearbeiten. Ein Feld auswählen, Chat öffnen und den Wert eingeben.",
-                    Page: new("Lineup-Einstellungen", "Feld auswählen, Chat öffnen und den neuen Wert senden. Mit abbrechen beenden.", fields, Key: $"attributes:{n.Owner}:{n.Map}:{n.Name}")));
+                items.Add(new("Lineup bearbeiten", "Nimmt den Wurf bewusst neu auf. Position, Blickwinkel, Wurfattribute, Endposition und Flugzeit werden gemeinsam ersetzt, sobald du die Aufnahme speicherst.",
+                    Page: new("Lineup bearbeiten", "Der bisherige Wurf bleibt bis zum Speichern erhalten. Ein neuer Wurf setzt Review und Medien zurück.", [
+                        new("Wurf neu aufnehmen", "Lädt das Lineup. Passe den Wurf an und wirf genau eine Granate. Danach in diesem Menü speichern oder verwerfen.", Request: new(TrainingAction.EditLineup, n)),
+                        new("Aufnahme speichern", "Ersetzt den gespeicherten Wurf durch die fertig gemessene Neuaufnahme. Review und bisherige Medien werden zurückgesetzt.", Request: new(TrainingAction.SaveCapture)),
+                        new("Aufnahme verwerfen", "Verwirft die Neuaufnahme. Der bisherige Wurf bleibt erhalten.", Request: new(TrainingAction.CancelCapture)),
+                        new("Abbrechen", "Behält die gespeicherten Wurfdaten.", Request: new(TrainingAction.Back))], Key: $"edit:{n.Owner}:{n.Map}:{n.Name}")));
                 items.Add(new(n.ReviewStatus == "pending" ? "Review angefragt" : "Zum Review freigeben", n.ReviewStatus == "pending" ? "Ein Plattform-Admin prüft deine Aufnahme. Nach seiner Freigabe erscheint sie zusätzlich unter Offiziell." : "Reicht deine Aufnahme zur Prüfung ein. Unter Alle bleibt sie sichtbar; Offiziell erfordert die Admin-Freigabe.", Request: new(TrainingAction.RequestReview, n), Enabled: n.ReviewStatus != "pending"));
                 items.Add(new("Eigene Aufnahme löschen", "Löscht ausschließlich diese eigene, noch nicht veröffentlichte Aufnahme. Du bestätigst im nächsten Schritt.", Page: new("Aufnahme löschen", n.Title, [
                     new("Abbrechen", "Behält die Aufnahme und geht zurück.", Request: new(TrainingAction.Back)),
                     new("Aufnahme endgültig löschen", "Entfernt diese Aufnahme aus deiner Bibliothek. Das kann nicht rückgängig gemacht werden.", Request: new(TrainingAction.DeleteLineup, n))], Key: $"delete:{n.Owner}:{n.Map}:{n.Name}")));
             }
-            items.Add(new(n.FlightDuration is { } duration ? FormattableString.Invariant($"Flugzeit: {duration:0.00} s") : "Flugzeit: Noch nicht erfasst",
-                "Servermessung vom Abwurf bis zur Explosion oder zum Beginn des Effekts. Eigene Aufnahmen laden und werfen, um die Zeit neu zu messen, oder in den Lineup-Einstellungen eingeben.", Enabled: false));
-            var description = string.IsNullOrWhiteSpace(n.Description) ? "Noch keine Beschreibung. Eigene Aufnahmen kannst du hier ergänzen." : n.Description;
+            MenuItem Setting(string field, string label, string value) => new($"{label}: {value}",
+                own ? LineupEditFields.Prompt(field) : "Gespeicherte Angabe.",
+                Request: own ? new(TrainingAction.EditField, n, Setting: field) : null, Enabled: own);
+            MenuItem Fact(string label, string value) => new($"{label}: {value}", "Automatisch erfasst. Änderungen sind nur über Lineup bearbeiten und eine neue Aufnahme möglich.", Enabled: false);
+            var attributes = n.Attributes;
+            var fields = new List<MenuItem> {
+                Setting("team", "Seite", n.Team switch { "ct" => "CT", "t" => "T", "both" => "Beide", _ => "Offen" }),
+                Setting("throwFromTitle", "Startposition", string.IsNullOrEmpty(n.ThrowFromTitle) ? "Offen" : n.ThrowFromTitle),
+                Setting("throwToTitle", "Endposition", string.IsNullOrEmpty(n.ThrowToTitle) ? "Offen" : n.ThrowToTitle),
+            };
+            fields.AddRange(LineupEditFields.Flags.Select(flag => Fact(flag.Value, attributes == null ? "Offen" : attributes.Flag(flag.Key) ? "Ja" : "Nein")));
+            fields.Add(Fact("Bewegung", attributes?.MovementLabel ?? "Offen"));
+            fields.Add(Fact("Maustaste", attributes?.ClickType switch { "left" => "Links", "right" => "Rechts", "both" => "Beide", _ => "Offen" }));
+            fields.Add(Fact("Flugzeit", n.FlightDuration is { } secondsValue ? FormattableString.Invariant($"{secondsValue:0.00} s") : "Noch nicht erfasst"));
+            fields.Add(Fact("Granatentyp", NadeCatalog.Label(n.Kind)));
+            fields.Add(new("Koordinaten ansehen", "Automatisch gespeicherte Spielkoordinaten.", Page: new("Koordinaten", "Diese Wurfdaten bleiben beim Training erhalten.", [
+                Fact("Start", NadeCaptureFile.Vector(n.Position)), Fact("Blickwinkel", NadeCaptureFile.Vector(n.Angles)),
+                Fact("Ende", n.LandingPosition is { } target ? NadeCaptureFile.Vector(target) : "Noch nicht erfasst")], Key: $"coordinates:{n.Owner}:{n.Map}:{n.Name}")));
+            items.Add(new("Lineup-Einstellungen", "Gespeicherte Wurfdaten ansehen. Der Ersteller kann Startposition, Endposition und Seite ergänzen.",
+                Page: new("Lineup-Einstellungen", "Wurfdaten werden automatisch erfasst und bleiben fest gespeichert.", fields, Key: $"attributes:{n.Owner}:{n.Map}:{n.Name}")));
+            items.Add(Fact("Flugzeit", n.FlightDuration is { } duration ? FormattableString.Invariant($"{duration:0.00} s") : "Noch nicht erfasst"));
+            var description = string.IsNullOrWhiteSpace(n.Description) ? "Noch keine Beschreibung." : n.Description;
             var facts = new List<string>();
             if (n.Team.Length > 0) facts.Add(n.Team switch { "ct" => "CT", "t" => "T", _ => "Beide Seiten" });
             if (n.ThrowFromTitle.Length > 0 || n.ThrowToTitle.Length > 0) facts.Add($"{n.ThrowFromTitle} → {n.ThrowToTitle}");

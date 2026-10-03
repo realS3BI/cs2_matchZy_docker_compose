@@ -12,7 +12,7 @@ public sealed record NadeCapture(string CaptureId, string Owner, string Name, st
     [property: JsonPropertyName("is_walking")] bool? IsWalking = null,
     [property: JsonPropertyName("is_running")] bool? IsRunning = null,
     [property: JsonPropertyName("is_stepping")] bool? IsStepping = null,
-    [property: JsonPropertyName("click_type")] string? ClickType = null);
+    [property: JsonPropertyName("click_type")] string? ClickType = null, string EditRevision = "");
 
 // Only this plugin writes captures. MatchZy remains the sole in-game writer of savednades.json.
 public static class NadeCaptureFile
@@ -32,8 +32,13 @@ public static class NadeCaptureFile
         {
             NadeKind.Smoke => "Smoke", NadeKind.Flash => "Flash", NadeKind.HE => "HE",
             NadeKind.Fire => "Molly", NadeKind.Decoy => "Decoy", _ => ""
-        }, displayName, technique, "", trace, true, team, flightDuration,
+        }, displayName, technique, technique, trace, true, team, flightDuration,
         attributes?.IsJumpthrow, attributes?.IsCrouch, attributes?.IsWalking, attributes?.IsRunning, attributes?.IsStepping, attributes?.ClickType);
+
+    public static NadeCapture CreateReplacement(NadeLineup original, NadeKind kind, Coordinates start,
+        Coordinates angles, Coordinates target, string technique, string trace, ThrowAttributes attributes, float duration) =>
+        CreateNew(original.Owner, original.Name, original.Title, original.Map, kind, start, angles, target,
+            technique, trace, attributes, original.Team, duration) with { NewLineup = false, EditRevision = original.Revision };
 
     public static void Write(string path, NadeCapture capture)
     {

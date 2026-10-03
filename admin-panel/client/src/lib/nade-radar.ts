@@ -6,6 +6,15 @@ export type PositionedNade = {
   radarFrom?: RadarPoint | null; radarTo?: RadarPoint | null;
 };
 
+// Valve overview: pos_x=-2796, pos_y=3328, scale=5.22 (1024px).
+// The bundled CSNADES Anubis image crops/resizes that overview. Registration against
+// the extracted game radar (94 matching features) gives this pixel transform.
+// Source: https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/data/radar_info/de_anubis.txt
+const ANUBIS_RADAR: RadarCalibration = {
+  xScale: 2.07353388 / (5.22 * 2048), xOffset: (2796 / 5.22 * 2.07353388 - 46.5108868) / 2048,
+  yScale: -2.07353388 / (5.22 * 2048), yOffset: (3328 / 5.22 * 2.07353388 - 25.9679913) / 2048,
+};
+
 function coordinates(value: string | undefined) {
   const parts = String(value || "").trim().split(/\s+/).map(Number);
   return parts.length === 3 && parts.every(Number.isFinite) ? parts : null;
@@ -23,7 +32,7 @@ export function inferRadarCalibration(map: MapDefinition, nades: (PositionedNade
       if (world && isRadarPoint(point)) refs.push({ world, radar: point });
     }
   }
-  if (refs.length < 2) return null;
+  if (refs.length < 2) return map.mapName === "de_anubis" && map.radarUrl === "/maps/anubis.webp" ? ANUBIS_RADAR : null;
   function fit(axis: 0 | 1, key: "x" | "y") {
     const meanWorld = refs.reduce((sum, r) => sum + r.world[axis], 0) / refs.length;
     const meanRadar = refs.reduce((sum, r) => sum + r.radar[key], 0) / refs.length;

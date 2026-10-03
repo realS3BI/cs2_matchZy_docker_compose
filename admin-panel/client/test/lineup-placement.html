@@ -3,11 +3,15 @@
 import React, {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {BrowserRouter, Route, Routes} from 'react-router-dom';
+import {useLiveNades} from '/src/hooks/use-live-nades.ts';
+import {NadeLibrary} from '/src/components/nade-library.tsx';
 import {LineupPage} from '/src/components/lineup-page.tsx';
 import {NadeFavoritesProvider} from '/src/components/nade-favorites.tsx';
 import {ACTIVE_DUTY_MAPS} from '/src/lib/maps.ts';
 import '/src/index.css';
 const params=new URLSearchParams(location.search);
+window.EventSource=class extends EventTarget {constructor(url){super();window.liveEvents=this;this.url=url;}close(){this.closed=true;}};
+window.publishEntries=next=>{entries=next;window.liveEvents.dispatchEvent(new MessageEvent('library',{data:JSON.stringify({entries})}));};
 const owner='76561198000000001';
 const user={identitySteam64:params.has('foreign')?'76561198000000002':owner,role:params.get('role')||'player'};
 let entries=[{id:'Abc1234',owner,map:'de_mirage',name:'window',displayName:'Fenster vom T-Spawn',type:'Smoke',lineupPos:'-1000 1000 0',landingPos:'1000 -1000 0',lineupAng:'0 90 0',official:true,mustKnow:true,reviewStatus:'approved',updatedAt:'1'}];
@@ -19,13 +23,44 @@ window.fetch=async (url,options)=>{
  }
  return new Response(JSON.stringify(String(url).includes('favorites')?{favorites:[]}:{entries}),{headers:{'Content-Type':'application/json'}});
 };
-history.replaceState(null,'','/maps/mirage/lineups/Abc1234');
-function App(){const [nades,setNades]=useState(entries);window.setRecording=patch=>{entries=entries.map(entry=>({...entry,...patch}));setNades(entries);};return React.createElement(BrowserRouter,null,React.createElement(NadeFavoritesProvider,null,React.createElement(Routes,null,React.createElement(Route,{path:'/maps/:mapSlug/lineups/:lineupId',element:React.createElement(LineupPage,{maps:ACTIVE_DUTY_MAPS,nades,user,onEntriesChange:setNades,onRefresh:async()=>{}})}))));}
+if(params.has('overview'))entries=entries.map(entry=>({...entry,map:'de_anubis',lineupPos:'-400 2192 32',landingPos:'-100 1200 96',team:'ct',flightDuration:3.125}));
+history.replaceState(null,'',params.has('overview')?'/maps/anubis':'/maps/mirage/lineups/Abc1234');
+function App(){const [nades,setNades]=useState(entries);useLiveNades(true,setNades);window.setRecording=patch=>{entries=entries.map(entry=>({...entry,...patch}));setNades(entries);};return React.createElement(BrowserRouter,null,React.createElement(NadeFavoritesProvider,null,React.createElement(Routes,null,React.createElement(Route,{path:'/maps/:mapSlug',element:React.createElement(NadeLibrary,{maps:ACTIVE_DUTY_MAPS,nades,user})}),React.createElement(Route,{path:'/maps/:mapSlug/lineups/:lineupId',element:React.createElement(LineupPage,{maps:ACTIVE_DUTY_MAPS,nades,user,onEntriesChange:setNades,onRefresh:async()=>{}})}))));}
 createRoot(document.getElementById('root')).render(React.createElement(App));
 const waitFor=async f=>{for(let i=0;i<100;i++){if(f())return;await new Promise(r=>setTimeout(r,30));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
 const assert=(value,message)=>{if(!value)throw Error(message);};
 const button=text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text);
 const clickMap=(x,y)=>{const svg=document.querySelector('.radar-map svg');const point=new DOMPoint(x*svg.viewBox.baseVal.width,y*svg.viewBox.baseVal.height).matrixTransform(svg.getScreenCTM());svg.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:point.x,clientY:point.y}));};
+window.checkLiveMap=async()=>{
+ await waitFor(()=>document.querySelector('.map-lineup-row')&&window.liveEvents);
+ assert(document.querySelectorAll('.map-lineup-row').length===1,'Ausgangsaufnahme fehlt');
+ assert(document.querySelectorAll('.radar-spot').length===1,'Anubis-Endposition nicht projiziert');
+ window.publishEntries([...entries,{...entries[0],id:'New1234',name:'new_smoke',displayName:'Neue Smoke vom Server',landingPos:'500 500 96',flightDuration:4.5}]);
+ await waitFor(()=>document.querySelectorAll('.map-lineup-row').length===2&&document.body.innerText.includes('Neue Smoke vom Server')&&document.querySelectorAll('.radar-spot').length===2);
+ assert(document.querySelector('.result-count').textContent==='2 Lineups','Live-Anzahl fehlt');
+ assert([...document.querySelectorAll('.map-lineup-technique')].some(item=>item.textContent.includes('4,5 s')),'Live-Flugzeit fehlt');
+ window.publishEntries(entries.slice(1));await waitFor(()=>document.querySelectorAll('.map-lineup-row').length===1);
+ assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
+ return 'PASS: Anubis-Projektion, neue Lineups und Löschungen live in der Kartenübersicht';
+};
+window.checkLiveLineup=async()=>{
+ await waitFor(()=>document.querySelector('h1')&&window.liveEvents);
+ assert(window.liveEvents.url==='/api/nades/events','Live-Verbindung fehlt');
+ window.publishEntries(entries.map(entry=>({...entry,displayName:'CT Spawn Stairs Dropper Smoke',lineupPos:'-400 2192 32',landingPos:'-100 1200 96',lineupAng:'80 90 0',flightDuration:3.125,is_jumpthrow:true,click_type:'left',official:false,throwFromTitle:'CT-Spawn',throwToTitle:'Stairs',updatedAt:'3'})));
+ await waitFor(()=>document.body.innerText.includes('3,13 s')&&document.querySelector('#lineup-field-throwFromTitle'));
+ assert(document.querySelector('h1').textContent==='CT Spawn Stairs Dropper Smoke','Detailname nicht live aktualisiert');
+ assert(!document.querySelector('#lineup-flight-duration')&&!document.querySelector('#lineup-field-lineupPos')&&!document.querySelector('#lineup-field-displayName'),'Feste Daten bearbeitbar');
+ const field=document.querySelector('#lineup-field-throwFromTitle');
+ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,'Eigene Eingabe');field.dispatchEvent(new Event('input',{bubbles:true}));
+ await waitFor(()=>!button('Speichern').disabled);
+ window.publishEntries(entries.map(entry=>({...entry,flightDuration:4.5,throwFromTitle:'Serveränderung',updatedAt:'4'})));
+ await waitFor(()=>document.body.innerText.includes('4,50 s')&&document.body.innerText.includes('inzwischen geändert'));
+ assert(field.value==='Eigene Eingabe','Live-Update überschreibt Eingabe');
+ assert(button('Speichern').disabled,'Veraltete Eingabe speicherbar');
+ button('Änderungen verwerfen').click();await waitFor(()=>field.value==='Serveränderung');
+ assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
+ return 'PASS: Live-Detaildaten, Schreibschutz und geschützte offene Eingaben';
+};
 window.checkPlacement=async()=>{
  await waitFor(()=>document.querySelector('h1'));
  if(params.has('foreign')&&user.role!=='admin') {assert(!button('Start und Ziel setzen'),'Fremde Positionierung bearbeitbar');assert(!button('Freigabe zurücknehmen'),'Fremde Freigabe zurücknehmbar');return 'PASS: Fremde Aufnahme geschützt';}
@@ -47,7 +82,8 @@ window.checkPlacement=async()=>{
  assert(window.requests[1].patch.radarFrom.x!==window.requests[0].patch.radarFrom.x,'Referenz nicht korrigiert');
  button('Freigabe zurücknehmen').click();await waitFor(()=>!button('Freigabe zurücknehmen'));
  assert(!document.body.innerText.includes('Must Know'),'Must Know nach Rücknahme erhalten');
- if(user.identitySteam64===owner) assert(!!document.querySelector('#lineup-field-displayName'),'Ersteller kann Entwurf nicht bearbeiten');
+ if(user.identitySteam64===owner) assert(!!document.querySelector('#lineup-field-throwFromTitle'),'Ersteller kann Positionsnamen nicht ergänzen');
+ assert(!document.querySelector('#lineup-field-displayName')&&!document.querySelector('#lineup-flight-duration'),'Feste Wurfdaten sind bearbeitbar');
  assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
  return 'PASS: Alle Nade-Arten einheitlich, offizielle Positionierung, Referenzkorrektur und Freigaberücknahme';
 };

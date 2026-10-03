@@ -8,29 +8,13 @@ public sealed class LineupEditTests
     [Theory]
     [InlineData("team", "CT", "ct")]
     [InlineData("team", "beide", "both")]
-    [InlineData("click_type", "rechts", "right")]
-    [InlineData("click_type", "beide", "both")]
     [InlineData("throwFromTitle", "Über T-Spawn", "Über T-Spawn")]
     [InlineData("throwToTitle", "Fenster", "Fenster")]
     [InlineData("throwToTitle", "-", "")]
-    [InlineData("type", "molotov", "Molly")]
-    [InlineData("lineupPos", "1  2 3", "1 2 3")]
-    [InlineData("movement", "gehen", "walk")]
-    [InlineData("movement", "laufen", "run")]
-    [InlineData("movement", "schrittwurf", "step")]
-    [InlineData("movement", "stand", "stand")]
     public void ChatInputMapsToCanonicalValues(string field, string input, string expected)
     {
         Assert.True(LineupEditFields.TryParse(field, input, out var value));
         Assert.Equal(expected, value);
-    }
-
-    [Theory]
-    [InlineData("ja", true)] [InlineData("nein", false)] [InlineData("true", true)] [InlineData("0", false)]
-    public void ChatBooleansRemainTyped(string input, bool expected)
-    {
-        Assert.True(LineupEditFields.TryParse("is_jumpthrow", input, out var value));
-        Assert.Equal(expected, Assert.IsType<bool>(value));
     }
 
     [Theory]
@@ -44,14 +28,12 @@ public sealed class LineupEditTests
         Assert.False(LineupEditFields.TryParse(field, value, out _));
 
     [Theory]
-    [InlineData("3.125", 3.125f)] [InlineData("3,125", 3.125f)] [InlineData("0", 0)]
-    public void ParsesManualFlightSeconds(string input, float expected)
-    {
-        Assert.True(LineupEditFields.TryParse("flightDuration", input, out var value));
-        Assert.Equal(expected, Assert.IsType<float>(value));
-        Assert.True(LineupEditFields.TryParse("flightDuration", "-", out var cleared));
-        Assert.Null(cleared);
-    }
+    [InlineData("flightDuration", "3.125")] [InlineData("flightDuration", "-")]
+    [InlineData("movement", "stand")] [InlineData("lineupPos", "1 2 3")]
+    [InlineData("landingPos", "1 2 3")] [InlineData("lineupAng", "0 90 0")]
+    [InlineData("is_jumpthrow", "ja")] [InlineData("click_type", "links")]
+    [InlineData("type", "smoke")] [InlineData("displayName", "Neuer Name")] [InlineData("desc", "Neuer Text")]
+    public void MeasuredDataCannotBeEditedFromChat(string field, string input) => Assert.False(LineupEditFields.TryParse(field, input, out _));
 
     [Fact]
     public void EveryAttributeIsReachableInTheCompactPanelWithCurrentValues()
@@ -66,8 +48,8 @@ public sealed class LineupEditTests
         menu.Enter(settings);
         Assert.Equal(9, menu.Visible.Count());
         Assert.Equal(2, menu.PageCount);
-        foreach (var field in new[] { "team", "throwFromTitle", "throwToTitle", "movement", "flightDuration", "click_type", "type", "is_jumpthrow", "is_crouch" })
-            Assert.Contains(settings.Items, i => i.Request?.Action == TrainingAction.EditField && i.Request.Setting == field);
+        Assert.Equal(new[] { "team", "throwFromTitle", "throwToTitle" }, settings.Items.Where(i => i.Request != null).Select(i => i.Request!.Setting));
+        Assert.All(settings.Items.Where(i => i.Page == null && i.Request == null), i => Assert.False(i.Enabled));
         Assert.Contains(settings.Items, i => i.Label == "Seite: CT");
         Assert.Contains(settings.Items, i => i.Label == "Jumpthrow: Ja");
         Assert.Contains(settings.Items, i => i.Label == "Bewegung: Stand");
@@ -75,7 +57,7 @@ public sealed class LineupEditTests
         Assert.DoesNotContain(settings.Items, i => i.Request?.Setting == "throwTechnique");
         Assert.DoesNotContain(settings.Items, i => new[] { "is_walking", "is_running", "is_stepping" }.Contains(i.Request?.Setting));
         var coordinates = settings.Items.Single(i => i.Page?.Key.StartsWith("coordinates:") == true).Page!;
-        Assert.Equal(new[] { "lineupPos", "lineupAng", "landingPos" }, coordinates.Items.Select(i => i.Request!.Setting));
+        Assert.All(coordinates.Items, i => { Assert.Null(i.Request); Assert.False(i.Enabled); });
         var changed = nade with { Attributes = new(IsCrouch: true, IsRunning: true, ClickType: "right"), FlightDuration = 2.25f };
         menu.Refresh(TrainingMenu.Create([changed], nade.Map, true, null, steamId: nade.Owner).Current);
         Assert.Contains(menu.Current.Items, i => i.Label == "Bewegung: Laufen");

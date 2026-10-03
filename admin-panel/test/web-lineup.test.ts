@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { applyWebNadeAction } from "../src/nade-review.js";
+import { NadeEvents } from "../src/nade-events.js";
 import { createApp } from "../src/app.js";
 import { lineupPermissions } from "../shared/lineup-policy.js";
 import { reviewMediaFixture } from "./review-fixtures.js";
@@ -33,8 +34,8 @@ test("manual creation assigns the session admin as owner and creates a distinct,
   assert.deepEqual(created.radarFrom, creation.patch.radarFrom);
   assert.equal(lineupPermissions(created, admin).edit, true);
   assert.notEqual(applyWebNadeAction(entries, creation, admin)[2].name, created.name);
-  const updated = applyWebNadeAction(entries, { ...created, action: "edit", revision: created.updatedAt, patch: { desc: "Überarbeitet" } }, admin);
-  assert.equal(updated[1].desc, "Überarbeitet");
+  const updated = applyWebNadeAction(entries, { ...created, action: "edit", revision: created.updatedAt, patch: { throwToTitle: "Überarbeitet" } }, admin);
+  assert.equal(updated[1].throwToTitle, "Überarbeitet");
 });
 
 test("manual creation rejects other roles, forged fields and invalid throw data", () => {
@@ -56,7 +57,7 @@ test("manual creation rejects other roles, forged fields and invalid throw data"
 test("owners edit their draft directly, preserving identity, media and unrelated recordings", () => {
   const foreign = { ...entry, owner: admin.identitySteam64 };
   const [updated, untouched] = applyWebNadeAction([{ ...entry, reviewStatus: "pending" }, foreign], { ...request, action: "edit", patch: {
-    displayName: "Fenster über T-Spawn", team: "ct", desc: "Links ausrichten, dann werfen.", is_jumpthrow: true, radarFrom: { x: .25, y: .75 }, radarTo: { x: .5, y: .1 },
+    throwToTitle: "Fenster über T-Spawn", team: "ct", radarFrom: { x: .25, y: .75 }, radarTo: { x: .5, y: .1 },
   } }, player);
   assert.equal(updated.name, entry.name);
   assert.equal(updated.owner, owner);
@@ -65,7 +66,7 @@ test("owners edit their draft directly, preserving identity, media and unrelated
   assert.equal(updated.lineupImages[0].url, entry.lineupImages[0].url);
   assert.equal(updated.reviewStatus, "");
   assert.equal(updated.team, "ct");
-  assert.equal(updated.displayName, "Fenster über T-Spawn");
+  assert.equal(updated.throwToTitle, "Fenster über T-Spawn");
   assert.notEqual(updated.updatedAt, entry.updatedAt);
   assert.deepEqual(updated.radarFrom, { x: .25, y: .75 });
   assert.equal(untouched, foreign);
@@ -176,7 +177,9 @@ test("placement restricts actors and fields, and owners can withdraw their own r
 test("authenticated endpoint enforces owner and role from the session, and serializes revisions", async t => {
   let user = player;
   let entries = [{ ...entry, reviewMedia: reviewMediaFixture }];
+  const nadeEvents = new NadeEvents();
   const app = createApp({ config: { sessionSecret: "test-secret" }, compose: {}, nadesSync: null, store: {
+    nadeEvents,
     getSession: async () => ({ purpose: "user", steamId: user.identitySteam64 }),
     getUser: async () => user,
     getNades: async () => structuredClone(entries),
@@ -190,6 +193,17 @@ test("authenticated endpoint enforces owner and role from the session, and seria
   const send = (body, authenticated = true) => fetch(url, { method: "POST", headers: {
     "Content-Type": "application/json", ...(authenticated ? { Cookie: `cs2_panel_session=${"a".repeat(43)}` } : {}),
   }, body: JSON.stringify(body) });
+  const eventUrl = `http://127.0.0.1:${address.port}/api/nades/events`;
+  assert.equal((await fetch(eventUrl)).status, 401);
+  for (const role of ["player", "training_player", "match_admin", "admin"]) {
+    user = { ...player, role };
+    const stream = await fetch(eventUrl, { headers: { Cookie: `cs2_panel_session=${"a".repeat(43)}` } });
+    assert.equal(stream.status, 200);
+    const reader = stream.body!.getReader();
+    assert.match(new TextDecoder().decode((await reader.read()).value), /event: library/);
+    await reader.cancel();
+  }
+  user = player;
   assert.equal((await send(request, false)).status, 401);
   assert.equal((await send({ ...request, action: "approve", role: "admin" })).status, 403);
   const results = await Promise.all([send(request), send(request)]);

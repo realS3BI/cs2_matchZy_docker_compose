@@ -20,68 +20,69 @@ test("typed throw attributes and measured seconds survive capture and MatchZy ex
   assert.equal(roundTrip.flightDuration, 3.125);
 });
 
-test("existing captures update measured duration without replacing manually edited attributes", () => {
-  const [updated] = mergeNadeCaptures([{ ...entry, ...attributes }], [{ ...entry, captureId: "second", landingPos: "10 20 30", flightDuration: 2.5, is_jumpthrow: false }]);
-  assert.equal(updated.flightDuration, 2.5);
-  assert.equal(updated.is_jumpthrow, true);
+test("training captures cannot replace any saved measured data", () => {
+  const measured = { ...entry, ...attributes, flightDuration: 3.125, landingPos: "7 8 9", captureId: "first" };
+  assert.deepEqual(mergeNadeCaptures([measured], [{ ...entry, ...attributes, captureId: "second", landingPos: "10 20 30", flightDuration: 2.5 }]), [measured]);
 });
 
-test("chat edits accept sides, location names, flight seconds and typed throw attributes", () => {
-  for (const [action, value] of Object.entries({ team: "ct", throwFromTitle: "Über T-Spawn", throwToTitle: "Fenster", flightDuration: 3.125, ...attributes })) {
-    const [updated] = applyPlayerNadeRequest([entry], { ...request, action, value });
-    assert.equal(updated[action], value, action);
-    assert.equal(updated.owner, owner);
-  }
-  assert.throws(() => applyPlayerNadeRequest([entry], { ...request, action: "flightDuration", value: -1 }));
-  assert.throws(() => applyPlayerNadeRequest([entry], { ...request, action: "throwTechnique", value: "Jumpthrow" }));
-  assert.throws(() => applyPlayerNadeRequest([entry], { ...request, action: "is_jumpthrow", value: "true" }));
-  assert.throws(() => applyPlayerNadeRequest([entry], { ...request, action: "click_type", value: "middle" }));
-});
-
-test("web edits accept booleans and allow owners to set or clear flight seconds", () => {
-  const [updated] = applyWebNadeAction([entry], { ...request, action: "edit", patch: attributes }, { identitySteam64: owner, role: "player" });
-  for (const [key, value] of Object.entries(attributes)) assert.equal(updated[key], value);
-  const [timed] = applyWebNadeAction([entry], { ...request, action: "edit", patch: { flightDuration: 3.125 } }, { identitySteam64: owner, role: "player" });
-  assert.equal(timed.flightDuration, 3.125);
-  const [cleared] = applyWebNadeAction([timed], { ...request, revision: timed.updatedAt, action: "edit", patch: { flightDuration: null } }, { identitySteam64: owner, role: "player" });
-  assert.equal(cleared.flightDuration, undefined);
-});
-
-test("game movement edits select one mode and clear the other two", () => {
-  for (const [mode, flag] of [["walk", "is_walking"], ["run", "is_running"], ["step", "is_stepping"], ["stand", ""]]) {
-    const [updated] = applyPlayerNadeRequest([{ ...entry, ...attributes }], { ...request, action: "movement", value: mode });
-    for (const key of ["is_walking", "is_running", "is_stepping"]) assert.equal(updated[key], key === flag);
-  }
-});
-
-test("web movement selection clears prior modes, rejects conflicts and normalizes old captures", () => {
+test("only side and position labels can be changed through chat or the web", () => {
+  const measured = { ...entry, ...attributes, flightDuration: 3.125, landingPos: "7 8 9" };
   const actor = { identitySteam64: owner, role: "player" };
-  for (const selected of ["is_walking", "is_running", "is_stepping"]) {
-    const [updated] = applyWebNadeAction([{ ...entry, is_stepping: true }], { ...request, action: "edit", patch: { [selected]: true } }, actor);
-    for (const key of ["is_walking", "is_running", "is_stepping"]) assert.equal(updated[key], key === selected);
+  for (const [action, value] of Object.entries({ team: "ct", throwFromTitle: "Über T-Spawn", throwToTitle: "Fenster" })) {
+    const [game] = applyPlayerNadeRequest([measured], { ...request, action, value });
+    const [web] = applyWebNadeAction([measured], { ...request, action: "edit", patch: { [action]: value } }, actor);
+    for (const updated of [game, web]) {
+      assert.equal(updated[action], value);
+      assert.equal(updated.flightDuration, 3.125);
+      assert.equal(updated.landingPos, measured.landingPos);
+      for (const key of Object.keys(attributes)) assert.equal(updated[key], measured[key]);
+    }
   }
-  assert.throws(() => applyWebNadeAction([entry], { ...request, action: "edit", patch: { is_walking: true, is_running: true } }, actor));
-  assert.throws(() => applyWebNadeAction([entry], { ...request, action: "edit", patch: { is_walking: "true", is_running: true } }, actor));
-  const [legacy] = sanitizeNades([{ ...entry, is_walking: true, is_running: true, is_stepping: true }]);
-  assert.equal(legacy.is_walking, false);
-  assert.equal(legacy.is_running, false);
-  assert.equal(legacy.is_stepping, true);
+  for (const [action, value] of Object.entries({ flightDuration: 2.5, lineupPos: "4 5 6", lineupAng: "0 180 0", landingPos: "10 20 30", type: "Flash", movement: "walk", displayName: "New", desc: "Changed", ...attributes })) {
+    assert.throws(() => applyPlayerNadeRequest([measured], { ...request, action, value }), action);
+    assert.throws(() => applyWebNadeAction([measured], { ...request, action: "edit", patch: { [action]: value } }, actor), action);
+  }
+  for (const value of [null, 0, 3.125, -1, Infinity, NaN, "2"])
+    assert.throws(() => applyWebNadeAction([measured], { ...request, action: "edit", patch: { flightDuration: value } }, actor));
 });
 
-test("manual flight times are validated, protected by ownership and may accompany new coordinates", () => {
-  const actor = { identitySteam64: owner, role: "player" };
-  for (const value of [-1, Infinity, NaN, "2"]) {
-    assert.throws(() => applyWebNadeAction([entry], { ...request, action: "edit", patch: { flightDuration: value } }, actor));
-    assert.throws(() => applyPlayerNadeRequest([entry], { ...request, action: "flightDuration", value }));
-  }
-  for (const protectedEntry of [{ ...entry, owner: "default" }, { ...entry, official: true }]) {
-    assert.throws(() => applyWebNadeAction([protectedEntry], { ...request, owner: protectedEntry.owner, action: "edit", patch: { flightDuration: 3 } }, actor));
-    assert.throws(() => applyPlayerNadeRequest([protectedEntry], { ...request, owner: protectedEntry.owner, action: "flightDuration", value: 3 }));
-  }
-  const [updated] = applyWebNadeAction([entry], { ...request, action: "edit", patch: { lineupPos: "4 5 6", flightDuration: 2.5 } }, actor);
+test("explicit measured replacements atomically replace throw data, clear obsolete media and preserve metadata", () => {
+  const measured = { ...entry, ...attributes, flightDuration: 3.125, landingPos: "7 8 9", captureId: "first",
+    team: "ct", throwFromTitle: "CT-Spawn", throwToTitle: "Fenster", reviewStatus: "pending",
+    radarFrom: { x: .2, y: .3 }, radarTo: { x: .4, y: .5 } };
+  const capture = { ...entry, ...attributes, newLineup: false, editRevision: entry.updatedAt,
+    captureId: "replacement", lineupPos: "4 5 6", lineupAng: "0 100 0", landingPos: "10 20 30", flightDuration: 2.5,
+    is_jumpthrow: false, team: "t", throwTechnique: "Stand", throwTrace: "[]" };
+  const [updated] = applyPlayerNadeRequest([measured], { ...request, action: "replace", value: capture });
   assert.equal(updated.flightDuration, 2.5);
-  const [cleared] = applyPlayerNadeRequest([updated], { ...request, revision: updated.updatedAt, action: "flightDuration", value: null });
-  assert.equal(cleared.flightDuration, undefined);
+  assert.equal(updated.lineupPos, capture.lineupPos);
+  assert.equal(updated.lineupAng, capture.lineupAng);
+  assert.equal(updated.landingPos, capture.landingPos);
+  assert.equal(updated.is_jumpthrow, false);
+  assert.equal(updated.desc, "Stand");
+  assert.equal(updated.team, "ct");
+  assert.equal(updated.throwFromTitle, measured.throwFromTitle);
+  assert.equal(updated.reviewStatus, "");
+  assert.equal(updated.radarFrom, undefined);
+  assert.equal(updated.radarTo, undefined);
+  assert.deepEqual(updated.lineupImages, []);
+  assert.notEqual(updated.updatedAt, entry.updatedAt);
+  const [merged] = mergeNadeCaptures([measured], [capture]);
+  assert.deepEqual({ ...merged, updatedAt: undefined }, { ...updated, updatedAt: undefined });
+  for (const patch of [{ editRevision: "stale" }, { captureId: "first" }, { flightDuration: null }, { flightDuration: -1 },
+    { landingPos: "NaN 0 0" }, { owner: "default" }, { map: "de_anubis" }, { name: "other" }, { is_crouch: undefined }, { newLineup: true }]) {
+    assert.throws(() => applyPlayerNadeRequest([measured], { ...request, action: "replace", value: { ...capture, ...patch } }));
+    assert.deepEqual(mergeNadeCaptures([measured], [{ ...capture, ...patch }]), [measured]);
+  }
+  assert.throws(() => applyPlayerNadeRequest([{ ...measured, official: true }], { ...request, action: "replace", value: capture }));
+  assert.throws(() => applyPlayerNadeRequest([measured], { ...request, action: "replace", actor: "76561198000000002", value: capture }));
+});
+
+test("new recordings require a measured duration and valid end coordinates", () => {
+  const capture = { ...entry, ...attributes, newLineup: true, captureId: "first", landingPos: "10 20 30", flightDuration: 2.5 };
+  for (const patch of [{ flightDuration: undefined }, { flightDuration: null }, { flightDuration: -1 }, { flightDuration: Infinity }, { landingPos: "" }, { landingPos: "NaN 0 0" }, { is_crouch: undefined }, { click_type: null }])
+    assert.deepEqual(mergeNadeCaptures([], [{ ...capture, ...patch }]), []);
+  assert.equal(mergeNadeCaptures([], [capture]).length, 1);
 });
 
 test("invalid booleans, click types and durations are rejected without inventing legacy measurements", () => {
@@ -89,16 +90,4 @@ test("invalid booleans, click types and durations are rejected without inventing
     assert.throws(() => sanitizeNades([{ ...entry, ...patch }]));
   }
   assert.equal(sanitizeNades([entry])[0].flightDuration, undefined);
-});
-
-test("changing actual launch coordinates invalidates old seconds but editing location names preserves them", () => {
-  const measured = { ...entry, ...attributes, flightDuration: 3.125 };
-  const [named] = applyPlayerNadeRequest([measured], { ...request, action: "throwFromTitle", value: "T-Spawn" });
-  assert.equal(named.flightDuration, 3.125);
-  const [moved] = applyPlayerNadeRequest([measured], { ...request, action: "lineupPos", value: "4 5 6" });
-  assert.equal(moved.flightDuration, undefined);
-  const [rotated] = applyWebNadeAction([measured], { ...request, action: "edit", patch: { lineupAng: "0 180 0" } }, { identitySteam64: owner, role: "player" });
-  assert.equal(rotated.flightDuration, undefined);
-  const [unmeasured] = mergeNadeCaptures([measured], [{ ...entry, landingPos: "10 20 30", captureId: "unknown-time" }]);
-  assert.equal(unmeasured.flightDuration, undefined);
 });

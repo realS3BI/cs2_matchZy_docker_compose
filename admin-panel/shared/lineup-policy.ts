@@ -9,8 +9,9 @@ export function lineupPermissions(nade: { owner: string; official?: boolean }, u
 }
 
 export const LINEUP_POSITION_FIELDS = ["radarFrom", "radarTo"] as const;
+export const LINEUP_EDIT_FIELDS = ["team", "throwFromTitle", "throwToTitle", ...LINEUP_POSITION_FIELDS] as const;
 
-export const LINEUP_EDIT_FIELDS = [
+export const LINEUP_CAPTURE_FIELDS = [
   "displayName", "desc", "type", "team", "flightDuration", "throwFromTitle", "throwToTitle",
   "lineupPos", "lineupAng", "landingPos", "radarFrom", "radarTo",
   ...THROW_ATTRIBUTE_FIELDS,

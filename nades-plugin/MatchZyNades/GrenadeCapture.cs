@@ -1,6 +1,5 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Commands;
 using Microsoft.Extensions.Logging;
 
 namespace MatchZyNades;
@@ -11,19 +10,14 @@ public sealed partial class MatchZyNadesPlugin
     private readonly GrenadeFlightTracker _flightTimes = new();
     private sealed record DraftNameRequest(string Owner, NadeKind Kind, string Map,
         Coordinates Start, Coordinates Angles, Coordinates Target, string Technique, string Trace,
-        ThrowAttributes Attributes, string Team, float? FlightDuration);
+        ThrowAttributes Attributes, string Team, float FlightDuration, NadeLineup? Original = null);
     private readonly Dictionary<int, float> _saveRequests = [];
     private readonly Dictionary<int, List<ThrowSample>> _saveSamples = [];
     private readonly Dictionary<int, DraftNameRequest> _draftNameRequests = [];
+    private readonly Dictionary<int, NadeLineup> _captureEdits = [];
 
     private void RegisterCapture()
     {
-        foreach (var command in new[] { "css_savenade", "css_sn", "css_loadnade", "css_ln" })
-            AddCommandListener(command, (player, info) =>
-            {
-                if (info.ArgCount > 1) ArmAfterCommand(player, info.GetArg(1));
-                return HookResult.Continue;
-            }, HookMode.Post);
         RegisterListener<Listeners.OnEntitySpawned>(CaptureProjectile);
         RegisterEventHandler<EventGrenadeThrown>((e, _) =>
         {
@@ -74,7 +68,11 @@ public sealed partial class MatchZyNadesPlugin
         RegisterEventHandler<EventDecoyStarted>((e, _) => CompleteCapture(e.Entityid, e.Userid, NadeKind.Decoy, new(e.X, e.Y, e.Z)));
         RegisterNadeFeedback();
         RegisterEventHandler<EventRoundStart>((_, _) => { ResetCapture(); return HookResult.Continue; });
-        RegisterEventHandler<EventPlayerDeath>((e, _) => { if (e.Userid is { } p) ClearCapture(p.Slot); return HookResult.Continue; });
+        RegisterEventHandler<EventPlayerDeath>((e, _) => {
+            // A released dropper smoke must still finish measuring after the thrower dies.
+            if (e.Userid is { } p && !_capture.HasThrown(p.Slot)) ClearCapture(p.Slot);
+            return HookResult.Continue;
+        });
     }
 
     private static NadeKind ProjectileKind(string name) => name switch
@@ -114,8 +112,7 @@ public sealed partial class MatchZyNadesPlugin
         ReleaseControl(player.Slot);
         if (_draftNameRequests.ContainsKey(player.Slot))
         { Tell(player, "Es gibt eine ungespeicherte Aufnahme. Zuerst Aufnahme speichern oder verwerfen wählen."); return; }
-        _capture.Forget(player.Slot);
-        _draftNameRequests.Remove(player.Slot);
+        ClearCapture(player.Slot);
         _saveSamples[player.Slot] = [];
         if (player.PlayerPawn.Value is { IsValid: true } pawn) AddSample(_saveSamples[player.Slot], player, pawn);
         _saveRequests[player.Slot] = Server.CurrentTime + 180;
@@ -154,6 +151,8 @@ public sealed partial class MatchZyNadesPlugin
             return true;
         }
         if (displayName.StartsWith('.') || displayName.StartsWith('!')) return false;
+        if (request.Original != null)
+        { Tell(player, "Ersetzte Aufnahme im Panel speichern oder verwerfen. Der Lineup-Name bleibt erhalten."); return true; }
         displayName = new string(displayName.Where(c => !char.IsControl(c)).Take(120).ToArray()).Trim();
         var name = System.Text.RegularExpressions.Regex.Replace(displayName.ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-', '_');
         if (displayName.Length == 0 || name.Length == 0)
@@ -191,37 +190,41 @@ public sealed partial class MatchZyNadesPlugin
         }
         if (request.Map != Server.MapName)
         { ClearCapture(player.Slot); Tell(player, "Die Aufnahme gehört zu einer anderen Map. Bitte erneut aufnehmen."); return; }
+        if (request.Original is { } original)
+        {
+            var current = ReadLibrary(player)?.FirstOrDefault(n => n.Owner == original.Owner && n.Map == original.Map && n.Name == original.Name);
+            if (current == null || current.Official || current.Revision != original.Revision || current.Owner != player.SteamID.ToString())
+            { Tell(player, "Das Lineup wurde inzwischen geändert oder freigegeben. Aufnahme verwerfen und erneut bearbeiten."); return; }
+            try
+            {
+                var capture = NadeCaptureFile.CreateReplacement(original, request.Kind, request.Start, request.Angles, request.Target,
+                    request.Technique, request.Trace, request.Attributes, request.FlightDuration);
+                var value = System.Text.Json.JsonSerializer.SerializeToElement(capture,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                if (QueueLineupRequest(player, original, "replace", value)) _draftNameRequests.Remove(player.Slot);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            { Logger.LogWarning(error, "Could not persist lineup replacement"); Tell(player, "Lineup konnte nicht gespeichert werden. Bitte erneut versuchen."); }
+            return;
+        }
         // A unique suffix also prevents collisions with captures awaiting dashboard sync.
         var name = $"{NadeCatalog.Label(request.Kind)} {request.Map} {DateTime.UtcNow:yyyyMMdd-HHmmss} {Guid.NewGuid().ToString("N")[..6]}";
         TrySaveNameFromChat(player, name);
     }
 
-    private void ArmCapture(CCSPlayerController player, NadeLineup lineup)
+    private void ArmLineupEdit(CCSPlayerController player, NadeLineup selected)
     {
-        if (!CanWriteNades(player) || !TrainingEnabled || lineup.Owner != player.SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture) || lineup.Official || lineup.Kind == NadeKind.Other) { _capture.Forget(player.Slot); return; }
-        _capture.Arm(player.Slot, player.SteamID, lineup, Server.CurrentTime);
-        Tell(player, "Der nächste Wurf erfasst das Ziel automatisch (gleicher Typ, innerhalb 2 Minuten). Danach Dashboard aktualisieren.");
-    }
-
-    private void ArmAfterCommand(CCSPlayerController? player, string name)
-    {
-        if (!CanWriteNades(player) || !Alive(player) || !TrainingEnabled) return;
-        var steamId = player!.SteamID;
-        var map = Server.MapName;
-        Server.NextFrame(() =>
-        {
-            if (!Alive(player) || player.SteamID != steamId || !TrainingEnabled || Server.MapName != map) return;
-            var candidates = ReadLibrary(player, quiet: true)?.Where(n => n.Name == name).ToArray() ?? [];
-            // Resolve private/global name collisions by the actual position after MatchZy's command.
-            var pawn = player.PlayerPawn.Value!;
-            var pos = pawn.AbsOrigin;
-            if (pos == null) return;
-            candidates = candidates.Where(n => Math.Abs(n.Position.X - pos.X) < 2 && Math.Abs(n.Position.Y - pos.Y) < 2 &&
-                Math.Abs(n.Position.Z - pos.Z) <= 8 && Math.Abs(n.Angles.X - pawn.EyeAngles.X) < 1 &&
-                Math.Abs(n.Angles.Y - pawn.EyeAngles.Y) < 1).ToArray();
-            if (candidates.Length == 1) ArmCapture(player, candidates[0]);
-            else if (candidates.Length > 1) Tell(player, "Name mehrfach vorhanden. Bitte das genaue Lineup im .nades-Menü laden.");
-        });
+        var lineup = ReadLibrary(player)?.FirstOrDefault(n => n.Owner == selected.Owner && n.Map == selected.Map && n.Name == selected.Name);
+        if (!CanWriteNades(player) || !TrainingEnabled || lineup == null || lineup.Owner != player.SteamID.ToString() || lineup.Official)
+        { Tell(player, "Nur deine eigenen, noch nicht offiziellen Lineups können neu aufgenommen werden."); return; }
+        if (_draftNameRequests.ContainsKey(player.Slot))
+        { Tell(player, "Zuerst die laufende Aufnahme speichern oder verwerfen."); return; }
+        if (string.IsNullOrEmpty(lineup.Revision))
+        { Tell(player, "Das Lineup wird noch synchronisiert. Bitte kurz warten."); return; }
+        LoadLineup(player, lineup);
+        ArmNewLineupCapture(player);
+        _captureEdits[player.Slot] = lineup;
+        Tell(player, "Lineup bearbeiten: Passe Position und Wurf an. Die nächste Granate wird vollständig neu gemessen. Danach unter Lineup bearbeiten bewusst speichern oder verwerfen.");
     }
 
     private void CaptureProjectile(CEntityInstance entity)
@@ -245,13 +248,15 @@ public sealed partial class MatchZyNadesPlugin
 
     private HookResult CompleteCapture(int entityId, CCSPlayerController? player, NadeKind kind, Coordinates target)
     {
+        if (player is not { IsValid: true } && _capture.Thrower(entityId) is { } thrower)
+            player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.Slot == thrower.Slot && p.SteamID == thrower.SteamId);
         if (!TrainingEnabled || player is not { IsValid: true } ||
             !float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z)) return HookResult.Continue;
-        var flightDuration = CompleteFlightTime(entityId, player, kind);
-        var lineup = _capture.Complete(entityId, player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime)
-            ?? _capture.CompleteByThrower(player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime);
-        if (lineup == null) return HookResult.Continue;
-        return CompleteNamedCapture(player, lineup, target, flightDuration);
+        CompleteFlightTime(entityId, player, kind);
+        var captured = _capture.CompleteMeasured(entityId, player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime)
+            ?? _capture.CompleteMeasuredByThrower(player.Slot, player.SteamID, kind, Server.MapName, Server.CurrentTime);
+        if (captured == null) return HookResult.Continue;
+        return CompleteNamedCapture(player, captured.Value.Lineup, target, captured.Value.Seconds);
     }
 
     private HookResult CompleteNamedCapture(CCSPlayerController player, NadeLineup lineup, Coordinates target, float? flightDuration)
@@ -260,25 +265,18 @@ public sealed partial class MatchZyNadesPlugin
         if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z)) return HookResult.Continue;
         if (lineup.Name.StartsWith("capture_", StringComparison.Ordinal))
         {
+            if (flightDuration is not { } measured || !float.IsFinite(measured) || measured < 0)
+            { ClearCapture(player.Slot); Tell(player, "Die Flugzeit konnte nicht eindeutig erfasst werden. Bitte die Aufnahme erneut starten und genau eine Granate werfen."); return HookResult.Continue; }
             var samples = System.Text.Json.JsonSerializer.Deserialize<ThrowSample[]>(lineup.ThrowTrace) ?? [];
             var technique = ThrowTechnique.Summarize(samples);
             _draftNameRequests[player.Slot] = new(lineup.Owner, lineup.Kind, lineup.Map,
                 lineup.Position, lineup.Angles, target, technique, lineup.ThrowTrace,
-                lineup.Attributes ?? ThrowAttributes.Detect(samples), lineup.Team, flightDuration);
-            var duration = flightDuration is { } seconds ? FormattableString.Invariant($" Flugzeit: {seconds:0.00} s.") : " Flugzeit konnte nicht eindeutig gemessen werden.";
-            Tell(player, $"Ziel erfasst: {technique}.{duration} Panelbedienung aktivieren und unter Neue Nade aufnehmen die Aufnahme speichern oder verwerfen. Optional einen eigenen Namen im Chat eingeben.");
+                lineup.Attributes ?? ThrowAttributes.Detect(samples), lineup.Team, measured,
+                _captureEdits.Remove(player.Slot, out var original) ? original : null);
+            var duration = FormattableString.Invariant($" Flugzeit: {measured:0.00} s.");
+            Tell(player, $"Ziel erfasst: {technique}.{duration} Panelbedienung aktivieren und unter " +
+                (original != null ? "Lineup bearbeiten die Neuaufnahme speichern oder verwerfen." : "Neue Nade aufnehmen die Aufnahme speichern oder verwerfen. Optional einen eigenen Namen im Chat eingeben."));
             return HookResult.Continue;
-        }
-        try
-        {
-            NadeCaptureFile.Write(Path.Combine(Path.GetDirectoryName(_libraryPath)!, "savednades.captures.json"),
-                NadeCaptureFile.Create(lineup, target, flightDuration));
-            Tell(player, $"Ziel für {MenuRenderer.Plain(lineup.Title, 90)} erfasst. Dashboard aktualisieren.");
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        {
-            Logger.LogWarning(error, "Could not persist grenade target");
-            Tell(player, "Ziel konnte nicht gespeichert werden. Bitte erneut laden und werfen.");
         }
         return HookResult.Continue;
     }
@@ -286,10 +284,10 @@ public sealed partial class MatchZyNadesPlugin
     private HookResult CompleteFireCapture(CCSPlayerController? player, Coordinates target)
     {
         if (!TrainingEnabled || player is not { IsValid: true }) return HookResult.Continue;
-        var flightDuration = CompleteFlightTime(null, player, NadeKind.Fire);
+        CompleteFlightTime(null, player, NadeKind.Fire);
         // Molotov detonation does not expose a projectile entity id in the CS# event.
-        var lineup = _capture.CompleteByThrower(player.Slot, player.SteamID, NadeKind.Fire, Server.MapName, Server.CurrentTime);
-        return lineup == null ? HookResult.Continue : CompleteNamedCapture(player, lineup, target, flightDuration);
+        var captured = _capture.CompleteMeasuredByThrower(player.Slot, player.SteamID, NadeKind.Fire, Server.MapName, Server.CurrentTime);
+        return captured == null ? HookResult.Continue : CompleteNamedCapture(player, captured.Value.Lineup, target, captured.Value.Seconds);
     }
 
     private void ClearCapture(int slot)
@@ -298,6 +296,7 @@ public sealed partial class MatchZyNadesPlugin
         _saveRequests.Remove(slot);
         _saveSamples.Remove(slot);
         _draftNameRequests.Remove(slot);
+        _captureEdits.Remove(slot);
     }
     private void ResetCapture()
     {
@@ -306,5 +305,6 @@ public sealed partial class MatchZyNadesPlugin
         _saveRequests.Clear();
         _saveSamples.Clear();
         _draftNameRequests.Clear();
+        _captureEdits.Clear();
     }
 }

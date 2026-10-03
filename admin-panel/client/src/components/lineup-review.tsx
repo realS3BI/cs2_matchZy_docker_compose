@@ -32,7 +32,17 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
   const missing = missingReviewMedia(nade);
   const missingDetails = missingReviewDetails(nade);
   const [draft, setDraft] = useState({ displayName: nade.displayName || nade.name, desc: nade.desc || "", throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" });
-  useEffect(() => setDraft({ displayName: nade.displayName || nade.name, desc: nade.desc || "", throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" }), [nade.owner, nade.map, nade.name, nade.displayName, nade.desc, nade.throwFromTitle, nade.throwToTitle]);
+  const [detailsBaseline, setDetailsBaseline] = useState(() => JSON.stringify({ throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" }));
+  const [detailsRevision, setDetailsRevision] = useState(nade.updatedAt || "");
+  const detailsDirty = JSON.stringify({ throwFromTitle: draft.throwFromTitle, throwToTitle: draft.throwToTitle }) !== detailsBaseline;
+  const detailsStale = detailsDirty && detailsRevision !== (nade.updatedAt || "");
+  function resetDetails() {
+    setDraft({ displayName: nade.displayName || nade.name, desc: nade.desc || "", throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" });
+    setDetailsBaseline(JSON.stringify({ throwFromTitle: nade.throwFromTitle || "", throwToTitle: nade.throwToTitle || "" }));
+    setDetailsRevision(nade.updatedAt || "");
+  }
+  useEffect(() => { if (!detailsDirty) resetDetails(); }, [nade, detailsDirty]);
+
   const step = steps[index];
   const media = nade.reviewMedia?.[step.id];
   const ownUpload = useReviewUpload({ nade, user, disabled, onEntriesChange });
@@ -91,9 +101,12 @@ export function LineupReview({ nade, user, disabled, mutate, onEntriesChange, on
       <CardContent className="grid gap-4">
         {REVIEW_DETAIL_FIELDS.map(field => <label key={field.key} className="grid gap-2 text-sm">
           <span>{field.label} *</span>
-          {field.key === "desc" ? <Textarea value={draft[field.key]} disabled={navigationLocked || !permissions.edit} maxLength={4000} onChange={event => setDraft(value => ({ ...value, [field.key]: event.target.value }))} /> : <Input value={draft[field.key]} disabled={navigationLocked || !permissions.edit} maxLength={120} onChange={event => setDraft(value => ({ ...value, [field.key]: event.target.value }))} />}
+          {field.key === "desc" ? <Textarea value={draft[field.key]} readOnly disabled={navigationLocked} maxLength={4000} onChange={event => setDraft(value => ({ ...value, [field.key]: event.target.value }))} /> : <Input value={draft[field.key]} readOnly={field.key === "displayName"} disabled={navigationLocked || !permissions.edit} maxLength={120} onChange={event => setDraft(value => ({ ...value, [field.key]: event.target.value }))} />}
         </label>)}
-        {permissions.edit ? <ActionButton disabled={navigationLocked || missingReviewDetails({ ...draft, name: "" }).length > 0} onClick={() => run(() => mutate("edit", { patch: draft }))} successLabel="Gespeichert">Angaben speichern</ActionButton> : <p className="text-sm text-muted-foreground">Nur der Ersteller kann die Angaben bearbeiten. Fehlende Angaben vor der Freigabe ergänzen lassen.</p>}
+        {permissions.edit ? <ActionButton disabled={navigationLocked || detailsStale || !detailsDirty || missingReviewDetails({ ...draft, name: "" }).length > 0} onClick={() => run(() => mutate("edit", { revision: detailsRevision, patch: { throwFromTitle: draft.throwFromTitle, throwToTitle: draft.throwToTitle } }).then(() => setDetailsBaseline(JSON.stringify({ throwFromTitle: draft.throwFromTitle, throwToTitle: draft.throwToTitle }))))} successLabel="Gespeichert">Angaben speichern</ActionButton> : <p className="text-sm text-muted-foreground">Name und Beschreibung bleiben fest gespeichert. Nur der Ersteller kann Startposition und Endposition ergänzen.</p>}
+        {detailsDirty && <Button variant="ghost" disabled={navigationLocked} onClick={resetDetails}>Änderungen verwerfen</Button>}
+        {detailsStale && <p role="status" className="text-sm text-muted-foreground">Die Aufnahme wurde inzwischen geändert. Verwirf deine Eingaben, um den aktuellen Stand zu laden.</p>}
+        <p className="text-xs text-muted-foreground">Name, Beschreibung und Wurfdaten sind fest gespeichert. Startposition und Endposition kannst du ergänzen.</p>
         <p className="text-sm">{missingDetails.length ? `Noch offen: ${missingDetails.join(", ")}` : "Alle Pflichtangaben sind gespeichert."}</p>
       </CardContent>
     </Card> : step.id !== "finish" ? <div className="review-step-layout">

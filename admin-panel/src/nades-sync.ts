@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:
 import { dirname } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { applyPlayerNadeRequest, applyGameReviewDecision } from "./nade-review.js";
+import { replaceMeasuredLineup } from "./measured-lineup.js";
 import { THROW_ATTRIBUTE_FIELDS } from "../shared/throw-attributes.js";
 import {
   matchZySavedNadesConfigToNades,
@@ -47,24 +48,8 @@ function preservePanelMetadata(importedEntries, currentEntries) {
   return importedEntries.map((entry) => {
     const current = currentByKey.get(nadeKey(entry));
     if (!current) return entry;
-    const merged: any = {
-      ...entry,
-      id: current.id || entry.id,
-      lineupImages: current.lineupImages || [],
-      ...(current.reviewMedia ? { reviewMedia: current.reviewMedia } : {}),
-    };
-    for (const key of ["displayName", "team", "mustKnow", "official", "reviewStatus", "updatedAt", "landingPos", "captureId", "throwTechnique", "throwTrace", "throwFromTitle", "throwToTitle", "radarFrom", "radarTo", ...THROW_ATTRIBUTE_FIELDS, "flightDuration"]) {
-      // A cleared flight time must stay empty when the game rewrites an older snapshot.
-      if (current[key] !== undefined || key === "flightDuration") merged[key] = current[key];
-    }
-    if (!sameVector(current.lineupPos, entry.lineupPos) || !sameVector(current.lineupAng, entry.lineupAng)) {
-      delete merged.landingPos;
-      delete merged.captureId;
-      delete merged.flightDuration;
-      delete merged.radarTo;
-      if (!sameVector(current.lineupPos, entry.lineupPos)) delete merged.radarFrom;
-    }
-    return merged;
+    // savednades.json is a training snapshot. Only explicit measured replacements may change a saved throw.
+    return current;
   });
 }
 
@@ -83,18 +68,14 @@ export function mergeNadeCaptures(entries, captures) {
   const byKey = new Map(captures.filter(c => c && typeof c === "object").map(c => [nadeKey(c), c]));
   const mergedEntries = entries.map(entry => {
     const capture = byKey.get(nadeKey(entry));
-    if (entry.official || !capture?.captureId || capture.captureId === entry.captureId ||
-        !sameVector(entry.lineupPos, capture.lineupPos) || !sameVector(entry.lineupAng, capture.lineupAng) ||
-        !sameVector(capture.landingPos, capture.landingPos)) return entry;
-    try {
-      // A new measured target supersedes an old manual target marker. Start overrides remain intact.
-      return sanitizeNades([{ ...entry, landingPos: capture.landingPos, radarTo: null,
-        flightDuration: capture.flightDuration ?? undefined,
-        captureId: capture.captureId, updatedAt: capture.capturedAt }])[0];
-    } catch { return entry; }
+    if (!capture?.editRevision) return entry;
+    try { return replaceMeasuredLineup(entry, capture); } catch { return entry; }
   });
   for (const capture of captures) {
-    if (capture?.newLineup !== true || !capture.name || mergedEntries.some(entry => nadeKey(entry) === nadeKey(capture))) continue;
+    if (capture?.newLineup !== true || !capture.name || !/^[0-9]{17}$/.test(capture.owner || "") ||
+        !capture.captureId || !sameVector(capture.landingPos, capture.landingPos) ||
+        THROW_ATTRIBUTE_FIELDS.some(key => capture[key] === undefined || capture[key] === null) ||
+        typeof capture.flightDuration !== "number" || !Number.isFinite(capture.flightDuration) || capture.flightDuration < 0 || mergedEntries.some(entry => nadeKey(entry) === nadeKey(capture))) continue;
     try {
       const [entry] = sanitizeNades([{
         name: capture.name, displayName: capture.displayName, map: capture.map, type: capture.type,
@@ -371,7 +352,8 @@ export class NadesSyncService {
       await this.store.replaceNadesFromSync(entries, { source, hash, bytes });
       this.lastDirection = "matchzy-to-panel";
     }
-    await this.writeMetadata(entries);
+    if (stableNades(entries) !== stableNades(importedEntries)) await this.writeFromMongoUnlocked(entries);
+    else await this.writeMetadata(entries);
     this.lastReadAt = new Date().toISOString();
     this.lastConfirmedAt = this.lastReadAt;
     this.lastError = "";
@@ -424,8 +406,7 @@ export class NadesSyncService {
       (present.has(nadeKey(capture)) || !receipts.has(captureKey(capture)))));
     if (stableNades(entries) !== stableNades(current)) {
       await this.store.replaceNadesFromSync(entries, { source: "grenade-capture" });
-      if (entries.some(entry => !current.some(existing => nadeKey(existing) === nadeKey(entry))))
-        await this.writeFromMongoUnlocked(entries);
+      await this.writeFromMongoUnlocked(entries);
       this.lastDirection = "matchzy-to-panel";
     }
     await this.writeMetadata(entries);

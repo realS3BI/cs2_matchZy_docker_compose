@@ -9,6 +9,18 @@ const references = [
   { map: map.mapName, lineupPos: "1000 -1000 128", radarFrom: { x: 0.9, y: 0.8 } }
 ];
 
+test("Anubis projects captured smoke endpoints without prior manual references", () => {
+  const anubis = ACTIVE_DUTY_MAPS.find(map => map.mapName === "de_anubis")!;
+  const calibration = inferRadarCalibration(anubis, []);
+  assert.ok(calibration);
+  const points = resolveRadarPoints({ lineupPos: "-400 2192 32", landingPos: "-100 1200 96" }, calibration);
+  assert.ok(Math.abs(points.radarFrom!.x - .442) < .002);
+  assert.ok(Math.abs(points.radarFrom!.y - .208) < .002);
+  assert.ok(points.radarTo);
+  assert.equal(inferRadarCalibration({ ...anubis, radarUrl: "/custom-anubis.webp" }, []), null);
+  assert.equal(resolveRadarPoints({ landingPos: "-100 1200 900" }, calibration).radarTo!.x, points.radarTo.x);
+});
+
 test("saved map references project world start and airborne effect coordinates", () => {
   const calibration = inferRadarCalibration(map, references);
   assert.ok(calibration);

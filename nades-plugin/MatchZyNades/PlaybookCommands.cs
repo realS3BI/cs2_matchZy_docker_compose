@@ -99,8 +99,10 @@ public static class PlaybookCommands
         ["sv_cheats"] = "1", ["sv_infinite_ammo"] = "1", ["sv_grenade_trajectory_prac_pipreview"] = "1",
         ["sv_grenade_trajectory_prac_trailtime"] = "3", ["sv_showimpacts"] = "0",
         ["mp_limitteams"] = "0", ["mp_autoteambalance"] = "0", ["mp_freezetime"] = "0",
-        // Join training promptly instead of waiting 15 seconds for team selection.
-        ["mp_force_pick_time"] = "1",
+        // Keep team selection open; choosing a team still spawns immediately.
+        ["mp_force_pick_time"] = "60", ["sv_disable_teamselect_menu"] = "0", ["sv_human_autojoin_team"] = "0",
+        // Finish startup on the empty server and skip the competitive team intro.
+        ["sv_hibernate_when_empty"] = "0", ["mp_team_intro_time"] = "0",
         // Teammates can pass through each other while still supporting boosts.
         ["mp_solid_teammates"] = "2", ["mp_solid_enemies"] = "0",
         ["mp_roundtime"] = "60", ["mp_roundtime_defuse"] = "60", ["mp_roundtime_hostage"] = "60",

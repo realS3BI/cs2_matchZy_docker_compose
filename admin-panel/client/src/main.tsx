@@ -1,3 +1,4 @@
+import { useLiveNades } from "./hooks/use-live-nades";
 import { NadesMenuStatus } from "./components/nades-menu-status";
 import { AppSidebar } from "./components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
@@ -831,6 +832,8 @@ function App() {
   useEffect(() => {
     loadAll().catch(() => setAuthenticated(false));
   }, []);
+
+  useLiveNades(authenticated === true, setNades);
 
   useEffect(() => {
     if (!authenticated || user?.role !== "admin" || busy) return;

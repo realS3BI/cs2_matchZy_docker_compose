@@ -6,6 +6,44 @@ namespace MatchZyNades.Tests;
 
 public sealed class NadeCaptureTests
 {
+    [Theory]
+    [InlineData(true)] [InlineData(false)]
+    public void DropperSmokeKeepsItsEndpointAndMeasuredTimeWithEitherEventOrder(bool spawnFirst)
+    {
+        var tracker = new NadeCaptureTracker();
+        var smoke = new NadeLineup("76561198000000001", "capture_dropper", "de_anubis", NadeKind.Smoke, "",
+            new(-400, 2192, 32), new(80, 90, 0));
+        tracker.Arm(1, 76561198000000001, smoke, 0);
+        if (spawnFirst) tracker.Projectile(100, 1, 76561198000000001, NadeKind.Smoke, 1);
+        Assert.True(tracker.Thrown(1, 76561198000000001, NadeKind.Smoke, 1.01f));
+        if (!spawnFirst) tracker.Projectile(100, 1, 76561198000000001, NadeKind.Smoke, 1.02f);
+        Assert.True(tracker.HasThrown(1));
+        Assert.Equal((1, 76561198000000001UL), tracker.Thrower(100));
+        var measured = tracker.CompleteMeasured(100, 1, 76561198000000001, NadeKind.Smoke, "de_anubis", 41.01f);
+        Assert.NotNull(measured);
+        Assert.Equal(smoke, measured.Value.Lineup);
+        Assert.Equal(40, measured.Value.Seconds, 3);
+        Assert.False(tracker.HasThrown(1));
+        Assert.Null(tracker.CompleteMeasuredByThrower(1, 76561198000000001, NadeKind.Smoke, "de_anubis", 42));
+    }
+
+    [Fact]
+    public void ExplicitReplacementSerializesAllMeasuredFieldsAndOriginalRevision()
+    {
+        var original = Lineup("dropper", owner: "76561198000000001") with { Revision = "revision-1", Team = "ct" };
+        var replacement = NadeCaptureFile.CreateReplacement(original, NadeKind.Smoke, new(10, 20, 30),
+            new(0, 90, 0), new(100, 200, 300), "Stand", "[]", new(IsCrouch: true), 2.5f);
+        var json = JsonSerializer.SerializeToElement(replacement, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        Assert.False(json.GetProperty("newLineup").GetBoolean());
+        Assert.Equal("revision-1", json.GetProperty("editRevision").GetString());
+        Assert.Equal(original.Name, json.GetProperty("name").GetString());
+        Assert.Equal("100 200 300", json.GetProperty("landingPos").GetString());
+        Assert.Equal(2.5f, json.GetProperty("flightDuration").GetSingle());
+        Assert.True(json.GetProperty("is_crouch").GetBoolean());
+        Assert.Equal("left", json.GetProperty("click_type").GetString());
+        Assert.Equal("Stand", json.GetProperty("throwTechnique").GetString());
+        Assert.Equal("Stand", json.GetProperty("description").GetString());
+    }
     private static NadeLineup Lineup(string name, NadeKind kind = NadeKind.Smoke, string owner = "default") =>
         new(owner, name, "de_mirage", kind, "", new(1, 2, 3), new(4, 5, 6), "Fenster vom Spawn");
 
@@ -44,7 +82,7 @@ public sealed class NadeCaptureTests
     [InlineData(1, 7656, NadeKind.Smoke, "de_mirage", 8)]
     [InlineData(1, 7655, NadeKind.Flash, "de_mirage", 8)]
     [InlineData(1, 7655, NadeKind.Smoke, "de_dust2", 8)]
-    [InlineData(1, 7655, NadeKind.Smoke, "de_mirage", 40)]
+    [InlineData(1, 7655, NadeKind.Smoke, "de_mirage", 182)]
     public void RejectsWrongIdentityMapTypeAndExpiredEvents(int slot, ulong steamId, NadeKind kind, string map, float now)
     {
         var tracker = new NadeCaptureTracker();

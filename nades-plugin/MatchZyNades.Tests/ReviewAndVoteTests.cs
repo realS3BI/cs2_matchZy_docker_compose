@@ -45,13 +45,13 @@ public sealed class ReviewAndVoteTests
             var menu = TrainingMenu.Create([entry], "de_mirage", true, null, steamId: actor);
             menu.Select(1); menu.Select(1); menu.Select(4); menu.Select(1); return menu.Current;
         }
-        Assert.Contains(Details(lineup.Owner, lineup).Items, i => i.Request?.Action == TrainingAction.EditName);
+        Assert.Contains(Details(lineup.Owner, lineup).Items, i => i.Page?.Key.StartsWith("edit:") == true);
         Assert.Contains(Details(lineup.Owner, lineup).Items, i => i.Request?.Action == TrainingAction.RequestReview);
         var foreign = Details("76561198000000002", lineup);
-        Assert.Equal(4, foreign.Items.Count);
+        Assert.Equal(5, foreign.Items.Count);
         Assert.Contains(foreign.Items, i => i.Page?.Key.StartsWith("review:") == true);
         Assert.DoesNotContain(foreign.Items, i => i.Request?.Action is TrainingAction.EditName or TrainingAction.DeleteLineup or TrainingAction.RequestReview);
-        Assert.Equal(3, Details(lineup.Owner, lineup with { Official = true }).Items.Count);
+        Assert.Equal(4, Details(lineup.Owner, lineup with { Official = true }).Items.Count);
         var pending = Details(lineup.Owner, lineup with { ReviewStatus = "pending" });
         Assert.False(pending.Items.Single(i => i.Request?.Action == TrainingAction.RequestReview).Enabled);
         var deletion = Details(lineup.Owner, lineup).Items.Single(i => i.Page?.Key.StartsWith("delete:") == true).Page!;

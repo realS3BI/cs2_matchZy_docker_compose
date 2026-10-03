@@ -90,7 +90,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   app.use("/api", (req, res, next) => {
     const role = res.locals.user.role;
     const route = `${req.method} ${req.path}`;
-    const shared = ["GET /control", "GET /nades", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites", "POST /nades/entry", "GET /nades/review/config"];
+    const shared = ["GET /control", "GET /nades", "GET /nades/events", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites", "POST /nades/entry", "GET /nades/review/config"];
     const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
     if (role === "admin" || shared.includes(route) ||
         (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
@@ -99,6 +99,10 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.get("/api/nades/review/config", (_req, res) => res.json({ uploadEnabled: !!config.uploadthingToken }));
+  app.get("/api/nades/events", (req, res) => {
+    if (!store.nadeEvents) { res.status(503).end(); return; }
+    void store.nadeEvents.stream(req, res, () => store.getNades());
+  });
   installReviewCapture(app, { config, store });
 
   async function controlSettings(req, res) {

@@ -36,7 +36,8 @@ public sealed class GrenadeFlightTests
         Assert.False(saved.IsWalking);
         Assert.False(saved.IsRunning);
         Assert.Equal("both", saved.ClickType);
-        Assert.Empty(saved.ThrowTechnique);
+        Assert.Equal(ThrowTechnique.Summarize(samples), saved.ThrowTechnique);
+        Assert.Equal(saved.ThrowTechnique, saved.Description);
     }
 
     [Fact]

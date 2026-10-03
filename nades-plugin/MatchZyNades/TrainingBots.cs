@@ -1,6 +1,7 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
+using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
 
@@ -32,9 +33,13 @@ public sealed partial class MatchZyNadesPlugin
         var generation = _botGeneration;
         var steamId = player.SteamID;
         _addingTrainingBot = true;
+        ApplyTrainingBotSettings();
         // bot_add is asynchronous. Match by controller handle, including its serial,
         // so an occupied or reused player slot can never steal another bot's position.
         Server.ExecuteCommand(team == 2 ? "bot_add_t" : "bot_add_ct");
+        // bot_add can change the quota itself. Pin it after the command, just as
+        // MatchZy does, before the quota manager can create replacement bots.
+        Server.ExecuteCommand($"bot_quota {TrainingBotCount() + 1}");
         WaitForTrainingBot(player, steamId, placement, existing, team, generation, 50);
     }
 
@@ -45,7 +50,7 @@ public sealed partial class MatchZyNadesPlugin
         {
             if (generation != _botGeneration || !TrainingEnabled) return;
             var candidates = Utilities.GetPlayers().Where(p => p.IsValid && p.IsBot && !p.IsHLTV &&
-                p.TeamNum == team && !existing.Contains(p.EntityHandle.Raw)).ToArray();
+                !existing.Contains(p.EntityHandle.Raw)).ToArray();
             if (!CanControl(owner) || owner.SteamID != steamId)
             {
                 foreach (var candidate in candidates) KickTrainingBot(candidate);
@@ -54,16 +59,18 @@ public sealed partial class MatchZyNadesPlugin
                     WaitForTrainingBot(owner, steamId, placement, existing, team, generation, attempts - 1);
                     return;
                 }
-                _addingTrainingBot = false;
+                FinishTrainingBotRequest();
                 return;
             }
-            var bot = candidates.FirstOrDefault(Alive);
+            var handle = TrainingBotClaim.Select(candidates.Select(p =>
+                new TrainingBotClaim.Candidate(p.EntityHandle.Raw, p.TeamNum, AlivePawn(p))), team);
+            var bot = candidates.FirstOrDefault(p => p.EntityHandle.Raw == handle);
             if (bot != null)
             {
                 _trainingBots[bot.EntityHandle.Raw] = placement;
                 RestoreTrainingBot(bot);
                 foreach (var extra in candidates.Where(p => p.EntityHandle.Raw != bot.EntityHandle.Raw)) KickTrainingBot(extra);
-                _addingTrainingBot = false;
+                FinishTrainingBotRequest();
                 Tell(owner, placement.Crouch ? "Duckenden Trainingsbot platziert." : "Stehenden Trainingsbot platziert.");
                 return;
             }
@@ -73,8 +80,49 @@ public sealed partial class MatchZyNadesPlugin
                 return;
             }
             foreach (var candidate in candidates) KickTrainingBot(candidate);
-            _addingTrainingBot = false;
+            FinishTrainingBotRequest();
             Tell(owner, "Bot konnte nicht gespawnt werden. Möglicherweise ist der Server oder das Team voll. Mit .nobots Bots entfernen.");
+        }, TimerFlags.STOP_ON_MAPCHANGE);
+    }
+
+    private int TrainingBotCount()
+    {
+        var connected = Utilities.GetPlayers().Where(p => p.IsValid && p.IsBot && !p.IsHLTV)
+            .Select(p => p.EntityHandle.Raw).ToHashSet();
+        foreach (var handle in _trainingBots.Keys.Where(h => !connected.Contains(h)).ToArray())
+            _trainingBots.Remove(handle);
+        return _trainingBots.Count;
+    }
+
+    private void ApplyTrainingBotSettings()
+    {
+        foreach (var name in new[] { "mp_autoteambalance", "mp_limitteams", "bot_quota_mode",
+                     "bot_join_after_player", "bot_stop", "bot_freeze", "bot_zombie" })
+            if (ConVar.Find(name) is { } variable)
+                variable.StringValue = PlaybookCommands.PracticeSettings[name];
+    }
+
+    private void EnforceTrainingBots()
+    {
+        if (!TrainingEnabled) return;
+        ApplyTrainingBotSettings();
+        if (ConVar.Find("bot_quota") is { } quota)
+            quota.SetValue(TrainingBotCount() + (_addingTrainingBot ? 1 : 0));
+        if (_addingTrainingBot) return;
+        // Also catch opposite-team and late arrivals from a single bot_add.
+        foreach (var bot in Utilities.GetPlayers().Where(p => p.IsValid && p.IsBot && !p.IsHLTV &&
+                     !_trainingBots.ContainsKey(p.EntityHandle.Raw)))
+            KickTrainingBot(bot);
+    }
+
+    private void FinishTrainingBotRequest()
+    {
+        _addingTrainingBot = false;
+        Server.ExecuteCommand($"bot_quota {TrainingBotCount()}");
+        var generation = _botGeneration;
+        AddTimer(0.6f, () =>
+        {
+            if (generation == _botGeneration) EnforceTrainingBots();
         }, TimerFlags.STOP_ON_MAPCHANGE);
     }
 
@@ -85,7 +133,7 @@ public sealed partial class MatchZyNadesPlugin
 
     private void RestoreTrainingBot(CCSPlayerController bot)
     {
-        if (!Alive(bot) || !_trainingBots.TryGetValue(bot.EntityHandle.Raw, out var placement)) return;
+        if (!AlivePawn(bot) || !_trainingBots.TryGetValue(bot.EntityHandle.Raw, out var placement)) return;
         var pawn = bot.PlayerPawn.Value!;
         var p = placement.Position.Position;
         var a = placement.Position.Angles;
@@ -99,7 +147,7 @@ public sealed partial class MatchZyNadesPlugin
         AddTimer(0.2f, () =>
         {
             if (generation == _botGeneration && TrainingEnabled && pawn.IsValid &&
-                bot.PlayerPawn.Value?.Handle == pawn.Handle && Alive(bot))
+                bot.PlayerPawn.Value?.Handle == pawn.Handle && AlivePawn(bot))
                 SetTrainingBotCrouch(pawn, placement.Crouch);
         }, TimerFlags.STOP_ON_MAPCHANGE);
     }

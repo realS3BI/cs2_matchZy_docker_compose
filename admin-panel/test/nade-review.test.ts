@@ -12,8 +12,8 @@ test("player review and edit preserve ownership and cannot grant official status
   assert.equal(review.official, undefined);
   assert.equal(review.mustKnow, undefined);
   assert.equal(review.owner, owner);
-  const [edited] = applyPlayerNadeRequest([review], { ...request, revision: review.updatedAt, action: "displayName", value: "Fenster über T-Spawn" });
-  assert.equal(edited.displayName, "Fenster über T-Spawn");
+  const [edited] = applyPlayerNadeRequest([review], { ...request, revision: review.updatedAt, action: "throwToTitle", value: "Fenster über T-Spawn" });
+  assert.equal(edited.throwToTitle, "Fenster über T-Spawn");
   assert.equal(edited.name, "window");
   assert.equal(edited.reviewStatus, "");
   assert.notEqual(edited.updatedAt, review.updatedAt);

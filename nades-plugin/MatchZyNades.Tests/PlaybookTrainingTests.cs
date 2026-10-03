@@ -105,6 +105,20 @@ public sealed class PlaybookTrainingTests
     }
 
     [Fact]
+    public void JoiningAllowsManualTeamSelectionWithoutAnIntroOrFreeze()
+    {
+        Assert.Equal("0", PlaybookCommands.PracticeSettings["sv_disable_teamselect_menu"]);
+        Assert.Equal("0", PlaybookCommands.PracticeSettings["sv_human_autojoin_team"]);
+        Assert.True(int.Parse(PlaybookCommands.PracticeSettings["mp_force_pick_time"]) >= 15);
+        Assert.Equal("0", PlaybookCommands.PracticeSettings["mp_team_intro_time"]);
+        Assert.Equal("0", PlaybookCommands.PracticeSettings["mp_freezetime"]);
+    }
+
+    [Fact]
+    public void EmptyServerCanFinishItsStartupBeforeTheFirstPlayerJoins() =>
+        Assert.Equal("0", PlaybookCommands.PracticeSettings["sv_hibernate_when_empty"]);
+
+    [Fact]
     public void HumansTakeDamageButResetToFullHealthBeforeDeath()
     {
         Assert.Equal("1", PlaybookCommands.PracticeSettings["buddha"]);

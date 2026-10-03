@@ -21,7 +21,7 @@ import { copyText } from "../lib/clipboard";
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
 import { findLineup, lineupKey, lineupPath, lineupReviewPath } from "../lib/lineups";
 import { inferRadarCalibration, resolveRadarPoints } from "../lib/nade-radar";
-import { LINEUP_EDIT_FIELDS, lineupPermissions } from "../../../shared/lineup-policy";
+import { LINEUP_CAPTURE_FIELDS, LINEUP_EDIT_FIELDS, lineupPermissions } from "../../../shared/lineup-policy";
 import { THROW_FLAGS, BOOLEAN_THROW_FLAGS, THROW_FLAG_LABELS, CLICK_TYPES, CLICK_LABELS, MOVEMENT_TYPES, MOVEMENT_LABELS, movementType, movementPatch, type MovementType } from "../../../shared/throw-attributes";
 
 export function LineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
@@ -42,8 +42,8 @@ export function NewLineupPage({ maps, nades, user, onEntriesChange, onRefresh })
   return <LineupContent key={`new-${map.key}`} {...{ nade, map, nades, user, onEntriesChange, onRefresh }} back={mapPath(map)} creating />;
 }
 
-function editableValues(nade) {
-  return Object.fromEntries(LINEUP_EDIT_FIELDS.map(key => [key, nade[key] ?? (THROW_FLAGS.includes(key as any) ? false : key === "click_type" ? "left" : key.startsWith("radar") || key === "flightDuration" ? null : "")]));
+function editableValues(nade, creating = false) {
+  return Object.fromEntries((creating ? LINEUP_CAPTURE_FIELDS : LINEUP_EDIT_FIELDS).map(key => [key, nade[key] ?? (THROW_FLAGS.includes(key as any) ? false : key === "click_type" ? "left" : key.startsWith("radar") || key === "flightDuration" ? null : "")]));
 }
 
 function formatThrowTrace(value) {
@@ -57,8 +57,8 @@ function formatThrowTrace(value) {
 function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, back, creating = false }) {
   const navigate = useNavigate();
   const permissions = lineupPermissions(nade, user);
-  const [draft, setDraft] = useState(() => editableValues(nade));
-  const [baseline, setBaseline] = useState(() => JSON.stringify(editableValues(nade)));
+  const [draft, setDraft] = useState(() => editableValues(nade, creating));
+  const [baseline, setBaseline] = useState(() => JSON.stringify(editableValues(nade, creating)));
   const [placement, setPlacement] = useState(() => ({ radarFrom: nade.radarFrom ?? null, radarTo: nade.radarTo ?? null }));
   const [placementBaseline, setPlacementBaseline] = useState(() => JSON.stringify(placement));
   const [positioning, setPositioning] = useState(creating);
@@ -69,8 +69,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   const detailsDirty = permissions.edit && JSON.stringify(draft) !== baseline;
   const placementDirty = permissions.position && JSON.stringify(placement) !== placementBaseline;
   const dirty = detailsDirty || placementDirty;
-  const canCreate = Boolean(draft.displayName.trim() && draft.lineupPos.trim() && draft.lineupAng.trim());
-  const validDuration = draft.flightDuration === null || Number.isFinite(draft.flightDuration) && draft.flightDuration >= 0;
+  const canCreate = creating && Boolean(draft.displayName?.trim() && draft.lineupPos?.trim() && draft.lineupAng?.trim());
+  const validDuration = !creating || draft.flightDuration === null || Number.isFinite(draft.flightDuration) && draft.flightDuration >= 0;
   const stale = dirty && revision !== (nade.updatedAt || "");
   const positionedNade = { ...nade, ...(permissions.edit ? draft : {}), ...placement };
   const calibration = inferRadarCalibration(map, nades.map(item => lineupKey(item) === lineupKey(nade) ? positionedNade : item));
@@ -78,7 +78,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   const missingPosition = !points.radarFrom || !points.radarTo;
 
   function reset(entry = nade) {
-    const values = editableValues(entry);
+    const values = editableValues(entry, creating);
     setDraft(values);
     setBaseline(JSON.stringify(values));
     const positions = { radarFrom: entry.radarFrom ?? null, radarTo: entry.radarTo ?? null };
@@ -161,7 +161,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             {!nade.official && nade.reviewStatus === "rejected" && <Badge variant="outline">Überarbeitung angefragt</Badge>}
           </div>
         </header>
-        {permissions.edit ? <form onSubmit={event => event.preventDefault()}>
+        {creating ? <form onSubmit={event => event.preventDefault()}>
           <fieldset disabled={busy} className="min-w-0">
             <FieldGroup>
               {textField("displayName", "Name", nade.name)}
@@ -198,6 +198,18 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             </FieldGroup>
           </fieldset>
         </form> : <div className="grid gap-5">
+          {permissions.edit && <form onSubmit={event => event.preventDefault()}><fieldset disabled={busy} className="min-w-0"><FieldGroup>
+            <FieldSet><FieldLegend>Seite</FieldLegend><ToggleGroup type="single" variant="outline" value={draft.team} disabled={busy} onValueChange={team => { if (team) patch({ team }); }} aria-label="Seite des Lineups" className="grid w-full grid-cols-3">
+              {LINEUP_TEAMS.map(team => <ToggleGroupItem key={team} value={team}><TeamIcon team={team} />{TEAM_LABELS[team]}</ToggleGroupItem>)}
+            </ToggleGroup></FieldSet>
+            {textField("throwFromTitle", "Startposition", "z. B. T-Spawn")}
+            {textField("throwToTitle", "Endposition", "z. B. Fenster")}
+            <div className="flex flex-wrap gap-2"><ActionButton icon={Save} disabled={busy || !dirty || stale} onClick={() => mutate(detailsDirty ? "edit" : "position", { patch: detailsDirty ? { ...draft, ...placement } : placement })} pendingLabel="Speichert …" successLabel="Gespeichert">Speichern</ActionButton>
+              {dirty && <Button variant="ghost" disabled={busy} onClick={() => reset()}>Änderungen verwerfen</Button>}
+            </div>
+            {stale && <p role="status" className="text-xs text-muted-foreground">Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden.</p>}
+          </FieldGroup></fieldset></form>}
+          <p className="text-xs text-muted-foreground">Wurfdaten werden automatisch vom Server erfasst und bleiben beim Training erhalten. Der Ersteller kann den Wurf im Server-Panel über „Lineup bearbeiten“ neu aufnehmen.</p>
           <dl className="lineup-detail-facts">
             <div><dt>Startposition</dt><dd>{nade.throwFromTitle || "Kreis auf der Karte"}</dd></div>
             <div><dt>Endposition</dt><dd>{nade.throwToTitle || "Raute auf der Karte"}</dd></div>
@@ -214,7 +226,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             <div><dt>Landeposition</dt><dd className="font-mono">{nade.landingPos || "Nicht hinterlegt"}</dd></div>
           </dl></details>
         </div>}
-        {!creating && !permissions.edit && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
+        {!creating && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
         {!creating && <Button variant="secondary" disabled={busy || dirty} onClick={() => navigate(lineupReviewPath(map, nade))}>Review öffnen</Button>}
         {!creating && permissions.revoke && (nade.official || nade.reviewStatus === "pending") && <ActionButton variant="ghost" disabled={busy || dirty} onClick={() => mutate("revoke")} successLabel="Zurückgenommen">{nade.official ? "Freigabe zurücknehmen" : "Review zurücknehmen"}</ActionButton>}
         {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">

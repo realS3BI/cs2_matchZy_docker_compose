@@ -24,6 +24,9 @@ public sealed partial class MatchZyNadesPlugin
     private void RegisterStandaloneTraining(bool hotReload)
     {
         if (!StandaloneTraining) return;
+        // Map/game configs and the engine quota manager can overwrite training
+        // settings after startup. Keep team rules and the tracked bot count fixed.
+        AddTimer(1f, EnforceTrainingBots, TimerFlags.REPEAT);
         foreach (var name in PlaybookCommands.TrainingCommands)
             AddCommand(name, "Playbook-Training", (player, command) => RunTrainingCommand(player, name, command.ArgString));
         AddCommandListener("noclip", (player, _) =>
@@ -34,13 +37,24 @@ public sealed partial class MatchZyNadesPlugin
         }, HookMode.Pre);
         RegisterListener<Listeners.OnMapStart>(_ => SchedulePractice());
         RegisterListener<Listeners.OnMapEnd>(() => { _practiceGeneration++; _practiceReady = false; ResetTraining(); });
+        RegisterEventHandler<EventPlayerConnectFull>((_, _) =>
+        {
+            // Reapply before the connecting client opens its team selection.
+            if (TrainingEnabled) ApplyPracticeSettings();
+            return HookResult.Continue;
+        }, HookMode.Pre);
+        RegisterEventHandler<EventRoundPrestart>((_, _) =>
+        {
+            // round_start is too late to prevent the engine's team intro.
+            if (TrainingEnabled) ApplyPracticeSettings();
+            return HookResult.Continue;
+        }, HookMode.Pre);
         RegisterEventHandler<EventPlayerSpawn>((e, _) =>
         {
             if (e.Userid is { IsValid: true } player)
                 Server.NextFrame(() =>
                 {
                     if (!TrainingEnabled) return;
-                    EndPracticeWarmup();
                     ApplyPlayerTraining(player);
                 });
             return HookResult.Continue;
@@ -50,7 +64,6 @@ public sealed partial class MatchZyNadesPlugin
             if (TrainingEnabled)
             {
                 ApplyPracticeSettings();
-                EndPracticeWarmup();
             }
             return HookResult.Continue;
         });
@@ -70,10 +83,10 @@ public sealed partial class MatchZyNadesPlugin
             return HookResult.Continue;
         });
         // Also covers hot reload and plugin loads after OnMapStart.
-        if (hotReload || !string.IsNullOrEmpty(Server.MapName)) SchedulePractice();
+        if (hotReload || !string.IsNullOrEmpty(Server.MapName)) SchedulePractice(restartRound: !hotReload);
     }
 
-    private void SchedulePractice()
+    private void SchedulePractice(bool restartRound = true)
     {
         var generation = ++_practiceGeneration;
         _practiceReady = false;
@@ -82,7 +95,11 @@ public sealed partial class MatchZyNadesPlugin
         {
             if (generation != _practiceGeneration) return;
             ApplyPracticeSettings();
-            Server.ExecuteCommand("bot_kick; mp_warmup_end; mp_restartgame 1");
+            Server.ExecuteCommand("bot_kick");
+            EndPracticeWarmup();
+            // Hibernation is disabled above, so this completes without waiting
+            // for the first player. A plugin reload keeps the running round.
+            if (restartRound) Server.ExecuteCommand("mp_restartgame 1");
             _practiceReady = true;
             // Map configs may run after OnMapStart. Reapply once they have settled.
             AddTimer(1f, () =>
@@ -101,7 +118,9 @@ public sealed partial class MatchZyNadesPlugin
         {
             if (ConVar.Find(name) is not { } variable) continue;
             _practiceDefaults.TryAdd(name, variable.StringValue);
-            variable.StringValue = value.Trim('"');
+            variable.StringValue = name == "bot_quota"
+                ? (TrainingBotCount() + (_addingTrainingBot ? 1 : 0)).ToString()
+                : value.Trim('"');
         }
     }
 

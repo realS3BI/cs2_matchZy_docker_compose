@@ -2,7 +2,7 @@ namespace MatchZyNades;
 
 public enum TrainingAction
 {
-    Close, Back, StartPractice, LoadLineup, RepeatLineup, CheckPosition,
+    Close, Back, StartPractice, LoadLineup, RepeatLineup, CheckPosition, EditLineup,
     Rethrow, ReviewRethrow, LastThrow, ClearGrenades, SavePosition, LoadPosition, Noclip,
     Bot, CrouchBot, RemoveBots, Trajectory, Impacts, NoFlash, God,
     BestSpawn, WorstSpawn, StartCapture, SaveCapture, CancelCapture, RefreshLibrary, GiveGrenade,

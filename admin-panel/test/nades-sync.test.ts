@@ -59,31 +59,30 @@ function sampleEntry(patch: Record<string, any> = {}): any {
   };
 }
 
-test("throw settings and automatic flight seconds reach the panel metadata and survive a MatchZy rewrite", async t => {
+test("automatic throw data reaches the panel metadata and survives a training snapshot", async t => {
   const owner = "76561198000000001";
-  const [entry] = sanitizeNades([sampleEntry({ owner, team: "ct", throwFromTitle: "Über T-Spawn", throwToTitle: "Fenster",
-    is_jumpthrow: true, is_crouch: false, is_walking: false, is_running: false, is_stepping: true, click_type: "both" })]);
-  const { service, store } = await createHarness(t, [entry]);
-  await service.writeFromMongo([entry]);
-  const capture = { ...entry, newLineup: false, captureId: "measured-flight", landingPos: "10 20 30", flightDuration: 3.125, capturedAt: new Date().toISOString() };
+  const capture = sampleCapture({ owner, newLineup: true, team: "ct", is_jumpthrow: true, is_stepping: true, click_type: "both" });
+  const { service, store } = await createHarness(t);
+  await service.writeFromMongo([]);
   await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [capture]);
   await service.poll();
   assert.equal(store.entries[0].flightDuration, 3.125);
   let metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
   assert.equal(metadata[0].flightDuration, 3.125);
-  assert.equal(metadata[0].landingPos, "10 20 30");
+  assert.equal(metadata[0].landingPos, capture.landingPos);
   assert.equal(metadata[0].click_type, "both");
-  assert.equal(metadata[0].throwFromTitle, "Über T-Spawn");
-  await writeJson(service.liveFile, sampleConfig({ owner }));
+  await writeJson(service.liveFile, sampleConfig({ owner, lineupPos: "99 99 99" }));
   await service.poll();
+  assert.equal(store.entries[0].lineupPos, capture.lineupPos);
   assert.equal(store.entries[0].flightDuration, 3.125);
   assert.equal(store.entries[0].is_jumpthrow, true);
-  assert.equal(store.entries[0].throwToTitle, "Fenster");
-  const request = { id: "e".repeat(32), actor: owner, owner, map: entry.map, name: entry.name, revision: store.entries[0].updatedAt, action: "is_crouch", value: true };
+  const request = { id: "e".repeat(32), actor: owner, owner, map: capture.map, name: capture.name, revision: store.entries[0].updatedAt, action: "is_crouch", value: true };
   await writeJson(join(dirname(service.liveFile), "savednades.requests", request.id + ".json"), request);
   await service.poll();
+  const result = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.requests", "results", request.id + ".json"), "utf8"));
+  assert.equal(result.ok, false);
   metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
-  assert.equal(metadata[0].is_crouch, true);
+  assert.equal(metadata[0].is_crouch, false);
   assert.equal(metadata[0].flightDuration, 3.125);
 });
 
@@ -239,7 +238,7 @@ test("sync keeps lineup images when MatchZy updates the same nade", async (t) =>
 
   await service.importLiveFile("test");
 
-  assert.equal(store.entries[0].desc, "updated in game");
+  assert.equal(store.entries[0].desc, existing.desc);
   assert.deepEqual(store.entries[0].lineupImages, [image]);
 });
 
@@ -256,7 +255,7 @@ test("sync keeps panel-only landing and radar positions", async (t) => {
 
   await service.importLiveFile("test");
 
-  assert.equal(store.entries[0].desc, "updated in game");
+  assert.equal(store.entries[0].desc, existing.desc);
   assert.equal(store.entries[0].landingPos, "7 8 9");
   assert.equal(store.entries[0].throwFromTitle, "T Spawn");
   assert.equal(store.entries[0].throwToTitle, "Window");
@@ -293,21 +292,17 @@ test("invalid live JSON is logged and does not overwrite Mongo entries", async (
 });
 
 function sampleCapture(patch = {}) {
-  return { ...sampleEntry(), captureId: "throw-1", landingPos: "700 -800 900", capturedAt: "2026-09-29T16:00:00Z", ...patch };
+  return { ...sampleEntry({ owner: "76561198000000001", updatedAt: "2026-09-01T00:00:00.000Z", is_jumpthrow: false, is_crouch: false, is_walking: false, is_running: false, is_stepping: false, click_type: "left" }), flightDuration: 3.125, newLineup: false, captureId: "throw-1", landingPos: "700 -800 900", capturedAt: "2026-09-29T16:00:00Z", ...patch };
 }
 
-test("capture polling works even when MatchZy's library file is unchanged", async (t) => {
-  const existing = sampleEntry({ id: "Ab1Cd2E", displayName: "Fenster vom Spawn", radarTo: { x: 0.1, y: 0.2 } });
-  const { store, service } = await createHarness(t, [existing]);
-  await service.writeFromMongo([existing]);
-  const originalLive = await readFile(service.liveFile, "utf8");
-  await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [sampleCapture()]);
+test("new capture polling works even when MatchZy's library file is unchanged", async t => {
+  const { store, service } = await createHarness(t);
+  await service.writeFromMongo([]);
+  await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [sampleCapture({ newLineup: true, displayName: "Fenster vom Spawn" })]);
   await service.poll();
   assert.equal(store.entries[0].landingPos, "700 -800 900");
-  assert.equal(store.entries[0].radarTo, undefined);
-  assert.equal(store.entries[0].displayName, existing.displayName);
-  assert.equal(store.entries[0].id, existing.id);
-  assert.equal(await readFile(service.liveFile, "utf8"), originalLive);
+  assert.equal(store.entries[0].flightDuration, 3.125);
+  assert.equal(store.entries[0].displayName, "Fenster vom Spawn");
   const actionCount = store.actions.length;
   await service.poll();
   assert.equal(store.actions.length, actionCount);
@@ -326,7 +321,7 @@ test("sync keeps titles and landing points and publishes metadata when MatchZy o
   await writeJson(service.liveFile, sampleConfig({ lineupPos: "2 3 4" }));
   await service.importLiveFile("test");
   const changed = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
-  assert.equal(changed[0].landingPos, null);
+  assert.equal(changed[0].landingPos, existing.landingPos);
 });
 
 test("captures respect owner, map, technical key, position and angle", () => {
@@ -339,18 +334,19 @@ test("captures respect owner, map, technical key, position and angle", () => {
   const edited = sampleEntry({ captureId: "throw-1", landingPos: "9 8 7" });
   assert.deepEqual(mergeNadeCaptures([edited], [sampleCapture()]), [edited]);
   const next = mergeNadeCaptures([edited], [sampleCapture({ captureId: "throw-2" })]);
-  assert.equal(next[0].landingPos, "700 -800 900");
+  assert.equal(next[0].landingPos, edited.landingPos);
 });
 
-test("moving a saved lineup invalidates captured targets and old manual references", async (t) => {
+test("a training snapshot cannot change saved throw data or manual references", async (t) => {
   const existing = sampleEntry({ landingPos: "7 8 9", captureId: "throw-1", radarFrom: { x: 0.1, y: 0.2 }, radarTo: { x: 0.4, y: 0.5 } });
   const { store, service } = await createHarness(t, [existing]);
   await writeJson(service.liveFile, sampleConfig({ lineupPos: "20 30 40" }));
   await service.importLiveFile("test");
-  assert.equal(store.entries[0].landingPos, undefined);
-  assert.equal(store.entries[0].radarFrom, undefined);
-  assert.equal(store.entries[0].radarTo, undefined);
-  assert.equal(store.entries[0].captureId, undefined);
+  assert.equal(store.entries[0].landingPos, existing.landingPos);
+  assert.deepEqual(store.entries[0].radarFrom, existing.radarFrom);
+  assert.deepEqual(store.entries[0].radarTo, existing.radarTo);
+  assert.equal(store.entries[0].captureId, existing.captureId);
+  assert.equal(store.entries[0].lineupPos, existing.lineupPos);
 });
 
 test("deleting captured lineups survives polling and restart without blocking a new recording", async (t) => {
@@ -380,7 +376,7 @@ test("deleting captured lineups survives polling and restart without blocking a 
 });
 
 test("deleting a capture imported by an older panel seeds its receipt before saving", async (t) => {
-  const captured = sampleEntry({ captureId: "throw-1" });
+  const captured = sampleEntry({ owner: "76561198000000001", captureId: "throw-1" });
   const { store, service } = await createHarness(t, [captured]);
   await service.writeFromMongo([captured]);
   await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [sampleCapture({ newLineup: true })]);
@@ -389,7 +385,7 @@ test("deleting a capture imported by an older panel seeds its receipt before sav
 });
 
 test("a new capture queued during a panel save is still imported", async (t) => {
-  const { store, service } = await createHarness(t, [sampleEntry({ captureId: "throw-1" })]);
+  const { store, service } = await createHarness(t, [sampleEntry({ owner: "76561198000000001", captureId: "throw-1" })]);
   await service.writeFromMongo(store.entries);
   await writeJson(join(dirname(service.liveFile), "savednades.captures.json"), [
     sampleCapture({ newLineup: true }),
@@ -446,18 +442,18 @@ test("web edits share the sync queue and stale writes cannot replace a newer rev
   const [entry, other] = sanitizeNades([sampleEntry({ owner }), sampleEntry({ name: "other" })]);
   const { service, store } = await createHarness(t, [entry, other]);
   await service.writeFromMongo([entry, other]);
-  const request = { owner, map: entry.map, name: entry.name, revision: entry.updatedAt, action: "edit", patch: { desc: "Im Web geändert" } };
+  const request = { owner, map: entry.map, name: entry.name, revision: entry.updatedAt, action: "edit", patch: { throwToTitle: "Im Web geändert" } };
   const change = entries => applyWebNadeAction(entries, request, { identitySteam64: owner, role: "player" });
   const results = await Promise.allSettled([service.changeFromPanel(change), service.changeFromPanel(change)]);
   assert.equal(results[0].status, "fulfilled");
   assert.equal(results[1].status, "rejected");
   if (results[1].status === "rejected") assert.equal(results[1].reason.status, 409);
-  assert.equal(store.entries[0].desc, "Im Web geändert");
+  assert.equal(store.entries[0].throwToTitle, "Im Web geändert");
   assert.deepEqual(store.entries[1], other);
   const metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
   assert.equal(metadata.find(n => n.owner === owner).updatedAt, store.entries[0].updatedAt);
   await service.poll();
-  assert.equal(store.entries[0].desc, "Im Web geändert");
+  assert.equal(store.entries[0].throwToTitle, "Im Web geändert");
 });
 
 test("manual web creation publishes a playable nade and preserves its metadata through game sync", async t => {
@@ -483,31 +479,35 @@ test("manual web creation publishes a playable nade and preserves its metadata t
   assert.equal(store.entries.length, 2);
 });
 
-test("manual flight corrections and movement selection reach the panel and survive an old game rewrite", async t => {
+test("explicit replacements use the request queue and reject stale replacement attempts", async t => {
   const owner = "76561198000000001";
-  const [entry] = sanitizeNades([sampleEntry({ owner, flightDuration: 3.125, is_walking: true })]);
+  const [entry] = sanitizeNades([sampleEntry({ owner, flightDuration: 3.125, is_walking: true, reviewStatus: "pending", reviewMedia: reviewMediaFixture })]);
   const { service, store } = await createHarness(t, [entry]);
   await service.writeFromMongo([entry]);
   const oldLive = JSON.parse(await readFile(service.liveFile, "utf8"));
-  const request = { id: "e".repeat(32), actor: owner, owner, map: entry.map, name: entry.name };
-  await service.changeFromPanel(entries => applyWebNadeAction(entries, {
-    ...request, revision: entries[0].updatedAt, action: "edit", patch: { is_running: true, flightDuration: 2.5 },
-  }, { identitySteam64: owner, role: "player" }));
-  let metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
-  assert.equal(metadata[0].is_running, true);
-  assert.equal(metadata[0].is_walking, false);
-  assert.equal(metadata[0].flightDuration, 2.5);
-  await service.changeFromPanel(entries => applyWebNadeAction(entries, {
-    ...request, revision: entries[0].updatedAt, action: "edit", patch: { flightDuration: null },
-  }, { identitySteam64: owner, role: "player" }));
+  const directory = join(dirname(service.liveFile), "savednades.requests");
+  const replacement = sampleCapture({ editRevision: entry.updatedAt, captureId: "improved", lineupPos: "10 20 30", is_running: true, flightDuration: 2.5 });
+  const request = { id: "e".repeat(32), actor: owner, owner, map: entry.map, name: entry.name, revision: entry.updatedAt, action: "replace", value: replacement };
+  await writeJson(join(directory, request.id + ".json"), request);
+  await service.poll();
+  assert.equal(store.entries[0].flightDuration, 2.5);
+  assert.equal(store.entries[0].is_running, true);
+  assert.equal(store.entries[0].lineupPos, "10 20 30");
+  assert.equal(store.entries[0].reviewStatus, "");
+  assert.equal(store.entries[0].reviewMedia, undefined);
+  let result = JSON.parse(await readFile(join(directory, "results", request.id + ".json"), "utf8"));
+  assert.equal(result.ok, true);
   await writeJson(service.liveFile, oldLive);
   await service.poll();
-  assert.equal(store.entries[0].flightDuration, undefined);
-  assert.equal(store.entries[0].is_running, true);
-  metadata = JSON.parse(await readFile(join(dirname(service.liveFile), "savednades.metadata.json"), "utf8"));
-  assert.equal(metadata[0].flightDuration, undefined);
+  assert.equal(store.entries[0].flightDuration, 2.5);
+  assert.equal(store.entries[0].lineupPos, "10 20 30");
+  await writeJson(join(directory, "d".repeat(32) + ".json"), { ...request, id: "d".repeat(32) });
+  await service.poll();
+  result = JSON.parse(await readFile(join(directory, "results", "d".repeat(32) + ".json"), "utf8"));
+  assert.equal(result.ok, false);
+  const live = JSON.parse(await readFile(service.liveFile, "utf8"));
+  assert.equal(live[owner][entry.name].LineupPos, "10 20 30");
 });
-
 
 test("team assignments survive game sync, captures and web revisions", async t => {
   const owner = "76561198000000001";
@@ -517,7 +517,7 @@ test("team assignments survive game sync, captures and web revisions", async t =
   await writeJson(service.liveFile, sampleConfig({ owner, desc: "Im Spiel geändert" }));
   await service.poll();
   assert.equal(store.entries[0].team, "t");
-  assert.equal(store.entries[0].desc, "Im Spiel geändert");
+  assert.equal(store.entries[0].desc, entry.desc);
   await service.changeFromPanel(entries => applyWebNadeAction(entries, {
     owner, name: entry.name, map: entry.map, revision: entries[0].updatedAt, action: "edit", patch: { team: "both" },
   }, { identitySteam64: owner, role: "player" }));
@@ -533,7 +533,7 @@ test("team assignments survive game sync, captures and web revisions", async t =
 
 test("review media survive game rewrites and only current platform admins approve via the game queue", async t => {
   const actor = "76561198000000002";
-  const [entry] = sanitizeNades([sampleEntry({ owner: "76561198000000001", reviewMedia: reviewMediaFixture })]);
+  const [entry] = sanitizeNades([sampleEntry({ owner: "76561198000000001", throwFromTitle: "Start", throwToTitle: "Ende", reviewMedia: reviewMediaFixture })]);
   const { service, store } = await createHarness(t, [entry]);
   let role = "match_admin";
   Object.assign(store, { getUser: async steamId => steamId === actor ? { identitySteam64: actor, role } : null });

@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.3.9";
+    public override string ModuleVersion => "2.3.11";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -130,8 +130,6 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
             RunTrainingCommand(player, PlaybookCommands.Normalize(words[0]), string.Join(" ", words.Skip(1)));
             return HookResult.Stop;
         }
-        if (words.Length > 1 && words[0].ToLowerInvariant() is ".savenade" or ".sn" or ".loadnade" or ".ln")
-            ArmAfterCommand(player, words[1]);
         if (words.Length == 0 || !words[0].Equals(".nades", StringComparison.OrdinalIgnoreCase)) return HookResult.Continue;
         Handle(player, words.Length > 1 ? words[1] : "");
         return HookResult.Stop;
@@ -193,7 +191,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         }
         player.PrintToChat(ChatMessage(message));
     }
-    private static bool Alive(CCSPlayerController? player) => player is { IsValid: true, IsBot: false, PawnIsAlive: true }
+    private static bool Alive(CCSPlayerController? player) => player is { IsBot: false } && AlivePawn(player);
+    private static bool AlivePawn(CCSPlayerController? player) => player is { IsValid: true, PawnIsAlive: true }
         && player.TeamNum is 2 or 3 && player.PlayerPawn.Value is { IsValid: true, MovementServices: not null, WeaponServices: not null };
     private bool TrainingEnabled => StandaloneTraining ? _practiceReady : _serverMode == "matchzy" && MatchZyState.IsPractice(MatchZyState.LoadedInstance());
 
@@ -306,6 +305,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         {
             case TrainingAction.TeleportSpawn: TeleportToSpawn(player, request.Spawn); return;
             case TrainingAction.LoadLineup when request.Lineup is { } lineup: LoadLineup(player, lineup); return;
+            case TrainingAction.EditLineup when request.Lineup is { } editLineup: ArmLineupEdit(player, editLineup); return;
             case TrainingAction.RepeatLineup:
                 if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
                 return;
@@ -332,6 +332,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
     {
         ReleaseControl(player.Slot);
         if (!CanControl(player) || !TrainingEnabled || !Alive(player)) return;
+        if (_draftNameRequests.ContainsKey(player.Slot))
+        { Tell(player, "Zuerst die fertige Aufnahme speichern oder verwerfen."); return; }
         // Re-read at selection time: a panel sync may have edited, removed or unshared this entry.
         var library = ReadLibrary(player);
         if (library == null) return;
@@ -349,7 +351,7 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
         PlayerBodyRotation.Repair(pawn);
         _last[player.Slot] = lineup;
         if (_menus.TryGetValue(player.Slot, out var session)) session.Library = null;
-        ArmCapture(player, lineup);
+        ClearCapture(player.Slot);
         Tell(player, $"Geladen: {lineup.Title}. {lineup.Description}" +
             (lineup.Kind == NadeKind.Other ? " Passende Granate selbst wählen." : " Bereit zum Trainieren."));
     }

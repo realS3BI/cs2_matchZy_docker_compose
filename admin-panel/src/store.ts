@@ -2,6 +2,7 @@ import { assignNadeIds } from "./nade-ids.js";
 import { Collection, Db, MongoClient } from "mongodb";
 import { sanitizeAdmins, sanitizeNades, sanitizeSettings } from "./validators.js";
 import { normalizeSettings, migrateAdmins } from "./policy.js";
+import { NadeEvents } from "./nade-events.js";
 
 type UserDocument = {
   _id: string;
@@ -16,6 +17,7 @@ type UserDocument = {
 };
 
 export class Store {
+  readonly nadeEvents = new NadeEvents();
   config: any;
   client: MongoClient;
   db!: Db;
@@ -211,6 +213,7 @@ export class Store {
       { upsert: true }
     );
     await this.logAction("save", "success", "Nades saved");
+    this.nadeEvents.publish(cleanEntries);
     return cleanEntries;
   }
 
@@ -222,6 +225,7 @@ export class Store {
       { upsert: true }
     );
     await this.logAction("nades_sync", "success", "Nades imported from MatchZy savednades.json", details);
+    this.nadeEvents.publish(cleanEntries);
     return cleanEntries;
   }
 
