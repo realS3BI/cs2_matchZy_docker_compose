@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowUp, ChevronsDown, Copy, Crosshair, Film, Footprints, Link2, MapPin, Mouse, PersonStanding, Target, Timer, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowUp, ChevronsDown, ChevronsRight, CirclePause, Copy, Crosshair, Film, Footprints, Link2, MapPin, MoveRight, PersonStanding, Play, ScanFace, Target, Timer, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Badge } from "./ui/badge";
 import { ActionButton } from "./action-button";
 import { FavoriteButton } from "./nade-favorites";
-import { GrenadeIcon, TeamIcon } from "./nade-icons";
+import { GrenadeIcon, TeamIcon, ThrowClickIcon } from "./nade-icons";
 import { TEAM_LABELS, isLineupTeam } from "../../../shared/lineup-teams";
 import { copyText } from "../lib/clipboard";
 import { CLICK_LABELS, MOVEMENT_LABELS, movementType } from "../../../shared/throw-attributes";
@@ -55,14 +55,16 @@ export function useHeldReviewSlot() {
   return held.alt ? held.shift ? "effect" : "position" : held.shift ? "aim" : null;
 }
 
+const MOVEMENT_ICONS = { stand: CirclePause, walk: Footprints, run: ChevronsRight, step: MoveRight };
+
 export function ThrowFacts({ nade }) {
   const movement = movementType(nade);
   const attributesKnown = ["is_jumpthrow", "is_crouch", "is_walking", "is_running", "is_stepping"].some(key => typeof nade[key] === "boolean");
   const facts = [
     { Icon: null, label: "Team", value: isLineupTeam(nade.team) ? <><TeamIcon team={nade.team} />{TEAM_LABELS[nade.team]}</> : "Nicht hinterlegt" },
-    { Icon: null, label: "Technik", value: <>{nade.is_jumpthrow && <ArrowUp aria-label="Jumpthrow" />}<Mouse aria-hidden="true" />{nade.is_jumpthrow ? "Jumpthrow + " : ""}{CLICK_LABELS[nade.click_type] || "Maustaste nicht erfasst"}</> },
+    { Icon: null, label: "Technik", value: <>{nade.is_jumpthrow && <ArrowUp aria-label="Jumpthrow" />}<ThrowClickIcon clickType={nade.click_type} />{nade.is_jumpthrow ? "Jumpthrow + " : ""}{CLICK_LABELS[nade.click_type] || "Maustaste nicht erfasst"}</> },
     { Icon: nade.is_crouch ? ChevronsDown : PersonStanding, label: "Haltung", value: attributesKnown ? nade.is_crouch ? "Geduckt" : "Aufrecht" : "Nicht erfasst" },
-    { Icon: movement === "stand" ? PersonStanding : Footprints, label: "Bewegung", value: attributesKnown ? MOVEMENT_LABELS[movement] : "Nicht erfasst" },
+    { Icon: MOVEMENT_ICONS[movement], label: "Bewegung", value: attributesKnown ? MOVEMENT_LABELS[movement] : "Nicht erfasst" },
     { Icon: Timer, label: "Flugzeit", value: typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst" },
   ];
   return <dl className="official-throw-facts" aria-label="Wurfattribute">{facts.map(({ Icon, label, value }) => <div key={label}><dt>{label}</dt><dd>{Icon && <Icon aria-hidden="true" />}{value}</dd></div>)}</dl>;
@@ -73,20 +75,12 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
   const [photoSlot, setPhotoSlot] = useState("aim");
   const [zoomOpen, setZoomOpen] = useState(false);
   const heldSlot = useHeldReviewSlot();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const resumeVideo = useRef(false);
   const shortcutSlot = !zoomOpen && heldSlot && nade.reviewMedia?.[heldSlot] ? heldSlot : null;
   const activeView = shortcutSlot ? "lineup" : view;
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (activeView !== "video") { resumeVideo.current = !video.paused; video.pause(); }
-    else if (resumeVideo.current) { resumeVideo.current = false; void video.play().catch(() => {}); }
-  }, [activeView]);
   const photos = [
     { slot: "aim", title: "Ausrichtung", Icon: Crosshair },
     { slot: "position", title: "Standposition", Icon: MapPin },
-    { slot: "front", title: "Vorderansicht", Icon: PersonStanding },
+    { slot: "front", title: "Vorderansicht", Icon: ScanFace },
     { slot: "effect", title: "Wirkung am Ziel", Icon: Target },
   ].filter(photo => nade.reviewMedia?.[photo.slot]);
   const selectedPhoto = photos.find(photo => photo.slot === (shortcutSlot || photoSlot)) || photos[0];
@@ -95,7 +89,7 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
     <div className="official-lineup-layout">
       <div className="official-lineup-main">
         <div className="official-media-stage">
-          {nade.reviewMedia?.video && <video ref={videoRef} hidden={activeView !== "video"} className="lineup-hero-video" src={nade.reviewMedia.video.url} poster={nade.reviewMedia?.aim?.url} controls playsInline preload="metadata" aria-label={`Wurfvideo: ${nade.displayName || nade.name}`} />}
+          {nade.reviewMedia?.video && <LineupVideo key={nade.reviewMedia.video.url} src={nade.reviewMedia.video.url} poster={nade.reviewMedia?.aim?.url} active={activeView === "video"} keyboardEnabled={!zoomOpen} title={nade.displayName || nade.name} />}
           {activeView === "video" && !nade.reviewMedia?.video && <p className="official-media-empty">Für dieses Lineup ist noch kein Video vorhanden.</p>}
           {activeView === "lineup" && (selectedPhoto ? <figure className="official-lineup-photo">
             <div className="official-photo-viewport"><img src={nade.reviewMedia[selectedPhoto.slot].url} alt={`${selectedPhoto.title}: ${nade.displayName || nade.name}`} style={{ transform: shortcutSlot === "aim" ? "scale(3)" : undefined }} /></div>
@@ -119,4 +113,36 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
     <CrosshairView nade={nade} open={zoomOpen} onOpenChange={setZoomOpen} />
     {children}
   </article>;
+}
+
+function LineupVideo({ src, poster, active, keyboardEnabled, title }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const resume = useRef(true);
+  const [paused, setPaused] = useState(false);
+  function play() { void video.current?.play().catch(() => setPaused(true)); }
+  function toggle() {
+    if (!video.current || !active) return;
+    if (video.current.paused) play(); else video.current.pause();
+  }
+  useEffect(() => {
+    if (!video.current) return;
+    if (active) { if (resume.current) play(); }
+    else { resume.current = !video.current.paused; video.current.pause(); }
+  }, [active]);
+  useEffect(() => {
+    if (!active || !keyboardEnabled) return;
+    const key = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "k" || event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+          event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
+      event.preventDefault(); toggle();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [active, keyboardEnabled]);
+  return <>
+    <video ref={video} hidden={!active} className="lineup-hero-video" src={src} poster={poster} muted autoPlay loop playsInline preload="metadata" aria-label={`Wurfvideo: ${title}`} onPlay={() => setPaused(false)} onPause={() => setPaused(true)} />
+    {active && <button className="lineup-video-toggle" onClick={toggle} aria-label={paused ? "Video abspielen" : "Video pausieren"} aria-keyshortcuts="K">
+      {paused && <span className="lineup-video-paused"><Play aria-hidden="true" /><span>Pausiert</span></span>}
+    </button>}
+  </>;
 }

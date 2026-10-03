@@ -8,7 +8,7 @@ export const THROW_ATTRIBUTE_FIELDS = [...THROW_FLAGS, "click_type"] as const;
 export const BOOLEAN_THROW_FLAGS = ["is_jumpthrow", "is_crouch"] as const;
 export const MOVEMENT_FLAGS = ["is_walking", "is_running", "is_stepping"] as const;
 export const MOVEMENT_TYPES = ["stand", "walk", "run", "step"] as const;
-export const MOVEMENT_LABELS = { stand: "Stand", walk: "Gehen", run: "Laufen", step: "Schrittwurf" } as const;
+export const MOVEMENT_LABELS = { stand: "Still stehend", walk: "Gehen", run: "Laufen", step: "Schrittwurf" } as const;
 export type MovementType = typeof MOVEMENT_TYPES[number];
 
 // Older recordings could mark a short step as walking or running as well.

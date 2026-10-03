@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ArrowUp, MapPin, Mouse, ZoomIn } from "lucide-react";
+import { ArrowUp, MapPin, ZoomIn } from "lucide-react";
 import { Button } from "./ui/button";
 import { CrosshairView, useHeldReviewSlot } from "./lineup-presentation";
 import { REVIEW_STEPS } from "../../../shared/review-media";
@@ -12,7 +12,7 @@ import { radarMarkerAsset } from "../lib/nade-assets";
 import { TEAM_LABELS, isLineupTeam } from "../../../shared/lineup-teams";
 import { cn } from "../lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
-import { GrenadeIcon } from "./nade-icons";
+import { GrenadeIcon, ThrowClickIcon } from "./nade-icons";
 import { throwAttributeSummary } from "../../../shared/throw-attributes";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "./ui/empty";
 
@@ -131,7 +131,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
             <HoverVideo key={nade.reviewMedia!.video!.key} nade={nade} active={!previewImage} />
             {previewImage && <div className={cn("radar-preview-photo", heldSlot === "aim" && "radar-preview-photo-zoom")}><img src={previewImage.url} alt={`${previewTitle}: ${nade.displayName || nade.name}`} /></div>}
           </Link>
-          <div className="radar-preview-technique">{nade.is_jumpthrow && <ArrowUp aria-label="Jumpthrow" />}<Mouse aria-hidden="true" /><span>{throwAttributeSummary(nade)}</span></div>
+          <div className="radar-preview-technique">{nade.is_jumpthrow && <ArrowUp aria-label="Jumpthrow" />}<ThrowClickIcon clickType={nade.click_type || "left"} /><span>{throwAttributeSummary(nade)}</span></div>
           {candidates.length > 1 && <div className="flex flex-wrap gap-1" aria-label="Lineup für die Vorschau auswählen">{candidates.map((candidate, index) => <Button key={lineupKey(candidate)} size="sm" variant={index === preview.index ? "default" : "secondary"} aria-pressed={index === preview.index} aria-label={candidate.displayName || candidate.name} onClick={() => setPreview(current => current && { ...current, index })}>{index + 1}</Button>)}</div>}
         </>;
       })()}
@@ -161,7 +161,10 @@ function HoverVideo({ nade, active }: { nade: RadarLineup; active: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (!video.current) return;
-    if (active) void video.current.play().catch(() => setBlocked(true));
+    if (active) {
+      video.current.currentTime = 0;
+      void video.current.play().then(() => setBlocked(false)).catch(() => setBlocked(true));
+    }
     else video.current.pause();
   }, [active]);
   return <div className="radar-preview-video">

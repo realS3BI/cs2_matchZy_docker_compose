@@ -8,6 +8,7 @@ export type RadarLineup = LineupReference & PositionedNade & {
   type?: string; team?: string; displayName?: string; throwFromTitle?: string; throwToTitle?: string;
   official?: boolean; reviewMedia?: ReviewMedia;
   is_jumpthrow?: boolean;
+  click_type?: string;
 };
 export type RadarGroup<T extends RadarLineup = RadarLineup> = {
   id: string; point: RadarPoint; title: string; nades: T[];

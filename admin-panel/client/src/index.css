@@ -1284,6 +1284,10 @@ button:not(:disabled),
 .official-media-stage { position: relative; aspect-ratio: 16 / 9; background: black; overflow: hidden; }
 .lineup-hero-video { display: block; width: 100%; height: 100%; object-fit: contain; }
 .lineup-hero-video[hidden] { display: none; }
+.lineup-video-toggle { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; cursor: pointer; background: transparent; }
+.lineup-video-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -4px; }
+.lineup-video-paused { display: grid; justify-items: center; gap: 0.5rem; padding: 1rem 1.25rem; border-radius: 0.75rem; background: #000b; color: white; font-size: 0.8rem; }
+.lineup-video-paused svg { width: 2.25rem; height: 2.25rem; }
 .official-media-empty { display: grid; place-content: center; height: 100%; padding: 1rem; text-align: center; font-size: 0.9rem; color: var(--muted-foreground); }
 .official-lineup-photo, .official-photo-viewport { width: 100%; height: 100%; }
 .official-photo-viewport { overflow: hidden; }
