@@ -13,10 +13,10 @@ const canvas=document.createElement('canvas');canvas.width=960;canvas.height=540
 const ctx=canvas.getContext('2d');
 function draw(){ctx.fillStyle='#263c43';ctx.fillRect(0,0,960,540);ctx.fillStyle='#b6a88d';ctx.fillRect(0,90,455,450);ctx.fillStyle='#dfcdb0';ctx.fillRect(455,120,300,420);ctx.fillStyle='#b07032';ctx.fillRect(470,360,490,90);ctx.strokeStyle='#78ff48';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(474,270);ctx.lineTo(486,270);ctx.moveTo(480,264);ctx.lineTo(480,276);ctx.stroke();}
 draw();const photo=canvas.toDataURL('image/png');
-const stream=canvas.captureStream(12), recorder=new MediaRecorder(stream,{mimeType:'video/webm'}), chunks=[];
+const stream=canvas.captureStream(0), recorder=new MediaRecorder(stream,{mimeType:'video/webm'}), chunks=[];
 recorder.ondataavailable=event=>chunks.push(event.data);
 const stopped=new Promise(resolve=>recorder.onstop=resolve);
-recorder.start();const frames=setInterval(draw,75);await new Promise(resolve=>setTimeout(resolve,800));recorder.stop();await stopped;clearInterval(frames);stream.getTracks().forEach(track=>track.stop());
+recorder.start();const frames=setInterval(()=>{draw();stream.getVideoTracks()[0].requestFrame();},75);await new Promise(resolve=>setTimeout(resolve,800));recorder.stop();await stopped;clearInterval(frames);stream.getTracks().forEach(track=>track.stop());
 const video=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}));
 // Supply a real, decoded clip for hover playback without a running API server.
 new MutationObserver(()=>{for(const player of document.querySelectorAll('.radar-preview-video video'))if(player.getAttribute('src')?.startsWith('/api/nades/video-preview/'))player.src=video;}).observe(document.body,{childList:true,subtree:true});
@@ -27,7 +27,7 @@ window.fetch=async()=>new Response(JSON.stringify({entries:[]}),{headers:{'Conte
 const overview=new URLSearchParams(location.search).has('overview');
 function App(){const [nades,setNades]=useState(entries);window.setRecording=patch=>{entries=entries.map(entry=>({...entry,...patch}));setNades(entries);};window.setEntries=next=>{entries=next;setNades(next);};return React.createElement(MemoryRouter,{initialEntries:[overview?'/maps/mirage':'/maps/mirage/lineups/Demo123']},React.createElement(NadeFavoritesProvider,null,React.createElement(Routes,null,React.createElement(Route,{path:'/maps/:mapSlug',element:React.createElement(NadeLibrary,{maps:ACTIVE_DUTY_MAPS,nades,user})}),React.createElement(Route,{path:'/maps/:mapSlug/lineups/:lineupId',element:React.createElement(LineupPage,{maps:ACTIVE_DUTY_MAPS,nades,user,onEntriesChange:setNades,onRefresh:async()=>{}})}))));}
 createRoot(document.getElementById('root')).render(React.createElement(App));
-const waitFor=async fn=>{for(let i=0;i<120;i++){if(fn())return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
+const waitFor=async (fn,attempts=120)=>{for(let i=0;i<attempts;i++){if(fn())return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
 const assert=(value,message)=>{if(!value)throw Error(message);};
 const button=text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text);
 const shift=type=>window.dispatchEvent(new KeyboardEvent(type,{key:'Shift',bubbles:true}));
@@ -72,18 +72,25 @@ window.checkDetail=async()=>{
  window.setRecording({official:true});await waitFor(()=>document.querySelector('.official-view-switch'));
  return 'PASS: Video, Pausieren und Fortsetzen, Shift/Alt/Shift+Alt, Bildauswahl, Zoomdialog, Entwurfsgrenze und Layout';
 };
-window.checkRadarPreview=async()=>{
+window.checkRadarPreview=async(mode='to')=>{
  await waitFor(()=>document.querySelector('.radar-spot'));
- document.querySelector('.radar-spot').click();await waitFor(()=>document.querySelector('.radar-spot-from'));
- const marker=document.querySelector('.radar-spot-from');
+ if(mode==='from'){button('Starts').click();await waitFor(()=>document.querySelector('.radar-spot-from'));}
+ const secondary=mode==='from'?'.radar-spot:not(.radar-spot-from)':'.radar-spot-from';
+ document.querySelector('.radar-spot').click();await waitFor(()=>document.querySelector(secondary));
+ const marker=document.querySelector(secondary);
+ assert(!document.querySelector('.radar-spot[title]'),'Marker zeigt einen Tooltip');
  marker.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await waitFor(()=>document.querySelector('.radar-preview-media'));
  assert(!document.querySelector('.radar-preview strong')&&!document.querySelector('.radar-preview button'),'Vorschau enthält Namen oder Zusatzbuttons');
+ assert(!document.querySelector('.radar-preview-heading'),'Hinweiszeile ist noch sichtbar');
  await waitFor(()=>document.querySelector('.radar-preview-video video')?.readyState>=2);
  const previewVideo=document.querySelector('.radar-preview-video video');
  assert(previewVideo.autoplay&&previewVideo.loop&&!previewVideo.controls,'Vorschau startet oder wiederholt nicht automatisch');
  await waitFor(()=>!previewVideo.paused);
- let lastPreviewTime=previewVideo.currentTime,previewLooped=false;
- await waitFor(()=>{const time=previewVideo.currentTime;if(time<lastPreviewTime)previewLooped=true;lastPreviewTime=time;return previewLooped;});
+ let lastPreviewTime=previewVideo.currentTime,previewLoops=0;
+ await waitFor(()=>{const time=previewVideo.currentTime;if(time<lastPreviewTime)previewLoops++;lastPreviewTime=time;return previewLoops>=3;},240);
+ previewVideo.pause();await waitFor(()=>!previewVideo.paused);
+ previewVideo.dispatchEvent(new Event('ended'));await waitFor(()=>!previewVideo.paused&&previewVideo.currentTime<.15);
+ previewVideo.dispatchEvent(new Event('error'));await waitFor(()=>previewVideo.getAttribute('src')===reviewMedia.video.url&&previewVideo.readyState>=2&&!previewVideo.paused);
  previewVideo.currentTime=Math.min(.4,previewVideo.duration/2);
  shift('keydown');await waitFor(()=>document.querySelector('.radar-preview-photo img')?.alt.startsWith('Ausrichtung'));
  assert(previewVideo.paused,'Vorschau läuft hinter dem Bild weiter');
@@ -102,13 +109,13 @@ window.checkRadarPreview=async()=>{
  assert(previewVideo.currentTime<.15&&!previewVideo.paused,'Vorschau startet nach Shift nicht von vorne');
  marker.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,shiftKey:true}));await waitFor(()=>document.querySelector('.crosshair-viewport'));
  document.querySelector('.crosshair-dialog button:has(.sr-only)').click();await waitFor(()=>!document.querySelector('.crosshair-viewport'));
- assert(document.querySelector('.radar-spot-from'),'Kartenauswahl geht beim Schließen verloren');
+ assert(document.querySelector(secondary),'Kartenauswahl geht beim Schließen verloren');
  window.setRecording({official:false});await new Promise(resolve=>setTimeout(resolve,100));
- document.querySelector('.radar-spot-from').dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await new Promise(resolve=>setTimeout(resolve,220));
+ document.querySelector(secondary).dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await new Promise(resolve=>setTimeout(resolve,220));
  assert(!document.querySelector('.radar-preview'),'Entwurf erhält Vorschau');
  window.setRecording({official:true});await new Promise(resolve=>setTimeout(resolve,100));
- window.setEntries([entries[0],{...entries[0],id:'Demo124',name:'second',displayName:'Zweite Smoke',reviewMedia:{...reviewMedia,video:{...reviewMedia.video,key:'second-video'}}}]);await waitFor(()=>document.querySelector('.radar-spot-from button')||document.querySelector('.radar-spot-from .radar-marker-label'));
- document.querySelector('.radar-spot-from').dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await waitFor(()=>document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]'));
+ window.setEntries([entries[0],{...entries[0],id:'Demo124',name:'second',displayName:'Zweite Smoke',reviewMedia:{...reviewMedia,video:{...reviewMedia.video,key:'second-video'}}}]);await waitFor(()=>document.querySelector(`${secondary} .radar-marker-label`));
+ document.querySelector(secondary).dispatchEvent(new MouseEvent('mouseover',{bubbles:true,relatedTarget:document.body}));await waitFor(()=>document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]'));
  document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]').click();await waitFor(()=>document.querySelector('.radar-preview button[aria-label="Zweite Smoke"]').getAttribute('aria-pressed')==='true');
  assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
  return 'PASS: Kompakte Vorschau, Shift/Alt/Shift+Alt, Shift-Klick, geschützte Kartenauswahl, Entwurfsgrenze und gestapelte Lineups';

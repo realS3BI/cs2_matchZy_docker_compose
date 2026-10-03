@@ -84,7 +84,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
       {asset && <img className="radar-marker-art" src={asset} alt="" aria-hidden="true" />}
       {group.nades.length > 1 && <span className="radar-marker-label">{group.nades.length}</span>}
     </>;
-    const previewable = secondary && side === "to" && markerSide === "from" && group.nades.some(nade => nade.official && nade.reviewMedia?.video);
+    const previewable = secondary && group.nades.some(nade => nade.official && nade.reviewMedia?.video);
     const aimNade = group.nades.find(nade => nade.official && nade.reviewMedia?.aim);
     const hoverProps = previewable ? {
       onMouseEnter: (event: React.MouseEvent<HTMLElement>) => showPreview(group, event.currentTarget),
@@ -94,15 +94,15 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
       "aria-haspopup": "dialog" as const,
     } : {};
     const openAim = (event: React.MouseEvent<HTMLElement>) => {
-      if (!event.shiftKey || event.altKey || !aimNade || side !== "to" || !secondary) return false;
+      if (!event.shiftKey || event.altKey || !aimNade || !secondary) return false;
       event.preventDefault(); cancelTimer(); setPreview(null); previewTrigger.current = event.currentTarget; setZoomNade(aimNade); return true;
     };
     if (secondary && group.nades.length === 1) return <Link key={`true-${group.id}`} to={href(group.nades[0])}
-      className={className} data-team={team || "unassigned"} style={style} aria-label={label} title={`${group.title}${aimNade ? " · Shift-Klick: Fadenkreuz-Zoom" : ""}`} {...hoverProps} onClick={openAim}>{content}</Link>;
+      className={className} data-team={team || "unassigned"} style={style} aria-label={label} {...hoverProps} onClick={openAim}>{content}</Link>;
     return <button key={`${secondary}-${group.id}`} type="button" className={className}
       data-team={team || "unassigned"} style={style} aria-label={label}
       aria-pressed={active} aria-expanded={secondary ? group === expanded : undefined}
-      aria-haspopup={secondary ? "dialog" : undefined} title={`${group.title}${countLabel}`}
+      aria-haspopup={secondary ? "dialog" : undefined}
       {...hoverProps} onClick={event => {
         if (openAim(event)) return;
         if (secondary) { optionsTrigger.current = event.currentTarget; onExpand(group); }
@@ -126,7 +126,6 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
         const previewImage = heldSlot && nade.reviewMedia?.[heldSlot];
         const previewTitle = REVIEW_STEPS.find(step => step.id === heldSlot)?.title;
         return <>
-          <div className="radar-preview-heading"><Link to={href(nade)}>Klick: ganzes Video</Link>{nade.reviewMedia?.aim && <span>Shift: Lineup</span>}</div>
           <Link className="radar-preview-media" to={href(nade)} aria-label={previewImage ? `${previewTitle}: Lineup öffnen` : "Vollständiges Wurfvideo öffnen"} onClick={event => { if (event.shiftKey && !event.altKey && nade.reviewMedia?.aim) { event.preventDefault(); cancelTimer(); setPreview(null); setZoomNade(nade); } }}>
             <HoverVideo key={nade.reviewMedia!.video!.key} nade={nade} active={!previewImage} />
             {previewImage && <div className={cn("radar-preview-photo", heldSlot === "aim" && "radar-preview-photo-zoom")}><img src={previewImage.url} alt={`${previewTitle}: ${nade.displayName || nade.name}`} /></div>}
@@ -155,21 +154,33 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
 }
 
 function HoverVideo({ nade, active }: { nade: RadarLineup; active: boolean }) {
+  const [original, setOriginal] = useState(false);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  function play() {
+    if (!activeRef.current || !video.current) return;
+    void video.current.play().then(() => setBlocked(false)).catch(error => {
+      if (activeRef.current && error.name !== "AbortError") setBlocked(true);
+    });
+  }
   useEffect(() => {
     if (!video.current) return;
     if (active) {
       video.current.currentTime = 0;
-      void video.current.play().then(() => setBlocked(false)).catch(() => setBlocked(true));
+      play();
     }
     else video.current.pause();
   }, [active]);
   return <div className="radar-preview-video">
-    {!failed && <video ref={video} src={`/api/nades/video-preview/${encodeURIComponent(nade.reviewMedia!.video!.key)}`} muted autoPlay loop playsInline preload="none" aria-label="Videovorschau des Wurfs"
-      onCanPlay={() => { setReady(true); if (active) video.current?.play().catch(() => setBlocked(true)); else video.current?.pause(); }} onError={() => setFailed(true)} />}
+    {!failed && <video ref={video} src={original ? nade.reviewMedia!.video!.url : `/api/nades/video-preview/${encodeURIComponent(nade.reviewMedia!.video!.key)}`} muted autoPlay loop playsInline preload="auto" aria-label="Videovorschau des Wurfs"
+      onCanPlay={() => { setReady(true); if (activeRef.current) play(); else video.current?.pause(); }}
+      onEnded={() => { if (activeRef.current && video.current) { video.current.currentTime = 0; play(); } }}
+      onPause={() => { if (activeRef.current) play(); }}
+      onError={() => { if (!original) { setReady(false); setBlocked(false); setOriginal(true); } else setFailed(true); }} />}
     {failed ? <p role="status">Die Videovorschau ist gerade nicht verfügbar. Klicke für das vollständige Video.</p> : !ready ? <p role="status">Videovorschau wird geladen …</p> : blocked ? <p role="status">Klicke für das vollständige Video.</p> : null}
   </div>;
 }
