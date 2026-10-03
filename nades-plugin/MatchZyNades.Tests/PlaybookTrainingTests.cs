@@ -97,11 +97,13 @@ public sealed class PlaybookTrainingTests
     [Fact]
     public void PracticeStartsAnUninterruptedHourWithoutAutomaticWarmup()
     {
-        foreach (var name in new[] { "mp_warmup_online_enabled", "mp_warmup_offline_enabled", "mp_do_warmup_period", "mp_warmup_pausetimer", "mp_timelimit", "mp_maxrounds" })
+        foreach (var name in new[] { "mp_warmup_online_enabled", "mp_warmup_offline_enabled", "mp_do_warmup_period", "mp_warmup_pausetimer", "mp_timelimit" })
             Assert.Equal("0", PlaybookCommands.PracticeSettings[name]);
         foreach (var name in new[] { "mp_roundtime", "mp_roundtime_defuse", "mp_roundtime_hostage" })
             Assert.Equal("60", PlaybookCommands.PracticeSettings[name]);
         Assert.Equal("1", PlaybookCommands.PracticeSettings["mp_ignore_round_win_conditions"]);
+        Assert.True(int.Parse(PlaybookCommands.PracticeSettings["mp_maxrounds"]) > 1,
+            "Competitive must not see a match with zero rounds when the first player joins.");
     }
 
     [Fact]

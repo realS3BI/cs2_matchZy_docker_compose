@@ -4,6 +4,7 @@ using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
+using Microsoft.Extensions.Logging;
 
 namespace MatchZyNades;
 
@@ -69,13 +70,15 @@ public sealed partial class MatchZyNadesPlugin
                 Server.NextFrame(() =>
                 {
                     if (!TrainingEnabled) return;
+                    MaintainPracticeSession();
                     ApplyPlayerTraining(player);
                 });
             return HookResult.Continue;
         });
         RegisterEventHandler<EventRoundStart>((_, _) =>
         {
-            MaintainPracticeSession();
+            // Let RestartRound finish writing its cached timers before repair.
+            Server.NextFrame(MaintainPracticeSession);
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerBlind>((e, _) =>
@@ -142,6 +145,23 @@ public sealed partial class MatchZyNadesPlugin
         if (!TrainingEnabled) return;
         ApplyPracticeSettings(sessionOnly: true);
         EndPracticeWarmup();
+        FinishPracticeFreeze();
+    }
+
+    private void FinishPracticeFreeze()
+    {
+        var rules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
+        if (rules == null || !Utilities.GetPlayers().Any(Alive)) return;
+        var now = Server.CurrentTime;
+        // mp_freezetime only controls subsequent rounds. Expire the cached
+        // countdown too; let the engine end freeze and start its 60-minute clock.
+        var duration = rules.RoundTime;
+        var start = rules.RoundStartTime;
+        if (!PracticeRound.FinishFreeze(rules.WarmupPeriod, rules.FreezePeriod,
+                rules.GameRestart || rules.RestartRoundTime > now, now,
+                ref rules.FreezeTime, ref rules.RoundTime, ref rules.RoundStartTime)) return;
+        Logger.LogInformation("Training: finishing freeze countdown (phase {Phase}, duration {Duration}, start {Start}, now {Now})",
+            rules.GamePhase, duration, start, now);
     }
 
     private void EndPracticeWarmup()

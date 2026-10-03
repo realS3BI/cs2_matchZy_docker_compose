@@ -123,7 +123,10 @@ public static class PlaybookCommands
         ["mp_solid_teammates"] = "2", ["mp_solid_enemies"] = "0",
         ["mp_roundtime"] = "60", ["mp_roundtime_defuse"] = "60", ["mp_roundtime_hostage"] = "60",
         ["mp_warmup_online_enabled"] = "0", ["mp_warmup_offline_enabled"] = "0", ["mp_do_warmup_period"] = "0",
-        ["mp_warmup_pausetimer"] = "0", ["mp_timelimit"] = "0", ["mp_maxrounds"] = "0",
+        ["mp_warmup_pausetimer"] = "0", ["mp_timelimit"] = "0",
+        // With no rounds configured, the competitive Game_Commencing path can
+        // enter intermission at 0:0. Win conditions still keep training on round 1.
+        ["mp_maxrounds"] = "1000",
         ["mp_ignore_round_win_conditions"] = "1", ["mp_respawn_on_death_ct"] = "1", ["mp_respawn_on_death_t"] = "1",
         ["mp_respawnwavetime_ct"] = "0", ["mp_respawnwavetime_t"] = "0",
         ["mp_buy_anywhere"] = "1", ["mp_buytime"] = "9999", ["mp_maxmoney"] = "60000", ["mp_startmoney"] = "60000",
