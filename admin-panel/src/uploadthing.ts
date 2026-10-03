@@ -5,13 +5,14 @@ import { z } from "zod";
 import { authenticatedUser } from "./auth.js";
 import { attachReviewMedia, reviewEntry } from "./review-media.js";
 import { reviewFileError } from "../shared/review-media.js";
+import { getVideoPreview } from "./video-preview.js";
 
 const inputSchema = z.object({
   owner: z.string().min(1).max(500), map: z.string().min(1).max(500), name: z.string().min(1).max(500),
   revision: z.string().min(1).max(100), slot: z.enum(["aim", "position", "front", "effect", "video"]),
 });
 
-export function createReviewFileRouter({ config, store, changeEntries, utapi }) {
+export function createReviewFileRouter({ config, store, changeEntries, utapi, preparePreview = undefined }) {
   const f = createUploadthing();
   const authorize = async ({ req, input, files }) => {
     if ((req.headers.origin && req.headers.origin !== config.publicUrl) || req.headers["sec-fetch-site"] === "cross-site")
@@ -41,7 +42,10 @@ export function createReviewFileRouter({ config, store, changeEntries, utapi }) 
         });
       });
       if (previousKey && previousKey !== file.key) await utapi.deleteFiles(previousKey).catch(() => {});
-      return { saved: true, updatedAt: reviewEntry(entries, metadata, user).updatedAt };
+      const saved = reviewEntry(entries, metadata, user);
+      // Prepare the small version during review, before the lineup becomes official.
+      if (metadata.slot === "video" && preparePreview) void preparePreview(saved.reviewMedia.video).catch(() => {});
+      return { saved: true, updatedAt: saved.updatedAt };
     } catch (error) {
       // Do not retain an unassigned file after a revoked permission or stale upload.
       const assigned = (await store.getNades()).some(n => Object.values(n.reviewMedia || {}).some((media: any) => media.key === file.key));
@@ -68,7 +72,7 @@ export function installReviewUploads(app, dependencies) {
   // The SDK verifies callback signatures. Browser initialization is authenticated
   // in the route middleware; callbacks have no browser session cookie.
   app.use("/api/uploadthing", createRouteHandler({
-    router: createReviewFileRouter({ ...dependencies, utapi }),
+    router: createReviewFileRouter({ ...dependencies, utapi, preparePreview: getVideoPreview }),
     config: { token: config.uploadthingToken, callbackUrl: `${config.publicUrl}/api/uploadthing` },
   }));
 }

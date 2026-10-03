@@ -37,6 +37,22 @@ public sealed class GrenadeRethrowTests
     }
 
     [Fact]
+    public void ReportsRejectedLaunchAndPreservesPreviousThrow()
+    {
+        var history = new GrenadeRethrowHistory();
+        var valid = Throw();
+        Assert.True(history.TryRemember(1, valid, out var accepted));
+        Assert.Equal("", accepted);
+        Assert.False(history.TryRemember(1, valid with { Velocity = new(0, 0, 0) }, out var zero));
+        Assert.Equal("Geschwindigkeit ist null", zero);
+        Assert.False(history.TryRemember(1, valid with { Position = new(float.NaN, 0, 0) }, out var position));
+        Assert.Equal("ungültige Position", position);
+        Assert.False(history.TryRemember(1, valid, out var synthetic, GrenadeRethrowHistory.Marker));
+        Assert.Equal("synthetischer Wiederholungswurf", synthetic);
+        Assert.Equal(valid, history.Last(1));
+    }
+
+    [Fact]
     public void DisconnectAndMapResetRemoveStoredThrows()
     {
         var history = new GrenadeRethrowHistory();

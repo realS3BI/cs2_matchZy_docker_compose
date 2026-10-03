@@ -1,6 +1,6 @@
 FROM node:22-alpine
 
-RUN apk add --no-cache docker-cli docker-cli-compose
+RUN apk add --no-cache docker-cli docker-cli-compose ffmpeg
 RUN corepack enable pnpm
 
 WORKDIR /app

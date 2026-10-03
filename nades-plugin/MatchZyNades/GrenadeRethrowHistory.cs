@@ -11,10 +11,20 @@ public sealed class GrenadeRethrowHistory
 
     public void Remember(ulong steamId, GrenadeRethrow grenade, string globalName = "")
     {
-        if (globalName == Marker || !Finite(grenade.Position) || !Finite(grenade.Angles) ||
-            !Finite(grenade.Velocity) || !Finite(grenade.AngularVelocity) ||
-            grenade.Velocity is { X: 0, Y: 0, Z: 0 }) return;
+        TryRemember(steamId, grenade, out _, globalName);
+    }
+
+    public bool TryRemember(ulong steamId, GrenadeRethrow grenade, out string reason, string globalName = "")
+    {
+        reason = globalName == Marker ? "synthetischer Wiederholungswurf" :
+            !Finite(grenade.Position) ? "ungültige Position" :
+            !Finite(grenade.Angles) ? "ungültige Winkel" :
+            !Finite(grenade.Velocity) ? "ungültige Geschwindigkeit" :
+            !Finite(grenade.AngularVelocity) ? "ungültige Drehgeschwindigkeit" :
+            grenade.Velocity is { X: 0, Y: 0, Z: 0 } ? "Geschwindigkeit ist null" : "";
+        if (reason.Length > 0) return false;
         _last[steamId] = grenade;
+        return true;
     }
 
     private static bool Finite(Coordinates value) => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);

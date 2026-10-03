@@ -16,6 +16,7 @@ import { LINEUP_TEAMS, TEAM_LABELS, isLineupTeam } from "../../../shared/lineup-
 import { ActionButton } from "./action-button";
 import { NadeFlightMap, NadePlacementEditor } from "./map-radar";
 import { FavoriteButton } from "./nade-favorites";
+import { OfficialLineupMedia } from "./lineup-presentation";
 import { api } from "../lib/api";
 import { copyText } from "../lib/clipboard";
 import { mapMatchesNade, mapPath, mapSlug } from "../lib/maps";
@@ -52,6 +53,14 @@ function formatThrowTrace(value) {
     if (!Array.isArray(samples)) return "";
     return samples.map(sample => `${Number(sample.time ?? sample.Time).toFixed(2)}s · ${sample.buttons ?? sample.Buttons ?? "keine Taste"} · Position ${sample.position ?? sample.Position ?? "?"} · Geschwindigkeit ${sample.velocity ?? sample.Velocity ?? "?"} · Blickwinkel ${sample.view ?? sample.View ?? "?"}`).join("\n");
   } catch { return ""; }
+}
+
+function LineupMapDisclosure({ official, positioning, canPosition, children }) {
+  if (!official) return <>{children}</>;
+  return <details className="lineup-map-disclosure" open={positioning || undefined}>
+    <summary>Start und Ziel auf der Karte{canPosition ? " · Positionierung bearbeiten" : ""}</summary>
+    {children}
+  </details>;
 }
 
 function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, back, creating = false }) {
@@ -129,12 +138,14 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
     return <Field htmlFor={id}><FieldLabel>{title}</FieldLabel><Input id={id} required={creating && ["displayName", "lineupPos", "lineupAng"].includes(key)} value={draft[key]} onChange={event => patch({ [key]: event.target.value })} placeholder={placeholder} maxLength={maxLength} /></Field>;
   }
 
-  return <article className="playbook-page lineup-page">
+  return <article className={`playbook-page lineup-page${nade.official && !creating ? " lineup-page-official" : ""}`}>
     <div><Button asChild variant="ghost" size="sm"><Link to={back} onClick={event => {
       if (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) event.preventDefault();
     }}><ArrowLeft data-icon="inline-start" />{map.name}</Link></Button></div>
     <div className="lineup-workspace">
       <div className="lineup-radar">
+        {nade.official && !creating && <OfficialLineupMedia nade={nade} />}
+        <LineupMapDisclosure official={nade.official && !creating} positioning={positioning} canPosition={permissions.position}>
         {permissions.position && <div className="mb-3 flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" disabled={busy} aria-expanded={positioning} onClick={() => setPositioning(value => !value)}>{positioning ? "Kartenansicht" : missingPosition ? "Start und Ziel setzen" : "Positionierung bearbeiten"}</Button>
         </div>}
@@ -148,6 +159,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
           {stale && <p className="mt-2 text-xs text-muted-foreground" role="status">Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden.</p>}
         </fieldset> : <><NadeFlightMap map={map} nades={[positionedNade]} calibration={calibration} /><p className="mt-3 text-xs text-muted-foreground">Kreis: Startposition · Raute: Landeposition</p></>}
         {!calibration && permissions.position && <p className="mt-3 text-xs text-muted-foreground">{map.mapName === "de_nuke" ? "Auf Nuke werden Start und Ziel wegen der getrennten Stockwerke manuell gesetzt." : "Für diese Map fehlen verlässliche Referenzen. Setze Start und Ziel auf der Karte. Gespeicherte Markierungen mit Spielkoordinaten dienen als Referenzen für weitere Nades und können über „Positionierung bearbeiten“ korrigiert werden."}</p>}
+        </LineupMapDisclosure>
       </div>
       <aside className="lineup-sidebar" aria-label="Lineup und Anleitung">
         <header className="grid gap-3">
@@ -209,7 +221,7 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             </div>
             {stale && <p role="status" className="text-xs text-muted-foreground">Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden.</p>}
           </FieldGroup></fieldset></form>}
-          <p className="text-xs text-muted-foreground">Wurfdaten werden automatisch vom Server erfasst und bleiben beim Training erhalten. Der Ersteller kann den Wurf im Server-Panel über „Lineup bearbeiten“ neu aufnehmen.</p>
+          {!nade.official && <><p className="text-xs text-muted-foreground">Wurfdaten werden automatisch vom Server erfasst und bleiben beim Training erhalten. Der Ersteller kann den Wurf im Server-Panel über „Lineup bearbeiten“ neu aufnehmen.</p>
           <dl className="lineup-detail-facts">
             <div><dt>Startposition</dt><dd>{nade.throwFromTitle || "Kreis auf der Karte"}</dd></div>
             <div><dt>Endposition</dt><dd>{nade.throwToTitle || "Raute auf der Karte"}</dd></div>
@@ -219,14 +231,14 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
             <Badge variant="secondary">{MOVEMENT_LABELS[movementType(nade)]}</Badge>
             {CLICK_TYPES.includes(nade.click_type) && <Badge variant="outline">{CLICK_LABELS[nade.click_type]}</Badge>}
           </div>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{nade.desc || "Zu diesem Lineup gibt es noch keine Anleitung."}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">{nade.desc || "Zu diesem Lineup gibt es noch keine Anleitung."}</p></>}
           <details className="lineup-coordinates"><summary>Koordinaten</summary><dl className="lineup-detail-facts mt-4">
             <div><dt>Start</dt><dd className="font-mono">{nade.lineupPos || "Nicht hinterlegt"}</dd></div>
             <div><dt>Blickwinkel</dt><dd className="font-mono">{nade.lineupAng || "Nicht hinterlegt"}</dd></div>
             <div><dt>Landeposition</dt><dd className="font-mono">{nade.landingPos || "Nicht hinterlegt"}</dd></div>
           </dl></details>
         </div>}
-        {!creating && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
+        {!creating && !nade.official && <dl className="lineup-detail-facts"><div><dt>Flugzeit</dt><dd>{typeof nade.flightDuration === "number" ? `${nade.flightDuration.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s` : "Noch nicht erfasst"}</dd></div></dl>}
         {!creating && <Button variant="secondary" disabled={busy || dirty} onClick={() => navigate(lineupReviewPath(map, nade))}>Review öffnen</Button>}
         {!creating && permissions.revoke && (nade.official || nade.reviewStatus === "pending") && <ActionButton variant="ghost" disabled={busy || dirty} onClick={() => mutate("revoke")} successLabel="Zurückgenommen">{nade.official ? "Freigabe zurücknehmen" : "Review zurücknehmen"}</ActionButton>}
         {!creating && <div className="grid justify-items-start gap-2 border-t pt-4">

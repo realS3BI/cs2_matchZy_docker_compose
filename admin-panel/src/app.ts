@@ -18,6 +18,7 @@ import { currentMapFromStatus, executeRcon, mapChangeCommand } from "./rcon.js";
 import { applyWebNadeAction } from "./nade-review.js";
 import { installReviewUploads } from "./uploadthing.js";
 import { installReviewCapture } from "./review-capture.js";
+import { installVideoPreviews } from "./video-preview.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "..", "dist");
@@ -94,6 +95,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
     if (role === "admin" || shared.includes(route) ||
         (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
+        (req.method === "GET" && /^\/nades\/video-preview\/[\w-]{1,256}$/.test(req.path)) ||
         (role === "match_admin" && operator.includes(route))) return next();
     res.status(403).json({ error: "Für diese Aktion fehlt dir die Berechtigung." });
   });
@@ -104,6 +106,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     void store.nadeEvents.stream(req, res, () => store.getNades());
   });
   installReviewCapture(app, { config, store });
+  installVideoPreviews(app, { store });
 
   async function controlSettings(req, res) {
     const input: any = sanitizeSettings(req.body?.settings);

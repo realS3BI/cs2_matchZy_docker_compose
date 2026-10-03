@@ -1,10 +1,12 @@
 import { findLineup, lineupId, lineupKey, type LineupReference } from "./lineups.js";
 import { type MapDefinition, type RadarPoint } from "./maps.js";
 import { resolveRadarPoints, type PositionedNade, type RadarCalibration } from "./nade-radar.js";
+import { type ReviewMedia } from "../../../shared/review-media.js";
 
 export type RadarSide = "from" | "to";
 export type RadarLineup = LineupReference & PositionedNade & {
   type?: string; team?: string; displayName?: string; throwFromTitle?: string; throwToTitle?: string;
+  official?: boolean; reviewMedia?: ReviewMedia;
 };
 export type RadarGroup<T extends RadarLineup = RadarLineup> = {
   id: string; point: RadarPoint; title: string; nades: T[];

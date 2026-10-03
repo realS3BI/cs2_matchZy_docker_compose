@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.3.13";
+    public override string ModuleVersion => "2.3.14";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 
@@ -310,6 +310,8 @@ public sealed partial class MatchZyNadesPlugin : BasePlugin
                 if (_last.TryGetValue(player.Slot, out var last)) LoadLineup(player, last);
                 return;
             case TrainingAction.ReviewRethrow:
+                Logger.LogInformation("[Rethrow] Review-Menü: sv_rethrow_last_grenade auf dem Server angefordert, SteamID={SteamId}, Map={Map}. Engine-Wurf; keine Zuordnung zum persönlichen .rt-Wurfspeicher.",
+                    player.SteamID, Server.MapName);
                 Server.ExecuteCommand("sv_rethrow_last_grenade");
                 Tell(player, "Letzten Server-Wurf erneut angefordert.");
                 return;

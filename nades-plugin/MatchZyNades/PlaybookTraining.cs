@@ -286,6 +286,9 @@ public sealed partial class MatchZyNadesPlugin
 
     private void ResetTraining()
     {
+        if (_rethrowObservations.Count > 0)
+            Logger.LogInformation("[Rethrow] Beobachtungen wegen Trainings-/Map-Reset beendet: Anzahl={Count}", _rethrowObservations.Count);
+        _rethrowObservations.Clear();
         _positions.Clear(); _throwPositions.Clear(); _rethrows.Clear(); _noFlash.Clear(); _god.Clear();
         ResetTrainingBots();
     }

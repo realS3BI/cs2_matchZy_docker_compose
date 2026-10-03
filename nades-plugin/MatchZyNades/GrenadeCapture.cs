@@ -24,6 +24,9 @@ public sealed partial class MatchZyNadesPlugin
             var player = e.Userid;
             if (player == null || !TrainingEnabled) return HookResult.Continue;
             var kind = ThrownKind(e.Weapon);
+            if (StandaloneTraining)
+                Logger.LogInformation("[Rethrow] grenade_thrown empfangen: SteamID={SteamId}, Waffe={Weapon}, Typ={Type}, Simulationszeit={Time}",
+                    player.SteamID, e.Weapon, kind, Server.CurrentTime);
             _flightTimes.Thrown(player.Slot, player.SteamID, kind, Server.CurrentTime);
             if (_saveRequests.TryGetValue(player.Slot, out var saveExpires))
             {
@@ -234,7 +237,12 @@ public sealed partial class MatchZyNadesPlugin
         // The thrower is assigned after spawn; grenade_thrown identifies a real player throw.
         Server.NextFrame(() =>
         {
-            if (!TrainingEnabled || !entity.IsValid) return;
+            if (!TrainingEnabled || !entity.IsValid)
+            {
+                if (StandaloneTraining)
+                    Logger.LogWarning("[Rethrow] Projektil im nächsten Frame nicht erfasst: Training={Training}, EntityGültig={Valid}", TrainingEnabled, entity.IsValid);
+                return;
+            }
             var projectile = new CBaseCSGrenadeProjectile(entity.Handle);
             if (projectile.Globalname == GrenadeRethrowHistory.Marker) return;
             var player = projectile.Thrower.Value?.Controller.Value?.As<CCSPlayerController>();
@@ -243,11 +251,15 @@ public sealed partial class MatchZyNadesPlugin
                 _capture.Projectile((int)entity.Index, player.Slot, player.SteamID, kind, Server.CurrentTime);
                 _flightTimes.Projectile((int)entity.Index, player.Slot, player.SteamID, kind, Server.CurrentTime);
             }
+            else if (StandaloneTraining)
+                Logger.LogWarning("[Rethrow] Wurf nicht gespeichert: Entity={Entity}, Typ={Type}, Grund=kein gültiger menschlicher Werfer im nächsten Frame, Thrower={Thrower}",
+                    entity.Index, projectile.DesignerName, projectile.Thrower.Raw);
         });
     }
 
     private HookResult CompleteCapture(int entityId, CCSPlayerController? player, NadeKind kind, Coordinates target)
     {
+        LogRethrowEffect(entityId, kind, target);
         if (player is not { IsValid: true } && _capture.Thrower(entityId) is { } thrower)
             player = Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.Slot == thrower.Slot && p.SteamID == thrower.SteamId);
         if (!TrainingEnabled || player is not { IsValid: true } ||
@@ -283,6 +295,9 @@ public sealed partial class MatchZyNadesPlugin
 
     private HookResult CompleteFireCapture(CCSPlayerController? player, Coordinates target)
     {
+        if (_rethrowObservations.Values.Any(observation => observation.Type == "molotov_projectile"))
+            Logger.LogInformation("[Rethrow] Molotov-Wirkungsereignis ohne Projektil-ID: SteamID={SteamId}, Position={Position}. Keine sichere Zuordnung zu einem Wiederholungsversuch möglich.",
+                player?.SteamID, RethrowCoordinates(target));
         if (!TrainingEnabled || player is not { IsValid: true }) return HookResult.Continue;
         CompleteFlightTime(null, player, NadeKind.Fire);
         // Molotov detonation does not expose a projectile entity id in the CS# event.
