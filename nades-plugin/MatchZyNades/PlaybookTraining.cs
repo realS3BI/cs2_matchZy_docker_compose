@@ -20,6 +20,7 @@ public sealed partial class MatchZyNadesPlugin
     private readonly HashSet<ulong> _noFlash = [];
     private readonly HashSet<ulong> _god = [];
     private readonly Dictionary<string, string> _practiceDefaults = [];
+    private readonly PracticeWarmup _practiceWarmup = new();
 
     private void RegisterStandaloneTraining(bool hotReload)
     {
@@ -27,6 +28,8 @@ public sealed partial class MatchZyNadesPlugin
         // Map/game configs and the engine quota manager can overwrite training
         // settings after startup. Keep team rules and the tracked bot count fixed.
         AddTimer(1f, EnforceTrainingBots, TimerFlags.REPEAT);
+        // Late game configs can start warmup after the map-start callback.
+        AddTimer(1f, MaintainPracticeSession, TimerFlags.REPEAT);
         foreach (var name in PlaybookCommands.TrainingCommands)
             AddCommand(name, "Playbook-Training", (player, command) => RunTrainingCommand(player, name, command.ArgString));
         AddCommandListener("noclip", (player, _) =>
@@ -36,13 +39,24 @@ public sealed partial class MatchZyNadesPlugin
             return HookResult.Stop;
         }, HookMode.Pre);
         RegisterListener<Listeners.OnMapStart>(_ => SchedulePractice());
-        RegisterListener<Listeners.OnMapEnd>(() => { _practiceGeneration++; _practiceReady = false; ResetTraining(); });
+        RegisterListener<Listeners.OnMapEnd>(() => { _practiceGeneration++; _practiceReady = false; _practiceWarmup.Reset(); ResetTraining(); });
+        AddCommandListener("jointeam", (_, _) =>
+        {
+            MaintainPracticeSession();
+            return HookResult.Continue;
+        }, HookMode.Pre);
         RegisterEventHandler<EventPlayerConnectFull>((_, _) =>
         {
             // Reapply before the connecting client opens its team selection.
-            if (TrainingEnabled) ApplyPracticeSettings();
+            MaintainPracticeSession();
             return HookResult.Continue;
         }, HookMode.Pre);
+        RegisterEventHandler<EventPlayerTeam>((e, _) =>
+        {
+            if (TrainingEnabled && e.Userid is { IsValid: true, IsBot: false, IsHLTV: false } player && e.Team is 2 or 3)
+                EnsureTrainingSpawn(player, e.Team, _practiceGeneration);
+            return HookResult.Continue;
+        });
         RegisterEventHandler<EventRoundPrestart>((_, _) =>
         {
             // round_start is too late to prevent the engine's team intro.
@@ -61,10 +75,7 @@ public sealed partial class MatchZyNadesPlugin
         });
         RegisterEventHandler<EventRoundStart>((_, _) =>
         {
-            if (TrainingEnabled)
-            {
-                ApplyPracticeSettings();
-            }
+            MaintainPracticeSession();
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerBlind>((e, _) =>
@@ -90,6 +101,7 @@ public sealed partial class MatchZyNadesPlugin
     {
         var generation = ++_practiceGeneration;
         _practiceReady = false;
+        _practiceWarmup.Reset();
         // World updates also run while the empty server is hibernating.
         Server.NextWorldUpdate(() =>
         {
@@ -112,10 +124,11 @@ public sealed partial class MatchZyNadesPlugin
         });
     }
 
-    private void ApplyPracticeSettings()
+    private void ApplyPracticeSettings(bool sessionOnly = false)
     {
         foreach (var (name, value) in PlaybookCommands.PracticeSettings)
         {
+            if (sessionOnly && !PlaybookCommands.PracticeSessionSettings.Contains(name)) continue;
             if (ConVar.Find(name) is not { } variable) continue;
             _practiceDefaults.TryAdd(name, variable.StringValue);
             variable.StringValue = name == "bot_quota"
@@ -124,10 +137,31 @@ public sealed partial class MatchZyNadesPlugin
         }
     }
 
-    private static void EndPracticeWarmup()
+    private void MaintainPracticeSession()
+    {
+        if (!TrainingEnabled) return;
+        ApplyPracticeSettings(sessionOnly: true);
+        EndPracticeWarmup();
+    }
+
+    private void EndPracticeWarmup()
     {
         var rules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
-        if (rules?.WarmupPeriod == true) Server.ExecuteCommand("mp_warmup_end");
+        if (rules != null)
+            _practiceWarmup.Update(rules.WarmupPeriod, () => Server.ExecuteCommand("mp_warmup_end"));
+    }
+
+    private void EnsureTrainingSpawn(CCSPlayerController player, int team, int generation, int attempts = 10)
+    {
+        // Respawn-on-death does not guarantee an initial spawn after joining an
+        // already running round. Give the engine time to finish ChangeTeam first.
+        AddTimer(0.1f, () =>
+        {
+            if (generation != _practiceGeneration || !TrainingEnabled ||
+                player is not { IsValid: true, IsBot: false, IsHLTV: false } || player.TeamNum != team || player.PawnIsAlive) return;
+            if (player.PlayerPawn.Value is { IsValid: true }) player.Respawn();
+            if (attempts > 1 && !player.PawnIsAlive) EnsureTrainingSpawn(player, team, generation, attempts - 1);
+        }, TimerFlags.STOP_ON_MAPCHANGE);
     }
 
     private static PracticePosition PositionOf(CCSPlayerController player)

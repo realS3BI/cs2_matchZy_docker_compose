@@ -119,6 +119,25 @@ public sealed class PlaybookTrainingTests
         Assert.Equal("0", PlaybookCommands.PracticeSettings["sv_hibernate_when_empty"]);
 
     [Fact]
+    public void TrainingKeepsTheChosenSideWithoutCompetitiveHalftimeOrRespawnWaves()
+    {
+        foreach (var name in new[] { "mp_halftime", "mp_halftime_pausetimer", "mp_halftime_pausematch",
+                     "mp_overtime_enable", "mp_match_can_clinch", "mp_respawnwavetime_ct", "mp_respawnwavetime_t" })
+            Assert.Equal("0", PlaybookCommands.PracticeSettings[name]);
+        Assert.Equal("any", PlaybookCommands.PracticeSettings["mp_humanteam"]);
+    }
+
+    [Fact]
+    public void SessionMaintenanceDoesNotResetPlayerTrainingTools()
+    {
+        Assert.DoesNotContain("sv_grenade_trajectory_prac_pipreview", PlaybookCommands.PracticeSessionSettings);
+        Assert.DoesNotContain("sv_showimpacts", PlaybookCommands.PracticeSessionSettings);
+        Assert.Contains("mp_halftime", PlaybookCommands.PracticeSessionSettings);
+        Assert.Contains("mp_warmup_online_enabled", PlaybookCommands.PracticeSessionSettings);
+        Assert.All(PlaybookCommands.PracticeSessionSettings, name => Assert.True(PlaybookCommands.PracticeSettings.ContainsKey(name)));
+    }
+
+    [Fact]
     public void HumansTakeDamageButResetToFullHealthBeforeDeath()
     {
         Assert.Equal("1", PlaybookCommands.PracticeSettings["buddha"]);

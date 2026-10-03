@@ -94,6 +94,19 @@ public static class PlaybookCommands
         "css_roundknife", "css_rk", "css_playout", "css_readyrequired", "css_restart", "css_rr", "css_endmatch", "css_forceend", "get5_endmatch"
     ];
 
+    // Only these rules are maintained continuously. Player tools such as .traj
+    // and .impacts must retain their settings while others join the session.
+    public static readonly IReadOnlySet<string> PracticeSessionSettings = new HashSet<string>
+    {
+        "sv_hibernate_when_empty", "mp_team_intro_time", "mp_freezetime", "mp_force_pick_time",
+        "sv_disable_teamselect_menu", "sv_human_autojoin_team", "mp_humanteam",
+        "mp_halftime", "mp_halftime_pausetimer", "mp_halftime_pausematch", "mp_overtime_enable", "mp_match_can_clinch",
+        "mp_warmup_online_enabled", "mp_warmup_offline_enabled", "mp_do_warmup_period", "mp_warmup_pausetimer",
+        "mp_timelimit", "mp_maxrounds", "mp_ignore_round_win_conditions",
+        "mp_respawn_on_death_ct", "mp_respawn_on_death_t", "mp_respawnwavetime_ct", "mp_respawnwavetime_t",
+        "mp_limitteams", "mp_autoteambalance"
+    };
+
     public static readonly IReadOnlyDictionary<string, string> PracticeSettings = new Dictionary<string, string>
     {
         ["sv_cheats"] = "1", ["sv_infinite_ammo"] = "1", ["sv_grenade_trajectory_prac_pipreview"] = "1",
@@ -103,12 +116,16 @@ public static class PlaybookCommands
         ["mp_force_pick_time"] = "60", ["sv_disable_teamselect_menu"] = "0", ["sv_human_autojoin_team"] = "0",
         // Finish startup on the empty server and skip the competitive team intro.
         ["sv_hibernate_when_empty"] = "0", ["mp_team_intro_time"] = "0",
+        // Competitive defaults otherwise keep a halftime/side-switch state machine active.
+        ["mp_halftime"] = "0", ["mp_halftime_pausetimer"] = "0", ["mp_halftime_pausematch"] = "0",
+        ["mp_overtime_enable"] = "0", ["mp_match_can_clinch"] = "0", ["mp_humanteam"] = "any",
         // Teammates can pass through each other while still supporting boosts.
         ["mp_solid_teammates"] = "2", ["mp_solid_enemies"] = "0",
         ["mp_roundtime"] = "60", ["mp_roundtime_defuse"] = "60", ["mp_roundtime_hostage"] = "60",
         ["mp_warmup_online_enabled"] = "0", ["mp_warmup_offline_enabled"] = "0", ["mp_do_warmup_period"] = "0",
         ["mp_warmup_pausetimer"] = "0", ["mp_timelimit"] = "0", ["mp_maxrounds"] = "0",
         ["mp_ignore_round_win_conditions"] = "1", ["mp_respawn_on_death_ct"] = "1", ["mp_respawn_on_death_t"] = "1",
+        ["mp_respawnwavetime_ct"] = "0", ["mp_respawnwavetime_t"] = "0",
         ["mp_buy_anywhere"] = "1", ["mp_buytime"] = "9999", ["mp_maxmoney"] = "60000", ["mp_startmoney"] = "60000",
         ["ammo_grenade_limit_total"] = "5", ["mp_free_armor"] = "2", ["mp_forcecamera"] = "0", ["bot_quota"] = "0",
         ["buddha"] = "1", ["buddha_ignore_bots"] = "1", ["buddha_reset_hp"] = "100",
