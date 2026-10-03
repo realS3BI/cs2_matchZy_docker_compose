@@ -1,6 +1,7 @@
 import { isRadarPoint, mapMatchesNade, type MapDefinition, type RadarPoint } from "./maps.js";
 
-export type RadarCalibration = { xScale: number; xOffset: number; yScale: number; yOffset: number };
+type RadarProjection = { xScale: number; xOffset: number; yScale: number; yOffset: number };
+export type RadarCalibration = RadarProjection & { altitudeSplit?: number; lower?: RadarProjection };
 export type PositionedNade = {
   lineupPos?: string; landingPos?: string;
   radarFrom?: RadarPoint | null; radarTo?: RadarPoint | null;
@@ -15,6 +16,20 @@ const ANUBIS_RADAR: RadarCalibration = {
   yScale: -2.07353388 / (5.22 * 2048), yOffset: (3328 / 5.22 * 2.07353388 - 25.9679913) / 2048,
 };
 
+// CS2 overview: pos_x=-3453, pos_y=2887, scale=7, lower below z=-495.
+// Register each cropped CSNADES image against Valve's extracted 1024px radar.
+// Upper: 15 matching features, maximum axis residual 3.36px; lower: 9, 2.35px.
+// https://github.com/MurkyYT/cs2-map-icons/blob/main/data/radar_info/de_nuke.txt
+const NUKE_RADAR: RadarCalibration = {
+  xScale: 1.605056794 / (7 * 1558), xOffset: (3453 / 7 * 1.605056794 - 70.702638359) / 1558,
+  yScale: -1.606974478 / (7 * 848), yOffset: (2887 / 7 * 1.606974478 - 419.172130276) / 848,
+  altitudeSplit: -495,
+  lower: {
+    xScale: 1.620856688 / (7 * 1558), xOffset: (3453 / 7 * 1.620856688 - 76.344960301) / 1558,
+    yScale: -1.615787574 / (7 * 848), yOffset: (2887 / 7 * 1.615787574 - 424.497446568) / 848,
+  },
+};
+
 function coordinates(value: string | undefined) {
   const parts = String(value || "").trim().split(/\s+/).map(Number);
   return parts.length === 3 && parts.every(Number.isFinite) ? parts : null;
@@ -23,8 +38,9 @@ function coordinates(value: string | undefined) {
 // The bundled CSNADES images are cropped, not Valve's square overview textures.
 // Calibrate against saved manual references on this exact image instead of guessing its bounds.
 export function inferRadarCalibration(map: MapDefinition, nades: (PositionedNade & { map?: string })[]): RadarCalibration | null {
-  // Nuke's bundled radar lays two floors side by side. A single XY transform would be misleading.
-  if (map.mapName === "de_nuke") return null;
+  // Fixed transforms apply only to the exact bundled images and their dimensions.
+  if (map.mapName === "de_nuke") return map.radarUrl === "/maps/nuke.webp"
+    && map.radarLowerUrl === "/maps/nuke-lower.webp" && map.radarWidth === 1558 && map.radarHeight === 848 ? NUKE_RADAR : null;
   const refs: { world: number[]; radar: RadarPoint }[] = [];
   for (const nade of nades.filter(n => mapMatchesNade(map, n.map || ""))) {
     for (const [pos, point] of [[nade.lineupPos, nade.radarFrom], [nade.landingPos, nade.radarTo]] as const) {
@@ -54,14 +70,26 @@ export function inferRadarCalibration(map: MapDefinition, nades: (PositionedNade
 export function worldToRadar(position: string | undefined, calibration: RadarCalibration | null): RadarPoint | null {
   const world = coordinates(position);
   if (!world || !calibration) return null;
-  const point = { x: world[0] * calibration.xScale + calibration.xOffset, y: world[1] * calibration.yScale + calibration.yOffset };
+  const level = calibration.altitudeSplit === undefined ? undefined : world[2] < calibration.altitudeSplit ? "lower" : "upper";
+  const projection = level === "lower" ? calibration.lower : calibration;
+  if (!projection) return null;
+  const point: RadarPoint = { x: world[0] * projection.xScale + projection.xOffset, y: world[1] * projection.yScale + projection.yOffset,
+    ...(level && { level }) };
   // Do not clamp off-map coordinates onto a false point on the image edge.
   return isRadarPoint(point) ? point : null;
 }
 
 export function resolveRadarPoints(nade: PositionedNade, calibration: RadarCalibration | null) {
+  function resolve(manual: RadarPoint | null | undefined, position: string | undefined) {
+    if (!isRadarPoint(manual)) return worldToRadar(position, calibration);
+    // Legacy manual points keep their XY; infer only the previously unstored floor.
+    const world = coordinates(position);
+    const level = manual.level ?? (calibration?.altitudeSplit !== undefined && world
+      ? world[2] < calibration.altitudeSplit ? "lower" : "upper" : undefined);
+    return level ? { ...manual, level } : manual;
+  }
   return {
-    radarFrom: isRadarPoint(nade.radarFrom) ? nade.radarFrom : worldToRadar(nade.lineupPos, calibration),
-    radarTo: isRadarPoint(nade.radarTo) ? nade.radarTo : worldToRadar(nade.landingPos, calibration)
+    radarFrom: resolve(nade.radarFrom, nade.lineupPos),
+    radarTo: resolve(nade.radarTo, nade.landingPos)
   };
 }

@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- Run pnpm dev:client, open /test/nuke-radar.html, call checkNukeRadar().
+     Uses the real library and placement editor without a backend. -->
+<html lang="de"><head><meta charset="UTF-8"><title>Nuke-Ebenen prüfen</title></head>
+<body><div id="root" style="container-type:inline-size;container-name:workspace"></div><script type="module">
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { NadeLibrary } from '/src/components/nade-library.tsx';
+import { NadeFavoritesProvider } from '/src/components/nade-favorites.tsx';
+import { NadePlacementEditor } from '/src/components/map-radar.tsx';
+import { ACTIVE_DUTY_MAPS } from '/src/lib/maps.ts';
+import { inferRadarCalibration } from '/src/lib/nade-radar.ts';
+import '/src/index.css';
+window.fetch = async () => new Response(JSON.stringify({ entries: [] }), { headers: { 'Content-Type': 'application/json' } });
+const map = ACTIVE_DUTY_MAPS.find(map => map.key === 'nuke');
+const nades = [
+  { owner: 'test', map: 'de_nuke', name: 'oben', displayName: 'A Smoke', type: 'Smoke', lineupPos: '650 -700 -400', landingPos: '650 -1100 -400' },
+  { owner: 'test', map: 'de_nuke', name: 'unten', displayName: 'B Smoke', type: 'Smoke', lineupPos: '650 -700 -768', landingPos: '650 -1100 -768' },
+  { owner: 'test', map: 'de_nuke', name: 'wechsel', displayName: 'Oben nach unten', type: 'Smoke', lineupPos: '0 -1500 -400', landingPos: '650 -1100 -768' },
+];
+function App() {
+  const [placement, setPlacement] = useState({});
+  window.placement = placement;
+  return React.createElement(MemoryRouter, { initialEntries: ['/maps/nuke'] },
+    React.createElement(NadeFavoritesProvider, null,
+      React.createElement(Routes, null, React.createElement(Route, { path: '/maps/:mapSlug', element:
+        React.createElement(NadeLibrary, { nades, maps: [map], user: { role: 'player' } }) })),
+      React.createElement('section', { id: 'editor' }, React.createElement(NadePlacementEditor, {
+        map, value: { ...nades[2], ...placement }, calibration: inferRadarCalibration(map, []),
+        onChange: patch => setPlacement(current => ({ ...current, ...patch })),
+      }))));
+}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+window.checkNukeRadar = async () => {
+  const assert = (value, message) => { if (!value) throw Error(message); };
+  const tick = () => new Promise(resolve => setTimeout(resolve, 100));
+  const frame = document.querySelector('.radar-browser-image');
+  const switchLevel = (container, number) => {
+    const button = container.querySelector(`.radar-level-switch button:nth-child(${number})`);
+    // A real pointerdown must not dismiss a selected position before switching.
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    button.click();
+  };
+  assert(frame.querySelectorAll('.radar-browser-background image').length === 1, 'Es muss genau eine Ebene sichtbar sein');
+  assert(frame.querySelector('.radar-browser-background').getAttribute('viewBox') === '0 0 1558 848', 'Karte nicht in voller Größe');
+  const markers = [...frame.querySelectorAll('.radar-spot')];
+  assert(markers.length === 1 && markers[0].getAttribute('aria-label').includes('Obere Ebene'), 'Automatisches oberes Ziel fehlt');
+  switchLevel(frame, 2);
+  await tick();
+  assert(frame.querySelector('image').getAttribute('href') === '/maps/nuke-lower.webp', 'Unteres Kartenbild fehlt');
+  const lower = frame.querySelector('.radar-spot');
+  assert(lower.getAttribute('aria-label').includes('2 Lineups') && lower.getAttribute('aria-label').includes('Untere Ebene'), 'Automatische untere Ziele fehlen');
+  lower.click();
+  await tick();
+  switchLevel(frame, 1);
+  await tick();
+  const counterpart = frame.querySelector('.radar-spot');
+  assert(counterpart.getAttribute('aria-label').startsWith('Start:') && counterpart.getAttribute('aria-label').includes('Obere Ebene'), 'Gegenposition fehlt oder Auswahl ging beim Umschalten verloren');
+  assert(frame.querySelectorAll('.radar-browser-lines line').length === 0, 'Falsche Linie zwischen Ebenen');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await tick();
+  const editor = document.querySelector('#editor');
+  switchLevel(editor, 2);
+  await tick();
+  const svg = document.querySelector('#editor .radar-map > svg');
+  const matrix = svg.getScreenCTM();
+  const click = (x, y) => {
+    const point = new DOMPoint(x, y).matrixTransform(matrix);
+    svg.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: point.x, clientY: point.y }));
+  };
+  click(1558 * .6, 848 * .6);
+  await tick();
+  assert(window.placement.radarFrom?.level === 'lower', 'Manuelle Ebene fehlt');
+  // MouseEvent rounds client pixels; allow one rendered pixel of error.
+  assert(Math.abs(window.placement.radarFrom.x - .6) < .003, 'Falsche lokale Koordinate');
+  switchLevel(editor, 1);
+  await tick();
+  click(1558 * .3, 848 * .4);
+  await tick();
+  assert(window.placement.radarTo?.level === 'upper', 'Manuelles Ziel auf oberer Ebene fehlt');
+  [...document.querySelectorAll('#editor button')].find(button => button.textContent.includes('Automatische Positionen')).click();
+  await tick();
+  assert(window.placement.radarFrom === null && window.placement.radarTo === null, 'Automatik entfernt manuelle Korrekturen nicht');
+  assert(editor.querySelectorAll('.radar-route-line').length === 0, 'Falsche Wurflinie zwischen Ebenen');
+  return 'PASS: Einzelansicht mit Ebenenumschalter, automatische Marker, Gegenposition nach Ebenenwechsel, manuelle Korrektur und Rückkehr zur Automatik';
+};
+</script></body></html>

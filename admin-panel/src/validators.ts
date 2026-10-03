@@ -95,7 +95,10 @@ function sanitizeRadarPoint(point, fieldName) {
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
     throw new Error(`${fieldName} coordinates must be between 0 and 1`);
   }
-  return { x, y };
+  if (point.level !== undefined && point.level !== "upper" && point.level !== "lower") {
+    throw new Error(`${fieldName}: Ungültige Kartenebene.`);
+  }
+  return { x, y, ...(point.level !== undefined && { level: point.level }) };
 }
 
 function sanitizeLineupImages(images) {

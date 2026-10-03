@@ -132,7 +132,6 @@ public sealed partial class MatchZyNadesPlugin
             Server.NextFrame(() => ObserveRethrow(observation, "nächster Frame"));
             foreach (var seconds in new[] { 0.25f, 1f, 3f, 10f, 30f })
                 AddTimer(seconds, () => ObserveRethrow(observation, $"nach {seconds} s", seconds == 30f), TimerFlags.STOP_ON_MAPCHANGE);
-            Tell(player, $"Projektil erzeugt (Versuch {id}); Wirkung noch nicht bestätigt.");
         }
         catch (Exception error)
         {

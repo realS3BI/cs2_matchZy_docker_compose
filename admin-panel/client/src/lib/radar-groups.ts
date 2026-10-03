@@ -25,13 +25,14 @@ export function groupRadarNades<T extends RadarLineup>(nades: T[], side: RadarSi
     const resolved = resolveRadarPoints(nade, calibration);
     const point = side === "from" ? resolved.radarFrom : resolved.radarTo;
     if (!point) continue;
-    const group = groups.find(group => group.points.every(other => distance(point, other) <= 0.035));
+    const group = groups.find(group => group.points.every(other => (!map.radarLowerUrl || (point.level || "upper") === (other.level || "upper")) && distance(point, other) <= 0.035));
     if (group) { group.nades.push(nade); group.points.push(point); }
     else groups.push({ nades: [nade], points: [point] });
   }
   return groups.map(({ nades, points }) => ({
     id: lineupId(nades[0]), nades,
-    point: { x: points.reduce((sum, p) => sum + p.x, 0) / points.length, y: points.reduce((sum, p) => sum + p.y, 0) / points.length },
+    point: { x: points.reduce((sum, p) => sum + p.x, 0) / points.length, y: points.reduce((sum, p) => sum + p.y, 0) / points.length,
+      ...(map.radarLowerUrl && { level: points[0].level || "upper" }) },
     title: [...new Set(nades.map(n => side === "from" ? n.throwFromTitle : n.throwToTitle).filter(Boolean))].join(" / ") || (side === "from" ? "Startposition" : "Landeposition"),
   }));
 }

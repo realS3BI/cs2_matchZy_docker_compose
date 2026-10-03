@@ -5,6 +5,9 @@ import { Button } from "./ui/button";
 import { isRadarPoint, type MapDefinition, type RadarPoint } from "../lib/maps";
 import { cn } from "../lib/utils";
 import { resolveRadarPoints, type RadarCalibration } from "../lib/nade-radar";
+import { radarCanvasSize, radarPointVisible, radarInputPoint, type RadarLevel } from "../lib/radar-layout";
+import { RadarBackground } from "./radar-background";
+import { RadarLevelSwitch } from "./radar-level-switch";
 
 type RadarNade = {
   id?: string;
@@ -28,6 +31,8 @@ type NadeFlightMapProps = {
   onMapClick?: (point: RadarPoint) => void;
   onSelectNade?: (nade: RadarNade) => void;
   calibration?: RadarCalibration | null;
+  level?: RadarLevel;
+  onLevelChange?: (level: RadarLevel) => void;
 };
 
 const TYPE_COLORS = {
@@ -66,12 +71,18 @@ export function NadeFlightMap({
   emptyMessage,
   onMapClick,
   onSelectNade,
-  calibration = null
+  calibration = null,
+  level,
+  onLevelChange
 }: NadeFlightMapProps) {
   const markerPrefix = useId().replace(/:/g, "");
-  const width = map.radarWidth || 1024;
-  const height = map.radarHeight || 1024;
-  const markerRadius = Math.max(width, height) * (compact ? 0.009 : 0.011);
+  const [viewLevel, setViewLevel] = useState<RadarLevel>(() => {
+    const points = resolveRadarPoints(nades[0] || {}, calibration);
+    return points.radarFrom?.level || points.radarTo?.level || "upper";
+  });
+  const activeLevel = level ?? viewLevel;
+  const { width, height } = radarCanvasSize(map);
+  const markerRadius = Math.max(map.radarWidth || 1024, height) * (compact ? 0.009 : 0.011);
   const placedCount = nades.filter((nade) => { const p = resolveRadarPoints(nade, calibration); return p.radarFrom && p.radarTo; }).length;
 
   function handleMapClick(event: React.MouseEvent<SVGSVGElement>) {
@@ -81,7 +92,7 @@ export function NadeFlightMap({
     const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
     // SVG may letterbox a radar when the viewport limits its height.
     if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) return;
-    onMapClick({ x: point.x / width, y: point.y / height });
+    onMapClick(radarInputPoint(map, { x: point.x / width, y: point.y / height }, activeLevel));
   }
 
   if (!map.radarUrl) {
@@ -98,10 +109,10 @@ export function NadeFlightMap({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role={onSelectNade ? "group" : "img"}
-        aria-label={`${map.name}: ${placedCount} Wurfwege auf dem Radar`}
+        aria-label={`${map.name}: ${placedCount} Wurfwege auf dem Radar${map.radarLowerUrl ? activeLevel === "lower" ? " · Untere Ebene" : " · Obere Ebene" : ""}`}
         onClick={handleMapClick}
       >
-        <image href={map.radarUrl} width={width} height={height} preserveAspectRatio="none" />
+        <RadarBackground map={map} level={activeLevel} />
         <defs>
           {Object.entries(TYPE_COLORS).map(([type, color]) => (
             <marker
@@ -123,7 +134,9 @@ export function NadeFlightMap({
         </defs>
         <g className="radar-routes">
           {nades.map((nade, index) => {
-            const points = resolveRadarPoints(nade, calibration);
+            const resolved = resolveRadarPoints(nade, calibration);
+            const points = { radarFrom: resolved.radarFrom && radarPointVisible(map, resolved.radarFrom, activeLevel) ? resolved.radarFrom : null,
+              radarTo: resolved.radarTo && radarPointVisible(map, resolved.radarTo, activeLevel) ? resolved.radarTo : null };
             const from = points.radarFrom ? pixelPoint(points.radarFrom, width, height) : null;
             const to = points.radarTo ? pixelPoint(points.radarTo, width, height) : null;
             const color = colorForType(nade.type);
@@ -173,6 +186,7 @@ export function NadeFlightMap({
           })}
         </g>
       </svg>
+      {map.radarLowerUrl && <RadarLevelSwitch level={activeLevel} onChange={onLevelChange ?? setViewLevel} />}
       {emptyMessage && placedCount === 0 ? <div className="radar-map-message">{emptyMessage}</div> : null}
     </div>
   );
@@ -202,12 +216,23 @@ export function NadePlacementEditor({ map, value, onChange, calibration = null }
     return points.radarFrom && !points.radarTo ? "to" : "from";
   });
   const points = resolveRadarPoints(value, calibration);
+  const [level, setLevel] = useState<RadarLevel>(() => {
+    const points = resolveRadarPoints(value, calibration);
+    return (mode === "to" ? points.radarTo : points.radarFrom)?.level || "upper";
+  });
+
+  function chooseMode(nextMode: "from" | "to") {
+    setMode(nextMode);
+    const point = nextMode === "from" ? points.radarFrom : points.radarTo;
+    if (point?.level) setLevel(point.level);
+  }
 
   function place(point: RadarPoint) {
-    const rounded = { x: Number(point.x.toFixed(6)), y: Number(point.y.toFixed(6)) };
+    const rounded = { x: Number(point.x.toFixed(6)), y: Number(point.y.toFixed(6)), ...(point.level && { level: point.level }) };
     if (mode === "from") {
       onChange({ radarFrom: rounded });
       setMode("to");
+      if (points.radarTo?.level) setLevel(points.radarTo.level);
     } else {
       onChange({ radarTo: rounded });
     }
@@ -221,10 +246,10 @@ export function NadePlacementEditor({ map, value, onChange, calibration = null }
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant={mode === "from" ? "default" : "secondary"} onClick={() => setMode("from")}>
+          <Button type="button" size="sm" variant={mode === "from" ? "default" : "secondary"} onClick={() => chooseMode("from")}>
             <Crosshair data-icon="inline-start" />Start setzen
           </Button>
-          <Button type="button" size="sm" variant={mode === "to" ? "default" : "secondary"} onClick={() => setMode("to")}>
+          <Button type="button" size="sm" variant={mode === "to" ? "default" : "secondary"} onClick={() => chooseMode("to")}>
             <Target data-icon="inline-start" />Ziel setzen
           </Button>
         </div>
@@ -232,7 +257,7 @@ export function NadePlacementEditor({ map, value, onChange, calibration = null }
           <RotateCcw data-icon="inline-start" />{calibration ? "Automatische Positionen" : "Markierungen entfernen"}
         </Button>
       </div>
-      <NadeFlightMap map={map} nades={[value]} calibration={calibration} onMapClick={place} />
+      <NadeFlightMap map={map} nades={[value]} calibration={calibration} onMapClick={place} level={level} onLevelChange={setLevel} />
       <div className="radar-placement-status">
         <span><i className={cn("radar-status-dot", points.radarFrom && "radar-status-dot-ready")} />Start {value.radarFrom ? "manuell" : points.radarFrom ? "automatisch" : "fehlt"}</span>
         <span><i className={cn("radar-status-diamond", points.radarTo && "radar-status-dot-ready")} />Ziel {value.radarTo ? "manuell" : points.radarTo ? "automatisch" : "fehlt"}</span>

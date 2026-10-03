@@ -130,7 +130,7 @@ test("map placement can bootstrap and correct reviewed recordings without changi
     const official = { ...entry, type, official: true, mustKnow: true, reviewStatus: "approved", flightDuration: 3.25, reviewMedia: reviewMediaFixture };
     for (const user of [player, admin]) {
       assert.equal(lineupPermissions(official, user).position, true);
-      const patch = { radarFrom: { x: .1, y: .8 }, radarTo: { x: .7, y: .2 } };
+      const patch = { radarFrom: { x: .1, y: .8, level: "upper" }, radarTo: { x: .7, y: .2, level: "lower" } };
       const [placed] = applyWebNadeAction([official], { ...request, action: "position", patch }, user);
       assert.deepEqual(placed.radarFrom, patch.radarFrom);
       assert.deepEqual(placed.radarTo, patch.radarTo);

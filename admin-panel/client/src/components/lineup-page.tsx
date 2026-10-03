@@ -152,7 +152,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
           {detailsDirty && <p className="mt-2 text-xs text-muted-foreground">Speichere die Positionierung zusammen mit deinen weiteren Änderungen über „Speichern“.</p>}
           {stale && <p className="mt-2 text-xs text-muted-foreground" role="status">Diese Aufnahme wurde inzwischen geändert. Verwirf deine Änderungen, um den aktuellen Stand zu laden.</p>}
         </fieldset> : <><NadeFlightMap map={map} nades={[positionedNade]} calibration={calibration} /><p className="mt-3 text-xs text-muted-foreground">Kreis: Startposition · Raute: Landeposition</p></>}
-        {!calibration && permissions.position && <p className="mt-3 text-xs text-muted-foreground">{map.mapName === "de_nuke" ? "Auf Nuke werden Start und Ziel wegen der getrennten Stockwerke manuell gesetzt." : "Für diese Map fehlen verlässliche Referenzen. Setze Start und Ziel auf der Karte. Gespeicherte Markierungen mit Spielkoordinaten dienen als Referenzen für weitere Nades und können über „Positionierung bearbeiten“ korrigiert werden."}</p>}
+        {map.radarLowerUrl && <p className="mt-3 text-xs text-muted-foreground">1: obere Ebene · 2: untere Ebene. Start und Ziel werden anhand ihrer jeweiligen Höhe zugeordnet. Über den Umschalter rechts oben kannst du die Ebene wechseln und Positionen korrigieren.</p>}
+        {!calibration && permissions.position && <p className="mt-3 text-xs text-muted-foreground">{map.mapName === "de_nuke" ? "Für dieses Nuke-Kartenbild fehlt die Kalibrierung der Ebenen. Setze Start und Ziel manuell." : "Für diese Map fehlen verlässliche Referenzen. Setze Start und Ziel auf der Karte. Gespeicherte Markierungen mit Spielkoordinaten dienen als Referenzen für weitere Nades und können über „Positionierung bearbeiten“ korrigiert werden."}</p>}
         </LineupMapDisclosure>
   );
   const deleteDialog = (

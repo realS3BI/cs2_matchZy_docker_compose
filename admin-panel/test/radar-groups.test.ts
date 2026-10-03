@@ -3,10 +3,27 @@ import assert from "node:assert/strict";
 import { groupRadarNades, findRadarGroup } from "../client/src/lib/radar-groups.js";
 import { lineupId } from "../client/src/lib/lineups.js";
 import { ACTIVE_DUTY_MAPS } from "../client/src/lib/maps.js";
+import { inferRadarCalibration } from "../client/src/lib/nade-radar.js";
 
 const map = ACTIVE_DUTY_MAPS.find(map => map.key === "anubis")!;
 const nade = (name: string, from = { x: 0.2, y: 0.3 }, to = { x: 0.7, y: 0.6 }) => ({
   owner: "player", map: map.mapName, name, radarFrom: from, radarTo: to,
+});
+
+test("Nuke groups upper and lower positions separately and displays recordings that have no manual markers", () => {
+  const nuke = ACTIVE_DUTY_MAPS.find(map => map.mapName === "de_nuke")!;
+  const entries = [
+    { owner: "player", map: "de_nuke", name: "a", lineupPos: "650 -700 -400", landingPos: "650 -1100 -768" },
+    { owner: "player", map: "de_nuke", name: "b", lineupPos: "650 -700 -400", landingPos: "650 -1100 -400" },
+    { owner: "player", map: "de_nuke", name: "c", lineupPos: "650 -700 -768", landingPos: "650 -1100 -768" },
+  ];
+  const calibration = inferRadarCalibration(nuke, entries);
+  const starts = groupRadarNades(entries, "from", nuke, calibration);
+  assert.deepEqual(starts.map(group => group.nades.length), [2, 1]);
+  assert.deepEqual(starts.map(group => group.point.level), ["upper", "lower"]);
+  const targets = groupRadarNades(entries, "to", nuke, calibration);
+  assert.equal(targets.length, 2);
+  assert.equal(targets.flatMap(group => group.nades).length, 3);
 });
 
 test("targets group first, then identical starts retain every individual lineup", () => {

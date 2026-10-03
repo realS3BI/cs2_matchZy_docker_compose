@@ -6,6 +6,9 @@ import { Button } from "./ui/button";
 import { CrosshairView, useHeldReviewSlot } from "./lineup-presentation";
 import { REVIEW_STEPS } from "../../../shared/review-media";
 import { type MapDefinition } from "../lib/maps";
+import { radarCanvasSize, radarPointVisible, type RadarLevel } from "../lib/radar-layout";
+import { RadarBackground } from "./radar-background";
+import { RadarLevelSwitch } from "./radar-level-switch";
 import { lineupKey } from "../lib/lineups";
 import { type RadarGroup, type RadarLineup, type RadarSide } from "../lib/radar-groups";
 import { radarMarkerAsset } from "../lib/nade-assets";
@@ -25,6 +28,8 @@ type Props = {
 };
 
 export function RadarBrowser({ map, side, groups, selected, counterparts, expanded, onSelect, onExpand, onDismiss, onCloseOptions, href }: Props) {
+  const [level, setLevel] = useState<RadarLevel>("upper");
+  useEffect(() => setLevel("upper"), [map.key]);
   const optionsTrigger = useRef<HTMLButtonElement>(null);
   const heldSlot = useHeldReviewSlot();
   const [preview, setPreview] = useState<{ group: RadarGroup; index: number; left: number; top: number } | null>(null);
@@ -44,7 +49,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
   }
   useEffect(() => {
     cancelTimer(); setPreview(null);
-  }, [selected?.id, side, expanded?.id, map.key]);
+  }, [selected?.id, side, expanded?.id, map.key, level]);
   useEffect(() => {
     // Live updates rebuild radar groups. Keep the player mounted while its
     // marker and officially reviewed recording are still available.
@@ -72,7 +77,7 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
   useEffect(() => {
     if (!selected || expanded || zoomNade) return;
     function dismiss(event: PointerEvent) {
-      if (event.target instanceof Element && event.target.closest(".radar-spot, .radar-preview")) return;
+      if (event.target instanceof Element && event.target.closest(".radar-spot, .radar-preview, .radar-level-switch")) return;
       onDismiss();
     }
     function escape(event: KeyboardEvent) {
@@ -86,16 +91,18 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
     };
   }, [selected, expanded, zoomNade, onDismiss]);
   if (!map.radarUrl) return <Empty className="border"><EmptyHeader><MapPin /><EmptyTitle>Keine Radarkarte hinterlegt</EmptyTitle><EmptyDescription>Alle Lineups findest du in der Liste darunter.</EmptyDescription></EmptyHeader></Empty>;
-  const width = map.radarWidth || 1024, height = map.radarHeight || 1024;
+  const { width, height } = radarCanvasSize(map);
   function marker(group: RadarGroup, markerSide: RadarSide, secondary = false) {
     const active = group === selected || group === expanded;
     const asset = markerSide === "to" ? radarMarkerAsset(group.nades) : null;
     const team = group.nades.every(nade => nade.team === group.nades[0].team) ? group.nades[0].team : undefined;
     const teamLabel = isLineupTeam(team) ? ` · ${TEAM_LABELS[team]}` : "";
     const countLabel = group.nades.length > 1 ? ` · ${group.nades.length} Lineups` : "";
-    const label = `${markerSide === "from" ? "Start" : "Ziel"}: ${group.title}${countLabel}${teamLabel}`;
+    const levelLabel = map.radarLowerUrl ? ` · ${group.point.level === "lower" ? "Untere Ebene" : "Obere Ebene"}` : "";
+    const label = `${markerSide === "from" ? "Start" : "Ziel"}: ${group.title}${countLabel}${teamLabel}${levelLabel}`;
     const className = cn("radar-spot", markerSide === "from" && "radar-spot-from", active && "radar-spot-active", asset && "radar-spot-asset", group.nades.length > 1 && "radar-spot-stack");
-    const style = { left: `${group.point.x * 100}%`, top: `${group.point.y * 100}%` };
+    const point = group.point;
+    const style = { left: `${point.x * 100}%`, top: `${point.y * 100}%` };
     const content = <>
       {asset && <img className="radar-marker-art" src={asset} alt="" aria-hidden="true" />}
       {group.nades.length > 1 && <span className="radar-marker-label">{group.nades.length}</span>}
@@ -127,12 +134,13 @@ export function RadarBrowser({ map, side, groups, selected, counterparts, expand
   }
   return <div className="radar-browser" role="group" aria-label={`Interaktive Radarkarte von ${map.name}`}>
     <div className="radar-browser-image" style={{ aspectRatio: `${width} / ${height}`, "--radar-aspect": width / height } as CSSProperties}>
-      <img src={map.radarUrl} alt={`Vollständige Radarkarte von ${map.name}`} draggable={false} />
+      <svg className="radar-browser-background" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${map.name}${map.radarLowerUrl ? level === "lower" ? ": Untere Ebene" : ": Obere Ebene" : ""}`}><RadarBackground map={map} level={level} /></svg>
+      {map.radarLowerUrl && <RadarLevelSwitch level={level} onChange={setLevel} />}
       {selected && <svg className="radar-browser-lines" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-        {counterparts.map(group => <line key={group.id} x1={selected.point.x * width} y1={selected.point.y * height} x2={group.point.x * width} y2={group.point.y * height} className={cn(expanded && group !== expanded && "radar-line-muted")} />)}
+        {counterparts.filter(group => radarPointVisible(map, selected.point, level) && radarPointVisible(map, group.point, level)).map(group => <line key={group.id} x1={selected.point.x * width} y1={selected.point.y * height} x2={group.point.x * width} y2={group.point.y * height} className={cn(expanded && group !== expanded && "radar-line-muted")} />)}
       </svg>}
-      {(selected ? [selected] : groups).map(group => marker(group, side))}
-      {selected && counterparts.map(group => marker(group, side === "from" ? "to" : "from", true))}
+      {(selected ? [selected] : groups).filter(group => radarPointVisible(map, group.point, level)).map(group => marker(group, side))}
+      {selected && counterparts.filter(group => radarPointVisible(map, group.point, level)).map(group => marker(group, side === "from" ? "to" : "from", true))}
     </div>
     {preview && createPortal(<div className="radar-preview" role="dialog" aria-label="Lineup-Vorschau" style={{ left: preview.left, top: preview.top }} onMouseEnter={cancelTimer} onMouseLeave={hidePreview} onFocus={cancelTimer} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) hidePreview(); }}>
       {(() => {

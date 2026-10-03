@@ -183,6 +183,15 @@ test("nadesToMatchZySavedNadesConfig omits lineup images", () => {
   });
 });
 
+test("radar floor corrections survive validation and reject invalid levels", () => {
+  const entry = { owner: "player", name: "test", map: "de_nuke", type: "Smoke", lineupPos: "1 2 3", lineupAng: "4 5 6",
+    radarFrom: { x: .2, y: .3, level: "upper" }, radarTo: { x: .4, y: .5, level: "lower" } };
+  const [saved] = sanitizeNades([entry]);
+  assert.deepEqual(saved.radarFrom, entry.radarFrom);
+  assert.deepEqual(saved.radarTo, entry.radarTo);
+  assert.throws(() => sanitizeNades([{ ...entry, radarTo: { ...entry.radarTo, level: "invalid" } }]), /Kartenebene/);
+});
+
 test("effect coordinates export as strings while panel radar metadata is omitted", () => {
   const config: any = nadesToMatchZySavedNadesConfig([{
     name: "window_smoke",

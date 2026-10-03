@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ACTIVE_DUTY_MAPS } from "../client/src/lib/maps.js";
 import { inferRadarCalibration, resolveRadarPoints, worldToRadar } from "../client/src/lib/nade-radar.js";
+import { radarCanvasSize, radarPointVisible, radarInputPoint } from "../client/src/lib/radar-layout.js";
 
 const map = ACTIVE_DUTY_MAPS[0];
 const references = [
@@ -45,7 +46,57 @@ test("missing, narrow, inconsistent and wrong-map references cannot calibrate a 
   assert.equal(inferRadarCalibration(ACTIVE_DUTY_MAPS[1], references), null);
   assert.equal(inferRadarCalibration(map, [references[0], { ...references[1], lineupPos: "-999 0 0" }]), null);
   assert.equal(inferRadarCalibration(map, [...references, { map: map.mapName, lineupPos: "0 0 0", radarFrom: { x: 0.2, y: 0.5 } }]), null);
-  assert.equal(inferRadarCalibration(ACTIVE_DUTY_MAPS[2], references.map(n => ({ ...n, map: "de_nuke" }))), null);
+  assert.equal(inferRadarCalibration({ ...ACTIVE_DUTY_MAPS[2], radarUrl: "/custom-nuke.webp" }, references.map(n => ({ ...n, map: "de_nuke" }))), null);
+});
+
+const nuke = ACTIVE_DUTY_MAPS.find(map => map.mapName === "de_nuke")!;
+
+test("Nuke projects upper and lower endpoints without references, choosing each endpoint's own altitude", () => {
+  const calibration = inferRadarCalibration(nuke, []);
+  assert.ok(calibration);
+  const points = resolveRadarPoints({ lineupPos: "650 -700 -400", landingPos: "650 -1100 -768" }, calibration);
+  assert.equal(points.radarFrom!.level, "upper");
+  assert.equal(points.radarTo!.level, "lower");
+  // Independent landmarks: centre of A on the upper image; B on the lower image.
+  assert.ok(Math.abs(points.radarFrom!.x * 1558 - 870) < 5);
+  assert.ok(Math.abs(points.radarFrom!.y * 848 - 404) < 5);
+  assert.ok(Math.abs(points.radarTo!.x * 1558 - 875) < 5);
+  assert.ok(Math.abs(points.radarTo!.y * 848 - 496) < 5);
+  assert.equal(worldToRadar("650 -700 -495", calibration)!.level, "upper");
+  assert.equal(worldToRadar("650 -700 -495.001", calibration)!.level, "lower");
+  assert.equal(worldToRadar("650 -700 900", calibration)!.level, "upper");
+  assert.equal(worldToRadar("650 -700", calibration), null);
+  assert.equal(worldToRadar("650 -700 NaN", calibration), null);
+  assert.equal(worldToRadar("100000 -700 -768", calibration), null);
+  assert.equal(inferRadarCalibration({ ...nuke, radarLowerUrl: undefined }, []), null);
+  assert.equal(inferRadarCalibration({ ...nuke, radarHeight: 1024 }, []), null);
+});
+
+test("Nuke preserves legacy manual XY, allows explicit floor correction and does not invent a missing endpoint", () => {
+  const calibration = inferRadarCalibration(nuke, []);
+  const legacy = { x: .3, y: .6 };
+  assert.deepEqual(resolveRadarPoints({ lineupPos: "650 -1100 -768", radarFrom: legacy }, calibration),
+    { radarFrom: { ...legacy, level: "lower" }, radarTo: null });
+  const corrected = { ...legacy, level: "upper" as const };
+  assert.deepEqual(resolveRadarPoints({ lineupPos: "650 -1100 -768", radarFrom: corrected }, calibration).radarFrom, corrected);
+  assert.deepEqual(resolveRadarPoints({ radarFrom: legacy }, calibration).radarFrom, legacy);
+});
+
+test("Nuke switches between full-size images, filters by level and preserves local click coordinates", () => {
+  assert.deepEqual(radarCanvasSize(nuke), { width: 1558, height: 848 });
+  for (const level of ["upper", "lower"] as const) {
+    for (const x of [.1, .6, .9]) {
+      const point = { x, y: .4, level };
+      assert.equal(radarPointVisible(nuke, point, level), true);
+      assert.equal(radarPointVisible(nuke, point, level === "upper" ? "lower" : "upper"), false);
+      assert.deepEqual(radarInputPoint(nuke, { x, y: .4 }, level), point);
+    }
+  }
+  assert.deepEqual(radarInputPoint(nuke, { x: 1, y: 1 }, "lower"), { x: 1, y: 1, level: "lower" });
+  assert.deepEqual(radarInputPoint(map, { x: .2, y: .3 }, "upper"), { x: .2, y: .3 });
+  assert.equal(radarPointVisible(nuke, { x: .2, y: .3 }, "upper"), true);
+  assert.equal(radarPointVisible(nuke, { x: .2, y: .3 }, "lower"), false);
+  assert.equal(radarPointVisible(map, { x: .2, y: .3 }, "lower"), true);
 });
 
 test("corrected references move automatic positions while preserving manual overrides across nade types", () => {
