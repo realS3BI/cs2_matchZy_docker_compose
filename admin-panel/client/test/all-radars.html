@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- pnpm dev:client, open /test/all-radars.html and run checkAllRadars(). -->
+<html lang="de"><head><meta charset="UTF-8"><title>Kartenmarker prüfen</title></head>
+<body><div id="root" style="container-type:inline-size;container-name:workspace"></div><script type="module">
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { NadeLibrary } from '/src/components/nade-library.tsx';
+import { NadeFavoritesProvider } from '/src/components/nade-favorites.tsx';
+import { BUILT_IN_MAPS, mapPath } from '/src/lib/maps.ts';
+import { inferRadarCalibration } from '/src/lib/nade-radar.ts';
+import '/src/index.css';
+window.fetch = async () => new Response(JSON.stringify({ entries: [] }), { headers: { 'Content-Type': 'application/json' } });
+const references = map => [{ owner: 'test', map: map.mapName, name: 'referenz', type: 'Smoke',
+  lineupPos: '-1000 1000 0', landingPos: '1000 -1000 0', radarFrom: { x: .2, y: .2 }, radarTo: { x: .8, y: .8 } }];
+function entries(map) {
+  const calibration = inferRadarCalibration(map, []) || inferRadarCalibration(map, references(map));
+  if (!map.radarUrl) return [];
+  const position = (point, projection, z) => `${(point.x - projection.xOffset) / projection.xScale} ${(point.y - projection.yOffset) / projection.yScale} ${z}`;
+  const split = calibration.altitudeSplit;
+  return ['upper', ...(calibration.lower ? ['lower'] : [])].map((level, index) => {
+    const projection = level === 'lower' ? calibration.lower : calibration;
+    const z = split === undefined ? 0 : split + (level === 'lower' ? -1 : 1);
+    return { owner: 'test', map: map.mapName, name: `aufnahme-${level}`, displayName: `Aufnahme ${level}`, type: 'Smoke',
+      lineupPos: position({ x: .4 + index * .1, y: .4 }, projection, z),
+      landingPos: position({ x: .6 + index * .1, y: .6 }, projection, z) };
+  }).concat(inferRadarCalibration(map, []) ? [] : references(map));
+}
+function App() {
+  const [map, setMap] = useState(BUILT_IN_MAPS[0]);
+  window.showRadarMap = name => setMap(BUILT_IN_MAPS.find(map => map.mapName === name));
+  return React.createElement(MemoryRouter, { key: map.key, initialEntries: [mapPath(map)] },
+    React.createElement(NadeFavoritesProvider, null,
+      React.createElement(Routes, null, React.createElement(Route, { path: '/maps/:mapSlug', element:
+        React.createElement(NadeLibrary, { nades: entries(map), maps: [map], user: { role: 'player' } }) }))));
+}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+window.checkAllRadars = async () => {
+  const tick = () => new Promise(resolve => setTimeout(resolve, 80));
+  const assert = (value, message) => { if (!value) throw Error(message); };
+  const checked = [];
+  for (const map of BUILT_IN_MAPS) {
+    window.showRadarMap(map.mapName);
+    await tick();
+    if (!map.radarUrl) {
+      assert(document.body.textContent.includes('Keine Radarkarte hinterlegt'), map.name + ': Hinweis fehlt');
+    } else {
+      const frame = document.querySelector('.radar-browser-image');
+      assert(frame?.querySelectorAll('.radar-spot').length > 0, map.name + ': automatische Zielmarker fehlen');
+      const image = frame.querySelector('image');
+      assert(image.getAttribute('href') === map.radarUrl, map.name + ': falsches Radarbild');
+      const loaded = new Image(); loaded.src = map.radarUrl; await loaded.decode();
+      assert(loaded.naturalWidth === map.radarWidth && loaded.naturalHeight === map.radarHeight, map.name + ': falsche Bildgröße');
+      if (map.radarLowerUrl) {
+        const lower = frame.querySelector('.radar-level-switch button:nth-child(2)');
+        lower.focus(); lower.click(); await tick();
+        assert(lower.getAttribute('aria-pressed') === 'true', map.name + ': Ebenenumschalter reagiert nicht');
+        assert(frame.querySelector('image').getAttribute('href') === map.radarLowerUrl, map.name + ': unteres Bild fehlt');
+        assert(frame.querySelectorAll('.radar-spot').length > 0, map.name + ': unterer Zielmarker fehlt');
+        const lowerImage = new Image(); lowerImage.src = map.radarLowerUrl; await lowerImage.decode();
+      }
+      const startButton = document.querySelector('button[aria-label="Starts"]') || [...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Starts');
+      startButton.click(); await tick();
+      assert(frame.querySelectorAll('.radar-spot').length > 0, map.name + ': automatische Startmarker fehlen');
+    }
+    checked.push(map.name);
+  }
+  return { passed: checked.length, maps: checked };
+};
+</script></body></html>

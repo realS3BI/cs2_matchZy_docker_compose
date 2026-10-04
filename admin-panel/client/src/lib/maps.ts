@@ -61,9 +61,10 @@ export const CSNADES_REFERENCE_MAPS: MapDefinition[] = [
 ];
 
 // Other playable maps shipped with CS2; availability comes from the server inventory.
-const extraRadars: Record<string, { radarUrl: string; radarWidth: number; radarHeight: number }> = {
+const extraRadars: Record<string, { radarUrl: string; radarLowerUrl?: string; radarWidth: number; radarHeight: number }> = {
   "ar_baggage": {
     "radarUrl": "/maps/ar_baggage.png",
+    "radarLowerUrl": "/maps/ar_baggage-lower.png",
     "radarWidth": 1024,
     "radarHeight": 1024
   },

@@ -1,4 +1,5 @@
 import { isRadarPoint, mapMatchesNade, type MapDefinition, type RadarPoint } from "./maps.js";
+import { BUNDLED_RADAR_CALIBRATIONS } from "./bundled-radar-calibrations.js";
 
 type RadarProjection = { xScale: number; xOffset: number; yScale: number; yOffset: number };
 export type RadarCalibration = RadarProjection & { altitudeSplit?: number; lower?: RadarProjection };
@@ -41,6 +42,12 @@ export function inferRadarCalibration(map: MapDefinition, nades: (PositionedNade
   // Fixed transforms apply only to the exact bundled images and their dimensions.
   if (map.mapName === "de_nuke") return map.radarUrl === "/maps/nuke.webp"
     && map.radarLowerUrl === "/maps/nuke-lower.webp" && map.radarWidth === 1558 && map.radarHeight === 848 ? NUKE_RADAR : null;
+  if (map.mapName === "de_anubis" && map.radarUrl === "/maps/anubis.webp"
+    && map.radarWidth === 2048 && map.radarHeight === 2048) return ANUBIS_RADAR;
+  const bundled = BUNDLED_RADAR_CALIBRATIONS.find(entry => entry.mapName === map.mapName
+    && entry.radarUrl === map.radarUrl && entry.radarWidth === map.radarWidth && entry.radarHeight === map.radarHeight
+    && ("radarLowerUrl" in entry ? entry.radarLowerUrl : undefined) === map.radarLowerUrl);
+  if (bundled) return bundled.projection;
   const refs: { world: number[]; radar: RadarPoint }[] = [];
   for (const nade of nades.filter(n => mapMatchesNade(map, n.map || ""))) {
     for (const [pos, point] of [[nade.lineupPos, nade.radarFrom], [nade.landingPos, nade.radarTo]] as const) {
@@ -48,7 +55,7 @@ export function inferRadarCalibration(map: MapDefinition, nades: (PositionedNade
       if (world && isRadarPoint(point)) refs.push({ world, radar: point });
     }
   }
-  if (refs.length < 2) return map.mapName === "de_anubis" && map.radarUrl === "/maps/anubis.webp" ? ANUBIS_RADAR : null;
+  if (refs.length < 2) return null;
   function fit(axis: 0 | 1, key: "x" | "y") {
     const meanWorld = refs.reduce((sum, r) => sum + r.world[axis], 0) / refs.length;
     const meanRadar = refs.reduce((sum, r) => sum + r.radar[key], 0) / refs.length;

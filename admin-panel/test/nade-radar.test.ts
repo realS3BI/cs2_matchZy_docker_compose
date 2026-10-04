@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { ACTIVE_DUTY_MAPS } from "../client/src/lib/maps.js";
 import { inferRadarCalibration, resolveRadarPoints, worldToRadar } from "../client/src/lib/nade-radar.js";
 import { radarCanvasSize, radarPointVisible, radarInputPoint } from "../client/src/lib/radar-layout.js";
+import { groupRadarNades } from "../client/src/lib/radar-groups.js";
 
-const map = ACTIVE_DUTY_MAPS[0];
+// Custom images still calibrate from saved references rather than bundled transforms.
+const map = { ...ACTIVE_DUTY_MAPS[0], radarUrl: "/custom-mirage.webp" };
 const references = [
   { map: map.mapName, lineupPos: "-1000 1000 0", radarFrom: { x: 0.1, y: 0.2 } },
   { map: map.mapName, lineupPos: "1000 -1000 128", radarFrom: { x: 0.9, y: 0.8 } }
@@ -19,7 +21,28 @@ test("Anubis projects captured smoke endpoints without prior manual references",
   assert.ok(Math.abs(points.radarFrom!.y - .208) < .002);
   assert.ok(points.radarTo);
   assert.equal(inferRadarCalibration({ ...anubis, radarUrl: "/custom-anubis.webp" }, []), null);
+  assert.equal(inferRadarCalibration({ ...anubis, radarWidth: 1024 }, []), null);
   assert.equal(resolveRadarPoints({ landingPos: "-100 1200 900" }, calibration).radarTo!.x, points.radarTo.x);
+});
+
+test("saved Anubis markers cannot disable or distort automatic positions for new captures", () => {
+  const anubis = ACTIVE_DUTY_MAPS.find(map => map.mapName === "de_anubis")!;
+  const baseline = inferRadarCalibration(anubis, []);
+  const capture = { owner: "123", name: "new-smoke", map: "de_anubis",
+    lineupPos: "-400 2192 32", landingPos: "-100 1200 96" };
+  for (const target of ["-350 2150 96", "-100 1200 96"]) {
+    const saved = { owner: "123", name: "saved-smoke", map: "de_anubis",
+      lineupPos: "-400 2192 32", landingPos: target,
+      radarFrom: { x: .25, y: .3 }, radarTo: { x: .75, y: .8 } };
+    const calibration = inferRadarCalibration(anubis, [saved, capture]);
+    assert.deepEqual(calibration, baseline);
+    assert.deepEqual(resolveRadarPoints(capture, calibration), resolveRadarPoints(capture, baseline));
+    assert.deepEqual(resolveRadarPoints(saved, calibration), { radarFrom: saved.radarFrom, radarTo: saved.radarTo });
+    for (const side of ["from", "to"] as const) {
+      assert.ok(groupRadarNades([saved, capture], side, anubis, calibration)
+        .some(group => group.nades.some(nade => nade.name === capture.name)));
+    }
+  }
 });
 
 test("saved map references project world start and airborne effect coordinates", () => {
@@ -43,7 +66,7 @@ test("manual markers override projection without inventing an unknown target", (
 test("missing, narrow, inconsistent and wrong-map references cannot calibrate a map", () => {
   assert.equal(inferRadarCalibration(map, []), null);
   assert.equal(inferRadarCalibration(map, references.slice(0, 1)), null);
-  assert.equal(inferRadarCalibration(ACTIVE_DUTY_MAPS[1], references), null);
+  assert.equal(inferRadarCalibration({ ...ACTIVE_DUTY_MAPS[1], radarUrl: "/custom-dust2.webp" }, references), null);
   assert.equal(inferRadarCalibration(map, [references[0], { ...references[1], lineupPos: "-999 0 0" }]), null);
   assert.equal(inferRadarCalibration(map, [...references, { map: map.mapName, lineupPos: "0 0 0", radarFrom: { x: 0.2, y: 0.5 } }]), null);
   assert.equal(inferRadarCalibration({ ...ACTIVE_DUTY_MAPS[2], radarUrl: "/custom-nuke.webp" }, references.map(n => ({ ...n, map: "de_nuke" }))), null);
