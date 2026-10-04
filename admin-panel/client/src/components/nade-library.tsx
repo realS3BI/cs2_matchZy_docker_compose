@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Crosshair, Plus, Star, Target, Zap } from "lucide-react";
+import { Check, ChevronDown, Crosshair, Plus, Star, Target, Zap } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia } from "./ui/empty";
 import { Field, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
@@ -117,21 +118,26 @@ export function NadeLibrary({ nades, maps, user }) {
           </ToggleGroup>
         </section>
         <Field htmlFor="nade-search" className="explorer-search"><FieldLabel>Lineups durchsuchen</FieldLabel><Input id="nade-search" placeholder="Name, Spot oder Beschreibung …" value={query} onChange={event => filter("q", event.target.value)} /></Field>
+        <Collapsible id="map-lineup-list" className="map-lineup-disclosure">
+          <CollapsibleTrigger className="map-lineup-list-trigger">
+            <span>{selected ? "Lineups zur Auswahl" : "Alle passenden Lineups"}</span>
+            <span className="result-count" role="status" aria-label={`${visible.length} ${visible.length === 1 ? "Lineup" : "Lineups"}`}>{visible.length}</span>
+            <ChevronDown className="map-category-chevron" aria-hidden="true" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="map-lineup-list-content">
+            {visible.length === 0 ? <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><Crosshair /></EmptyMedia><EmptyTitle>{collection === "favorites" ? "Keine passenden Favoriten" : "Keine passenden Lineups"}</EmptyTitle><EmptyDescription>{collection === "favorites" ? "Merke dir Lineups über den Stern. Deine Favoriten findest du anschließend hier." : mapNades.length ? "Passe die Filter an oder suche nach einem anderen Spot." : "Für diese Map wurden noch keine Nades aufgenommen."}</EmptyDescription></EmptyHeader></Empty> :
+              <ol className="map-lineup-list">{visible.map(nade => <li key={lineupKey(nade)}>
+                <Link className="map-lineup-row" to={href(nade)}>
+                  <span className="map-lineup-kind" role="img" aria-label={nade.type === "Molly" ? "Molotov" : nade.type || "Nade"}><GrenadeIcon type={nade.type} /></span>
+                  <div className="map-lineup-name"><strong>{nade.displayName || nade.name}</strong><span>{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Landeposition"}</span></div>
+                  <span className="map-lineup-technique">{throwAttributeSummary(nade)}{typeof nade.flightDuration === "number" && ` · ${nade.flightDuration.toLocaleString("de-AT", { maximumFractionDigits: 2 })} s`}</span>
+                  <div className="map-lineup-badges">{isLineupTeam(nade.team) && <Badge variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}{nade.mustKnow && <Badge>Must Know</Badge>}{nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div>
+                </Link>
+                <FavoriteButton nade={nade} compact />
+              </li>)}</ol>}
+          </CollapsibleContent>
+        </Collapsible>
       </aside>
     </div>
-    <section id="map-lineup-list" aria-labelledby="map-lineup-list-title">
-      <div className="section-heading"><h2 id="map-lineup-list-title">{selected ? "Lineups zur Auswahl" : "Alle passenden Lineups"}</h2><span className="result-count" role="status">{visible.length} {visible.length === 1 ? "Lineup" : "Lineups"}</span></div>
-      {visible.length === 0 ? <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><Crosshair /></EmptyMedia><EmptyTitle>{collection === "favorites" ? "Keine passenden Favoriten" : "Keine passenden Lineups"}</EmptyTitle><EmptyDescription>{collection === "favorites" ? "Merke dir Lineups über den Stern. Deine Favoriten findest du anschließend hier." : mapNades.length ? "Passe die Filter an oder suche nach einem anderen Spot." : "Für diese Map wurden noch keine Nades aufgenommen."}</EmptyDescription></EmptyHeader></Empty> :
-        <ol className="map-lineup-list">{visible.map(nade => <li key={lineupKey(nade)}>
-          <Link className="map-lineup-row" to={href(nade)}>
-            <span className="map-lineup-kind"><GrenadeIcon type={nade.type} />{nade.type === "Molly" ? "Molotov" : nade.type || "Nade"}</span>
-            <div className="map-lineup-name"><strong>{nade.displayName || nade.name}</strong><span>{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Landeposition"}</span></div>
-            <span className="map-lineup-technique">{throwAttributeSummary(nade)}{typeof nade.flightDuration === "number" && ` · ${nade.flightDuration.toLocaleString("de-AT", { maximumFractionDigits: 2 })} s`}</span>
-            <div className="map-lineup-badges">{isLineupTeam(nade.team) && <Badge variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}{nade.mustKnow && <Badge>Must Know</Badge>}{nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div>
-            <ArrowRight className="map-lineup-arrow" aria-hidden="true" />
-          </Link>
-          <FavoriteButton nade={nade} compact />
-        </li>)}</ol>}
-    </section>
   </div>;
 }
