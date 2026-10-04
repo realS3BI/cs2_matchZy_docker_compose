@@ -20,7 +20,7 @@ async function fixture(role = "admin", testLogin = false) {
   const favorites = new Map<string, any[]>();
   const commands = [];
   const actions = [];
-  const config = { testLoginUsername: "test", testLoginPassword: testLogin ? "test-password" : "", publicUrl: "https://cs2.example.com", sessionSecret: "secret", liveMatchZyNadesFile: join(directory, "nades.json"), runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(directory, "savednades.json"), uploadDir: directory };
+  const config = { testLoginUsername: "test", testLoginPassword: testLogin ? "test-password" : "", publicUrl: "https://cs2.example.com", sessionSecret: "secret", liveNadesFile: join(directory, "nades.json"), runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeNadesFile: join(directory, "savednades.json"), uploadDir: directory };
   await writeFile(config.runtimeSettingsFile, JSON.stringify(settings));
   await writeFile(join(directory, "aaaa.png"), "official");
   await writeFile(join(directory, "bbbb.png"), "private");

@@ -70,7 +70,7 @@ export function AppSidebar({ user, serverItems, onNavigate, onLogout, dirty, sta
                 </div>
                 <div className="grid flex-1 gap-0.5 text-left leading-tight">
                   <span className="truncate font-semibold">Playbook</span>
-                  <span className="truncate text-xs">Nades & Server</span>
+                  <span className="truncate text-xs">Training & Matches</span>
                 </div>
               </Link>
             </SidebarMenuButton>

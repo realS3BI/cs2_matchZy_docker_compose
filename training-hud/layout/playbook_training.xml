@@ -1,0 +1,34 @@
+<root>
+    <styles><include src="s2r://panorama/styles/custom_game/playbook_training.vcss_c" /></styles>
+    <Panel class="training-screen" hittest="false">
+        <Panel id="training_panel" class="training-panel" hittest="true">
+            <Panel class="heading">
+                <Label class="title" text="Playbook" />
+                <Label id="training_breadcrumb" class="breadcrumb" text="{s:text}" />
+            </Panel>
+            <Panel class="rows">
+                <Button id="row_0" class="row"><Label id="row_0_text" text="{s:text}" /></Button>
+                <Button id="row_1" class="row"><Label id="row_1_text" text="{s:text}" /></Button>
+                <Button id="row_2" class="row"><Label id="row_2_text" text="{s:text}" /></Button>
+                <Button id="row_3" class="row"><Label id="row_3_text" text="{s:text}" /></Button>
+                <Button id="row_4" class="row"><Label id="row_4_text" text="{s:text}" /></Button>
+                <Button id="row_5" class="row"><Label id="row_5_text" text="{s:text}" /></Button>
+                <Button id="row_6" class="row"><Label id="row_6_text" text="{s:text}" /></Button>
+                <Button id="row_7" class="row"><Label id="row_7_text" text="{s:text}" /></Button>
+                <Button id="row_8" class="row"><Label id="row_8_text" text="{s:text}" /></Button>
+            </Panel>
+            <Panel class="navigation">
+                <Button id="training_back" class="small-button"><Label text="Zurück" /></Button>
+                <Button id="training_previous" class="small-button"><Label text="&lt;- Seite" /></Button>
+                <Label id="training_page" class="page-number" text="{s:text}" />
+                <Button id="training_next" class="small-button"><Label text="Seite -&gt;" /></Button>
+                <Button id="training_home" class="small-button"><Label text="Home" /></Button>
+            </Panel>
+            <Panel class="details">
+                <Label class="eyebrow" text="BESCHREIBUNG" />
+                <Label id="training_detail" class="description" text="{s:text}" />
+            </Panel>
+
+        </Panel>
+    </Panel>
+</root>

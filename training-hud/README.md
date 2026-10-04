@@ -14,7 +14,7 @@ Für die Playbook-Überschrift die aktuellen Assets auf Windows neu kompilieren.
 
 ## Stand und Voraussetzungen
 
-Quellen und Serveranbindung sind vorhanden. Die Workshop Tools wurden installiert und beide Panorama-Dateien erfolgreich kompiliert und in `matchzy_training_hud` abgelegt. Der Benutzer hat die lokale Anzeige im laufenden CS2-Client bestätigt. **Workshop-Auslieferung und Mehrspieler-Abnahme stehen noch aus.** Upload-Texte und Ablauf: [Workshop-Release](workshop-release.md).
+Die Quellen heißen `playbook_training.xml` und `playbook_training.css`; der Build verwendet das Addon `playbook_training_hud`. Plugin 2.4.0 benötigt diese neu kompilierten Assets. Die frühere lokale Anzeige wurde bereits im CS2-Client geprüft. Für die umbenannten Assets stehen der echte Windows-Build, die Workshop-Auslieferung und die Mehrspieler-Abnahme noch aus. [Umstieg bestehender Installationen](../docs/migration-playbook.md) und [Workshop-Release](workshop-release.md).
 
 - CounterStrikeSharp API **374** oder neuer, passendes Metamod und aktuelles CS2.
 - Zum Bauen: CS2 Workshop Tools mit `game/bin/win64/resourcecompiler.exe`.
@@ -36,7 +36,7 @@ Für einen reinen Compilerlauf:
 ./training-hud/build.ps1 -Cs2 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
 ```
 
-Das Skript kopiert ausschließlich die zwei Projektquellen in `content/csgo_addons/matchzy_training_hud`, ruft Valves Compiler auf und legt die kompilierten Dateien direkt im zuvor mit den Workshop Tools angelegten Addon `game/csgo_addons/matchzy_training_hud` sowie unter `training-hud/dist` ab. Es verändert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veröffentlicht nichts.
+Das Skript kopiert ausschließlich die zwei Projektquellen in `content/csgo_addons/playbook_training_hud`, ruft Valves Compiler auf und legt die kompilierten Dateien direkt im zuvor mit den Workshop Tools angelegten Addon `game/csgo_addons/playbook_training_hud` sowie unter `training-hud/dist` ab. Es verändert weder Tastaturbelegungen noch Dateien unter `game/csgo` und veröffentlicht nichts.
 
 Für einen lokalen Entwicklungstest installiert `hud.cmd` die beiden kompilierten Dateien aus `dist/panorama` unter den gleichen relativen Pfaden in `game/csgo/panorama` und prüft ihre SHA-256-Hashes. Anschließend CS2 für den Review aus der geöffneten Playbook-App starten oder für einen reinen Panel-Test normal über Steam. Der Workshop-Tools-Client läuft mit `-insecure` und kann keinem VAC-gesicherten Server beitreten. Zum Testen braucht der Server das aktuelle Plugin und aktiviertes Trainings-HUD in den Servereinstellungen von Playbook. Vor dem anschließenden Download-Test mit `hud.cmd -Mode live` die lokalen Testdateien sichern und entfernen, damit sie das Workshop-Addon nicht überdecken.
 
@@ -65,7 +65,7 @@ $cs2Path = 'D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive'
 ./training-hud/panel-source.ps1 status -Cs2 $cs2Path
 ```
 
-Die drei Zeilen sind Alternativen: `local` baut die aktuellen XML-/CSS-Quellen und installiert die beiden lokalen Overrides. Mit `-SkipBuild` werden stattdessen die bereits kompilierten Dateien unter `dist` verwendet. `live` entfernt ausschließlich diese beiden Overrides; vorhandene Dateien werden vorher unter `<CS2>/matchzy-hud-backups/<ID>` gesichert. `status` prüft nur die Dateien auf der Festplatte und funktioniert auch bei laufendem Spiel. Die installierte Workshop-Version wird nicht verändert.
+Die drei Zeilen sind Alternativen: `local` baut die aktuellen XML-/CSS-Quellen und installiert die beiden lokalen Overrides. Mit `-SkipBuild` werden stattdessen die bereits kompilierten Dateien unter `dist` verwendet. `live` entfernt ausschließlich diese beiden Overrides; vorhandene Dateien werden vorher unter `<CS2>/playbook-hud-backups/<ID>` gesichert. `status` prüft nur die Dateien auf der Festplatte und funktioniert auch bei laufendem Spiel. Die installierte Workshop-Version wird nicht verändert.
 
 Nach einem Wechsel CS2 normal über Steam starten. Das Skript beendet oder startet das Spiel nicht automatisch. Für `live` muss das veröffentlichte Workshop-Addon bereits vom Server bereitgestellt werden; das Entfernen lokaler Dateien allein lädt kein Addon herunter. Die Workshop-Auslieferung dieses Projekts ist noch nicht abgenommen.
 
@@ -90,7 +90,7 @@ Auswahl und Seitenwechsel laufen im Kreis. Hoch beim ersten Eintrag wählt den l
 
 Der erste Eintrag unter **Keybinds**, **Alle Keybinds in Konsole ausgeben**, schreibt ausschließlich zwei kopierbare Befehlszeilen in die Client-Konsole. Das geht auch direkt mit `css_training_binds`. Die erste Zeile enthält alle acht Panel-Binds, mit Semikolon getrennt. Der kurze Plugin-Befehl `css_tk` hält die gesamte Zeile unter 240 UTF-8-Bytes, damit sie in der Client-Konsole angezeigt werden kann. Dafür muss auch das Server-Plugin aktualisiert sein. Die zweite lautet `bind "n" "noclip"` und ist optional: `n` darf durch eine selbst gewählte, freie Taste ersetzt werden. Noclip benötigt `sv_cheats 1`. Jede gewünschte Zeile einzeln kopieren und ausführen.
 
-Alternativ [matchzy_training.cfg](matchzy_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec matchzy_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen; auch das Server-Plugin lädt keine lokale Spieler-CFG. Die optionale Noclip-Zeile ist in der Datei auskommentiert.
+Alternativ [playbook_training.cfg](playbook_training.cfg) nach `game/csgo/cfg` kopieren und einmal `exec playbook_training` in CS2 ausführen. Die CFG wird nicht automatisch geladen; auch das Server-Plugin lädt keine lokale Spieler-CFG. Die optionale Noclip-Zeile ist in der Datei auskommentiert.
 
 **Bisherige Belegungen wiederherstellen:** Vor dem Ausführen für jede betroffene Taste beispielsweise `bind "KP_0"` beziehungsweise `bind "n"` in der Konsole eingeben. Die angezeigten bisherigen Befehle als `bind "TASTE" "BISHERIGER BEFEHL"` in einer eigenen Datei `training_restore.cfg` unter `game/csgo/cfg` sichern. Für zuvor unbelegte Tasten dort `unbind "TASTE"` eintragen. Nach dem Training `exec training_restore` ausführen. Ohne vorherige Sicherung kennt das Plugin die überschriebenen Belegungen nicht; `unbind` allein stellt sie nicht wieder her.
 

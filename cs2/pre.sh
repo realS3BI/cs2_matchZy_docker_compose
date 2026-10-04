@@ -4,7 +4,7 @@
 # body MUST run in a subshell so that `set -e`, traps, and exit codes do not
 # leak into the parent entry.sh and abort the container start.
 
-_matchzy_bootstrap_main() (
+_playbook_bootstrap_main() (
   set -euo pipefail
 
   log() {
@@ -500,7 +500,7 @@ _matchzy_bootstrap_main() (
       addon_count=$((addon_count + 1))
     done
 
-    local hud_addon_id="${MATCHZY_TRAINING_HUD_ADDON_ID:-}"
+    local hud_addon_id="${PLAYBOOK_TRAINING_HUD_ADDON_ID:-}"
     [[ -z "$hud_addon_id" || "$hud_addon_id" =~ ^[0-9]+$ ]] || fail "Invalid training HUD workshop ID"
     [[ -n "$addons_value" || -n "$hud_addon_id" ]] || fail "Cannot write MultiAddonManager config without addon IDs"
 
@@ -663,15 +663,39 @@ _matchzy_bootstrap_main() (
       "$CSS_DIR/configs/plugins/MatchZy"
   }
 
-  install_matchzy_nades() {
+  install_playbook() {
     local mode="$1"
-    local source_file="/opt/matchzy-nades/MatchZyNades.dll"
-    local gamedata_file="/opt/matchzy-nades/playbook-nades.json"
-    local destination_dir="$CSS_DIR/plugins/MatchZyNades"
+    local source_file="/opt/playbook/Playbook.dll"
+    local gamedata_file="/opt/playbook/playbook-nades.json"
+    local destination_dir="$CSS_DIR/plugins/Playbook"
     [[ -f "$source_file" ]] || fail "Bundled Playbook plugin not found: $source_file"
     [[ -f "$gamedata_file" ]] || fail "Bundled Playbook grenade gamedata not found: $gamedata_file"
     mkdir -p "$destination_dir"
-    copy_file_atomic "$source_file" "$destination_dir/MatchZyNades.dll"
+    # Preserve per-player settings and favorites, then retire the old assembly
+    # outside CSS's plugin discovery path. Existing Playbook data wins on retry.
+    local legacy_dir="$CSS_DIR/plugins/MatchZyNades"
+    if [[ -d "$legacy_dir" ]]; then
+      if [[ -d "$legacy_dir/data" ]]; then
+        mkdir -p "$destination_dir/data" || fail "Cannot create Playbook data directory"
+        local legacy_file target_file migration_list
+        migration_list="$(mktemp)" || fail "Cannot prepare Playbook data migration"
+        find "$legacy_dir/data" -type f -print0 > "$migration_list" || fail "Cannot read previous Playbook data"
+        while IFS= read -r -d '' legacy_file; do
+          target_file="$destination_dir/data/${legacy_file#"$legacy_dir/data/"}"
+          if [[ ! -e "$target_file" && ! -L "$target_file" ]]; then
+            mkdir -p "$(dirname "$target_file")" || fail "Cannot create Playbook data directory"
+            cp -a "$legacy_file" "$target_file" || fail "Cannot migrate Playbook data: $legacy_file"
+          fi
+        done < "$migration_list"
+        rm -f "$migration_list"
+      fi
+      local archive_dir
+      mkdir -p "$CSS_DIR/playbook-migration" || fail "Cannot create Playbook migration archive"
+      archive_dir="$(mktemp -d "$CSS_DIR/playbook-migration/MatchZyNades.XXXXXX")" || fail "Cannot prepare Playbook migration archive"
+      mv "$legacy_dir" "$archive_dir/" || fail "Cannot archive previous Playbook plugin"
+      log "Migrated Playbook player data; previous plugin archived at $archive_dir"
+    fi
+    copy_file_atomic "$source_file" "$destination_dir/Playbook.dll"
     mkdir -p "$CSS_DIR/gamedata"
     copy_file_atomic "$gamedata_file" "$CSS_DIR/gamedata/playbook-nades.json"
     log "Installed bundled Playbook plugin (.nades menu)"
@@ -852,7 +876,7 @@ _matchzy_bootstrap_main() (
   local matchzy_chat_prefix="$(jq -er '.matchZyChatPrefix' "$SETTINGS_FILE")"
   local runtime_css_admins_file="/config-runtime/csharp-admins.json"
   local runtime_matchzy_admins_file="/config-runtime/matchzy-admins.json"
-  local runtime_matchzy_savednades_file="/config-runtime/matchzy-savednades.json"
+  local runtime_matchzy_savednades_file="/config-runtime/playbook-lineups.json"
 
   case "$server_mode" in
     matchzy)
@@ -917,10 +941,10 @@ _matchzy_bootstrap_main() (
     MULTIADDONMANAGER_ADDON_IDS+=("$fortnite_emotes_workshop_addon_id")
   fi
 
-  if [[ -n "${MATCHZY_TRAINING_HUD_ADDON_ID:-}" ]]; then
-    [[ "$MATCHZY_TRAINING_HUD_ADDON_ID" =~ ^[0-9]+$ ]] || fail "Invalid training HUD workshop ID"
+  if [[ -n "${PLAYBOOK_TRAINING_HUD_ADDON_ID:-}" ]]; then
+    [[ "$PLAYBOOK_TRAINING_HUD_ADDON_ID" =~ ^[0-9]+$ ]] || fail "Invalid training HUD workshop ID"
     NEED_MULTIADDONMANAGER=1
-    log "Configured training HUD client addon: $MATCHZY_TRAINING_HUD_ADDON_ID"
+    log "Configured training HUD client addon: $PLAYBOOK_TRAINING_HUD_ADDON_ID"
   fi
 
   if ((${#WORKSHOP_ADDON_IDS[@]} > 0)); then
@@ -1220,7 +1244,7 @@ _matchzy_bootstrap_main() (
 
   patch_gameinfo_for_metamod "$GAMEINFO_FILE"
   rm -rf "$CSS_DIR/plugins/MatchZyCoach" "$CSS_DIR/configs/plugins/MatchZyCoach"
-  install_matchzy_nades "$server_mode"
+  install_playbook "$server_mode"
 
   write_admin_files_from_runtime \
     "$runtime_css_admins_file" \
@@ -1350,7 +1374,7 @@ _matchzy_bootstrap_main() (
   log "Mod bootstrap complete"
 )
 
-if _matchzy_bootstrap_main; then
+if _playbook_bootstrap_main; then
   printf '[pre.sh] %s\n' "Hook finished successfully"
 else
   _rc=$?
@@ -1358,4 +1382,4 @@ else
   unset _rc
 fi
 
-unset -f _matchzy_bootstrap_main
+unset -f _playbook_bootstrap_main

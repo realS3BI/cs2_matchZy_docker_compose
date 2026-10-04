@@ -148,8 +148,8 @@ async function createHarness(t, entries = []) {
   const store = new FakeStore(entries);
   const service = new NadesSyncService({
     config: {
-      liveMatchZyNadesFile: join(dir, "cs2", "savednades.json"),
-      runtimeMatchZyNadesFile: join(dir, "runtime", "matchzy-savednades.json"),
+      liveNadesFile: join(dir, "cs2", "savednades.json"),
+      runtimeNadesFile: join(dir, "runtime", "playbook-lineups.json"),
       nadesSyncEnabled: true,
       nadesSyncIntervalMs: 10000
     },
@@ -220,7 +220,7 @@ test("poll imports external live file changes", async (t) => {
 
   assert.deepEqual(comparable(store.entries), [external]);
   assert.equal(store.actions.at(-1).status, "success");
-  assert.equal(service.status().lastDirection, "matchzy-to-panel");
+  assert.equal(service.status().lastDirection, "server-to-panel");
 });
 
 test("sync keeps lineup images when MatchZy updates the same nade", async (t) => {

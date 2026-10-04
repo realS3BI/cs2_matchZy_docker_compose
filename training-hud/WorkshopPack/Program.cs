@@ -5,8 +5,8 @@ if (args.Length != 2)
 
 // Deliberately package only the compiled client assets, never local configs or credentials.
 string[] paths = [
-    "panorama/layout/custom_game/matchzy_training.vxml_c",
-    "panorama/styles/custom_game/matchzy_training.vcss_c"
+    "panorama/layout/custom_game/playbook_training.vxml_c",
+    "panorama/styles/custom_game/playbook_training.vcss_c"
 ];
 var files = paths.ToDictionary(path => path, path => File.ReadAllBytes(Path.Combine(args[0], path)));
 if (files.Any(file => file.Value.Length == 0))

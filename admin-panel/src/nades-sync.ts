@@ -205,8 +205,8 @@ export class NadesSyncService {
   constructor({ config, store }) {
     this.config = config;
     this.store = store;
-    this.liveFile = config.liveMatchZyNadesFile;
-    this.runtimeFile = config.runtimeMatchZyNadesFile;
+    this.liveFile = config.liveNadesFile;
+    this.runtimeFile = config.runtimeNadesFile;
     this.matchZyConfigFile = config.liveMatchZyConfigFile || `${dirname(this.liveFile)}/config.cfg`;
     this.intervalMs = Number.isFinite(config.nadesSyncIntervalMs) && config.nadesSyncIntervalMs > 0
       ? config.nadesSyncIntervalMs
@@ -350,7 +350,7 @@ export class NadesSyncService {
     const entries = preservePanelMetadata(importedEntries, current);
     if (stableNades(entries) !== stableNades(current)) {
       await this.store.replaceNadesFromSync(entries, { source, hash, bytes });
-      this.lastDirection = "matchzy-to-panel";
+      this.lastDirection = "server-to-panel";
     }
     if (stableNades(entries) !== stableNades(importedEntries)) await this.writeFromMongoUnlocked(entries);
     else await this.writeMetadata(entries);
@@ -378,7 +378,7 @@ export class NadesSyncService {
     await this.writeMetadata(cleanEntries);
     this.lastWriteAt = new Date().toISOString();
     this.lastConfirmedAt = this.lastWriteAt;
-    this.lastDirection = "panel-to-matchzy";
+    this.lastDirection = "panel-to-server";
     await this.refreshFileState();
     this.lastError = "";
   }
@@ -407,7 +407,7 @@ export class NadesSyncService {
     if (stableNades(entries) !== stableNades(current)) {
       await this.store.replaceNadesFromSync(entries, { source: "grenade-capture" });
       await this.writeFromMongoUnlocked(entries);
-      this.lastDirection = "matchzy-to-panel";
+      this.lastDirection = "server-to-panel";
     }
     await this.writeMetadata(entries);
     await this.rememberCaptures(entries, receipts);
