@@ -36,7 +36,9 @@ window.checkDetail=async()=>{
  await waitFor(()=>document.querySelector('.lineup-hero-video')?.readyState>=2);
  const video=document.querySelector('.lineup-hero-video');
  assert(!video.hidden,'Video nicht im Vordergrund');
- assert(!document.querySelector('.official-photo-picker'),'Bilder trotz Videoansicht geöffnet');
+ assert([...document.querySelectorAll('.official-photo-picker button')].map(item=>item.textContent).join(',')==='Video,Ausrichtung,Standposition,Wirkung am Ziel,Vorderansicht','Medienauswahl oder Reihenfolge falsch');
+ assert(!document.querySelector('.official-view-switch'),'Alter Toggle noch sichtbar');
+ assert(!!document.querySelector('.official-lineup-sidebar .official-lineup-actions'),'Aktionen fehlen rechts');
  assert(!document.querySelector('.official-lineup-instructions').textContent.includes('Shift'),'Shift-Hinweis steht in der Anleitung');
  assert(video.autoplay&&video.loop&&!video.controls,'Autostart, Loop oder ausgeblendete Playbar fehlen');
  await waitFor(()=>!video.paused);
@@ -57,7 +59,8 @@ window.checkDetail=async()=>{
  shift('keyup');await waitFor(()=>!video.hidden&&!video.paused);
  alt('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
  alt('keyup');await waitFor(()=>!video.hidden&&!video.paused);
- button('Lineup').click();await waitFor(()=>document.querySelectorAll('.official-photo-picker button').length===4);
+ button('Vorderansicht').click();await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Vorderansicht');
+ button('Wirkung am Ziel').click();await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Wirkung am Ziel');
  button('Standposition').click();await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
  shift('keydown');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent.includes('Fadenkreuz-Zoom'));
  shift('keyup');await waitFor(()=>document.querySelector('.official-lineup-photo figcaption')?.textContent==='Standposition');
@@ -68,8 +71,8 @@ window.checkDetail=async()=>{
  document.querySelector('button:has(.sr-only)').click();await waitFor(()=>!document.querySelector('.crosshair-viewport'));
  assert(document.documentElement.scrollWidth<=innerWidth,'Horizontaler Überlauf');
  window.setRecording({official:false});await waitFor(()=>!document.querySelector('.official-lineup-detail'));
- assert(!document.querySelector('.official-view-switch'),'Neue Ansicht gilt für Entwürfe');
- window.setRecording({official:true});await waitFor(()=>document.querySelector('.official-view-switch'));
+ assert(!document.querySelector('.official-photo-picker'),'Neue Ansicht gilt für Entwürfe');
+ window.setRecording({official:true});await waitFor(()=>document.querySelector('.official-photo-picker'));
  return 'PASS: Video, Pausieren und Fortsetzen, Shift/Alt/Shift+Alt, Bildauswahl, Zoomdialog, Entwurfsgrenze und Layout';
 };
 window.checkRadarPreview=async(mode='to')=>{

@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowUp, ChevronsDown, ChevronsRight, CirclePause, Copy, Crosshair, Film, Footprints, Link2, MapPin, MoveRight, PersonStanding, Play, ScanFace, Target, Timer, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
-import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Badge } from "./ui/badge";
 import { ActionButton } from "./action-button";
 import { FavoriteButton } from "./nade-favorites";
@@ -71,38 +70,43 @@ export function ThrowFacts({ nade }) {
 }
 
 export function OfficialLineupDetail({ nade, map, back, onBack, management, children }) {
-  const [view, setView] = useState(nade.reviewMedia?.video ? "video" : "lineup");
-  const [photoSlot, setPhotoSlot] = useState("aim");
+  const [selectedSlot, setSelectedSlot] = useState(() => ["video", "aim", "position", "effect", "front"].find(slot => nade.reviewMedia?.[slot]) || "video");
   const [zoomOpen, setZoomOpen] = useState(false);
   const heldSlot = useHeldReviewSlot();
   const shortcutSlot = !zoomOpen && heldSlot && nade.reviewMedia?.[heldSlot] ? heldSlot : null;
-  const activeView = shortcutSlot ? "lineup" : view;
-  const photos = [
+  const activeSlot = shortcutSlot || selectedSlot;
+  const media = [
+    { slot: "video", title: "Video", Icon: Film },
     { slot: "aim", title: "Ausrichtung", Icon: Crosshair },
     { slot: "position", title: "Standposition", Icon: MapPin },
-    { slot: "front", title: "Vorderansicht", Icon: ScanFace },
     { slot: "effect", title: "Wirkung am Ziel", Icon: Target },
-  ].filter(photo => nade.reviewMedia?.[photo.slot]);
-  const selectedPhoto = photos.find(photo => photo.slot === (shortcutSlot || photoSlot)) || photos[0];
+    { slot: "front", title: "Vorderansicht", Icon: ScanFace },
+  ];
+  const selectedPhoto = media.find(item => item.slot === activeSlot);
   return <article className="playbook-page lineup-page official-lineup-detail">
     <header className="official-lineup-heading"><Link to={back} onClick={onBack} aria-label={`Zurück zu ${map.name}`}><ArrowLeft /></Link><h1>{map.name} · {nade.type === "Molly" ? "Molotov" : nade.type}: {nade.displayName || nade.name}</h1></header>
     <div className="official-lineup-layout">
+      <nav className="official-photo-picker" aria-label="Lineup-Medien auswählen">{media.map(({ slot, title, Icon }) => {
+        const thumbnail = slot === "video" ? nade.reviewMedia?.aim?.url : nade.reviewMedia?.[slot]?.url;
+        return <button key={slot} aria-pressed={activeSlot === slot} onClick={() => setSelectedSlot(slot)}>
+          {thumbnail ? <img src={thumbnail} alt="" loading="lazy" /> : <div className="official-media-thumbnail"><Icon aria-hidden="true" /></div>}
+          <span><Icon aria-hidden="true" />{title}</span>
+        </button>;
+      })}</nav>
       <div className="official-lineup-main">
         <div className="official-media-stage">
-          {nade.reviewMedia?.video && <LineupVideo key={nade.reviewMedia.video.url} src={nade.reviewMedia.video.url} poster={nade.reviewMedia?.aim?.url} active={activeView === "video"} keyboardEnabled={!zoomOpen} title={nade.displayName || nade.name} />}
-          {activeView === "video" && !nade.reviewMedia?.video && <p className="official-media-empty">Für dieses Lineup ist noch kein Video vorhanden.</p>}
-          {activeView === "lineup" && (selectedPhoto ? <figure className="official-lineup-photo">
+          {nade.reviewMedia?.video && <LineupVideo key={nade.reviewMedia.video.url} src={nade.reviewMedia.video.url} poster={nade.reviewMedia?.aim?.url} active={activeSlot === "video"} keyboardEnabled={!zoomOpen} title={nade.displayName || nade.name} />}
+          {activeSlot === "video" && !nade.reviewMedia?.video && <p className="official-media-empty">Für dieses Lineup ist noch kein Video vorhanden.</p>}
+          {activeSlot !== "video" && (nade.reviewMedia?.[activeSlot] && selectedPhoto ? <figure className="official-lineup-photo">
             <div className="official-photo-viewport"><img src={nade.reviewMedia[selectedPhoto.slot].url} alt={`${selectedPhoto.title}: ${nade.displayName || nade.name}`} style={{ transform: shortcutSlot === "aim" ? "scale(3)" : undefined }} /></div>
             <figcaption>{selectedPhoto.title}{shortcutSlot === "aim" && " · Fadenkreuz-Zoom"}</figcaption>
             {selectedPhoto.slot === "aim" && <Button className="official-photo-zoom" variant="secondary" size="sm" onClick={() => setZoomOpen(true)}><ZoomIn />Fadenkreuz-Zoom</Button>}
-          </figure> : <p className="official-media-empty">Für dieses Lineup sind noch keine Bilder vorhanden.</p>)}
+          </figure> : <p className="official-media-empty">Für diese Ansicht ist noch kein Bild vorhanden.</p>)}
         </div>
-        <div className="official-lineup-actions"><FavoriteButton nade={nade} /><ActionButton size="sm" variant="secondary" icon={Link2} onClick={() => copyText(window.location.href)} successLabel="Link kopiert">Link kopieren</ActionButton><ActionButton size="sm" variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton></div>
-        {activeView === "lineup" && photos.length > 0 && <div className="official-photo-picker" role="group" aria-label="Lineup-Bilder auswählen">{photos.map(({ slot, title, Icon }) => <button key={slot} aria-pressed={selectedPhoto?.slot === slot} onClick={() => setPhotoSlot(slot)}><img src={nade.reviewMedia[slot].url} alt="" loading="lazy" /><span><Icon aria-hidden="true" />{title}</span></button>)}</div>}
         {nade.lineupImages?.length > 0 && <section className="lineup-images" aria-label="Weitere Bilder zur Anleitung">{nade.lineupImages.map(image => <figure key={image.key || image.url}><img src={image.url} alt={image.name || `Ausrichtung für ${nade.displayName || nade.name}`} loading="lazy" /><figcaption>{image.name}</figcaption></figure>)}</section>}
       </div>
       <aside className="official-lineup-sidebar" aria-label="Ansicht und Wurfanleitung">
-        <ToggleGroup type="single" variant="outline" value={activeView} onValueChange={value => { if (value) setView(value); }} className="official-view-switch" aria-label="Video oder Lineup anzeigen"><ToggleGroupItem value="video"><Film />Video</ToggleGroupItem><ToggleGroupItem value="lineup"><Crosshair />Lineup</ToggleGroupItem></ToggleGroup>
+        <div className="official-lineup-actions"><FavoriteButton nade={nade} /><ActionButton size="sm" variant="secondary" icon={Link2} onClick={() => copyText(window.location.href)} successLabel="Link kopiert">Link kopieren</ActionButton><ActionButton size="sm" variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton></div>
         <ThrowFacts nade={nade} />
         <div className="official-lineup-labels"><Badge variant="success">Offiziell</Badge>{nade.mustKnow && <Badge>Must Know</Badge>}</div>
         <section className="official-lineup-instructions" aria-label="Anleitung"><h2><GrenadeIcon type={nade.type} />So wirfst du dieses Lineup</h2><p className="official-lineup-route">{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Zielposition"}</p>{nade.desc && <p className="throw-description">{nade.desc}</p>}</section>
