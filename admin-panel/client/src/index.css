@@ -1326,7 +1326,9 @@ button:not(:disabled),
 .official-lineup-route { font-size: 0.8rem; color: var(--muted-foreground); }
 .throw-description { white-space: pre-wrap; font-size: 0.85rem; line-height: 1.65; }
 .official-photo-picker { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
-.official-media-thumbnail { display: grid; place-items: center; aspect-ratio: 16 / 9; background: var(--console); color: var(--muted-foreground); }
+.official-media-thumbnail { position: relative; overflow: hidden; display: grid; place-items: center; aspect-ratio: 16 / 9; background: var(--console); color: var(--muted-foreground); }
+.official-media-shortcut { position: absolute; right: 0.25rem; bottom: 0.25rem; pointer-events: none; }
+.official-media-shortcut [data-slot="kbd"] { color: var(--foreground); background: var(--card); box-shadow: 0 1px 3px #0008; }
 .official-media-thumbnail > svg { width: 1.5rem; height: 1.5rem; }
 .official-photo-picker button { min-width: 0; overflow: hidden; border: 2px solid transparent; border-radius: 0.35rem; background: var(--secondary); cursor: pointer; text-align: left; }
 .official-photo-picker button[aria-pressed=true] { border-color: var(--primary); }
@@ -1336,18 +1338,21 @@ button:not(:disabled),
 .official-photo-picker svg { width: 0.9rem; height: 0.9rem; flex: none; }
 .official-lineup-management > summary { cursor: pointer; font-size: 0.8rem; color: var(--muted-foreground); padding-block: 0.75rem; }
 .official-lineup-management > div { display: grid; gap: 1rem; padding-top: 0.5rem; }
-@container workspace (max-width: 1100px) {
-  .official-lineup-layout { grid-template-columns: 7.5rem minmax(0, 1fr) 16rem; gap: 1rem; }
+/* Keep the media wide once the navigation and instruction columns compete for space. */
+@container workspace (max-width: 1300px) {
+  .official-lineup-layout { grid-template-columns: minmax(0, 1fr) 19rem; grid-template-rows: min-content 1fr; gap: 1rem 1.5rem; }
+  .official-lineup-main { grid-column: 1; grid-row: 1; }
+  .official-photo-picker { grid-column: 1; grid-row: 2; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .official-lineup-sidebar { grid-column: 2; grid-row: 1 / 3; }
 }
 @container workspace (max-width: 850px) {
-  .official-lineup-layout { grid-template-columns: 7.5rem minmax(0, 1fr); }
-  .official-photo-picker { grid-row: 1 / 3; }
-  .official-lineup-sidebar { grid-column: 2; }
+  .official-lineup-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .official-lineup-sidebar { grid-column: 1; grid-row: 3; }
   .official-throw-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @container workspace (max-width: 520px) {
-  .official-lineup-layout { grid-template-columns: minmax(0, 1fr); }
-  .official-photo-picker { grid-row: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .official-lineup-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .official-photo-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .official-lineup-sidebar { grid-column: 1; }
   .official-photo-picker span { font-size: 0.6875rem; padding: 0.35rem; }
   .official-photo-zoom { top: 0.35rem; right: 0.35rem; }

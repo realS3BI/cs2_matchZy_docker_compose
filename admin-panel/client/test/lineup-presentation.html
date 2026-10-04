@@ -29,14 +29,14 @@ function App(){const [nades,setNades]=useState(entries);window.setRecording=patc
 createRoot(document.getElementById('root')).render(React.createElement(App));
 const waitFor=async (fn,attempts=120)=>{for(let i=0;i<attempts;i++){if(fn())return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('Zeitüberschreitung: '+document.body.innerText);};
 const assert=(value,message)=>{if(!value)throw Error(message);};
-const button=text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text);
+const button=text=>[...document.querySelectorAll('button')].find(button=>{const copy=button.cloneNode(true);copy.querySelector('[data-slot="kbd-group"]')?.remove();return copy.textContent.trim()===text;});
 const shift=type=>window.dispatchEvent(new KeyboardEvent(type,{key:'Shift',bubbles:true}));
 const alt=type=>window.dispatchEvent(new KeyboardEvent(type,{key:'Alt',bubbles:true,cancelable:true}));
 window.checkDetail=async()=>{
  await waitFor(()=>document.querySelector('.lineup-hero-video')?.readyState>=2);
  const video=document.querySelector('.lineup-hero-video');
  assert(!video.hidden,'Video nicht im Vordergrund');
- assert([...document.querySelectorAll('.official-photo-picker button')].map(item=>item.textContent).join(',')==='Video,Ausrichtung,Standposition,Wirkung am Ziel,Vorderansicht','Medienauswahl oder Reihenfolge falsch');
+ assert([...document.querySelectorAll('.official-photo-picker button')].map(item=>item.querySelector(':scope > span').textContent).join(',')==='Video,Ausrichtung,Standposition,Wirkung am Ziel,Vorderansicht','Medienauswahl oder Reihenfolge falsch');
  assert(!document.querySelector('.official-view-switch'),'Alter Toggle noch sichtbar');
  assert(!!document.querySelector('.official-lineup-sidebar .official-lineup-actions'),'Aktionen fehlen rechts');
  assert(!document.querySelector('.official-lineup-instructions').textContent.includes('Shift'),'Shift-Hinweis steht in der Anleitung');

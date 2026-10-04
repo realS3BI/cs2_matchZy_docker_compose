@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowUp, ChevronsDown, ChevronsRight, CirclePause, Copy, Cro
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Badge } from "./ui/badge";
+import { Kbd, KbdGroup } from "./ui/kbd";
 import { ActionButton } from "./action-button";
 import { FavoriteButton } from "./nade-favorites";
 import { GrenadeIcon, TeamIcon, ThrowClickIcon } from "./nade-icons";
@@ -76,20 +77,22 @@ export function OfficialLineupDetail({ nade, map, back, onBack, management, chil
   const shortcutSlot = !zoomOpen && heldSlot && nade.reviewMedia?.[heldSlot] ? heldSlot : null;
   const activeSlot = shortcutSlot || selectedSlot;
   const media = [
-    { slot: "video", title: "Video", Icon: Film },
-    { slot: "aim", title: "Ausrichtung", Icon: Crosshair },
-    { slot: "position", title: "Standposition", Icon: MapPin },
-    { slot: "effect", title: "Wirkung am Ziel", Icon: Target },
-    { slot: "front", title: "Vorderansicht", Icon: ScanFace },
+    { slot: "video", title: "Video", Icon: Film, shortcut: [] },
+    { slot: "aim", title: "Ausrichtung", Icon: Crosshair, shortcut: ["Shift"] },
+    { slot: "position", title: "Standposition", Icon: MapPin, shortcut: ["Alt"] },
+    { slot: "effect", title: "Wirkung am Ziel", Icon: Target, shortcut: ["Shift", "Alt"] },
+    { slot: "front", title: "Vorderansicht", Icon: ScanFace, shortcut: [] },
   ];
   const selectedPhoto = media.find(item => item.slot === activeSlot);
   return <article className="playbook-page lineup-page official-lineup-detail">
     <header className="official-lineup-heading"><Link to={back} onClick={onBack} aria-label={`Zurück zu ${map.name}`}><ArrowLeft /></Link><h1>{map.name} · {nade.type === "Molly" ? "Molotov" : nade.type}: {nade.displayName || nade.name}</h1></header>
     <div className="official-lineup-layout">
-      <nav className="official-photo-picker" aria-label="Lineup-Medien auswählen">{media.map(({ slot, title, Icon }) => {
+      <nav className="official-photo-picker" aria-label="Lineup-Medien auswählen">{media.map(({ slot, title, Icon, shortcut }) => {
         const thumbnail = slot === "video" ? nade.reviewMedia?.aim?.url : nade.reviewMedia?.[slot]?.url;
-        return <button key={slot} aria-pressed={activeSlot === slot} onClick={() => setSelectedSlot(slot)}>
-          {thumbnail ? <img src={thumbnail} alt="" loading="lazy" /> : <div className="official-media-thumbnail"><Icon aria-hidden="true" /></div>}
+        return <button key={slot} title={shortcut.length && nade.reviewMedia?.[slot] ? `${title} · ${shortcut.join(" + ")} gedrückt halten` : title} aria-keyshortcuts={shortcut.length && nade.reviewMedia?.[slot] ? shortcut.join("+") : undefined} aria-pressed={activeSlot === slot} onClick={() => setSelectedSlot(slot)}>
+          <div className="official-media-thumbnail">{thumbnail ? <img src={thumbnail} alt="" loading="lazy" style={slot === "aim" ? { transform: "scale(3)", transformOrigin: "center" } : undefined} /> : <Icon aria-hidden="true" />}
+            {shortcut.length > 0 && nade.reviewMedia?.[slot] && <KbdGroup className="official-media-shortcut" aria-hidden="true">{shortcut.map(key => <Kbd key={key}>{key}</Kbd>)}</KbdGroup>}
+          </div>
           <span><Icon aria-hidden="true" />{title}</span>
         </button>;
       })}</nav>
