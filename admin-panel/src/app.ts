@@ -55,7 +55,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
 export function createApp({ config, store, compose, nadesSync, restartScheduler = null, rcon = executeRcon, steamVerifier = undefined }) {
   async function readMapInventory() {
     try {
-      const parsed = JSON.parse(await readFile(join(dirname(config.liveMatchZyNadesFile), "savednades.maps.json"), "utf8"));
+      const parsed = JSON.parse(await readFile(join(dirname(config.liveNadesFile), "savednades.maps.json"), "utf8"));
       return Array.isArray(parsed) ? parsed : null;
     } catch { return null; }
   }

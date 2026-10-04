@@ -224,7 +224,7 @@ export class Store {
       { $set: { entries: cleanEntries, updatedAt: new Date() } },
       { upsert: true }
     );
-    await this.logAction("nades_sync", "success", "Nades imported from MatchZy savednades.json", details);
+    await this.logAction("nades_sync", "success", "Lineups vom Spielserver übernommen", details);
     this.nadeEvents.publish(cleanEntries);
     return cleanEntries;
   }

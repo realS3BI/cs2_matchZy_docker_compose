@@ -17,13 +17,13 @@ Playbook ist die Website und das eigene Server-Plugin für die Granaten-Biblioth
 | Wurfhistorie, Colored Smokes | Noch nicht implementiert, ausgeblendet bzw. gesperrt | MatchZy in Practice |
 | Ready, Matchstart, Pausen, Knife, Veto, Demos, Statistiken | Nicht verfügbar | MatchZy |
 
-Playbook erzeugt Rethrow-Projektile über die CounterStrikeSharp-Entity-API, entsprechend [MatchZys Fallback zur Projektilerzeugung](https://github.com/shobhit-pathak/MatchZy/blob/dev/GrenadeThrownData.cs). Der Nades-Modus ruft keine fehlenden MatchZy-Werkzeuge auf. Im Scrim-Modus bleibt MatchZy als externes Plugin installiert.
+Playbook erzeugt Smoke, HE, Molotov/Incendiary und Decoy über die jeweiligen nativen Engine-Funktionen; Flashbangs erhalten einen typisierten Spawn. Die Signaturen liegen in `server-plugin/gamedata/playbook-nades.json`. Der Nades-Modus ruft keine fehlenden MatchZy-Werkzeuge auf. Im Scrim-Modus bleibt MatchZy als externes Plugin installiert.
 
 ## Befehle im Nades-Modus
 
 `.rethrow`, `.rt` und `css_rethrow` wiederholen die eigene zuletzt geworfene Granate. Im `.nades`-Panel liegt dieselbe Aktion unter Trainingswerkzeuge → Letzten Wurf wiederholen. Abwurfposition, Geschwindigkeit, Rotation und Granatentyp werden vom echten Projektil gespeichert, einschließlich der Unterscheidung zwischen Molotov und CT-Brandgranate. Der Spieler bleibt an seiner aktuellen Position und kann die Wirkung von dort beobachten.
 
-Ohne vorherigen Wurf erscheint ein Hinweis. Disconnect und Mapwechsel löschen den gespeicherten Wurf. Wiederholungen ersetzen ihn nicht und zählen nicht als neue Aufnahme oder Flugzeitmessung. Im eigenständigen Nades-Modus haben die erzeugten Projektile keinen Spieler als Werfer, damit ihre Explosion keine parallele Aufnahme abschließt. Ihr Schaden wird daher keinem Spieler zugeordnet.
+Ohne vorherigen Wurf erscheint ein Hinweis. Disconnect und Mapwechsel löschen den gespeicherten Wurf. Wiederholungen ersetzen ihn nicht und zählen nicht als neue Aufnahme oder Flugzeitmessung. Die Projektile behalten den Spieler als Owner und Werfer. Wiederholte Würfe sind im Aufnahme-Tracker gesondert markiert und lösen keine neue Aufnahme aus.
 
 Der Nades-Modus startet direkt eine 60-Minuten-Trainingsrunde. Automatisches Online-/Offline-Warmup, Freezezeit und Map-Zeitlimit sind ausgeschaltet. Ignorierte Siegbedingungen verhindern automatische Rundenenden auch nach Ablauf der Rundenzeit. Ab Plugin **2.3.13** bleibt `mp_maxrounds` auf einem positiven Wert von 1000: Mit `0` zeigte der Competitive-Startablauf beim ersten Spielerbeitritt „Game Over“ bei 0:0 und wechselte in die Intermission. Die Trainingsrunde bleibt durch ignorierte Siegbedingungen trotzdem ununterbrochen. Ein später beitretender Spieler löst keinen Neustart für die anderen aus. Beim Mapstart werden die Einstellungen im nächsten World-Update angewendet und nach dem Laden der Map-Konfiguration erneut gesetzt. Ein noch aktives Warmup wird während dieser Initialisierung beendet, nicht erst beim Spawn eines Spielers. Ein Plugin-Hot-Reload startet die laufende Runde nicht neu.
 
@@ -69,7 +69,7 @@ Die bestehenden festen `css_training_*`- und `css_tk`-Binds bleiben gültig. Das
 
 Website, Seitentitel, Plugin-Anzeigename, HUD und Workshop-Texte heißen Playbook. Der gemeinsame Chat-Präfix ist standardmäßig `[{Green}Playbook{Default}]`; eigene Präfixe gelten für Playbook und MatchZy. Im MatchZy-Modus liest Playbook den tatsächlich verwendeten MatchZy-Präfix. Nur die alten ausgelieferten Standardwerte für Servername und Präfix werden migriert.
 
-`MatchZyNades.dll`, der Compose-Projektname, die HUD-Assetpfade und `cfg/MatchZy/savednades.json` bleiben kompatible technische Namen. Damit bleiben bestehende Volumes, Workshop-Assets, Binds und gespeicherte Daten zugeordnet. Favoriten verwenden weiterhin Steam-ID sowie Owner, Map und internen Lineup-Namen. Es gibt keine Umbenennung von Nutzerinhalten.
+Das eigene Plugin heißt ab Version 2.4.0 `Playbook.dll`, neue Compose-Projekte heißen `playbook`, und das HUD lädt `playbook_training.xml`. Vorhandene Installationen benötigen die [Migration](migration-playbook.md) und aktualisierte Client-Assets. `cfg/MatchZy/savednades.json` bleibt die gemeinsame Bibliothek beider Modi. Favoriten verwenden weiterhin Steam-ID sowie Owner, Map und internen Lineup-Namen. Nutzerinhalte werden nicht umbenannt.
 
 ## Prüfen und ausrollen
 

@@ -41,7 +41,7 @@ export async function writeAdminRuntimeFiles(config, admins) {
 export async function writeServerRuntimeFiles(config, nadesSync, settings, admins, nades) {
   await mkdir(dirname(config.runtimeSettingsFile), { recursive: true });
   await writeAdminRuntimeFiles(config, admins);
-  await writeJsonFile(config.runtimeMatchZyNadesFile, nadesToMatchZySavedNadesConfig(nades));
+  await writeJsonFile(config.runtimeNadesFile, nadesToMatchZySavedNadesConfig(nades));
   await nadesSync?.writeFromMongo(nades);
   await writeJsonFile(config.runtimeSettingsFile, normalizeSettings(settings));
   await writeJsonFile(`${dirname(config.runtimeSettingsFile)}/map-catalog.json`, BUILT_IN_MAPS.map(m => ({ mapName: m.mapName, title: m.name, category: m.category })));

@@ -1,4 +1,4 @@
-# Playbook im Spiel (2.1.0)
+# Playbook im Spiel
 
 Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und vier Beschreibungszeilen über die volle Breite. Längere Texte werden mit Auslassungspunkten gekürzt. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
 
@@ -161,7 +161,7 @@ Dashboard- und CS2-Image neu bauen und deployen. Ein Ingame-Test mit mindestens 
 ## Prüfen
 
 ```sh
-dotnet test nades-plugin/MatchZyNades.Tests/MatchZyNades.Tests.csproj --configuration Release
+dotnet test server-plugin/Playbook.Tests/Playbook.Tests.csproj --configuration Release
 docker build -f cs2/Dockerfile --target nades-tests .
 ```
 

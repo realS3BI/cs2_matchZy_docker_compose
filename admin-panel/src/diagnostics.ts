@@ -27,7 +27,7 @@ function parseProbeOutput(output = "") {
     const [kind, key, value = ""] = line.split("\t");
     if (kind === "FILE" && key) files[key] = value === "1";
     if (kind === "VERSION" && key) versions[key] = value;
-    if (kind === "RUNTIME" && key === "matchZyNades") {
+    if (kind === "RUNTIME" && key === "playbookPlugin") {
       try {
         const data = JSON.parse(value);
         if (data && typeof data === "object" && !Array.isArray(data)) {
@@ -45,9 +45,9 @@ function parseProbeOutput(output = "") {
 
 function nadesMenuStatus({ files, runtime, settings, service, container, probe, cssReady, logs }) {
   const expected = ["matchzy", "nades"].includes(settings.serverMode);
-  const installed = Boolean(files.matchZyNades);
-  const bundled = Boolean(files.matchZyNadesBundled);
-  const heartbeat = runtime.matchZyNades;
+  const installed = Boolean(files.playbookPlugin);
+  const bundled = Boolean(files.playbookPluginBundled);
+  const heartbeat = runtime.playbookPlugin;
   const updated = Date.parse(heartbeat?.updatedAt);
   const loaded = Date.parse(heartbeat?.loadedAt);
   const started = Date.parse(container?.startedAt);
@@ -55,8 +55,8 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
   const current = Number.isFinite(started) && loaded >= started && updated >= loaded;
   const fresh = current && age >= -5000 && age <= 30000 &&
     typeof heartbeat?.practice === "boolean" && typeof heartbeat?.version === "string";
-  const loadFailure = lastPluginLog(logs, "failed to load plugin|could not load plugin", "matchzynades");
-  const loadSuccess = Math.max(lastPluginLog(logs, "finished loading plugin", "matchzynades"),
+  const loadFailure = lastPluginLog(logs, "failed to load plugin|could not load plugin", "playbook");
+  const loadSuccess = Math.max(lastPluginLog(logs, "finished loading plugin", "playbook"),
     lastIndexOfAny(logs, ["nade training menu loaded"]), lastPluginLog(logs, "matchzy nades \\S+", "loaded"), lastPluginLog(logs, "playbook \\S+", "loaded"));
   let state: string;
   let status: string;
@@ -68,7 +68,7 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
   } else if (!installed) {
     state = expected ? "missing" : "inactive"; status = expected ? "fail" : "pass";
     detail = !expected ? "Automatically installed with MatchZy and Nades modes. Select one of these modes and Apply & restart."
-      : bundled ? "MatchZyNades.dll is missing from the plugin folder. Apply & restart to install the bundled menu."
+      : bundled ? "Playbook.dll is missing from the plugin folder. Apply & restart to install the bundled menu."
       : "This CS2 image does not contain the menu plugin. Rebuild and redeploy the stack; a container restart alone cannot add it.";
   } else if (!cssReady) {
     state = "blocked"; status = "fail"; detail = "The plugin is installed, but CounterStrikeSharp cannot start. Check the framework errors in Diagnostics.";
@@ -80,7 +80,7 @@ function nadesMenuStatus({ files, runtime, settings, service, container, probe, 
   } else if (current && heartbeat?.state === "unloaded") {
     state = "unloaded"; status = "fail"; detail = "The plugin reported that it was unloaded. Apply & restart, then check Diagnostics.";
   } else if (loadFailure > loadSuccess) {
-    state = "failed"; status = "fail"; detail = "CounterStrikeSharp reported a MatchZyNades load failure. Check Docker logs for the plugin error and verify CounterStrikeSharp API 374 or newer is installed.";
+    state = "failed"; status = "fail"; detail = "CounterStrikeSharp reported a Playbook load failure. Check Docker logs for the plugin error and verify CounterStrikeSharp API 374 or newer is installed.";
   } else {
     state = "unconfirmed"; status = "warn";
     detail = "The DLL is installed, but there is no recent confirmation from this server start. Check the load logs in Diagnostics; rebuild the stack if it still uses plugin 1.0.0.";
@@ -98,7 +98,7 @@ function lastIndexOfAny(text, needles) {
 }
 
 function lastPluginLog(text, verbs, name) {
-  // A word boundary prevents MatchZyNades from matching MatchZy.
+  // Match complete plugin names, not prefixes of other assemblies.
   const matches = [...text.matchAll(new RegExp(`(?:${verbs})\\s+["']?${name}\\b`, "gi"))];
   return matches.at(-1)?.index ?? -1;
 }
@@ -233,7 +233,7 @@ export function buildDiagnostics({ service, container, probe, logs = "", desired
           ? "The host rejected CounterStrikeSharp because its native module requested an executable stack. Rebuild the CS2 image to apply the compatibility patch."
           : "Native loader or API assembly is missing."
     ),
-    ...(nadeMenu.expected ? [check("matchzy-nades", "Playbook Ingame-Panel", nadeMenu.status, nadeMenu.detail)] : []),
+    ...(nadeMenu.expected ? [check("playbook-plugin", "Playbook Ingame-Panel", nadeMenu.status, nadeMenu.detail)] : []),
     modeCheck
   ];
 

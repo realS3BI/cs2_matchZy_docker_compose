@@ -134,7 +134,7 @@ test("restart writes the saved server mode before restarting CS2", async () => {
     runtimeSettingsFile: join(runtimeDir, "settings.json"),
     runtimeAdminsFile: join(runtimeDir, "csharp-admins.json"),
     runtimeMatchZyAdminsFile: join(runtimeDir, "matchzy-admins.json"),
-    runtimeMatchZyNadesFile: join(runtimeDir, "matchzy-savednades.json")
+    runtimeNadesFile: join(runtimeDir, "playbook-lineups.json")
   };
   let runtimeModeAtRestart = "";
   let runtimeVacAtRestart = true;
@@ -179,7 +179,7 @@ test("restart writes the saved server mode before restarting CS2", async () => {
 test("applying either VAC mode publishes the setting before recreating the server", async (t) => {
   const runtimeDir = await mkdtemp(join(tmpdir(), "playbook-vac-apply-"));
   t.after(() => rm(runtimeDir, { recursive: true, force: true }));
-  const config = { sessionSecret: "test-secret", runtimeSettingsFile: join(runtimeDir, "settings.json"), runtimeAdminsFile: join(runtimeDir, "admins.json"), runtimeMatchZyAdminsFile: join(runtimeDir, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(runtimeDir, "savednades.json") };
+  const config = { sessionSecret: "test-secret", runtimeSettingsFile: join(runtimeDir, "settings.json"), runtimeAdminsFile: join(runtimeDir, "admins.json"), runtimeMatchZyAdminsFile: join(runtimeDir, "matchzy-admins.json"), runtimeNadesFile: join(runtimeDir, "savednades.json") };
   let saved = normalizeSettings({ steamToken: "token", rconPassword: "secret" });
   const applied = [];
   const app = createApp({ config, store: {
@@ -218,7 +218,7 @@ test("live map controls use applied credentials, validate input and preserve sav
   const actions = [];
   let fail = false;
   const app = createApp({
-    config: { password: "test-password", sessionSecret: "secret", runtimeSettingsFile, liveMatchZyNadesFile: join(runtimeDir, "savednades.json"), serviceName: "cs2" },
+    config: { password: "test-password", sessionSecret: "secret", runtimeSettingsFile, liveNadesFile: join(runtimeDir, "savednades.json"), serviceName: "cs2" },
     store: { logAction: async (...args) => actions.push(args) },
     compose: {},
     nadesSync: null,

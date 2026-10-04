@@ -12,7 +12,7 @@ test("runtime files use the typed JSON settings contract", async (t) => {
     runtimeSettingsFile: join(directory, "settings.json"),
     runtimeAdminsFile: join(directory, "csharp-admins.json"),
     runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"),
-    runtimeMatchZyNadesFile: join(directory, "matchzy-savednades.json")
+    runtimeNadesFile: join(directory, "playbook-lineups.json")
   };
   let synchronizedNades: any[] | null = null;
 
@@ -40,7 +40,7 @@ test("runtime files use the typed JSON settings contract", async (t) => {
 test("runtime publication persists both VAC modes as booleans", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "playbook-vac-runtime-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const config = { runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeMatchZyNadesFile: join(directory, "savednades.json") };
+  const config = { runtimeSettingsFile: join(directory, "settings.json"), runtimeAdminsFile: join(directory, "admins.json"), runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"), runtimeNadesFile: join(directory, "savednades.json") };
   for (const vacEnabled of [false, true]) {
     await writeServerRuntimeFiles(config, { writeFromMongo: async () => undefined }, { vacEnabled }, [], []);
     assert.equal(JSON.parse(await readFile(config.runtimeSettingsFile, "utf8")).vacEnabled, vacEnabled);

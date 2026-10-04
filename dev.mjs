@@ -13,7 +13,7 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--help" || arg === "-h") {
-      console.log(`Lokale Entwicklung mit MongoDB, API und Vite.
+      console.log(`Playbook lokal entwickeln mit MongoDB, API und Vite.
 
   ./dev.sh [--url http://localhost:5173] [--admin STEAM64_ID]
   node dev.mjs [--url http://localhost:5173] [--admin STEAM64_ID]
@@ -21,7 +21,8 @@ async function main() {
 
 Voraussetzungen: Node.js ab 22, Docker mit Compose ab 2.22.
 Die Einstellungen stehen in .env.development. Strg+C stoppt die Container;
-die Entwicklungsdaten bleiben für den nächsten Start erhalten.`);
+die Entwicklungsdaten bleiben für den nächsten Start erhalten.
+COMPOSE_PROJECT_NAME überschreibt den Standard playbook-dev.`);
       return;
     }
     if (!["--url", "--admin"].includes(arg) || !args[i + 1] || args[i + 1].startsWith("--")) {
@@ -70,7 +71,7 @@ die Entwicklungsdaten bleiben für den nächsten Start erhalten.`);
   if (!admin) console.log("Ohne ADMIN_PANEL_ADMIN_STEAM_ID erhält eine neue Steam-Anmeldung die Rolle Player.");
   console.log("Strg+C stoppt die Container. Die lokalen Daten bleiben erhalten.");
 
-  const child = spawn("docker", ["compose", "--project-name", "cs2-matchzy-dev", "--env-file", envFile, "-f", "docker-compose.dev.yml", "up", "--build", "--watch", "--attach", "api", "--attach", "web"], {
+  const child = spawn("docker", ["compose", "--project-name", process.env.COMPOSE_PROJECT_NAME || "playbook-dev", "--env-file", envFile, "-f", "docker-compose.dev.yml", "up", "--build", "--watch", "--attach", "api", "--attach", "web"], {
     stdio: "inherit",
     env: {
       ...process.env,

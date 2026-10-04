@@ -17,15 +17,15 @@ try {
     foreach ($part in @('layout', 'styles')) {
         New-Item -ItemType Directory -Path (Join-Path $fixture $part) | Out-Null
     }
-    'test-layout' | Set-Content -LiteralPath (Join-Path $fixture 'layout/matchzy_training.xml')
-    'test-styles' | Set-Content -LiteralPath (Join-Path $fixture 'styles/matchzy_training.css')
+    'test-layout' | Set-Content -LiteralPath (Join-Path $fixture 'layout/playbook_training.xml')
+    'test-styles' | Set-Content -LiteralPath (Join-Path $fixture 'styles/playbook_training.css')
     @'
 param([string]$Cs2)
 $global:ReleaseTestBuilds++
 foreach ($part in @(@('layout', 'xml', 'vxml_c'), @('styles', 'css', 'vcss_c'))) {
     $target = Join-Path $PSScriptRoot "dist/panorama/$($part[0])/custom_game"
     New-Item -ItemType Directory -Force -Path $target | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "$($part[0])/matchzy_training.$($part[1])") -Destination (Join-Path $target "matchzy_training.$($part[2])") -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "$($part[0])/playbook_training.$($part[1])") -Destination (Join-Path $target "playbook_training.$($part[2])") -Force
 }
 '@ | Set-Content -LiteralPath (Join-Path $fixture 'build.ps1')
     @'
@@ -81,7 +81,7 @@ Write-Output $global:ReleaseTestSteamOutput
     Assert ((Get-Content -LiteralPath (Join-Path $fixture 'dist/release.json') -Raw) -eq $publishedProof) 'Eine reine Prüfung darf die Metadaten des letzten Releases nicht überschreiben.'
 
     $uploads = $global:ReleaseTestUploads
-    $source = Join-Path $fixture 'layout/matchzy_training.xml'
+    $source = Join-Path $fixture 'layout/playbook_training.xml'
     $original = [IO.File]::ReadAllBytes($source)
     'changed-layout' | Set-Content -LiteralPath $source
     Expect-Failure { & $script @parameters -Publish -SkipBuild } 'Quellen.*geändert'
@@ -89,7 +89,7 @@ Write-Output $global:ReleaseTestSteamOutput
     $global:ReleaseTestCommit = 'new-commit'
     Expect-Failure { & $script @parameters -Publish -SkipBuild } 'Commit.*geändert'
     $global:ReleaseTestCommit = 'test-commit'
-    $asset = Join-Path $fixture 'dist/panorama/styles/custom_game/matchzy_training.vcss_c'
+    $asset = Join-Path $fixture 'dist/panorama/styles/custom_game/playbook_training.vcss_c'
     $original = [IO.File]::ReadAllBytes($asset)
     'changed-styles' | Set-Content -LiteralPath $asset
     Expect-Failure { & $script @parameters -Publish -SkipBuild } 'HUD-Dateien.*geändert'

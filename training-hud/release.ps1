@@ -14,8 +14,8 @@ $dist = Join-Path $PSScriptRoot 'dist'
 $content = Join-Path $dist 'workshop'
 $vpk = Join-Path $content "$workshopId.vpk"
 $manifestPath = Join-Path $dist 'release.json'
-$sourcePaths = @('layout/matchzy_training.xml', 'styles/matchzy_training.css')
-$assetPaths = @('panorama/layout/custom_game/matchzy_training.vxml_c', 'panorama/styles/custom_game/matchzy_training.vcss_c')
+$sourcePaths = @('layout/playbook_training.xml', 'styles/playbook_training.css')
+$assetPaths = @('panorama/layout/custom_game/playbook_training.vxml_c', 'panorama/styles/custom_game/playbook_training.vcss_c')
 
 function Get-HudHashes([string]$Root, [string[]]$Paths) {
     $hashes = [ordered]@{}

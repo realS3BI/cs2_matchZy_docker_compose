@@ -48,5 +48,15 @@
     "tailwindcss": "^4.1.18",
     "typescript": "^6.0.3",
     "vite": "^7.3.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/realS3BI/playbook.git",
+    "directory": "admin-panel"
+  },
+  "homepage": "https://github.com/realS3BI/playbook#readme",
+  "bugs": {
+    "url": "https://github.com/realS3BI/playbook/issues"
+  },
+  "description": "Playbook für CS2: Lineup-Bibliothek, Training, Reviews und Serververwaltung"
 }

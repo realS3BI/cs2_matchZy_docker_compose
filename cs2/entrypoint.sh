@@ -66,9 +66,9 @@ configure_upstream_process() {
   # New panel settings take precedence over legacy deployment variables.
   # Keep the old environment only until a panel-managed runtime is applied.
   if jq -e 'has("trainingHudEnabled")' "$settings_file" >/dev/null; then
-    export MATCHZY_TRAINING_HUD_READY="$(read_setting 'if .trainingHudEnabled == true then "1" else "0" end')"
-    export MATCHZY_TRAINING_HUD_ADDON_ID="$(read_setting 'if .trainingHudEnabled == true and .trainingHudWorkshopEnabled == true then (.trainingHudWorkshopId // "") else "" end')"
-    if [[ "$MATCHZY_TRAINING_HUD_READY" == "1" && "$(read_setting '.trainingHudWorkshopEnabled | tostring')" == "true" && ! "$MATCHZY_TRAINING_HUD_ADDON_ID" =~ ^[1-9][0-9]{0,19}$ ]]; then
+    export PLAYBOOK_TRAINING_HUD_READY="$(read_setting 'if .trainingHudEnabled == true then "1" else "0" end')"
+    export PLAYBOOK_TRAINING_HUD_ADDON_ID="$(read_setting 'if .trainingHudEnabled == true and .trainingHudWorkshopEnabled == true then (.trainingHudWorkshopId // "") else "" end')"
+    if [[ "$PLAYBOOK_TRAINING_HUD_READY" == "1" && "$(read_setting '.trainingHudWorkshopEnabled | tostring')" == "true" && ! "$PLAYBOOK_TRAINING_HUD_ADDON_ID" =~ ^[1-9][0-9]{0,19}$ ]]; then
       echo '[entrypoint] Invalid or missing training HUD Workshop ID' >&2
       return 1
     fi
