@@ -1103,12 +1103,12 @@ button:not(:disabled),
 .server-save-panel h2 { font-size: 0.95rem; font-weight: 600; }
 .server-save-panel p { max-width: 34rem; margin-top: 0.3rem; font-size: 0.8rem; color: var(--muted-foreground); }
 .playbook-page { display: flex; flex-direction: column; gap: 2.4rem; }
-.control-main:has(.map-explorer-page) { max-width: none; padding-top: 1rem; }
+.control-main:has(.map-explorer-page) { max-width: none; padding-block: 1rem; }
 .map-explorer-page { gap: 1.5rem; }
 .map-explorer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; align-items: start; gap: 1.75rem; }
 .map-explorer-stage { min-width: 0; padding: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--console); }
 .radar-browser { width: 100%; padding: 1rem; }
-.radar-browser-image { position: relative; width: 100%; max-width: calc(max(22rem, 100svh - 13rem) * var(--radar-aspect)); margin-inline: auto; }
+.radar-browser-image { position: relative; width: 100%; max-width: calc(max(12rem, 100svh - 9.75rem) * var(--radar-aspect)); margin-inline: auto; }
 .radar-browser-background { display: block; width: 100%; height: 100%; }
 .radar-level-switch { position: absolute; top: 1rem; right: 1rem; z-index: 3; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--secondary); }
 .radar-level-switch button { width: 44px; height: 44px; color: var(--secondary-foreground); font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background-color 150ms; }
@@ -1128,7 +1128,14 @@ button:not(:disabled),
 .radar-spot:hover, .radar-spot:focus-visible { outline: 3px solid var(--foreground); outline-offset: 3px; }
 .map-explorer-heading { display: flex; flex-direction: column; gap: 0.75rem; }
 .map-explorer-heading h1 { font-size: 1.4rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.025em; overflow-wrap: anywhere; }
-.map-explorer-sidebar { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
+.map-explorer-sidebar { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.map-explorer-sidebar > * { flex-shrink: 0; }
+.map-explorer-sidebar [aria-label="Granatentyp"] { gap: 0.25rem; }
+.map-explorer-sidebar .map-explorer-heading { gap: 0.5rem; }
+.map-explorer-sidebar .explorer-control { gap: 0.5rem; }
+@container workspace (min-width: 801px) {
+  .map-explorer-sidebar { max-height: calc(100svh - 6rem); overflow-y: auto; scrollbar-width: thin; }
+}
 .explorer-control { display: flex; flex-direction: column; gap: 0.7rem; }
 .explorer-control h2 { font-size: 0.8rem; font-weight: 600; }
 .explorer-control p { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.6; }
