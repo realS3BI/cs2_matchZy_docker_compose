@@ -63,23 +63,33 @@ window.checkLiveLineup=async()=>{
 };
 window.checkPlacement=async()=>{
  await waitFor(()=>document.querySelector('h1'));
+ assert(!document.querySelector('.lineup-map-disclosure')&&!document.querySelector('.official-lineup-main .radar-map'),'Kartenbearbeitung steht unter der Präsentation');
+ document.querySelector('.official-lineup-management').open=true;
  if(params.has('foreign')&&user.role!=='admin') {assert(!button('Start und Ziel setzen'),'Fremde Positionierung bearbeitbar');assert(!button('Freigabe zurücknehmen'),'Fremde Freigabe zurücknehmbar');return 'PASS: Fremde Aufnahme geschützt';}
  for(const type of ['Smoke','Molly','Flash','HE','Decoy']) {
   window.setRecording({type});await waitFor(()=>document.querySelector('h1').textContent.includes(type==='Molly'?'Molotov':type));
   assert(!!button('Start und Ziel setzen'),'Positionierung fehlt: '+type);
   assert(!button('Start setzen')&&!button('Ziel setzen'),'Editor standardmäßig offen: '+type);
  }
- button('Start und Ziel setzen').click();await waitFor(()=>button('Start setzen'));
+ button('Start und Ziel setzen').click();await waitFor(()=>button('Start setzen')&&button('Positionierung speichern'));
+ assert(!!document.querySelector('[role=dialog] .radar-map'),'Positionierung öffnet kein Modal');
  clickMap(.2,.8);await waitFor(()=>document.body.innerText.includes('Start manuell'));
  clickMap(.8,.2);await waitFor(()=>document.body.innerText.includes('Ziel manuell'));
- button('Positionierung speichern').click();await waitFor(()=>button('Positionierung bearbeiten'));
+ button('Positionierung speichern').click();await waitFor(()=>button('Positionierung bearbeiten')&&!document.querySelector('[role=dialog]'));
  assert(window.requests[0].action==='position','Keine gesonderte Positionierungsaktion');
  assert(Object.keys(window.requests[0].patch).sort().join(',')==='radarFrom,radarTo','Wurfdaten im Kartenpatch');
  assert(document.body.innerText.includes('Offiziell')&&document.body.innerText.includes('Must Know'),'Freigabe verloren');
- button('Positionierung bearbeiten').click();await waitFor(()=>button('Start setzen'));
+ button('Positionierung bearbeiten').click();await waitFor(()=>button('Start setzen')&&button('Positionierung speichern'));
  clickMap(.25,.75);await waitFor(()=>!button('Positionierung speichern').disabled);
- button('Positionierung speichern').click();await waitFor(()=>window.requests.length===2&&!button('Start setzen'));
+ button('Positionierung speichern').click();await waitFor(()=>window.requests.length===2&&!document.querySelector('[role=dialog]'));
  assert(window.requests[1].patch.radarFrom.x!==window.requests[0].patch.radarFrom.x,'Referenz nicht korrigiert');
+ assert(!document.querySelector('[role=dialog]'),'Modal bleibt nach Speichern offen');
+ button('Positionierung bearbeiten').click();await waitFor(()=>button('Start setzen')&&button('Positionierung speichern'));
+ clickMap(.35,.65);await waitFor(()=>!button('Positionierung speichern').disabled);
+ button('Abbrechen').click();await waitFor(()=>!document.querySelector('[role=dialog]'));
+ button('Positionierung bearbeiten').click();await waitFor(()=>button('Start setzen')&&button('Positionierung speichern'));
+ assert(button('Positionierung speichern').disabled,'Abgebrochene Änderungen bleiben im Entwurf');
+ button('Abbrechen').click();await waitFor(()=>!document.querySelector('[role=dialog]'));
  button('Freigabe zurücknehmen').click();await waitFor(()=>!button('Freigabe zurücknehmen'));
  assert(!document.body.innerText.includes('Must Know'),'Must Know nach Rücknahme erhalten');
  if(user.identitySteam64===owner) assert(!!document.querySelector('#lineup-field-throwFromTitle'),'Ersteller kann Positionsnamen nicht ergänzen');

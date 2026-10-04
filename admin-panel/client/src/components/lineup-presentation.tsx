@@ -70,7 +70,7 @@ export function ThrowFacts({ nade }) {
   return <dl className="official-throw-facts" aria-label="Wurfattribute">{facts.map(({ Icon, label, value }) => <div key={label}><dt>{label}</dt><dd>{Icon && <Icon aria-hidden="true" />}{value}</dd></div>)}</dl>;
 }
 
-export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, management, children }) {
+export function OfficialLineupDetail({ nade, map, back, onBack, management, children }) {
   const [view, setView] = useState(nade.reviewMedia?.video ? "video" : "lineup");
   const [photoSlot, setPhotoSlot] = useState("aim");
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -99,7 +99,6 @@ export function OfficialLineupDetail({ nade, map, back, onBack, mapContent, mana
         </div>
         <div className="official-lineup-actions"><FavoriteButton nade={nade} /><ActionButton size="sm" variant="secondary" icon={Link2} onClick={() => copyText(window.location.href)} successLabel="Link kopiert">Link kopieren</ActionButton><ActionButton size="sm" variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton></div>
         {activeView === "lineup" && photos.length > 0 && <div className="official-photo-picker" role="group" aria-label="Lineup-Bilder auswählen">{photos.map(({ slot, title, Icon }) => <button key={slot} aria-pressed={selectedPhoto?.slot === slot} onClick={() => setPhotoSlot(slot)}><img src={nade.reviewMedia[slot].url} alt="" loading="lazy" /><span><Icon aria-hidden="true" />{title}</span></button>)}</div>}
-        {mapContent}
         {nade.lineupImages?.length > 0 && <section className="lineup-images" aria-label="Weitere Bilder zur Anleitung">{nade.lineupImages.map(image => <figure key={image.key || image.url}><img src={image.url} alt={image.name || `Ausrichtung für ${nade.displayName || nade.name}`} loading="lazy" /><figcaption>{image.name}</figcaption></figure>)}</section>}
       </div>
       <aside className="official-lineup-sidebar" aria-label="Ansicht und Wurfanleitung">

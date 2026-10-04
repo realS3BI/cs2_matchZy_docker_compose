@@ -8,7 +8,7 @@ import { Textarea } from "./ui/textarea";
 import { Field, FieldGroup, FieldLabel, FieldSet, FieldLegend } from "./ui/field";
 import { Switch } from "./ui/switch";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "./ui/empty";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { TeamIcon, GrenadeIcon } from "./nade-icons";
@@ -53,14 +53,6 @@ function formatThrowTrace(value) {
     if (!Array.isArray(samples)) return "";
     return samples.map(sample => `${Number(sample.time ?? sample.Time).toFixed(2)}s · ${sample.buttons ?? sample.Buttons ?? "keine Taste"} · Position ${sample.position ?? sample.Position ?? "?"} · Geschwindigkeit ${sample.velocity ?? sample.Velocity ?? "?"} · Blickwinkel ${sample.view ?? sample.View ?? "?"}`).join("\n");
   } catch { return ""; }
-}
-
-function LineupMapDisclosure({ official, positioning, canPosition, children }) {
-  if (!official) return <>{children}</>;
-  return <details className="lineup-map-disclosure" open={positioning || undefined}>
-    <summary>Start und Ziel auf der Karte{canPosition ? " · Positionierung bearbeiten" : ""}</summary>
-    {children}
-  </details>;
 }
 
 function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, back, creating = false }) {
@@ -139,8 +131,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
   }
 
   const mapContent = (
-        <LineupMapDisclosure official={nade.official && !creating} positioning={positioning} canPosition={permissions.position}>
-        {permissions.position && <div className="mb-3 flex flex-wrap gap-2">
+        <>
+        {permissions.position && !nade.official && <div className="mb-3 flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" disabled={busy} aria-expanded={positioning} onClick={() => setPositioning(value => !value)}>{positioning ? "Kartenansicht" : missingPosition ? "Start und Ziel setzen" : "Positionierung bearbeiten"}</Button>
         </div>}
         {permissions.position && positioning ? <fieldset disabled={busy} className="min-w-0" inert={busy || undefined}>
@@ -154,22 +146,34 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
         </fieldset> : <><NadeFlightMap map={map} nades={[positionedNade]} calibration={calibration} /><p className="mt-3 text-xs text-muted-foreground">Kreis: Startposition · Raute: Landeposition</p></>}
         {map.radarLowerUrl && <p className="mt-3 text-xs text-muted-foreground">1: obere Ebene · 2: untere Ebene. Start und Ziel werden anhand ihrer jeweiligen Höhe zugeordnet. Über den Umschalter rechts oben kannst du die Ebene wechseln und Positionen korrigieren.</p>}
         {!calibration && permissions.position && <p className="mt-3 text-xs text-muted-foreground">{map.mapName === "de_nuke" ? "Für dieses Nuke-Kartenbild fehlt die Kalibrierung der Ebenen. Setze Start und Ziel manuell." : "Für diese Map fehlen verlässliche Referenzen. Setze Start und Ziel auf der Karte. Gespeicherte Markierungen mit Spielkoordinaten dienen als Referenzen für weitere Nades und können über „Positionierung bearbeiten“ korrigiert werden."}</p>}
-        </LineupMapDisclosure>
+        </>
   );
   const deleteDialog = (
     <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent><DialogHeader><DialogTitle>Lineup löschen?</DialogTitle><DialogDescription>„{nade.displayName || nade.name}“ wird aus der Bibliothek entfernt. Das lässt sich nicht rückgängig machen.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" disabled={busy} onClick={() => setDeleteOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" icon={Trash2} disabled={busy} onClick={() => mutate("delete")} pendingLabel="Löscht …">Endgültig löschen</ActionButton></DialogFooter></DialogContent></Dialog>
   );
-  if (nade.official && !creating) return <OfficialLineupDetail nade={nade} map={map} back={back}
+  function closePositioning() {
+    if (busy) return;
+    setPlacement(JSON.parse(placementBaseline));
+    setPositioning(false);
+  }
+  if (nade.official && !creating) return <Dialog open={positioning} onOpenChange={open => { if (open) setPositioning(true); else closePositioning(); }}><OfficialLineupDetail nade={nade} map={map} back={back}
     onBack={event => { if (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) event.preventDefault(); }}
-    mapContent={mapContent}
     management={<>
+      {permissions.position && <DialogTrigger asChild><Button variant="secondary" disabled={busy}>{missingPosition ? "Start und Ziel setzen" : "Positionierung bearbeiten"}</Button></DialogTrigger>}
       <Button variant="secondary" disabled={busy || dirty} onClick={() => navigate(lineupReviewPath(map, nade))}>Review öffnen</Button>
       {permissions.revoke && <ActionButton variant="ghost" disabled={busy || dirty} onClick={() => mutate("revoke")} successLabel="Zurückgenommen">Freigabe zurücknehmen</ActionButton>}
       <details className="lineup-coordinates"><summary>Koordinaten</summary><dl className="lineup-detail-facts mt-4"><div><dt>Start</dt><dd className="font-mono">{nade.lineupPos || "Nicht hinterlegt"}</dd></div><div><dt>Blickwinkel</dt><dd className="font-mono">{nade.lineupAng || "Nicht hinterlegt"}</dd></div><div><dt>Landeposition</dt><dd className="font-mono">{nade.landingPos || "Nicht hinterlegt"}</dd></div></dl></details>
       {nade.throwTrace && <details className="lineup-coordinates"><summary>Aufgezeichnete Tasten und Bewegung</summary><pre className="mt-4 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">{formatThrowTrace(nade.throwTrace) || "Keine lesbaren Wurfdaten vorhanden."}</pre></details>}
       <code className="break-all text-xs text-muted-foreground">.loadnade {nade.name}</code>
       <div className="flex flex-wrap gap-2"><ActionButton variant="ghost" size="sm" icon={RefreshCw} onClick={onRefresh} disabled={busy} successLabel="Aktualisiert">Aktualisieren</ActionButton>{permissions.delete && <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDeleteOpen(true)}><Trash2 />Löschen</Button>}</div>
-    </>}>{deleteDialog}</OfficialLineupDetail>;
+    </>}>
+      {permissions.position && <DialogContent className="lineup-placement-dialog" onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onInteractOutside={event => { if (busy) event.preventDefault(); }}>
+        <DialogHeader><DialogTitle>Positionierung bearbeiten</DialogTitle><DialogDescription>Setze Start und Ziel für „{nade.displayName || nade.name}“ auf der Karte. Wurfdaten und Freigaben bleiben erhalten.</DialogDescription></DialogHeader>
+        {mapContent}
+        <DialogFooter><Button variant="secondary" disabled={busy} onClick={closePositioning}>Abbrechen</Button></DialogFooter>
+      </DialogContent>}
+      {deleteDialog}
+    </OfficialLineupDetail></Dialog>;
 
   return <article className="playbook-page lineup-page">
     <div><Button asChild variant="ghost" size="sm"><Link to={back} onClick={event => {
