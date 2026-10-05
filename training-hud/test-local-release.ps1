@@ -17,7 +17,7 @@ try {
     $hudRoot = Join-Path $fixture 'training-hud'
     $desktopRoot = Join-Path $fixture 'playbook-desktop'
     New-Item -ItemType Directory -Path $hudRoot, $desktopRoot | Out-Null
-    foreach ($name in @('local-release.ps1', 'release.ps1', 'panel-source.ps1')) {
+    foreach ($name in @('local-release.ps1', 'release.ps1', 'panel-source.ps1', 'export-local.ps1', 'install-local.ps1', 'install-local.cmd', 'local-package-readme.txt')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $hudRoot
     }
     foreach ($directory in @('training-hud/layout', 'training-hud/styles', 'cs2 with spaces/game/csgo')) {
@@ -113,6 +113,33 @@ if ($args -contains '+workshop_build_item') {
     $settingsPath = Join-Path $hudRoot '.local/settings.json'
     $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
     Assert ($settings.cs2 -eq $cs2) 'CS2-Pfad wurde nicht gespeichert.'
+
+    # Install the actual exported ZIP in another client without compiler or repository.
+    $zip = Join-Path $hudRoot 'dist/Playbook-HUD-local.zip'
+    Assert (Test-Path -LiteralPath $zip) 'Das Standardupdate muss ein Paket zum Weitergeben erzeugen.'
+    $unpacked = Join-Path $fixture 'friend package'
+    Expand-Archive -LiteralPath $zip -DestinationPath $unpacked
+    $package = Join-Path $unpacked 'Playbook-HUD-local'
+    Assert (@(Get-ChildItem -LiteralPath $package -Recurse -File).Count -eq 6) 'Das Paket muss ausschließlich zwei Assets, zwei Skripte, Launcher und Anleitung enthalten.'
+    $installer = Join-Path $package 'install-local.ps1'
+    $bom = [IO.File]::ReadAllBytes($installer)
+    Assert ($bom[0] -eq 239 -and $bom[1] -eq 187 -and $bom[2] -eq 191) 'Windows PowerShell braucht UTF-8 mit BOM für deutsche Meldungen.'
+    $friendCs2 = Join-Path $fixture 'friend cs2'
+    New-Item -ItemType Directory -Force -Path (Join-Path $friendCs2 'game/csgo') | Out-Null
+    & $installer -Cs2 $friendCs2 | Out-Null
+    foreach ($relative in @('panorama/layout/custom_game/playbook_training.vxml_c', 'panorama/styles/custom_game/playbook_training.vcss_c')) {
+        $friendAsset = Join-Path $friendCs2 "game/csgo/$relative"
+        Assert ((Get-FileHash -LiteralPath $friendAsset).Hash -eq (Get-FileHash -LiteralPath (Join-Path $hudRoot "dist/$relative")).Hash) 'Freund muss exakt den lokal gebauten Stand erhalten.'
+    }
+    $global:HudFlowRunning = $true
+    Expect-Failure { & $installer -Cs2 $friendCs2 } 'CS2 zuerst vollständig beenden'
+    $global:HudFlowRunning = $false
+    & $installer -Cs2 $friendCs2 -Mode live | Out-Null
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $friendCs2 'game/csgo') -Recurse -File).Count -eq 0) 'Paket muss den Wechsel zurück zur Workshop-Version erlauben.'
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $friendCs2 'playbook-hud-backups') -Recurse -File).Count -eq 2) 'Paket muss beide Dateien vor dem Entfernen sichern.'
+    Remove-Item -LiteralPath (Join-Path $package 'game/csgo/panorama/styles/custom_game/playbook_training.vcss_c')
+    Expect-Failure { & $installer -Cs2 $friendCs2 } 'Kompilierte HUD-Datei fehlt'
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $friendCs2 'game/csgo') -Recurse -File).Count -eq 0) 'Unvollständiges Paket darf nicht teilweise installiert werden.'
 
     Set-Answers @('j', 'Größe kompakt geprüft', 'public')
     & $script @parameters -Mode release | Out-Null

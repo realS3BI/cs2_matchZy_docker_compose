@@ -140,7 +140,12 @@ public sealed partial class PlaybookPlugin : BasePlugin
         Handle(player, command.ArgCount > 1 ? command.GetArg(1) : "");
 
     [ConsoleCommand("css_training", "Toggle panel control (bind to any key)")]
-    public void OnTraining(CCSPlayerController? player, CommandInfo command) => TogglePanelControl(player);
+    public void OnTraining(CCSPlayerController? player, CommandInfo command)
+    {
+        LogPanelState(player, "css_training empfangen");
+        TogglePanelControl(player);
+        LogPanelState(player, "css_training verarbeitet");
+    }
 
     private void TogglePanelControl(CCSPlayerController? player)
     {
@@ -200,7 +205,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
     {
         if (!CanControl(player)) return;
         if (action.Equals("close", StringComparison.OrdinalIgnoreCase))
-        { if (_menus.TryGetValue(player.Slot, out var open)) Hide(open); return; }
+        { if (_menus.TryGetValue(player.Slot, out var open)) Hide(open); LogPanelState(player, "css_nades close verarbeitet"); return; }
         if (!Alive(player)) { Close(player.Slot); Tell(player, "Bitte zuerst einem Team beitreten und spawnen."); return; }
         if (action.Length == 0) { Open(player); return; }
         if (int.TryParse(action, out var key)) { Select(player, key); return; }
@@ -259,10 +264,12 @@ public sealed partial class PlaybookPlugin : BasePlugin
 
     private void Open(CCSPlayerController player, bool focus = true)
     {
+        LogPanelState(player, "Panel öffnen angefordert");
         if (!CanControl(player)) return;
         if (!TrainingEnabled) { Close(player.Slot); Tell(player, "Das Panel ist nur im Training verfügbar. Im Webpanel den Modus Nades wählen."); return; }
         if (Environment.GetEnvironmentVariable("PLAYBOOK_TRAINING_HUD_READY") != "1")
         {
+            LogPanelState(player, "Panel öffnen abgelehnt: Trainings-HUD nicht aktiviert");
             Tell(player, "Trainings-HUD in den Servereinstellungen des Webpanels aktivieren und übernehmen. HUD-Dateien lokal installieren oder über Workshop ausliefern. Keybinds: css_training_binds.");
             return;
         }
@@ -271,6 +278,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
         var session = new MenuSession(player, BuildMenu(player), TrainingEnabled) { Settings = ReadSettings(player) };
         _menus[player.Slot] = session;
         SetFocus(session, focus);
+        if (!focus) LogPanelState(player, "Panel ohne Fokus geöffnet");
     }
 
     private void Select(CCSPlayerController player, int key)
@@ -441,7 +449,13 @@ public sealed partial class PlaybookPlugin : BasePlugin
                 {
                     if (Server.CurrentTime >= session.NextDraw)
                     {
+                        var hadEntity = session.Panel.EntityIndex != null;
                         session.Panel.Draw(session.Menu, session.Focused);
+                        if (!hadEntity)
+                        {
+                            LogPanelState(player, "Panel-Entity erstellt; Client-Anzeige unbestätigt");
+                            PrintPanelAssetHint(player);
+                        }
                         session.NextDraw = Server.CurrentTime + 0.1f;
                     }
                 }
@@ -449,6 +463,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
                 {
                     Logger.LogError(error, "Could not draw training panel for slot {Slot}", slot);
                     Close(slot);
+                    LogPanelState(player, $"Panel-Zeichnen fehlgeschlagen: {error.GetType().Name}; Sitzung geschlossen");
                     Tell(player, "Seitenpanel konnte nicht erstellt werden. Serverlog prüfen.");
                 }
             }
@@ -476,7 +491,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
         session.Panel.Dispose();
     }
 
-    private static void SetFocus(MenuSession session, bool focus)
+    private void SetFocus(MenuSession session, bool focus)
     {
         if (session.Focused == focus) return;
         session.Focused = focus;
@@ -505,6 +520,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
             session.Pawn.AbsVelocity.X = session.Pawn.AbsVelocity.Y = session.Pawn.AbsVelocity.Z = 0;
             Utilities.SetStateChanged(session.Pawn, "CBaseEntity", "m_MoveType");
             LockAttacks(session);
+            LogPanelState(session.Player, "Panel-Steuerung aktiviert", session);
             return;
         }
         if (session.Pawn.IsValid)
@@ -529,6 +545,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
                     weapons.NextAttack = Math.Max(session.NextAttack, Server.CurrentTime + 0.15f);
             }
         }
+        LogPanelState(session.Player, "Panel-Steuerung freigegeben", session);
     }
 
     private void Forget(CCSPlayerController? player)

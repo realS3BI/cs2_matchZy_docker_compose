@@ -13,6 +13,8 @@ internal sealed class ScreenPanel(CCSPlayerController player) : IDisposable
     private readonly Dictionary<string, string> _texts = [];
     private readonly Dictionary<string, bool> _classes = [];
     private bool _capturing;
+    public uint? EntityIndex => _entity is { IsValid: true } ? _entity.Index : null;
+    public bool Capturing => _capturing;
     public bool Owns(CCSCustomHudLayout layout) => _entity is { IsValid: true } && _entity.Handle == layout.Handle;
 
     public void Draw(InGameMenu menu, bool focused)

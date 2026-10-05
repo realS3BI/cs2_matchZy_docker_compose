@@ -52,16 +52,27 @@ public sealed partial class PlaybookPlugin
     [ConsoleCommand("css_training_key", "Dispatch a fixed panel key")]
     public void OnPanelKey(CCSPlayerController? player, CommandInfo command)
     {
-        if (!TrainingEnabled || !Alive(player) || command.ArgCount != 2 || player!.SteamID == 0) return;
+        if (!TrainingEnabled || !Alive(player) || command.ArgCount != 2 || player!.SteamID == 0)
+        { LogPanelState(player, "css_training_key abgelehnt: Training, Spieler oder Argumente ungültig"); return; }
         var settings = _menus.TryGetValue(player.Slot, out var session) ? session.Settings : ReadSettings(player);
-        if (settings.ActionForKey(command.GetArg(1)) is { } action) RunPanelAction(player, action);
+        if (settings.ActionForKey(command.GetArg(1)) is { } action) RunPanelShortcut(player, action, "css_training_key");
+        else LogPanelState(player, "css_training_key abgelehnt: unbekannte Taste");
     }
 
     [ConsoleCommand("css_tk", "Dispatch a fixed panel key by index (0-7)")]
     public void OnShortPanelKey(CCSPlayerController? player, CommandInfo command)
     {
-        if (!TrainingEnabled || !Alive(player) || command.ArgCount != 2 || player!.SteamID == 0) return;
-        if (PlayerPanelSettings.ActionForIndex(command.GetArg(1)) is { } action) RunPanelAction(player, action);
+        if (!TrainingEnabled || !Alive(player) || command.ArgCount != 2 || player!.SteamID == 0)
+        { LogPanelState(player, "css_tk abgelehnt: Training, Spieler oder Argumente ungültig"); return; }
+        if (PlayerPanelSettings.ActionForIndex(command.GetArg(1)) is { } action) RunPanelShortcut(player, action, "css_tk");
+        else LogPanelState(player, "css_tk abgelehnt: Index muss 0 bis 7 sein");
+    }
+
+    private void RunPanelShortcut(CCSPlayerController player, string action, string source)
+    {
+        if (action is "focus" or "visible") LogPanelState(player, $"{source}: {action} empfangen");
+        RunPanelAction(player, action);
+        if (action is "focus" or "visible") LogPanelState(player, $"{source}: {action} verarbeitet");
     }
 
     private void OnPanelClicked(CCSPlayerController player, CCSCustomHudLayout layout, string buttonId)

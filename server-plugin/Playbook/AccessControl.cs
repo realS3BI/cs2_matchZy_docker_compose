@@ -55,7 +55,7 @@ public sealed class ServerPermissions(string path)
     private static bool TrainingCommand(string command) => command is
         "css_nades" or "css_nades_select" or "css_nades_last" or
         "css_training" or "css_training_visible" or "css_training_binds" or
-        "css_training_key" or "css_tk" or "css_training_vote" or
+        "css_training_key" or "css_tk" or "css_training_debug" or "css_training_vote" or
         "css_y" or "css_n" or "css_mapja" or "css_mapnein" or
         "css_rethrow" or "css_rt" or "css_last" or "css_clear" or "css_savepos" or "css_loadpos" or
         "css_bot" or "css_cbot" or "css_crouchbot" or "css_nobots" or "css_traj" or "css_impacts" or
@@ -74,9 +74,15 @@ public sealed partial class PlaybookPlugin
         if (player is not { IsValid: true }) return HookResult.Continue; // Server RCON remains authorized separately.
         var command = info.GetArg(0);
         if (command is "say" or "say_team") command = info.ArgString;
+        var panelCommand = PlaybookCommands.Normalize(command) is "css_tk" or "css_training_key" or "css_training" or "css_training_visible" or "css_training_debug" or "css_nades";
         if (ServerPermissions.Blocks(_permissions.Read().For(player.SteamID), command))
-        { player.PrintToChat(ChatMessage("Deine Rolle erlaubt diesen Befehl nicht.")); return HookResult.Stop; }
+        {
+            if (panelCommand) LogPanelState(player, "Panel-Befehl abgelehnt: Rolle erlaubt diesen Befehl nicht");
+            player.PrintToChat(ChatMessage("Deine Rolle erlaubt diesen Befehl nicht."));
+            return HookResult.Stop;
+        }
         if (!PlaybookCommands.Blocks(_serverMode, TrainingEnabled, command)) return HookResult.Continue;
+        if (panelCommand) LogPanelState(player, "Panel-Befehl abgelehnt: Spielmodus erlaubt diesen Befehl nicht");
         player.PrintToChat(ChatMessage("Dieser Befehl ist in diesem Spielmodus nicht verfügbar."));
         return HookResult.Stop;
     }

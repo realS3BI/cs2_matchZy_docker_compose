@@ -94,6 +94,7 @@ if ($Mode -eq 'update') {
     & (Join-Path $PSScriptRoot 'panel-source.ps1') local -Cs2 $Cs2 -SkipBuild
     $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'dist/release.json') -Raw | ConvertFrom-Json -AsHashtable
     Assert-LocalHud $manifest
+    & (Join-Path $PSScriptRoot 'export-local.ps1')
     Write-Output 'Panorama-Panel aktualisiert und geprüft. Im Dashboard Trainings-HUD aktivieren und HUD über Workshop ausliefern ausschalten; Änderungen mit Apply & restart übernehmen.'
     Write-Output 'Playbook wird jetzt gebaut und geöffnet. Für den Review dort Server → Reviews öffnen und CS2 starten.'
     $global:LASTEXITCODE = 0

@@ -18,7 +18,7 @@ Die Quellen heißen `playbook_training.xml` und `playbook_training.css`; der Bui
 
 - CounterStrikeSharp API **374** oder neuer, passendes Metamod und aktuelles CS2.
 - Zum Bauen: CS2 Workshop Tools mit `game/bin/win64/resourcecompiler.exe`.
-- Zum Verteilen an Mitspieler: eigenes Workshop-Addon und kompatibler MultiAddonManager. Die Spieler laden das fertige Addon und brauchen keine Workshop Tools.
+- Zum Verteilen an Mitspieler: lokales HUD-Paket oder eigenes Workshop-Addon und kompatibler MultiAddonManager. Die Spieler brauchen keine Workshop Tools.
 
 ## Bauen und installieren
 
@@ -54,6 +54,18 @@ Die HUD-Konfiguration erfolgt über die Servereinstellungen in Playbook. Bei der
 
 Der Bootstrap installiert den bereits verwendeten MultiAddonManager bei Bedarf und schreibt die HUD-ID nach `mm_client_extra_addons`. Vorhandene Server-/Map-Addons bleiben in `mm_extra_addons`. Die aktivierte Panel-Einstellung schaltet das Ingame-Panel frei. Bei rein lokalen Tests wird keine Addon-ID benötigt, aber der Testclient muss die Dateien installiert haben. Ohne Assets erscheint sonst trotz erfolgreich erstellter Server-Entity kein HUD. Für API/Metamod/AddonManager eine zusammen kompatible Version benutzen; keine ungetestete pauschale Versionserhöhung des gesamten Servers.
 
+## Lokalen Stand an Freunde weitergeben
+
+Jedes erfolgreiche Panorama-Update mit `hud.cmd` erzeugt automatisch `training-hud/dist/Playbook-HUD-local.zip` und den gleichnamigen Ordner. Das Paket enthält nur die beiden kompilierten Panel-Dateien, einen Installer und eine kurze Anleitung. Der Export erfolgt vor dem App-Build, sodass das Paket auch bei einem anschließenden App-Buildfehler bereitliegt. Für einen erneuten Export bereits kompilierter Dateien genügt auf Windows `./training-hud/export-local.ps1`.
+
+Die ZIP an deinen Freund schicken. Er beendet CS2 vollständig, entpackt sie und doppelklickt `Installieren.cmd`. Der Installer erkennt die Steam-Bibliotheken und fragt bei Bedarf nach dem CS2-Verzeichnis. Er braucht nur das in Windows enthaltene Windows PowerShell, sichert vorherige lokale HUD-Dateien und prüft die kopierten Dateien mit SHA-256. Git, Workshop Tools und die Playbook-App braucht dein Freund nicht.
+
+Alternativ kann er den enthaltenen `game`-Ordner direkt in seinen CS2-Installationsordner kopieren und zusammenführen. Diesen Ordner findet er in Steam unter **CS2 → Eigenschaften → Installierte Dateien → Durchsuchen**. Vorhandene gleichnamige Dateien dabei selbst sichern. Danach CS2 normal über Steam starten, mit dem Trainingsserver verbinden und `.nades` eingeben.
+
+Der Server braucht weiterhin das passende Plugin. Für den gemeinsamen lokalen Test **Trainings-HUD aktivieren** einschalten und **HUD über Workshop ausliefern** ausschalten, dann **Apply & restart** ausführen. Das gilt serverweit; jeder Spieler braucht dann das lokale Paket. Dadurch entfällt nur der Workshop-Download des HUDs. Andere Workshop-Maps oder Addons bleiben davon unabhängig.
+
+Ein einmal installiertes Paket bleibt lokal verfügbar. Bei Änderungen schickst du eine neue ZIP, die dein Freund bei beendetem CS2 installiert. Das Paket aktualisiert sich nicht selbst aus dem Internet. Für den Wechsel zurück zur Workshop-Auslieferung bei beendetem CS2 im entpackten Paket `./install-local.ps1 -Mode live` ausführen und die Workshop-Auslieferung auf dem Server wieder aktivieren.
+
 ## Zwischen lokaler Entwicklung und Live wechseln
 
 CS2 vollständig beenden und im Projektordner in PowerShell ausführen:
@@ -74,6 +86,14 @@ Das ist ein **PowerShell-Befehl, kein CS2-Konsolenbefehl**. Das Plugin bestimmt 
 Damit lassen sich Layout und Styles ohne Workshop-Veröffentlichung und ohne Serveränderung entwickeln, solange Panel-IDs und Variablen zur installierten Plugin-Version passen. Menüpunkte, Favoriten, Spawns und andere C#-Funktionen kommen weiterhin vom Server-Plugin. Zum Testen neuer Funktionen ist eine aktualisierte Plugin-Version auf einem Entwicklungsserver nötig.
 
 ## Feste Keybinds
+
+### Panel bleibt unsichtbar oder die Bewegung ist gesperrt
+
+Das Server-Plugin schreibt beim Öffnen über `KP_0` beziehungsweise `css_tk 0`, beim Ein-/Ausblenden und beim Wechsel der Panel-Steuerung Diagnosemeldungen mit dem Präfix `[Playbook-HUD]` in die Client-Konsole und das Serverlog. Die Meldungen enthalten den Spielmodus, Trainingsstatus, HUD-Aktivierung, Berechtigung, Sitzung, Sichtbarkeit, Fokus, Entity-ID, Eingabeübernahme und Bewegungszustand. Das Serverlog enthält zusätzlich Steam-ID, Map und Layoutpfad. Ablehnungen durch Rollen- oder Spielmodusprüfung werden ebenfalls protokolliert. Die regelmäßigen Panel-Aktualisierungen erzeugen keine wiederholten Diagnosemeldungen.
+
+Mit `css_training_debug` kann ein Trainingsspieler den aktuellen Zustand samt Installationshinweis erneut ausgeben. Zum Sammeln eines Fehlerfalls in der CS2-Konsole `css_tk 0`, danach `css_training_debug` ausführen und die `[Playbook-HUD]`-Zeilen zusammen mit Panorama-/Resource-Fehlern aus der Client-Konsole weitergeben. Mit `css_nades close` wird die Panel-Steuerung freigegeben; alternativ `KP_0` erneut drücken. Diese Diagnose erfordert das aktualisierte Server-Plugin.
+
+Eine gültige Server-Entity bestätigt nur die Erstellung auf dem Server. Die HUD-API liefert keine Bestätigung, dass der Client das Layout geladen oder angezeigt hat. Die Protokolle kennzeichnen die Client-Anzeige deshalb ausdrücklich als unbestätigt. Bei einem unsichtbaren Panel trotz aktiver Eingabeübernahme die lokalen Dateien beziehungsweise Workshop-Auslieferung prüfen und CS2 vollständig neu starten.
 
 Unter **Keybinds** stehen die unveränderlichen Tasten. Alte persönliche Belegungen und Spielaktions-Navigation werden beim Laden ignoriert; Favoriten bleiben erhalten.
 

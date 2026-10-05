@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true, Position = 0)]
     [ValidateSet('local', 'live', 'status')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Cs2,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$Assets = (Join-Path $PSScriptRoot 'dist')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,7 +43,7 @@ if (Get-Process -Name cs2 -ErrorAction SilentlyContinue) {
 if ($Mode -eq 'local') {
     if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'build.ps1') -Cs2 $installRoot }
     foreach ($relative in $relativeFiles) {
-        $source = Join-Path $PSScriptRoot "dist/$relative"
+        $source = Join-Path $Assets $relative
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Kompilierte HUD-Datei fehlt: $source" }
     }
 }
@@ -59,7 +60,11 @@ try {
         $target = Join-Path $gameRoot $relative
         if ($Mode -eq 'local' -and $relativeFiles -contains $relative) {
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
-            Copy-Item -LiteralPath (Join-Path $PSScriptRoot "dist/$relative") -Destination $target -Force
+            $source = Join-Path $Assets $relative
+            Copy-Item -LiteralPath $source -Destination $target -Force
+            if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash) {
+                throw "Installierte HUD-Datei stimmt nicht mit der Quelle überein: $target"
+            }
         } elseif (Test-Path -LiteralPath $target -PathType Leaf) {
             Remove-Item -LiteralPath $target
         }
