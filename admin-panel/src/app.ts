@@ -62,7 +62,7 @@ async function resetRepairFlagAfterBootstrap({ config, store, compose, since }) 
 export function createApp({ config, store, compose, nadesSync, restartScheduler = null, rcon = executeRcon, steamVerifier = undefined }) {
   async function readMapInventory() {
     try {
-      const parsed = JSON.parse(await readFile(join(dirname(config.liveMatchZyNadesFile), "savednades.maps.json"), "utf8"));
+      const parsed = JSON.parse(await readFile(join(dirname(config.liveNadesFile), "savednades.maps.json"), "utf8"));
       return Array.isArray(parsed) ? parsed : null;
     } catch { return null; }
   }
@@ -142,7 +142,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   live.get(app, "/api/access", async () => {
       let published = null, applied = null;
       try { published = JSON.parse(await readFile(join(dirname(config.runtimeAdminsFile), "permissions.json"), "utf8")); } catch {}
-      try { applied = JSON.parse(await readFile(join(dirname(config.liveMatchZyNadesFile), "permissions-applied.json"), "utf8")); } catch {}
+      try { applied = JSON.parse(await readFile(join(dirname(config.liveNadesFile), "permissions-applied.json"), "utf8")); } catch {}
       const history = store.actions ? await store.actions.find({ type: { $in: ["user_role", "team_change", "team_join", "team_invite"] } }).sort({ createdAt: -1 }).limit(50).toArray() : [];
       return { roles: ROLE_CATALOG, actions: ACTIONS, history,
         runtime: { publishedRevision: published?.revision || null, appliedRevision: applied?.revision || null,

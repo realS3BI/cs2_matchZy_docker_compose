@@ -1,0 +1,26 @@
+using CounterStrikeSharp.API.Core;
+
+namespace Playbook;
+
+public sealed partial class PlaybookPlugin
+{
+    private void ToggleFavorite(CCSPlayerController player, NadeLineup? selected)
+    {
+        if (selected == null || !_menus.TryGetValue(player.Slot, out var session)) return;
+        var library = ReadLibrary(player);
+        if (library == null) return;
+        var lineup = library.FirstOrDefault(n => NadeReference.From(n) == NadeReference.From(selected));
+        if (lineup == null) { Tell(player, "Dieses Lineup ist nicht mehr verfügbar."); return; }
+        try
+        {
+            var settings = session.Settings.ToggleFavorite(lineup);
+            _settingsStore.Save(player.SteamID, settings);
+            session.Settings = settings;
+            session.Menu.Refresh(BuildMenu(player).Current);
+            session.Library = library;
+            Tell(player, settings.IsFavorite(lineup) ? "In deinen Favoriten gespeichert." : "Aus deinen Favoriten entfernt.");
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        { Tell(player, "Favoriten nicht gespeichert: " + error.Message); }
+    }
+}

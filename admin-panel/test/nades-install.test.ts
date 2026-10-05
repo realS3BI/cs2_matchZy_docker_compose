@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile, access } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -45,7 +45,7 @@ printf '%s' "$matchzy_enabled"
 });
 
 test("panel HUD controls override legacy environment and clear only client addons", async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), "matchzy-hud-settings-"));
+  const fixture = await mkdtemp(join(tmpdir(), "playbook-hud-settings-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));
   const settingsFile = join(fixture, "settings.json");
   const config = join(fixture, "multiaddonmanager.cfg");
@@ -63,11 +63,11 @@ fail() { exit 1; }
 is_enabled() { [[ "$1" == "1" ]]; }
 ${configure}
 ${writer}
-export MATCHZY_TRAINING_HUD_READY=1
-export MATCHZY_TRAINING_HUD_ADDON_ID=999
+export PLAYBOOK_TRAINING_HUD_READY=1
+export PLAYBOOK_TRAINING_HUD_ADDON_ID=999
 configure_upstream_process
 write_multiaddonmanager_config ${quote(config)} 1 111 222
-printf '%s' "$MATCHZY_TRAINING_HUD_READY"
+printf '%s' "$PLAYBOOK_TRAINING_HUD_READY"
 `;
   for (const [enabled, workshop, expectedId, ready] of [
     [true, true, "123456", "1"], [true, false, "", "1"], [false, true, "", "0"]
@@ -89,18 +89,23 @@ printf '%s' "$MATCHZY_TRAINING_HUD_READY"
 });
 
 test("bootstrap installs the role guard in every mode and preserves its data", async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), "matchzy-nades-install-"));
+  const fixture = await mkdtemp(join(tmpdir(), "playbook-plugin-install-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));
   const bundle = join(fixture, "bundled.dll");
   const gamedata = join(fixture, "playbook-nades.json");
-  const signatures = await readFile(resolve("../nades-plugin/gamedata/playbook-nades.json"), "utf8");
-  const plugin = join(fixture, "css", "plugins", "MatchZyNades");
+  const signatures = await readFile(resolve("../server-plugin/gamedata/playbook-nades.json"), "utf8");
+  const plugin = join(fixture, "css", "plugins", "Playbook");
+  const legacy = join(fixture, "css", "plugins", "MatchZyNades");
+  await mkdir(join(legacy, "data", "players"), { recursive: true });
+  await writeFile(join(legacy, "MatchZyNades.dll"), "previous plugin");
+  await writeFile(join(legacy, "data", "players", "76561198000000000.json"), '{"favorites":["owner/map/lineup"],"hotkey":"KP_0"}');
+  await writeFile(join(legacy, "data", "keep.json"), "older settings");
   await mkdir(join(plugin, "data"), { recursive: true });
   await writeFile(bundle, "bundled plugin");
   await writeFile(gamedata, signatures);
   await writeFile(join(plugin, "data", "keep.json"), "keep");
   const pre = await readFile(resolve("../cs2/pre.sh"), "utf8");
-  const install = pre.match(/  install_matchzy_nades\(\) \{[\s\S]*?\n  \}/)?.[0];
+  const install = pre.match(/  install_playbook\(\) \{[\s\S]*?\n  \}/)?.[0];
   assert.ok(install);
   // Exercise the real bootstrap function with its image bundle paths redirected to this fixture.
   const script = `set -eu
@@ -108,22 +113,36 @@ CSS_DIR=${quote(join(fixture, "css"))}
 log() { :; }
 fail() { exit 1; }
 copy_file_atomic() { cp "$1" "$2"; }
-${install.replace('"/opt/matchzy-nades/MatchZyNades.dll"', quote(bundle)).replace('"/opt/matchzy-nades/playbook-nades.json"', quote(gamedata))}
-install_matchzy_nades "$1"
+${install.replace('"/opt/playbook/Playbook.dll"', quote(bundle)).replace('"/opt/playbook/playbook-nades.json"', quote(gamedata))}
+install_playbook "$1"
 `;
   for (const mode of ["matchzy", "nades", "warmup", "vanilla"]) {
     await execFileAsync("bash", ["-c", script, "nades-install", mode]);
-    if (["matchzy", "nades"].includes(mode))
-      assert.equal(await readFile(join(plugin, "MatchZyNades.dll"), "utf8"), "bundled plugin");
-    else
-      assert.equal(await readFile(join(plugin, "MatchZyNades.dll"), "utf8"), "bundled plugin");
+    assert.equal(await readFile(join(plugin, "Playbook.dll"), "utf8"), "bundled plugin");
     assert.equal(await readFile(join(plugin, "data", "keep.json"), "utf8"), "keep");
+    assert.equal(await readFile(join(plugin, "data", "players", "76561198000000000.json"), "utf8"), '{"favorites":["owner/map/lineup"],"hotkey":"KP_0"}');
+    await assert.rejects(access(legacy));
     assert.equal(await readFile(join(fixture, "css", "gamedata", "playbook-nades.json"), "utf8"), signatures);
   }
+  const archiveRoot = join(fixture, "css", "playbook-migration");
+  const archives = await readdir(archiveRoot);
+  assert.equal(archives.length, 1, "Repeated startup must not repeat the migration");
+  assert.equal(await readFile(join(archiveRoot, archives[0], "MatchZyNades", "data", "keep.json"), "utf8"), "older settings");
+  assert.equal(await readFile(join(archiveRoot, archives[0], "MatchZyNades", "MatchZyNades.dll"), "utf8"), "previous plugin");
+  // The real bootstrap is called from an if, which disables implicit errexit.
+  // A failed copy must still stop before moving the only original data.
+  await mkdir(join(legacy, "data"), { recursive: true });
+  await writeFile(join(legacy, "data", "uncopied.json"), "original");
+  await writeFile(join(legacy, "MatchZyNades.dll"), "previous plugin");
+  const failedCopy = script.replace('install_playbook "$1"', 'cp() { return 1; }\nif install_playbook "$1"; then :; fi');
+  await assert.rejects(execFileAsync("bash", ["-c", failedCopy, "playbook-install", "nades"]));
+  assert.equal(await readFile(join(legacy, "data", "uncopied.json"), "utf8"), "original");
+  assert.equal(await readFile(join(legacy, "MatchZyNades.dll"), "utf8"), "previous plugin");
+  assert.equal((await readdir(archiveRoot)).length, 1);
 });
 
 test("training HUD mounts as client addon and preserves the server addon list", async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), "matchzy-hud-install-"));
+  const fixture = await mkdtemp(join(tmpdir(), "playbook-hud-install-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));
   const config = join(fixture, "multiaddonmanager.cfg");
   const pre = await readFile(resolve("../cs2/pre.sh"), "utf8");
@@ -134,7 +153,7 @@ log() { :; }
 fail() { exit 1; }
 is_enabled() { [[ "$1" == "1" ]]; }
 ${writer}
-MATCHZY_TRAINING_HUD_ADDON_ID="$1"
+PLAYBOOK_TRAINING_HUD_ADDON_ID="$1"
 shift
 write_multiaddonmanager_config ${quote(config)} 1 "$@"
 `;

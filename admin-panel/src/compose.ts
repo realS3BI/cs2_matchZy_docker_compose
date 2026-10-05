@@ -40,13 +40,13 @@ probe_file counterStrikeSharpApi "$root/addons/counterstrikesharp/api/CounterStr
 probe_file matchZy "$root/addons/counterstrikesharp/plugins/MatchZy/MatchZy.dll"
 probe_file matchZyConfig "$root/cfg/MatchZy/config.cfg"
 probe_file matchZySavedNades "$root/cfg/MatchZy/savednades.json"
-probe_file matchZyNades "$root/addons/counterstrikesharp/plugins/MatchZyNades/MatchZyNades.dll"
-probe_file matchZyNadesBundled "/opt/matchzy-nades/MatchZyNades.dll"
-status_file="$root/addons/counterstrikesharp/plugins/MatchZyNades/data/status.json"
+probe_file playbookPlugin "$root/addons/counterstrikesharp/plugins/Playbook/Playbook.dll"
+probe_file playbookPluginBundled "/opt/playbook/Playbook.dll"
+status_file="$root/addons/counterstrikesharp/plugins/Playbook/data/status.json"
 if [ -f "$status_file" ]; then
   runtime="$(jq -ce '{state, version, loadedAt, updatedAt, practice, map}' "$status_file" 2>/dev/null)"
   if [ -n "$runtime" ]; then
-    printf 'RUNTIME\tmatchZyNades\t%s\n' "$runtime"
+    printf 'RUNTIME\tplaybookPlugin\t%s\n' "$runtime"
   fi
 fi
 probe_file weaponPaints "$root/addons/counterstrikesharp/plugins/WeaponPaints/WeaponPaints.dll"

@@ -1,4 +1,4 @@
-name: cs2-matchzy-dev
+name: playbook-dev
 
 services:
   mongodb:

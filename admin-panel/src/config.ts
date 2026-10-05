@@ -22,8 +22,8 @@ export function getConfig() {
     runtimeSettingsFile: "/runtime/settings.json",
     runtimeAdminsFile: "/runtime/csharp-admins.json",
     runtimeMatchZyAdminsFile: "/runtime/matchzy-admins.json",
-    runtimeMatchZyNadesFile: "/runtime/matchzy-savednades.json",
-    liveMatchZyNadesFile: "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
+    runtimeNadesFile: "/runtime/playbook-lineups.json",
+    liveNadesFile: "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
     liveMatchZyConfigFile: "/cs2-data/game/csgo/cfg/MatchZy/config.cfg",
     uploadDir: "/uploads",
     demoDir: "/demos",
@@ -39,7 +39,7 @@ export function getConfig() {
     nadesSyncEnabled: true,
     nadesSyncIntervalMs: 2000,
     controlMode: "docker",
-    composeProjectName: "cs2-matchzy",
+    composeProjectName: process.env.PLAYBOOK_COMPOSE_PROJECT_NAME || "playbook",
     serviceName: "cs2",
     containerName: ""
   };

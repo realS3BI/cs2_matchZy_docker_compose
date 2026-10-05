@@ -23,15 +23,15 @@ try {
     foreach ($directory in @('training-hud/layout', 'training-hud/styles', 'cs2 with spaces/game/csgo')) {
         New-Item -ItemType Directory -Force -Path (Join-Path $fixture $directory) | Out-Null
     }
-    'layout-source' | Set-Content -LiteralPath (Join-Path $hudRoot 'layout/matchzy_training.xml')
-    'styles-source' | Set-Content -LiteralPath (Join-Path $hudRoot 'styles/matchzy_training.css')
+    'layout-source' | Set-Content -LiteralPath (Join-Path $hudRoot 'layout/playbook_training.xml')
+    'styles-source' | Set-Content -LiteralPath (Join-Path $hudRoot 'styles/playbook_training.css')
     @'
 param([string]$Cs2)
 $global:HudFlowBuilds++
 foreach ($part in @(@('layout', 'xml', 'vxml_c'), @('styles', 'css', 'vcss_c'))) {
     $target = Join-Path $PSScriptRoot "dist/panorama/$($part[0])/custom_game"
     New-Item -ItemType Directory -Force -Path $target | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "$($part[0])/matchzy_training.$($part[1])") -Destination (Join-Path $target "matchzy_training.$($part[2])") -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "$($part[0])/playbook_training.$($part[1])") -Destination (Join-Path $target "playbook_training.$($part[2])") -Force
 }
 '@ | Set-Content -LiteralPath (Join-Path $hudRoot 'build.ps1')
     @'
@@ -93,7 +93,7 @@ if ($args -contains '+workshop_build_item') {
     $global:HudFlowLoginExit = 0
     $global:HudFlowUploadOutput = 'Success. Uploaded item to Workshop (PublishedFileID 3810441722).'
     $cs2 = Join-Path $fixture 'cs2 with spaces'
-    $global:HudFlowLocalAsset = Join-Path $cs2 'game/csgo/panorama/layout/custom_game/matchzy_training.vxml_c'
+    $global:HudFlowLocalAsset = Join-Path $cs2 'game/csgo/panorama/layout/custom_game/playbook_training.vxml_c'
     $script = Join-Path $hudRoot 'local-release.ps1'
     $parameters = @{ Cs2 = $cs2; SteamCmd = (Join-Path $fixture 'steamcmd.ps1'); SteamUsername = 'test_owner' }
     $proof = Join-Path $hudRoot 'dist/release.json'
@@ -129,7 +129,7 @@ if ($args -contains '+workshop_build_item') {
     Expect-Failure { & $script @parameters -Mode release } 'Lokales HUD stimmt nicht'
     Assert ($global:HudFlowUploads -eq 1 -and $global:HudFlowLogins -eq 1) 'Nach Änderung während des Tests darf Steam nicht aufgerufen werden.'
     $global:HudFlowMutateOnApproval = $false
-    Copy-Item -LiteralPath (Join-Path $hudRoot 'dist/panorama/layout/custom_game/matchzy_training.vxml_c') -Destination $global:HudFlowLocalAsset -Force
+    Copy-Item -LiteralPath (Join-Path $hudRoot 'dist/panorama/layout/custom_game/playbook_training.vxml_c') -Destination $global:HudFlowLocalAsset -Force
 
     Set-Answers @()
     & $script @parameters | Out-Null
@@ -167,7 +167,7 @@ if ($args -contains '+workshop_build_item') {
     Set-Answers @()
     & $script @parameters -Mode live | Out-Null
     Assert (-not (Test-Path -LiteralPath $global:HudFlowLocalAsset)) 'Live muss lokale Overrides entfernen.'
-    Assert (@(Get-ChildItem -LiteralPath (Join-Path $cs2 'matchzy-hud-backups') -Recurse -File).Count -ge 2) 'Lokale Overrides müssen vor dem Entfernen gesichert werden.'
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $cs2 'playbook-hud-backups') -Recurse -File).Count -ge 2) 'Lokale Overrides müssen vor dem Entfernen gesichert werden.'
     Assert ($global:HudFlowBuilds -eq $builds) 'Live/Status dürfen keinen Build starten.'
 
     # Updating launches Playbook without Steam prompts; publishing is a separate action.

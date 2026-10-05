@@ -1,7 +1,7 @@
 {
   "name": "playbook-desktop",
   "productName": "Playbook",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Playbook mit automatischer CS2-Review-Aufnahme für Windows",
   "author": "Sebastian Schlosser",
   "private": true,
@@ -53,9 +53,18 @@
       {
         "provider": "github",
         "owner": "realS3BI",
-        "repo": "cs2_matchZy_docker_compose",
+        "repo": "playbook",
         "releaseType": "release"
       }
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/realS3BI/playbook.git",
+    "directory": "playbook-desktop"
+  },
+  "homepage": "https://github.com/realS3BI/playbook#readme",
+  "bugs": {
+    "url": "https://github.com/realS3BI/playbook/issues"
   }
 }

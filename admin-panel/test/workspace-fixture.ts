@@ -18,11 +18,11 @@ export async function workspaceFixture(publicUrl = "http://localhost:5177") {
     bootstrapAdminSteamId: ids[0],
     publicUrl,
     sessionSecret: "isolated-integration-test-secret",
-    liveMatchZyNadesFile: join(directory, "nades.json"),
+    liveNadesFile: join(directory, "nades.json"),
     runtimeSettingsFile: join(directory, "settings.json"),
     runtimeAdminsFile: join(directory, "admins.json"),
     runtimeMatchZyAdminsFile: join(directory, "matchzy-admins.json"),
-    runtimeMatchZyNadesFile: join(directory, "savednades.json"),
+    runtimeNadesFile: join(directory, "savednades.json"),
     uploadDir: directory,
   };
   const store = new Store(config);

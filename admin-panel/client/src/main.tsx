@@ -438,26 +438,38 @@ function SettingField({ field, value, onChange }) {
 
 const usefulLinks = [
   {
-    title: "MatchZy documentation",
-    description: "Setup, configuration, match commands and API reference.",
-    href: "https://shobhit-pathak.github.io/MatchZy/",
-    category: "Documentation"
+    title: "Playbook",
+    description: "Projekt, Installation, Entwicklung und Betrieb der CS2-Plattform.",
+    href: "https://github.com/realS3BI/playbook",
+    category: "Projekt"
   },
   {
-    title: "MatchZy on GitHub",
-    description: "Source code, releases and issue tracker for the match plugin.",
+    title: "Playbook-Dokumentation",
+    description: "Training, Lineups, Reviews und die Einbindung des MatchZy-Modus.",
+    href: "https://github.com/realS3BI/playbook/blob/main/docs/README.md",
+    category: "Dokumentation"
+  },
+  {
+    title: "MatchZy-Dokumentation",
+    description: "Konfiguration, Match-Befehle und API des MatchZy-Modus.",
+    href: "https://shobhit-pathak.github.io/MatchZy/",
+    category: "Spielmodus"
+  },
+  {
+    title: "MatchZy auf GitHub",
+    description: "Quellcode, Releases und Fehlerberichte des externen Match-Plugins.",
     href: "https://github.com/shobhit-pathak/MatchZy",
-    category: "Game mode"
+    category: "Spielmodus"
   },
   {
     title: "Fortnite Emotes & Dances",
-    description: "Source code, commands and releases for the optional emote plugin.",
+    description: "Quellcode, Befehle und Releases des optionalen Emote-Plugins.",
     href: "https://github.com/Cruze03/FortniteEmotesNDances",
     category: "Plugin"
   },
   {
-    title: "CounterStrikeSharp documentation",
-    description: "Framework installation, configuration and API documentation.",
+    title: "CounterStrikeSharp-Dokumentation",
+    description: "Installation, Konfiguration und API des Server-Frameworks.",
     href: "https://docs.cssharp.dev/",
     category: "Framework"
   }
@@ -467,9 +479,9 @@ function Links() {
   return (
     <>
       <PageHeader
-        eyebrow="Reference shelf"
-        title="Links"
-        description="Documentation, repositories and release pages used to run this server."
+        eyebrow="Playbook"
+        title="Dokumentation"
+        description="Anleitungen für Playbook und Referenzen der eingebundenen Server-Komponenten."
       />
       <div className="grid gap-3 md:grid-cols-2">
         {usefulLinks.map((link) => {

@@ -157,7 +157,7 @@ export class ReviewCaptureBridge {
 }
 
 export function installReviewCapture(app, { config, store }) {
-  const bridge = config.liveMatchZyNadesFile ? new ReviewCaptureBridge(join(dirname(config.liveMatchZyNadesFile), "savednades.review")) : null;
+  const bridge = config.liveNadesFile ? new ReviewCaptureBridge(join(dirname(config.liveNadesFile), "savednades.review")) : null;
   const route = (path, handler) => app.post(`/api/nades/review/capture/${path}`, async (req, res) => {
     try {
       if (!isPlatformAdmin(res.locals.user)) return res.status(403).json({ error: "Ingame-Aufnahmen sind nur für Plattform-Admins verfügbar." });

@@ -58,7 +58,7 @@ test("review HTTP sessions use the authenticated Steam ID, return exact panel me
   const app = express();
   app.use(express.json());
   app.use((_req, res, next) => { res.locals.user = user; next(); });
-  installReviewCapture(app, { config: { liveMatchZyNadesFile: join(directory, "savednades.json"), uploadthingToken: "configured" }, store: { getNades: async () => entries } });
+  installReviewCapture(app, { config: { liveNadesFile: join(directory, "savednades.json"), uploadthingToken: "configured" }, store: { getNades: async () => entries } });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));

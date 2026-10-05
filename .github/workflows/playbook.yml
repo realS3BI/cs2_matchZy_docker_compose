@@ -1,0 +1,51 @@
+name: Playbook prüfen
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: admin-panel/pnpm-lock.yaml
+      - name: Testwerkzeuge installieren
+        run: sudo apt-get update && sudo apt-get install -y jq ffmpeg
+      - name: Website und API prüfen
+        working-directory: admin-panel
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+          pnpm build
+      - name: Startskripte prüfen
+        run: |
+          bash -n cs2/pre.sh cs2/entrypoint.sh dev.sh hud.sh
+          node --check dev.mjs
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Playbook-Plugin testen und bauen
+        run: |
+          dotnet test server-plugin/Playbook.Tests/Playbook.Tests.csproj --configuration Release
+          dotnet publish server-plugin/Playbook/Playbook.csproj --configuration Release --output /tmp/playbook-plugin
+      - name: HUD-Skripte und Migration prüfen
+        shell: pwsh
+        run: |
+          ./training-hud/test-release.ps1
+          ./training-hud/test-local-release.ps1
+          ./training-hud/test-update-local.ps1
+          ./training-hud/test-panel-migration.ps1

@@ -12,17 +12,26 @@ if (-not (Test-Path -LiteralPath $gameRoot -PathType Container)) {
     throw "Kein CS2-Spielverzeichnis: $gameRoot"
 }
 $relativeFiles = @(
+    'panorama/layout/custom_game/playbook_training.vxml_c',
+    'panorama/styles/custom_game/playbook_training.vcss_c'
+)
+$legacyFiles = @(
     'panorama/layout/custom_game/matchzy_training.vxml_c',
     'panorama/styles/custom_game/matchzy_training.vcss_c'
 )
-$present = @($relativeFiles | Where-Object { Test-Path -LiteralPath (Join-Path $gameRoot $_) -PathType Leaf })
+$managedFiles = @($relativeFiles) + @($legacyFiles)
+$present = @($managedFiles | Where-Object { Test-Path -LiteralPath (Join-Path $gameRoot $_) -PathType Leaf })
 if ($Mode -eq 'status') {
-    if ($present.Count -eq 2) {
+    $currentCount = @($relativeFiles | Where-Object { $present -contains $_ }).Count
+    if ($currentCount -eq 2) {
         Write-Output 'Local: Beide lokalen HUD-Dateien sind installiert.'
-    } elseif ($present.Count -eq 0) {
+    } elseif ($currentCount -eq 0) {
         Write-Output 'Live: Keine lokalen HUD-Dateien installiert. Das Workshop-Addon muss vom Server bereitgestellt werden.'
     } else {
         Write-Output 'Unvollständig: Nur eine lokale HUD-Datei vorhanden. Mit local oder live korrigieren.'
+    }
+    if (@($legacyFiles | Where-Object { $present -contains $_ }).Count -gt 0) {
+        Write-Output 'Alte MatchZy-HUD-Dateien vorhanden. Mit local oder live sichern und entfernen.'
     }
     Write-Output 'Status der Dateien auf der Festplatte; ein laufender Client kann noch die vorherige Version im Cache haben.'
     return
@@ -39,16 +48,16 @@ if ($Mode -eq 'local') {
 }
 
 # Backups are outside game/csgo so CS2 cannot mount them as overrides.
-$backup = Join-Path $installRoot ("matchzy-hud-backups/" + [guid]::NewGuid().ToString('N'))
+$backup = Join-Path $installRoot ("playbook-hud-backups/" + [guid]::NewGuid().ToString('N'))
 foreach ($relative in $present) {
     $saved = Join-Path $backup $relative
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $saved) | Out-Null
     Copy-Item -LiteralPath (Join-Path $gameRoot $relative) -Destination $saved
 }
 try {
-    foreach ($relative in $relativeFiles) {
+    foreach ($relative in $managedFiles) {
         $target = Join-Path $gameRoot $relative
-        if ($Mode -eq 'local') {
+        if ($Mode -eq 'local' -and $relativeFiles -contains $relative) {
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot "dist/$relative") -Destination $target -Force
         } elseif (Test-Path -LiteralPath $target -PathType Leaf) {
@@ -57,7 +66,7 @@ try {
     }
 } catch {
     # Restore the original pair, including an originally missing file.
-    foreach ($relative in $relativeFiles) {
+    foreach ($relative in $managedFiles) {
         $target = Join-Path $gameRoot $relative
         if ($present -contains $relative) {
             Copy-Item -LiteralPath (Join-Path $backup $relative) -Destination $target -Force

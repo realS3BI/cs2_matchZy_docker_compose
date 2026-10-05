@@ -111,8 +111,8 @@ export function watchLiveRuntime({
     events();
     void logs();
   }
-  if (config.liveMatchZyNadesFile) {
-    const directory = dirname(config.liveMatchZyNadesFile);
+  if (config.liveNadesFile) {
+    const directory = dirname(config.liveNadesFile);
     watchDirectory(directory, (name) => {
       if (name === "permissions-applied.json") notify("/api/access");
       if (name === "savednades.maps.json")
@@ -121,7 +121,7 @@ export function watchLiveRuntime({
     watchDirectory(
       join(
         directory,
-        "../../addons/counterstrikesharp/plugins/MatchZyNades/data",
+        "../../addons/counterstrikesharp/plugins/Playbook/data",
       ),
       (name) => {
         if (name === "status.json")

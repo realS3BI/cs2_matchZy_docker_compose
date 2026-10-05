@@ -7,7 +7,7 @@ HUD-Dateien und Server-Plugin werden getrennt aktualisiert. Das Skript veröffen
 ## Windows einmal einrichten
 
 1. Git for Windows installieren und das Repository klonen, falls die Arbeitskopie noch nicht existiert. Dieser Projektordner darf beispielsweise auf dem Desktop liegen. Er muss eine Git-Arbeitskopie sein; ein ZIP-Download reicht für das automatische Update nicht aus.
-2. CS2 einschließlich Workshop Tools installieren oder aktualisieren. Unter dem CS2-Installationsverzeichnis muss `game/bin/win64/resourcecompiler.exe` existieren. Das Addon `matchzy_training_hud` einmal in den Workshop Tools anlegen, falls dieser Rechner es noch nicht kennt.
+2. CS2 einschließlich Workshop Tools installieren oder aktualisieren. Unter dem CS2-Installationsverzeichnis muss `game/bin/win64/resourcecompiler.exe` existieren. Das Addon `playbook_training_hud` einmal in den Workshop Tools anlegen, falls dieser Rechner es noch nicht kennt.
 3. PowerShell 7 und das .NET 10 **SDK** installieren. In Windows PowerShell:
 
    ```powershell
@@ -33,7 +33,7 @@ Der Ablauf ist bei jeder normalen Ausführung derselbe:
 
 1. Die Git-Arbeitskopie wird mit `git pull --ff-only` auf den Stand ihres eingestellten Upstream-Branches gebracht, beim normalen Klonen also `origin/main`. Ein fehlgeschlagenes Update bricht den Ablauf vor dem HUD-Build ab. Lokale Änderungen und eigene Commits werden nicht zurückgesetzt. Nach dem Pull wird das heruntergeladene Release-Skript verwendet.
 2. Beim ersten Start erkennt es CS2 über die Steam-Bibliotheken oder fragt nach dem Installationsverzeichnis. Beispiel: `D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive`. Leerzeichen im Pfad sind erlaubt.
-3. Es kompiliert die zwei Panorama-Dateien, erstellt mit ValvePak das Workshop-VPK und prüft dessen Inhalt nach erneutem Öffnen. Die vorherigen lokalen HUD-Dateien werden gesichert; anschließend wird der neue Build in `game/csgo/panorama` und im Addon `matchzy_training_hud` installiert.
+3. Es kompiliert die zwei Panorama-Dateien, erstellt mit ValvePak das Workshop-VPK und prüft dessen Inhalt nach erneutem Öffnen. Die vorherigen lokalen HUD-Dateien werden gesichert; anschließend wird der neue Build in `game/csgo/panorama` und im Addon `playbook_training_hud` installiert.
 4. Es prüft die installierten Panorama-Dateien, installiert die App-Abhängigkeiten mit `npm ci`, testet und baut die Electron-App samt Windows-Hilfsprogramm. Die frisch gebaute App unter `playbook-desktop/dist/win-unpacked/Playbook.exe` wird direkt geöffnet. Ein Installer und eine Workshop-Rückfrage sind dafür nicht nötig. Für den Review in Playbook **Server → Reviews** öffnen, CS2 starten und das Spielbild freigeben.
 
 Zum vollständigen Update müssen Git for Windows, PowerShell 7, Node.js 22 oder neuer einschließlich npm, .NET SDK 10 und die CS2 Workshop Tools installiert sein. Laufende Reviews vorher beenden. Ein fehlgeschlagener Pull oder Build öffnet keine ältere App. Das Workshop-Paket bleibt für einen späteren, ausdrücklich gestarteten Release vorbereitet.
@@ -98,7 +98,7 @@ Dieses Addon enthält Client-Dateien, keine spielbare Map und keinen eigenständ
 Communityprojekt, keine offizielle Valve-Veröffentlichung.
 ```
 
-Falls SteamCMD den Upload für App 730 oder das Erstellerkonto ablehnt, das bestehende Addon `matchzy_training_hud` in den Workshop Tools öffnen. Im Asset Browser unter **Tools → Counter-Strike 2 Workshop Manager** den bestehenden Eintrag **3810441722** aktualisieren. Die neuen kompilierten Dateien liegen bereits unter `game/csgo_addons/matchzy_training_hud/panorama/`. Keine neue Submission erstellen. Vor dem Upload prüfen, dass der Manager diese Dateien einpackt, und anschließend den erfolgreichen Upload bestätigen lassen. Eventuell verlangte Workshop-Vereinbarungen mit dem Erstellerkonto abschließen.
+Falls SteamCMD den Upload für App 730 oder das Erstellerkonto ablehnt, das bestehende Addon `playbook_training_hud` in den Workshop Tools öffnen. Im Asset Browser unter **Tools → Counter-Strike 2 Workshop Manager** den bestehenden Eintrag **3810441722** aktualisieren. Die neuen kompilierten Dateien liegen bereits unter `game/csgo_addons/playbook_training_hud/panorama/`. Keine neue Submission erstellen. Vor dem Upload prüfen, dass der Manager diese Dateien einpackt, und anschließend den erfolgreichen Upload bestätigen lassen. Eventuell verlangte Workshop-Vereinbarungen mit dem Erstellerkonto abschließen.
 
 Das Vorschaubild bei Bedarf mit `create-workshop-preview.ps1` erzeugen oder im Workshop Manager ersetzen.
 
