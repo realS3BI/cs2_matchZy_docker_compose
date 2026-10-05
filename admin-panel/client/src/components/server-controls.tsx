@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useLiveResource } from "../hooks/use-live-resource";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, MapPinned, RefreshCw, UploadCloud } from "lucide-react";
 import { api } from "../lib/api";
 import { BUILT_IN_MAPS, workshopMapsFromSettings } from "../lib/maps";
@@ -10,6 +11,7 @@ import { Field, FieldDescription, FieldLabel } from "./ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
 
 export function ServerControls({ settings, setSettings, policy, busy, running, onApply }) {
+  const gameVersion = useRef(0);
   const [game, setGame] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -25,7 +27,9 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
     setLoading(true);
     setError("");
     try {
-      setGame(await api("/api/server/game"));
+      const version = gameVersion.current;
+      const data = await api("/api/server/game");
+      if (version === gameVersion.current) setGame(data);
     } catch (error) {
       setGame(null);
       throw error;
@@ -38,13 +42,16 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
     if (busy || !running) { setGame(null); return; }
     let cancelled = false;
     setLoading(true);
+    const version = gameVersion.current;
     api("/api/server/game").then((result) => {
-      if (!cancelled) { setGame(result); setError(""); }
+      if (!cancelled && version === gameVersion.current) { setGame(result); setError(""); }
     }).catch((error) => {
       if (!cancelled) { setGame(null); setError(error.message); }
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [busy, running]);
+
+  useLiveResource(running ? "/api/server/game" : null, data => { gameVersion.current++; setGame(data); setError(""); }, error => { setGame(null); setError(error.message); });
 
   async function changeMap() {
     setSwitching(true);

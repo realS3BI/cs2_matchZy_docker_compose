@@ -1,3 +1,4 @@
+import { useLiveResource } from "../hooks/use-live-resource";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Star } from "lucide-react";
 import { api } from "../lib/api";
@@ -17,13 +18,15 @@ export function NadeFavoritesProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const saving = useRef(false);
+  const receivedLive = useRef(false);
   useEffect(() => {
     let current = true;
     api("/api/nades/favorites").then(data => {
-      if (current) { setFavorites(data.entries || []); setLoaded(true); }
+      if (current && !receivedLive.current) { setFavorites(data.entries || []); setLoaded(true); }
     }).catch(error => { if (current) setError(error.message); });
     return () => { current = false; };
   }, []);
+  useLiveResource("/api/nades/favorites", data => { receivedLive.current = true; setFavorites(data.entries || []); setLoaded(true); setError(""); }, error => setError(error.message));
   const keys = new Set(favorites.map(lineupKey));
   async function toggle(nade: LineupReference) {
     if (!loaded || saving.current) return;

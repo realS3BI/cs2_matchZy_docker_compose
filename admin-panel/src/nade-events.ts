@@ -8,17 +8,21 @@ export class NadeEvents {
     for (const listener of this.listeners) listener(entries);
   }
 
-  async stream(req: Request, res: Response, read: () => Promise<any[]>) {
+  async stream(req: Request, res: Response, read: () => Promise<any[]>, allowed: () => Promise<boolean> = async () => true) {
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" });
     res.flushHeaders();
     let changed = false;
+    let pending = Promise.resolve();
     const send = (entries: any[]) => {
       changed = true;
-      if (res.destroyed || res.writableLength > 4 * 1024 * 1024) { res.destroy(); return; }
-      res.write(`event: library\ndata: ${JSON.stringify({ entries })}\n\n`);
+      pending = pending.then(async () => {
+        if (res.destroyed || !await allowed()) { res.end(); return; }
+        if (res.writableLength > 4 * 1024 * 1024) { res.destroy(); return; }
+        res.write(`event: library\ndata: ${JSON.stringify({ entries })}\n\n`);
+      }).catch(() => { res.end(); });
     };
     this.listeners.add(send);
-    const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 25000);
+    const heartbeat = setInterval(() => { void allowed().then(ok => ok ? res.write(": heartbeat\n\n") : res.end()).catch(() => res.end()); }, 25000);
     heartbeat.unref();
     res.on("close", () => { clearInterval(heartbeat); this.listeners.delete(send); });
     try {

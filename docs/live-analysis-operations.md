@@ -1,0 +1,69 @@
+# Live, Tonaufnahmen und Matchvorbereitung
+
+Stand: 5. Oktober 2026. Die Erweiterung ist im Projekt umgesetzt. Eigene FACEIT- und Premier-Matches bleiben die Hauptquellen; die nachstehenden externen Zugänge werden nicht durch die Steam-Anmeldung bereitgestellt.
+
+## Live gemeinsam verwenden
+
+Unter **Analyse → Live** bereitet ein Owner oder Captain einen Raum vor. Er wählt **Match begleiten** oder **Demo / Stratbook besprechen** und benennt ein Teammitglied, das die Tonaufnahme übernimmt. Nach der Bestätigung durch den Moderator wird die Sitzung gestartet. Das Team öffnet denselben Raumlink.
+
+Der Moderator präsentiert analysierte Teamdemos, veröffentlichte Strats oder Notizen. Wiedergabe, Wechsel, Kartenzeiger, Moderationsübernahme und Notizen werden auf einer gemeinsamen Zeitachse gespeichert. Befehle werden über die vorhandene WebSocket-Verbindung bestätigt; Revisionsprüfungen verhindern konkurrierende Änderungen. Nach dem Wiederverbinden wird der gespeicherte Raum geladen. Präsentierte Strat-Versionen werden kopiert: Eine spätere Veröffentlichung verändert die alte Besprechung nicht.
+
+Die Tonaufnahme startet ausdrücklich auf dem eingeteilten Rechner. Im Browser sind Mikrofonaufnahme und getrennte Imports für Spielton und Kommunikation verfügbar. WAV, MP3, M4A, WebM und OGG werden unterstützt. Spielimports erhalten Stereo; Kommunikationsimports werden in Mono verarbeitet. Die Dateien beginnen zunächst bei Sitzungssekunde 0 und werden anschließend über ihre Zeitanker zur Demo ausgerichtet.
+
+Die Windows-Desktop-App bietet **Spiel und Kommunikation aufnehmen**. Zwei aktive Windows-Aufnahmegeräte werden über ihre stabilen Geräte-IDs ausgewählt und lokal gespeichert. Für neue Einstellungen schlägt die Oberfläche `Voicemeeter Out B1` und `Voicemeeter Out B2` vor. Alte Treibernamen können manuell gewählt werden. Fehlt ein gespeichertes Gerät, wird kein Standardmikrofon als Ersatz aufgenommen. Pegelanzeigen helfen vor dem Start und während der Aufnahme bei der Prüfung; vor dem Start werden sie alle 2,5 Sekunden aktualisiert. Beide Spuren verwenden dieselbe monotone Aufnahmezeitbasis und werden auf 48 kHz normalisiert. Der Recorder erfasst ausschließlich die beiden ausgewählten Aufnahmegeräte; er benötigt keine Discord-Prozessaufnahme, keinen Discord-Bot und keine CS2-Review-Verbindung.
+
+### Voicemeeter-Routing für Sebastians Setup
+
+A1 bleibt der Kopfhörer, A2 der Lautsprecher. Windows und Discord verwenden weiterhin B3 als Mikrofoneingang. B3 ist ein Windows-Aufnahmegerät, kein Wiedergabegerät. Die vorhandenen A1/A2-Schalter werden nicht verändert.
+
+| Kanal | B1 · Spielaufnahme | B2 · Kommunikation | B3 · Mikrofon für Anwendungen |
+| --- | --- | --- | --- |
+| Headset-Mikrofon · Hardware-Eingang 1 | Aus | An | An |
+| Voice · Discord über CABLE-A Output | Aus | An | Aus |
+| Game · CS2 über CABLE-B Output | An | Aus | Aus |
+| Musik, Browser, Default und weitere Eingänge | Aus | Aus | Aus |
+
+Gegenüber dem gezeigten Ausgangszustand werden Game → B1 und Voice → B2 zusätzlich aktiviert. Das Mikrofon liegt bereits auf B2 und B3. B2 darf danach nicht als Mikrofoneingang in Discord oder CS2 verwendet werden, weil er auch empfangene Stimmen enthält. CS2 und Discord senden an die Wiedergabegeräte CABLE-B Input beziehungsweise CABLE-A Input; Voicemeeter empfängt diese über die jeweiligen Cable-Outputs. Ingame-Calls sind in der Spielspur enthalten, wenn CS2 sie über dieselbe Ausgabe wiedergibt. Die eigene Stimme ist auf der Kommunikationsspur enthalten.
+
+Die optionale **Mikrofonzuleitung zu B2 steuern** verwendet die installierte [Voicemeeter Remote API](https://download.vb-audio.com/Download_CABLE/VoicemeeterRemoteAPI.pdf). Der Mikrofonkanal wird ausdrücklich gewählt; Standard ist Hardware-Eingang 1. Der Helfer verändert ausschließlich `Strip[i].B2`, bestätigt die Änderung durch Rücklesen und stellt beim normalen Aufnahmeende den vorherigen Zustand wieder her. B3, Mikrofon-Mute, A1/A2 und die übrigen Kanäle bleiben erhalten. Ohne verfügbare Remote API oder bei einer Kommunikationsquelle außerhalb B2 bleibt die Aufnahme möglich; die Zuleitung muss dann in Voicemeeter bedient werden. Discord-Mute und Push-to-Talk steuern diesen Mitschnitt nicht. Nach einem erzwungenen Prozessabbruch den B2-Schalter am Mikrofon prüfen, weil die Wiederherstellung dann nicht garantiert ist.
+
+Browsersegmente werden vor dem Upload in IndexedDB gespeichert. Die Desktop-App schreibt WAV-Segmente lokal, komprimiert sie zu AAC und behält die Dateien bis zur bestätigten Verarbeitung. Nach einem Neustart werden zurückgelassene WAV-Dateien wiederhergestellt und ausstehende Segmente erneut gesendet, einschließlich älterer Discord-/Mikrofonaufnahmen. Ein Konto- oder Teamwechsel erteilt keinen Zugriff auf die alten lokalen Dateien. Bei Geräteverlust oder zu wenig lokalem Speicher wird die Aufnahme beendet und die vorhandenen Segmente bleiben erhalten. Ein laufender Tonmitschnitt bleibt bei Seitenwechseln sichtbar. Vor einem App-Update muss die Aufnahme beendet werden. Die Windows-Aufnahme und Voicemeeter-Steuerung benötigen noch einen Hardwaretest auf dem eingerichteten Rechner.
+
+Nach dem Ende kann die Besprechung mit ihren Präsentationswechseln abgespielt werden. Bei **Match begleiten** wird die passende Teamdemo anschließend verbunden. Mindestens zwei Zeitanker je Tonspur verbinden eine Stelle im Audio mit einer Runde und deren Sekundenposition. Weitere gespeicherte Anker werden bei der Interpolation berücksichtigt; zwischen Ankern wird linear abgeglichen. Es gibt noch keine automatische Zuordnung durch CS2-GSI oder Spracherkennung.
+
+Ein Captain kann einen Ausschnitt als Erklärung an eine Strat oder einen ihrer fünf Plätze hängen. Bei Besprechungen bezieht sich der Ausschnitt auf die Sitzungszeit, bei Matchaufnahmen auf die ausgewählte Demorunde. Der Link öffnet diese Stelle. Die Sitzung wird dabei angeheftet und bleibt erhalten. Die Verknüpfung kann im Stratbook wieder entfernt werden; anschließend lässt sich die Aufbewahrung in der Aufnahme lösen.
+
+## Prematch vorbereiten
+
+Unter **Analyse → Prematch** entsteht eine Teamvorbereitung mit Gegner-Team oder FACEIT-Matchroom, erwarteter Besetzung, Zeitraum, Wettbewerb und eigenem Matchplan. Ein FACEIT-Championship-/Turnierlink kann ergänzt werden; der Abgleich übernimmt passende Gegnermatches aus dem Wettbewerb. Der Quellenabgleich ist begrenzt: Spielerhistorien liefern zunächst bis zu 30 Matches je Spieler, ein Wettbewerb bis zu 500 Einträge. Die Oberfläche zeigt die daraus tatsächlich verfügbare Auswahl.
+
+Der Captain bestätigt die erwarteten fünf FACEIT-Spieler-IDs. Der Bericht zählt die vollständige Besetzung getrennt von teilweise gleichen Besetzungen. Map-Ergebnisse verwenden vorhandene Einzelmatchwerte; Serienergebnisse werden nicht als Rundenergebnis jeder Map ausgegeben. Ohne Demo gibt es keine erfundene Utility-Tendenz. Analysierte Demos liefern belegte Beispiele früher Smokes und Molotovs mit Szenenlinks. Das sind Beispiele aus den ersten 20 Sekunden nach Freeze-Ende, ohne Einkaufsfilter, keine Full-Buy-, Trade- oder Vetoanalyse.
+
+Eigene veröffentlichte Strats lassen sich dem Matchplan hinzufügen. Entwürfe sind für Owner und Captains sichtbar; nach dem Veröffentlichen kann das gesamte Team die Vorbereitung lesen. Die Bedienung mit Spieler-IDs ist ein erster Stand; eine Suche mit Nicknames ist noch nicht vorhanden.
+
+## Quellenzugänge einrichten
+
+Die neuen Variablen stehen in [.env.example](../.env.example) und werden in beiden Compose-Konfigurationen an die API weitergegeben. Nach Änderungen die Entwicklungsumgebung neu starten beziehungsweise die API neu erstellen. API und Worker teilen das private Demo-Volume. Die lokale Entwicklungs-API wurde neu gebaut; die Änderungen sind nicht veröffentlicht oder auf einen Produktionsserver übertragen worden.
+
+- `FACEIT_API_KEY`: serverseitiger Data-API-Schlüssel aus dem FACEIT Developer Portal. Die Verbindung ermittelt den FACEIT-Spieler anhand des angemeldeten Steam-Kontos. Öffentliche Matchmetadaten werden auch ohne Demo-Downloads importiert. [FACEIT Data API](https://docs.faceit.com/docs/data-api/)
+- `FACEIT_DOWNLOADS_TOKEN`: separater Access Token mit freigegebenem Downloads-Zugang. Erst damit werden private FACEIT-Demos über signierte Downloadlinks importiert. Ein normaler Data-API-Schlüssel genügt dafür nicht. [FACEIT Downloads API](https://docs.faceit.com/getting-started/Guides/download-api/)
+- `STEAM_WEB_API_KEY`: Betreiberzugang für die Valve-Matchhistorie. Im eigenen Konto hinterlegt der Spieler seinen Game Authentication Code und einen aktuellen Match-Sharecode. Der Authentication Code wird verschlüsselt gespeichert und nicht über die Listen-API ausgegeben. Der nächste Sharecode wird als Importcursor gespeichert. [Valve Match History](https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive_Access_Match_History)
+- `STEAM_GC_REFRESH_TOKEN`: optionaler Refresh Token einer separaten Steam-Client-Sitzung für die Auflösung des Sharecodes zur Demodatei. Dieser Adapter nutzt `steam-user` und `globaloffensive`; er ist keine offizielle Garantie für alle zukünftigen CS2-Protokollstände. Ohne den Zugang bleiben Matchmetadaten importierbar und eine manuell hochgeladene Demo kann zugeordnet werden.
+
+Der initiale FACEIT-Abgleich umfasst bis zu 30 Tage, nachfolgende Läufe überlappen die letzte Synchronisation um zwei Tage. Quellen werden alle 15 Minuten abgeglichen; der Hintergrundlauf prüft alle 30 Sekunden auf fällige Arbeit. Valve folgt dem Sharecode-Cursor, begrenzt auf 100 Fortschritte pro Lauf. Pausieren einer Verbindung hält den automatischen Abgleich und zugehörige automatische Downloads an. Webhooks und FACEIT OAuth sind in diesem Stand nicht implementiert.
+
+## Speicher und Aufbewahrung
+
+Originaldemos und Replay-Daten bleiben im Demo-Volume. Tonspuren werden serverseitig bei 48 kHz in Opus komprimiert und in Abschnitte von fünf Minuten geteilt. Spielton bleibt Stereo mit 128 kbit/s, Kommunikation und weitere Tonspuren werden Mono mit 64 kbit/s. Spiel und Kommunikation zusammen entsprechen bei diesen Zielbitraten ungefähr 86 MB je Stunde, zuzüglich Container- und Verwaltungsdaten. Die Aufnahme ist auf acht Stunden begrenzt. Audioquelldateien sind auf 512 MiB je Spur beschränkt, einzelne Uploadsegmente auf 16 MiB; Demo-Uploads auf 1 GiB.
+
+`RECORDING_STORAGE=local` ist der Standard. Bei `uploadthing` werden fertig komprimierte Audioabschnitte mit privater ACL hochgeladen. Die UploadThing-App muss diese ACL erlauben, `UPLOADTHING_TOKEN` muss gesetzt sein. Jeder Dateizugriff prüft zuerst die aktuelle Teammitgliedschaft und erzeugt danach einen kurzlebigen signierten Link. Verarbeitung benötigt weiterhin lokalen Arbeitsraum; UploadThing beseitigt diesen Bedarf nicht. Die bestehenden Review-Fotos und -Videos behalten ihren bisherigen Speicherweg.
+
+Standardquoten: 100 GiB für den Analysebestand, 20 GiB je Team beziehungsweise persönlichem Bereich und mindestens 2 GiB freier lokaler Arbeitsraum. Die Matchimport-Seite zeigt Originale, Replay-Daten, Audio und Reservierungen. Uploads, automatische Downloads und Audioverarbeitung reservieren Speicher vor Beginn; bei fehlendem Platz stoppen sie mit einer erklärenden Meldung. Doppelte Segmente belegen kein zweites Kontingent. Die Grenzen sind über `ANALYSIS_STORAGE_LIMIT_GIB`, `ANALYSIS_SCOPE_LIMIT_GIB` und `ANALYSIS_MINIMUM_FREE_GIB` einstellbar.
+
+Automatisch importierte Originaldemos werden nach 14 Tagen entfernt, ungenutzte Auswertungen nach 90 Tagen. Ungeheftete Live-Aufzeichnungen laufen 90 Tage nach Sitzungsende ab. Angeheftete Inhalte und als Strat-Erklärung verwendete Sitzungen bleiben erhalten. Review-, Strat-, aktive Team- und Prematch-Verweise schützen die dazugehörigen Replay-Daten vor Löschung. Manuelle Demo-Uploads werden nicht automatisch entfernt. Metadaten der Matchhistorie bleiben bestehen; eine entfernte automatische Demo wird nicht ständig erneut heruntergeladen. Volume und MongoDB gehören gemeinsam in die Datensicherung.
+
+## Prüfung und verbleibende Grenzen
+
+Prüfungen umfassen den Linux-Server mit isolierter MongoDB und FFmpeg, Audiosegmente und private Range-Wiedergabe, Zugriffsschutz, WebSocket-Clients und Wiederverbindung, eingefrorene Strat-Inhalte, Prematch-Abdeckung, Quellenpausen und Speicherbereinigung. Die Desktop-Tests simulieren Verbindungsabbrüche, bestätigte Uploads, Kontoabweichungen und Wiederaufnahme nach einem App-Neustart. Der Windows-Helfer wird für `win-x64` gebaut. Im gemeinsamen Browser wurden Raumstart, Strat-Präsentation, synthetischer WAV-Import und Aufzeichnungsansicht geprüft.
+
+Echte FACEIT-/Steam-Downloads, private UploadThing-Audios und eine Windows-Aufnahme mit den beiden Voicemeeter-Bussen benötigen noch die jeweiligen Zugänge beziehungsweise den Hardwaretest. Die aktuelle Architektur verwendet eine API-Instanz; mehrere API-Instanzen benötigen vor der Skalierung gemeinsame Raumbenachrichtigungen und verteilte Verarbeitungssperren. KI-Zusammenfassung, Transkription und automatische Call-Erkennung bleiben spätere Erweiterungen.

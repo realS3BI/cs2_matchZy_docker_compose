@@ -1,6 +1,6 @@
 # Playbook
 
-Playbook verwaltet CS2-Granaten-Lineups und einen Dedicated Server über ein geschütztes Web-Dashboard für Docker Compose oder Coolify. Servername, Steam-Registrierung, RCON, Spielmodus, Plugins, Versionen, Admins, Workshop-Maps, Nades und Wartung werden im Dashboard gepflegt.
+Playbook verwaltet CS2-Granaten-Lineups, Teams, rollenbasierte Strats und einen Dedicated Server über ein geschütztes Web-Dashboard für Docker Compose oder Coolify. Servername, Steam-Registrierung, RCON, Spielmodus, Plugins, Versionen, Admins, Workshop-Maps, Nades und Wartung werden im Dashboard gepflegt.
 
 ## Lokal entwickeln
 
@@ -14,7 +14,7 @@ Im Repository starten:
 
 Unter Windows oder ohne Bash funktioniert `node dev.mjs`. Auch `cd admin-panel` und `pnpm dev` starten dieselbe Umgebung. Eine lokale Installation der npm-Abhängigkeiten ist dafür nicht nötig; sie werden im Docker-Image installiert.
 
-Das Skript startet MongoDB, die API und Vite unter `http://localhost:5173`. Vite lädt Frontend-Änderungen direkt nach. Änderungen unter `admin-panel/src` bauen die API automatisch neu und starten sie wieder. Währenddessen können API-Anfragen kurz fehlschlagen. Strg+C beendet die Container. Datenbank, Uploads und Runtime-Dateien bleiben in eigenen Volumes des Compose-Projekts `cs2-matchzy-dev` erhalten.
+Das Skript startet MongoDB, die API, den Demo-Worker und Vite unter `http://localhost:5173`. Vite lädt Frontend-Änderungen direkt nach. Änderungen unter `admin-panel/src` bauen die API automatisch neu und starten sie wieder. Währenddessen können API-Anfragen kurz fehlschlagen. Strg+C beendet die Container. Datenbank, Uploads und Runtime-Dateien bleiben in eigenen Volumes des Compose-Projekts `cs2-matchzy-dev` erhalten.
 
 Für den Zugriff über eine LAN- oder Tailscale-Adresse die tatsächliche Browser-Adresse angeben:
 
@@ -28,9 +28,51 @@ Steam verwendet die konfigurierte Adresse für den Callback. Deshalb das Dashboa
 
 Vite verwendet den gewählten Port auch im Container und zeigt die tatsächliche Browser-Adresse an. Die API läuft intern weiterhin auf Port 8080. Vite leitet `/api` dorthin weiter; der Browser verwendet ausschließlich die konfigurierte öffentliche Adresse.
 
+### HTTPS über Tailscale
+
+Auf Sebastians Mac ist die Entwicklungsadresse `https://sebastian-mac.spitz-werner.ts.net:8443`. Tailscale Serve übernimmt HTTPS und leitet an Vite auf `127.0.0.1:5173` weiter. Andere Geräte benötigen Zugang zum selben Tailnet.
+
+Die lokale `.env.development` enthält dafür zusätzlich zum Session-Secret:
+
+```dotenv
+ADMIN_PANEL_PUBLIC_URL=https://sebastian-mac.spitz-werner.ts.net:8443
+DEV_PORT=5173
+DEV_BIND_ADDRESS=127.0.0.1
+```
+
+Die Weiterleitung wird einmalig eingerichtet:
+
+```bash
+tailscale serve --bg --https=8443 http://127.0.0.1:5173
+```
+
+Danach startet `./dev.sh` die Umgebung mit dieser Adresse. Steam-Anmeldung und Vites automatisches Neuladen verwenden ebenfalls die HTTPS-Adresse. Der Vite-Port bleibt lokal erreichbar. Ein anderer interner Port lässt sich mit `--port` wählen; dann muss auch das Ziel der Tailscale-Weiterleitung angepasst werden. HTTPS benötigt diesen vorgeschalteten Proxy, Vite selbst stellt kein Zertifikat aus.
+
+Zum Entfernen ausschließlich dieser Weiterleitung: `tailscale serve --https=8443 off`. [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) speichert die mit `--bg` eingerichtete Weiterleitung über Neustarts hinweg; Docker Desktop und die Entwicklungsumgebung müssen für den Zugriff laufen.
+
 Ein bisher separat gestartetes Vite zuerst beenden, falls Port 5173 belegt ist. `pnpm dev:client` startet weiterhin nur das Frontend und benötigt eine separat erreichbare API auf Port 8080. Genau diese fehlende API verursachte bisher HTTP 500 beim Steam-Login mit `pnpm dev`.
 
 Die Entwicklungsumgebung startet keinen CS2-Gameserver und erhält keinen Docker-Socket. Anmeldung, Dashboard und gespeicherte Daten lassen sich lokal entwickeln; Gameserver-Steuerung und Live-Diagnosen benötigen den vollständigen Deployment-Stack.
+
+## Live-Aktualisierungen
+
+Jeder angemeldete Browser verwendet eine gemeinsame WebSocket-Verbindung unter `/api/live`. Das erste Laden und das Speichern von Inhalten verwenden HTTP-Anfragen. Gemeinsame Demo-Wiedergabe und Anwesenheit verwenden zusätzlich bestätigte WebSocket-Befehle. Änderungen an Teams, Strats, aktiven Taktiken, Nades, Favoriten, Benutzerrechten und Servereinstellungen werden nach dem Speichern an die geöffneten Ansichten gesendet. Der bisherige Nade-SSE-Endpunkt bleibt für ältere Clients verfügbar.
+
+HTTP und WebSocket verwenden dieselben Datenabfragen und RBAC-Prüfungen. Vor jedem Versand wird die Sitzung erneut geprüft. Fremde Teams, unveröffentlichte Entwürfe und Serverdaten ohne passende Rolle werden nicht übertragen. Entzogene Mitgliedschaften leeren offene Teamansichten; eine beendete Sitzung schließt die Verbindung. Der Server akzeptiert nur die konfigurierte öffentliche Herkunft, begrenzt Abonnements und Nachrichten und trennt Clients, die keine Daten mehr abnehmen.
+
+Bei einer Unterbrechung zeigt die Oberfläche den Verbindungsstatus und verbindet sich automatisch neu. Danach sendet der Server vollständige aktuelle Ansichten. Ungespeicherte Server- und Strat-Entwürfe bleiben erhalten; parallele Strat-Änderungen müssen vor dem Speichern abgeglichen werden.
+
+Docker-Ereignisse und Logausgaben lösen Server-Updates aus. Dateien des bestehenden Ingame-Plugins werden beobachtet. Als Rückfallebene prüft die API abonnierte Logs jede Sekunde, den Serverstatus alle zwei Sekunden, die Live-Map alle drei Sekunden und Diagnosen alle zehn Sekunden. Diese Prüfungen laufen auf dem Server; im Browser entfallen die wiederkehrenden HTTP-Abfragen. Der Ingame-Dateiabgleich und die Capture-Leases behalten ihr bestehendes Protokoll. Es gibt weiterhin keinen CS2-Gameserver im lokalen Entwicklungsstack.
+
+Ein vorgeschalteter Proxy muss WebSocket-Upgrades für `/api/live` an denselben API-Port weiterreichen. Vite und die lokale Tailscale-Weiterleitung unterstützen das bereits. In Produktion verwendet der Browser automatisch `wss://` mit der konfigurierten HTTPS-Adresse. Die Umsetzung läuft innerhalb einer API-Instanz; mehrere API-Replikate benötigen zusätzlich einen gemeinsamen Ereignisverteiler.
+
+## Demoanalyse und Team-Reviews
+
+Unter **Analyse** könnt ihr heruntergeladene FACEIT- und Premier-Demos hochladen, Runden auf dem Radar ansehen und Szenen für einen Team-Review vorbereiten. Der Captain steuert die gemeinsame Wiedergabe über WebSocket. Mitglieder können selbst nachsehen, wieder folgen und Erkenntnisse festhalten. Aus einer Szene entsteht ein Strat-Entwurf; Beispiele lassen sich auch mit bestehenden Strats und Spieleraufgaben verbinden.
+
+Uploads sind zunächst privat, sofern beim Hochladen kein Team gewählt wird. Eine spätere Teamfreigabe ist ausdrücklich möglich. Die Verarbeitung läuft im neuen Dienst `demo-worker`; API und Worker benötigen das gemeinsame Demo-Volume. Eine laufende Entwicklungsumgebung nach diesem Update einmal neu starten, damit der zusätzliche Dienst und das Volume eingebunden werden.
+
+Manuelle Datei-Uploads (`.dem`, `.dem.gz`, `.dem.bz2`) bleiben verfügbar. Unter **Live** werden Match- und Team-Besprechungen mit Tonspuren, Präsentationswechseln und Notizen verbunden; Ausschnitte lassen sich als Strat-Erklärungen übernehmen. **Prematch** verbindet Gegnerbesetzung, FACEIT-Wettbewerb, verfügbare Demos und den eigenen Matchplan. **Matchimporte** verwaltet FACEIT-/Steam-Verbindungen, Speicherquoten und Aufbewahrung. Die Quellenzugänge, private Audioablage und noch ausstehenden echten Windows-/Provider-Tests stehen im [Betriebsablauf für Live und Matchvorbereitung](docs/live-analysis-operations.md). KI bleibt eine spätere Erweiterung. Ablauf und Grenzen der Demoanalyse sind in [Demoanalyse und Matchvorbereitung](docs/demo-analysis-plan.md#implementierter-erster-ausbau) beschrieben.
 
 ## Deployment
 
@@ -123,7 +165,7 @@ Coolify / Compose
 
 ## Dashboard
 
-Die Website öffnet nach der Anmeldung **All Maps**. Die einklappbare shadcn-Sidebar basiert auf `sidebar-08` und gliedert sich in **Maps** und **Server**. Auf dem Handy öffnet sie sich als seitliches Menü.
+Die Website öffnet nach der Anmeldung **All Maps**. Die einklappbare shadcn-Sidebar basiert auf `sidebar-08` und gliedert sich in **Maps**, **Team-Management**, **Strats**, **Server** und **Verwaltung**. Server und Verwaltung erscheinen entsprechend den vergebenen Rechten. Auf dem Handy öffnet sie sich als seitliches Menü.
 
 - **Maps → All Maps**: durchsuchbare Kartenübersicht mit Active Duty, Reserve-Pool, inaktiven Maps, weiteren Spielmodi und Workshop-Maps. Auch nicht installierte Maps bleiben zum Durchstöbern verfügbar.
 - **Map-Seiten**, etwa `/maps/mirage`: große Radarkarte mit gruppierten Start- oder Landepositionen. Ein Klick zeigt die zugehörigen Gegenpositionen; mehrere Würfe vom selben Punkt bleiben einzeln auswählbar. Rechts stehen Granatentyp, Sammlung und Suche, darunter eine kompakte Lineup-Liste. „Alle“ zeigt auch ungeprüfte Aufnahmen. Jede Active-Duty-Map ist direkt in der Sidebar verlinkt.
@@ -131,7 +173,7 @@ Die Website öffnet nach der Anmeldung **All Maps**. Die einklappbare shadcn-Sid
 - **Nade hinzufügen** auf der Map-Seite: Plattform-Admins erstellen Nades manuell über den vorhandenen Editor. Name, Granatentyp, Startkoordinaten und Blickwinkel sind erforderlich; Anleitung, Wurfattribute und Radarpositionen können ergänzt werden. Die Nade gehört dem angemeldeten Admin und wird als Entwurf gespeichert. Die Freigaben „Offiziell“ und „Must Know“ erfolgen anschließend auf der Lineup-Seite. Eine Aufnahme im Spiel ist dafür nicht nötig.
 - **Favoriten**: über den Stern in der Liste oder auf der Detailseite merken. Website-Favoriten werden in MongoDB pro Steam-ID und vollständiger Lineup-Identität gespeichert. Sie sind unabhängig von den Favoriten des Ingame-Panels.
 - **Bearbeiten und Review** direkt auf der Lineup-Seite: Nur Ersteller ändern ihre noch nicht offiziellen Wurfdaten und reichen sie zum Review ein. Anzeigename, Anleitung, Wurfattribute, Flugzeit, Seite (T, CT oder beide) und Spielkoordinaten sind dort bearbeitbar. Kartenpositionen dürfen Ersteller und Plattform-Admins auch nach der Freigabe korrigieren; beide können Review oder Freigabe zurücknehmen. Nur Plattform-Admins vergeben „Offiziell“ und „Must Know“ und dürfen alle Aufnahmen löschen. Ersteller dürfen ihre noch nicht offiziellen Aufnahmen löschen. Andere Nutzer sehen Wurfweg und Anleitung. Review-Fotos und Videos werden auf der eigenen Review-Seite ergänzt.
-- **Server**: aufklappbarer Bereich mit den bisherigen Einträgen Übersicht, Einstellungen, Modi & Plugins, Konsole, Benutzer, Diagnose, Logs, Wartung und Dokumentation. Workshop-Maps und Startmap befinden sich in den Servereinstellungen. Die verfügbaren Werkzeuge richten sich nach der Rolle.
+- **Server**: aufklappbarer Bereich mit den bisherigen Einträgen Übersicht, Einstellungen, Modi & Plugins, Konsole, Diagnose, Logs, Wartung und Dokumentation. Workshop-Maps und Startmap befinden sich in den Servereinstellungen. Die verfügbaren Werkzeuge richten sich nach der Rolle.
 
 Granatentyp, Team, Sammlung und Suche stehen in der URL. Die Teamfilter T und CT zeigen jeweils auch Aufnahmen für beide Seiten. Ältere Aufnahmen ohne Zuordnung bleiben unter „Alle“ sichtbar. Beim Wechsel zur Detailseite und zurück bleiben sie erhalten. `/` und `/nades` öffnen `/maps`; bisherige Links wie `/nades?map=de_mirage` und `/maps?map=mirage` führen auf die passende Map-Seite. Auch `/nades?view=manage` führt jetzt zur Bibliothek. Die früheren schreibenden Sammel- und Import-Endpunkte sind stillgelegt; Änderungen laufen einzeln über die Eigentümer- und Revisionsprüfung.
 
@@ -139,7 +181,7 @@ Granatentyp, Team, Sammlung und Suche stehen in der URL. Die Teamfilter T und CT
 
 ### VAC und Zugang mit `-insecure`
 
-Plattform-Admins steuern unter **Server → Einstellungen → VAC und Spielzugang** mit „VAC aktivieren“ den nächsten Serverstart:
+Server-Admins steuern unter **Server → Einstellungen → VAC und Spielzugang** mit „VAC aktivieren“ den nächsten Serverstart:
 
 - **Aktiviert** (Standard): Der Server startet mit VAC. CS2-Clients mit `-insecure` können nicht beitreten.
 - **Deaktiviert**: Der Server startet mit `-insecure`, also ohne VAC-Schutz. Clients mit und ohne `-insecure` können beitreten. Damit können automatische Playbook-Reviews über die lokale Command-Pipe auf deinem Coolify-Trainingsserver stattfinden.
@@ -171,26 +213,41 @@ WeaponPaints benoetigt eine eigene Datenbankkonfiguration im erzeugten Plugin-Co
 
 Die Website verwendet [Steams OpenID-Anmeldung](https://steamcommunity.com/dev). Dafür ist kein Steam-Web-API-Key nötig. Steam bestätigt die Steam64-ID; Passwörter werden nur bei Steam eingegeben. Die feste Callback-Adresse lautet `ADMIN_PANEL_PUBLIC_URL/api/auth/steam/callback`. Hinter Coolify muss die konfigurierte öffentliche Adresse der Browser-Adresse entsprechen.
 
-| Rolle | Website | Spielserver |
-| --- | --- | --- |
-| Admin | Alle Bereiche, Benutzerverwaltung, Nade-Freigaben und Server-Konsole | Alle Rechte |
-| Match Admin | Alle Nades und Maps lesen, eigene noch nicht offizielle Aufnahmen bearbeiten und einreichen, Workshop-Maps hinzufügen, Servermodus, Plugins und Colored Smokes ändern, RCON senden | Panel und MatchZy-Befehle; keine Nade-Aufnahmen bearbeiten, importieren oder löschen |
-| Trainingsspieler | Nur Maps und Lineups ansehen, persönliche Website-Favoriten speichern | `.nades` und Panel-Bedienung im Practice-Modus, Trainingswerkzeuge, persönliche Favoriten und Map-Abstimmungen; keine Serververwaltung oder Lineup-Bearbeitung |
-| Player | Alle Nades und Maps ansehen, persönliche Website-Favoriten speichern, eigene noch nicht offizielle Aufnahmen bearbeiten und einreichen | Spielen; kein Panel und keine MatchZy-Befehle, auch kein `.ready` |
+Die zentrale Rechtematrix steht unter **Verwaltung → Rollen und Rechte**. **Verwaltung → Benutzer** vergibt Plattform- und Serverrollen getrennt. Ein Plattform-Admin bekommt dadurch weder Serverzugriff noch Einsicht in fremde Team-Strats. Teamrollen stehen in der Benutzerübersicht; ändern darf sie ausschließlich der jeweilige Team-Owner.
 
-Neue Steam-Logins werden dauerhaft als Player gespeichert. Unter „Benutzer“ kann ein Admin Namen und Rollen ändern oder Steam64-IDs vorab anlegen. Trainingsspieler erhalten keine CounterStrikeSharp-Adminflags. Im MatchZy-Modus startet ein Admin oder Match Admin Practice mit `.prac`; der Servermodus Nades startet das eigenständige Playbook-Training. Trainingsspieler können weder den Modus ändern noch Maps direkt wechseln oder RCON verwenden. Eine Umstellung auf Player entzieht auch den Panel-Zugang. Die eigene Admin-Rolle kann nur ein anderer Admin ändern.
+| Bereich | Feste Rollen |
+| --- | --- |
+| Plattform | Benutzer; Plattform-Admin für Benutzerverwaltung und administrative Nade-Funktionen |
+| Server `primary` | Kein Serverzugriff; Trainingsspieler; Match Admin; Server-Admin |
+| Je Team | Mitglied; Captain; Owner |
 
-Für Trainingsspieler genügt `.nades` im Chat, sobald sie einem Team beigetreten und gespawnt sind. Das Panel ist mit der Maus bedienbar; nach dem Ausblenden öffnet `.nades` es erneut. Shortcuts werden nie automatisch installiert. Freiwillige Binds muss jeder Spieler in seiner eigenen Konsole setzen.
+Neue Steam-Benutzer erhalten keine Serverrechte. Sie dürfen Teams gründen und Einladungen annehmen. Trainingsspieler öffnen mit `.nades` das Panel und verwenden die freigegebenen Trainingswerkzeuge. Match Admins steuern Matches, Modi und erlaubte Optionen. Server-Admins verwalten zusätzlich alle Einstellungen, Neustarts und Diagnose. **Match Admin und Server-Admin besitzen uneingeschränkten RCON-Zugriff.** Nade-Aufnahmen im Spiel erfordern Plattform-Admin und mindestens Trainingsspieler. Die bestehenden Ersteller-, Review- und Favoritenregeln bleiben erhalten.
 
-Vorhandene Owner und alte Einträge mit Root-Rechten werden als Admin übernommen. Match Operator wird Match Admin; Moderator und andere Custom-Rollen werden Player. Es gibt keine frei vergebbaren Flags mehr. Die Migration überschreibt keine bereits umgestellten Benutzer. Nach dem Update sind alte Passwort-Sitzungen ungültig; `ADMIN_PANEL_PASSWORD` kann aus Coolify entfernt werden.
+Beim ersten Start mit RBAC übernimmt `roleAssignments` die bisherigen Rollen: `admin` wird Plattform-Admin plus Server-Admin, `match_admin` und `training_player` behalten ihre jeweilige Serverrolle, `player` wird Benutzer ohne Serverzugriff. Spätere Starts überschreiben diese Zuweisungen nicht. Die eigene Plattform-Admin-Rolle kann nur ein anderer Plattform-Admin entfernen; mindestens einer muss erhalten bleiben. Sichere MongoDB vor dem Update. Eine ältere API-Version versteht getrennte Rollen nicht; für einen Rollback die gesicherte Datenbank zusammen mit der vorherigen Version verwenden.
 
-Die Website liest die Rolle bei jeder Anfrage aus MongoDB. Zufällige Sitzungstokens werden nur gehasht gespeichert und laufen nach zwölf Stunden ab. Abmelden widerruft die Sitzung. Steam-Rückleitungen sind an eine einmalig verwendbare Browser-Anmeldung gebunden. Schreibende Browser-Anfragen müssen von der konfigurierten Website stammen.
+API und gebündeltes Plugin 2.4.0 gemeinsam neu bauen und deployen. `permissions.json` enthält einen atomaren Berechtigungsstand samt CSS-Flags. Das Plugin prüft effektive Rechte, lädt geänderte CSS-Rechte und bestätigt die Revision in `cfg/MatchZy/permissions-applied.json`. Die Rechtematrix zeigt den Abgleich. Ein fehlender oder ungültiger Export gibt keine privilegierten Funktionen frei. Der temporäre alte Rollenexport erweitert keine Serverrechte eines reinen Plattform-Admins. Das HUD bleibt kompakt mit neun Listenplätzen.
 
-Das Panel schreibt Rollen und feste CounterStrikeSharp-Rechte in das Runtime-Volume. Die gebündelte Server-Erweiterung prüft Rollen vor Konsolen- und Chatbefehlen und lädt geänderte CSS-Rechte innerhalb weniger Sekunden. MatchZys eigene `admins.json` bleibt leer, `matchzy_everyone_is_admin` ist beim Start deaktiviert. Das Ingame-Panel bleibt kompakt mit neun Listenplätzen.
+Die Website liest Rechte bei jeder Anfrage aus MongoDB. Sitzungstokens werden gehasht gespeichert und laufen nach zwölf Stunden ab. Abmelden widerruft die Sitzung. Steam-Rückleitungen sind einmalig und an den Browser gebunden; Team-Einladungslinks bleiben über die Anmeldung erhalten. Schreibende Browser-Anfragen müssen von der konfigurierten Website stammen. Das synthetische Testkonto darf keine Teams gründen, Einladungen annehmen oder Serverrechte erhalten.
+
+## Team-Management und Strats
+
+1. Unter **Team-Management** ein Team gründen. Der Gründer ist Owner. Ein Spieler kann mehreren Teams angehören.
+2. Als Owner einen Einladungslink erstellen. Er gilt sieben Tage und kann widerrufen werden. Eingeladene Steam-Benutzer bestätigen den Beitritt als Mitglied. Nur der Owner darf Mitglieder entfernen, Captains ernennen und das Eigentum übertragen. Eine Übertragung widerruft offene Einladungen.
+3. Unter **Strats** eine Taktik anlegen. Owner und Captains bearbeiten Name, Map, Seite, gemeinsame Erklärung und fünf frei benennbare Plätze. Pro Platz lassen sich ein Teammitglied und geordnete Schritte mit Position, Timing und Nade-Links hinterlegen.
+4. Den Entwurf speichern und anschließend veröffentlichen. Mitglieder sehen nur veröffentlichte Strats. **Meine Aufgaben** ist die Standardansicht; **Teamübersicht** zeigt alle Plätze. Noch nicht besetzte Spieler erhalten einen Hinweis.
+5. Eine veröffentlichte Strat aktivieren und gemeinsam **Strats → Live-Ansicht** öffnen. Jeder Tab folgt seinem Team aus der URL, mit sofortigen Aktualisierungen über WebSocket. Entwurf und erneute Veröffentlichung verändern die aktive Fassung erst bei erneuter Aktivierung. Archivieren blendet die Bibliotheksfassung aus; ein bereits aktiver Stand bleibt bis zum Beenden erhalten.
+
+Revisionsprüfungen verhindern, dass parallele Änderungen unbemerkt überschrieben werden. Der Editor warnt vor dem Verlassen mit ungespeicherten Änderungen. Nach dem Entfernen eines besetzten Mitglieds muss die Besetzung vor der nächsten Veröffentlichung oder Aktivierung korrigiert werden. Verknüpfte Nades behalten ihre eigenen Rechte und ihren Freigabestatus. Fehlende Nades werden im Schritt angezeigt und verhindern eine erneute Veröffentlichung, bis die Referenz entfernt oder ersetzt wird.
+
+Teams und Strats funktionieren ohne laufenden CS2-Server. Es gibt keinen Import aus `cs-playbook` und keine Ingame-Strat-Ansicht. Technische Details und ursprüngliche Entscheidungen stehen in [Team-Plan](docs/team-playbooks-plan.md) und [RBAC-Plan](docs/rbac-plan.md).
+
+### Tests
+
+Im Verzeichnis `admin-panel` prüfen `pnpm typecheck`, `pnpm build` und `pnpm test` den Webstand. Die vorhandenen Shell-Tests benötigen Bash 4+ und `jq`. Für die MongoDB-Tests zusätzlich `TEST_MONGODB_URI` auf eine erreichbare Testinstanz setzen, zum Beispiel `mongodb://127.0.0.1:27028`. Jeder Test erstellt eine eigene Datenbank mit Präfix `test_` und entfernt sie danach. Ohne diese Variable werden die Datenbanktests übersprungen. Plugin-Tests laufen mit .NET 10 über `dotnet test nades-plugin/MatchZyNades.Tests/MatchZyNades.Tests.csproj` vom Repository-Verzeichnis aus.
 
 ## Server-Konsole
 
-Admin und Match Admin können unter „Server-Konsole“ RCON-Befehle wie `status` senden. Der Chat zeigt die Serverantwort oder einen Verbindungsfehler. Er verwendet das RCON-Passwort der angewendeten Serverkonfiguration; ein Neustart ist zum Senden nicht nötig. Der Verlauf bleibt nur im geöffneten Browserfenster. Im Audit werden Steam-ID und Ergebnis gespeichert, keine Befehle mit möglichen Passwörtern.
+Server-Admin und Match Admin können unter „Server-Konsole“ RCON-Befehle wie `status` senden. Der Chat zeigt die Serverantwort oder einen Verbindungsfehler. Er verwendet das RCON-Passwort der angewendeten Serverkonfiguration; ein Neustart ist zum Senden nicht nötig. Der Verlauf bleibt nur im geöffneten Browserfenster. Im Audit werden Steam-ID und Ergebnis gespeichert, keine Befehle mit möglichen Passwörtern.
 
 RCON ist wie gewünscht uneingeschränkt. Ein Match Admin kann darüber auch administrative Serverbefehle ausführen. Die Schreibsperren für Nades und Map-Daten gelten für Website und direkte Ingame-Befehle, nicht als Isolation gegenüber uneingeschränktem RCON.
 
@@ -199,7 +256,7 @@ RCON ist wie gewünscht uneingeschränkt. Ein Match Admin kann darüber auch adm
 
 Das Playbook-Plugin wird unter dem kompatiblen Dateinamen `MatchZyNades.dll` in allen Modi für die Rollenprüfung installiert. Das Trainingspanel ist für Admin, Match Admin und Trainingsspieler im eigenständigen Nades-Training und in MatchZy Practice verfügbar. Aufnahmen dürfen nur Admins erstellen. Das feste Panorama-HUD bietet Mausbedienung, persönliche Hotkeys, Favoriten und pro Steam-ID gespeicherte Einstellungen. Granaten-Bibliothek, Aufnahme und Trainingswerkzeuge bleiben enthalten. **Vor Aktivierung müssen die HUD-Assets kompiliert und auf den Clients verfügbar sein**; der C#-Build allein reicht nicht. Unter **Server → Trainings-HUD** lassen sich das Panel und die Workshop-Auslieferung getrennt einschalten und die Workshop-ID hinterlegen. Für lokale Entwicklung das HUD aktivieren und die Workshop-Auslieferung ausschalten. Mit **Apply & restart** übernehmen. Anleitung, lokale Build-Befehle und aktueller Abnahmestand: [Training-HUD](training-hud/README.md). CounterStrikeSharp API 374+ ist erforderlich.
 
-Unter Windows aktualisiert ein Doppelklick auf [hud.cmd](hud.cmd) den lokalen Review-Stand: Git-Pull, Panorama-Panel bauen und installieren, Electron-App testen und bauen, Playbook direkt öffnen. CS2 vorher vollständig beenden. Voraussetzungen: Git, PowerShell 7, Node.js 22+ einschließlich npm, .NET SDK 10 und CS2 Workshop Tools. In der geöffneten App **Server → Reviews** wählen, CS2 starten und das Spielbild freigeben. Der Server benötigt zusätzlich das aktuelle Playbook-Plugin. Ein Workshop-Release bleibt separat über `hud.cmd -Mode release` verfügbar.
+Unter Windows aktualisiert ein Doppelklick auf [hud.cmd](hud.cmd) den lokalen Review-Stand: Git-Pull, Panorama-Panel bauen und installieren, Electron-App testen und bauen, Playbook direkt öffnen. CS2 vorher vollständig beenden. Voraussetzungen: Git, PowerShell 7, Node.js 22+ einschließlich npm, .NET SDK 10 und CS2 Workshop Tools. In der geöffneten App **Verwaltung → Reviews** wählen, CS2 starten und das Spielbild freigeben. Der Server benötigt zusätzlich das aktuelle Playbook-Plugin. Ein Workshop-Release bleibt separat über `hud.cmd -Mode release` verfügbar.
 
 Unter **Server → Modi & Plugins** zeigt eine Statuskarte, ob das Menü fehlt, nur installiert oder vom laufenden Plugin bestätigt ist. **Loaded** basiert auf einer aktuellen Rückmeldung aus diesem Containerstart und zeigt auch den Practice-Zustand. **Diagnostics** prüft das Menü separat. Nach dem Update müssen sowohl Dashboard als auch CS2 neu gebaut und deployed werden.
 

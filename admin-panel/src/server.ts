@@ -1,3 +1,6 @@
+import { createServer } from "node:http";
+import { installLiveServer } from "./live-server.js";
+import { watchLiveRuntime } from "./live-runtime.js";
 import { getConfig } from "./config.js";
 import { Compose } from "./compose.js";
 import { createApp } from "./app.js";
@@ -36,6 +39,7 @@ await writeServerRuntimeFiles(
 const compose = new Compose(config);
 const restartScheduler = new RestartScheduler({ store, compose, config });
 restartScheduler.start();
+store.imports.start();
 
 const app = createApp({
   config,
@@ -45,13 +49,19 @@ const app = createApp({
   restartScheduler
 });
 
-const server = app.listen(config.port, "0.0.0.0", () => {
+const server = createServer(app);
+const live = installLiveServer(server, { config, store, resources: app.locals.live });
+const stopWatching = watchLiveRuntime({ config, compose, changes: store.changes });
+server.listen(config.port, "0.0.0.0", () => {
   console.log(`API bereit unter ${config.publicUrl}/api, interner Port ${config.port}.`);
 });
 
 async function shutdown() {
+  live.close();
+  stopWatching();
   server.close();
   restartScheduler.stop();
+  store.imports.stop();
   await nadesSync.stop();
   await store.close();
   process.exit(0);

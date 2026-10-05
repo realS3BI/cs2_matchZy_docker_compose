@@ -28,5 +28,11 @@ if (location.origin === 'https://playbook.schlossers.at' && window === window.to
       ipcRenderer.on('review:stop-video', listener);
       return () => ipcRenderer.removeListener('review:stop-video', listener);
     },
+    liveStatus: () => invoke('review:live-status'),
+    liveDevices: () => invoke('review:live-devices'),
+    liveStart: (sessionId, options) => invoke('review:live-start', sessionId, options),
+    liveStop: () => invoke('review:live-stop'),
+    liveMute: muted => invoke('review:live-mute', muted),
+    liveRetry: () => invoke('review:live-retry'),
   }));
 }

@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useResource } from "./workspace-ui";
 import { NavLink } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
-import { api } from "../lib/api";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -16,32 +15,7 @@ const STATES = {
 } as const;
 
 export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
-  const [report, setReport] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const pending = useRef(false);
-  const mounted = useRef(false);
-  const refresh = useCallback(async () => {
-    if (pending.current) return;
-    pending.current = true;
-    setLoading(true);
-    try {
-      const next = await api("/api/server/diagnostics");
-      if (mounted.current) { setReport(next); setError(""); }
-    } catch (failure) {
-      if (mounted.current) setError(failure.message || "Could not check the server.");
-    } finally {
-      pending.current = false;
-      if (mounted.current) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    mounted.current = true;
-    void refresh();
-    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 30000);
-    return () => { mounted.current = false; window.clearInterval(timer); };
-  }, [refresh]);
+  const { data: report, loading, error, reload: refresh } = useResource<any>("/api/server/diagnostics");
 
   const menu = report?.nades?.menu;
   const [label, variant] = STATES[error ? "unavailable" : menu?.state] || STATES.unavailable;
@@ -84,7 +58,7 @@ export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" disabled={loading} onClick={() => void refresh()}><RefreshCw aria-hidden="true" className={loading ? "animate-spin" : ""} />{loading ? "Checking…" : "Refresh status"}</Button>
           <NavLink className="text-sm font-medium underline underline-offset-4" to="/diagnostics">Open diagnostics</NavLink>
-          {!error && report?.generatedAt ? <span className="text-xs text-muted-foreground">Checked {new Date(report.generatedAt).toLocaleTimeString()} · refreshes every 30 s</span> : null}
+          {!error && report?.generatedAt ? <span className="text-xs text-muted-foreground">Checked {new Date(report.generatedAt).toLocaleTimeString()} · Live-Updates</span> : null}
         </div>
       </CardContent>
     </Card>

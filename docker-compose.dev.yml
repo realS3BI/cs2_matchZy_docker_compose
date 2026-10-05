@@ -24,9 +24,18 @@ services:
       ADMIN_PANEL_TEST_USERNAME: ${ADMIN_PANEL_TEST_USERNAME:-test}
       ADMIN_PANEL_TEST_PASSWORD: ${ADMIN_PANEL_TEST_PASSWORD:-}
       UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:-}
+      RECORDING_STORAGE: ${RECORDING_STORAGE:-local}
+      ANALYSIS_STORAGE_LIMIT_GIB: ${ANALYSIS_STORAGE_LIMIT_GIB:-100}
+      ANALYSIS_SCOPE_LIMIT_GIB: ${ANALYSIS_SCOPE_LIMIT_GIB:-20}
+      ANALYSIS_MINIMUM_FREE_GIB: ${ANALYSIS_MINIMUM_FREE_GIB:-2}
+      FACEIT_API_KEY: ${FACEIT_API_KEY:-}
+      FACEIT_DOWNLOADS_TOKEN: ${FACEIT_DOWNLOADS_TOKEN:-}
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      STEAM_GC_REFRESH_TOKEN: ${STEAM_GC_REFRESH_TOKEN:-}
     volumes:
       - runtime:/runtime
       - uploads:/uploads
+      - demos:/demos
       - cs2_data:/cs2-data
     depends_on:
       mongodb:
@@ -51,6 +60,36 @@ services:
         - action: rebuild
           path: ./admin-panel/pnpm-lock.yaml
 
+  demo-worker:
+    build:
+      context: .
+      dockerfile: admin-panel/Dockerfile.demo-worker
+    init: true
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - demos:/demos
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    develop:
+      watch:
+        - action: rebuild
+          path: ./admin-panel/src
+        - action: rebuild
+          path: ./admin-panel/shared
+        - action: rebuild
+          path: ./admin-panel/package.json
+        - action: rebuild
+          path: ./admin-panel/pnpm-lock.yaml
+
   web:
     build:
       context: ./admin-panel
@@ -63,7 +102,7 @@ services:
       DEV_PORT: ${DEV_PORT:-5173}
       DEV_USE_POLLING: "1"
     ports:
-      - "${DEV_PORT:-5173}:${DEV_PORT:-5173}"
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_PORT:-5173}:${DEV_PORT:-5173}"
     volumes:
       - ./admin-panel/client:/app/client:ro
       - ./admin-panel/shared:/app/shared:ro
@@ -81,4 +120,5 @@ volumes:
   mongodb:
   runtime:
   uploads:
+  demos:
   cs2_data:

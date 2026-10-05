@@ -15,16 +15,18 @@ async function main() {
     if (arg === "--help" || arg === "-h") {
       console.log(`Lokale Entwicklung mit MongoDB, API und Vite.
 
-  ./dev.sh [--url http://localhost:5173] [--admin STEAM64_ID]
-  node dev.mjs [--url http://localhost:5173] [--admin STEAM64_ID]
+  ./dev.sh [--url HTTP(S)-ADRESSE] [--port VITE_PORT] [--admin STEAM64_ID]
+  node dev.mjs [--url HTTP(S)-ADRESSE] [--port VITE_PORT] [--admin STEAM64_ID]
   cd admin-panel && pnpm dev
 
 Voraussetzungen: Node.js ab 22, Docker mit Compose ab 2.22.
+Standard: http://localhost:5173. HTTPS benötigt einen vorgeschalteten Proxy;
+dabei läuft Vite standardmäßig auf 127.0.0.1:5173 (änderbar mit --port).
 Die Einstellungen stehen in .env.development. Strg+C stoppt die Container;
 die Entwicklungsdaten bleiben für den nächsten Start erhalten.`);
       return;
     }
-    if (!["--url", "--admin"].includes(arg) || !args[i + 1] || args[i + 1].startsWith("--")) {
+    if (!["--url", "--port", "--admin"].includes(arg) || !args[i + 1] || args[i + 1].startsWith("--")) {
       throw new Error(`Unbekanntes oder unvollständiges Argument: ${arg}. Hilfe: --help`);
     }
     options[arg.slice(2)] = args[++i];
@@ -33,21 +35,25 @@ die Entwicklungsdaten bleiben für den nächsten Start erhalten.`);
   const envFile = ".env.development";
   if (existsSync(envFile)) process.loadEnvFile(envFile);
   const publicUrl = new URL(options.url || process.env.ADMIN_PANEL_PUBLIC_URL || "http://localhost:5173");
-  if (publicUrl.protocol !== "http:" || publicUrl.username || publicUrl.password || publicUrl.pathname !== "/" || publicUrl.search || publicUrl.hash) {
-    throw new Error("Für die lokale Entwicklung eine HTTP-Adresse ohne Pfad angeben, z. B. http://localhost:5173.");
+  if (!["http:", "https:"].includes(publicUrl.protocol) || publicUrl.username || publicUrl.password || publicUrl.pathname !== "/" || publicUrl.search || publicUrl.hash) {
+    throw new Error("Für die lokale Entwicklung eine HTTP(S)-Adresse ohne Pfad angeben, z. B. http://localhost:5173.");
   }
   const admin = options.admin ?? process.env.ADMIN_PANEL_ADMIN_STEAM_ID ?? "";
   if (admin && !/^\d{17}$/.test(admin)) throw new Error("Die Steam64-ID muss aus 17 Ziffern bestehen.");
-  const port = Number(publicUrl.port || 80);
+  const https = publicUrl.protocol === "https:";
+  const port = Number(options.port || (https ? process.env.DEV_PORT || 5173 : publicUrl.port || 80));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Der Vite-Port muss zwischen 1 und 65535 liegen.");
+  if (!https && port !== Number(publicUrl.port || 80)) throw new Error("Bei HTTP muss der Vite-Port mit dem Port in --url übereinstimmen.");
+  const bindAddress = process.env.DEV_BIND_ADDRESS || (https ? "127.0.0.1" : "0.0.0.0");
   await new Promise((resolve, reject) => {
     const server = createServer();
-    server.once("error", () => reject(new Error(`Port ${port} ist belegt. Den bisherigen Dev-Server beenden oder mit --url einen anderen Port wählen.`)));
-    server.listen(port, "0.0.0.0", () => server.close(resolve));
+    server.once("error", error => reject(new Error(`Vite kann ${bindAddress}:${port} nicht verwenden (${error.code}). Den bisherigen Dev-Server beenden oder ${https ? "mit --port" : "in --url"} einen anderen Port wählen.`)));
+    server.listen(port, bindAddress, () => server.close(resolve));
   });
 
-  const info = spawnSync("docker", ["info"], { stdio: "ignore" });
+  const info = spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 });
   if (info.status !== 0) throw new Error("Docker ist nicht erreichbar. Docker Desktop bzw. den Docker-Dienst starten.");
-  const compose = spawnSync("docker", ["compose", "version", "--short"], { encoding: "utf8" });
+  const compose = spawnSync("docker", ["compose", "version", "--short"], { encoding: "utf8", timeout: 15_000 });
   const version = compose.stdout?.trim().replace(/^v/, "").split(".").map(Number);
   if (compose.status !== 0 || !version || !(version[0] > 2 || (version[0] === 2 && version[1] >= 22))) {
     throw new Error("Docker Compose ab Version 2.22 wird für das automatische Neuladen benötigt.");
@@ -60,11 +66,13 @@ die Entwicklungsdaten bleiben für den nächsten Start erhalten.`);
       `ADMIN_PANEL_PUBLIC_URL=${publicUrl.origin}`,
       `ADMIN_PANEL_ADMIN_STEAM_ID=${admin}`,
       `ADMIN_PANEL_SESSION_SECRET=${secret}`,
+      ...(https ? [`DEV_PORT=${port}`, `DEV_BIND_ADDRESS=${bindAddress}`] : []),
       ""
     ].join("\n"), { mode: 0o600, flag: "wx" });
   }
   console.log(`Starte die Entwicklungsumgebung für ${publicUrl.origin}`);
   console.log(`Browser und Steam-Callback: ${publicUrl.origin}, interner API-Port: 8080.`);
+  if (https) console.log(`Der HTTPS-Proxy muss auf http://127.0.0.1:${port} weiterleiten.`);
   console.log("Frontend-Änderungen lädt Vite direkt. API-Änderungen bauen den API-Container neu.");
   if (admin) console.log("Die konfigurierte Steam-ID erhält beim Start lokale Admin-Rechte, auch bei einem bestehenden Konto.");
   if (!admin) console.log("Ohne ADMIN_PANEL_ADMIN_STEAM_ID erhält eine neue Steam-Anmeldung die Rolle Player.");
@@ -77,7 +85,8 @@ die Entwicklungsdaten bleiben für den nächsten Start erhalten.`);
       ADMIN_PANEL_PUBLIC_URL: publicUrl.origin,
       ADMIN_PANEL_ADMIN_STEAM_ID: admin,
       ADMIN_PANEL_SESSION_SECRET: secret,
-      DEV_PORT: String(port)
+      DEV_PORT: String(port),
+      DEV_BIND_ADDRESS: bindAddress
     }
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));

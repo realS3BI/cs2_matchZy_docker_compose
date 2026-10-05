@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../shared/authorization.js";
 import { canUploadReviewMedia, isReviewSlot, reviewFileError, type ReviewMedia } from "../shared/review-media.js";
 
 function reject(status: number, message: string): never { throw Object.assign(new Error(message), { status }); }
@@ -35,7 +36,7 @@ export function attachReviewMedia(entries, input, user, file) {
   if (typeof input.revision !== "string" || input.revision !== entry.updatedAt) reject(409, "Das Lineup wurde während des Uploads geändert. Bitte aktualisieren und erneut hochladen.");
   const reviewMedia = sanitizeReviewMedia({ ...entry.reviewMedia, [input.slot]: { ...file, uploadedBy: user.identitySteam64 } });
   return entries.map(n => n === entry ? { ...entry, reviewMedia,
-    reviewStatus: user.role === "admin" ? entry.reviewStatus : "",
+    reviewStatus: isPlatformAdmin(user) ? entry.reviewStatus : "",
     updatedAt: new Date(Math.max(Date.now(), Date.parse(entry.updatedAt) + 1 || 0)).toISOString(),
   } : n);
 }

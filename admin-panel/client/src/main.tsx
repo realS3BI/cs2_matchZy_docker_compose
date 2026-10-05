@@ -1,4 +1,12 @@
-import { useLiveNades } from "./hooks/use-live-nades";
+import { useLiveResource, useLiveState } from "./hooks/use-live-resource";
+import { authorize, isServerAdmin } from "../../shared/authorization";
+import { TeamsPage, TeamPage, JoinTeamPage } from "./components/teams-page";
+import { AnalysisPage, DemoPage, ReviewPage } from "./components/analysis-pages";
+import { LiveRecordingStatus } from "./components/live-recording-status";
+import { LiveSessionsPage, LiveSessionPage } from "./components/live-session-pages";
+import { MatchImportsPage, PrematchesPage, PrematchPage } from "./components/match-preparation-pages";
+import { StratsPage, StratPage, StratEditor, LiveStratsPage } from "./components/strats-page";
+import { RolesPage } from "./components/roles-page";
 import { NadesMenuStatus } from "./components/nades-menu-status";
 import { AppSidebar } from "./components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
@@ -17,7 +25,7 @@ import { mapPath, mapSlug, mapsForLibrary } from "./lib/maps";
 import { NadeLibrary, LegacyLibraryRedirect } from "./components/nade-library";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   BookOpen,
@@ -88,7 +96,7 @@ const routePaths = {
   server: "/server",
   reviews: REVIEW_QUEUE_PATH,
   plugins: "/plugins",
-  access: "/access",
+  access: "/admin/users",
   maintenance: "/maintenance",
   maps: "/maps",
   nades: "/nades",
@@ -99,14 +107,18 @@ const routePaths = {
 };
 
 const tabs = [
+  { id: "teams", path: "/teams", label: "Team-Management", icon: UsersRound, group: "Teams" },
+  { id: "analysis", path: "/analysis", label: "Analyse", icon: Activity, group: "Analyse" },
+  { id: "strats", path: "/strats", label: "Strats", icon: BookOpen, group: "Strats" },
+  { id: "roles", path: "/admin/roles", label: "Rollen und Rechte", icon: Shield, group: "Verwaltung" },
   { id: "nades", path: routePaths.nades, label: "Nades", icon: Crosshair, group: "Training" },
   { id: "maps", path: routePaths.maps, label: "Maps", icon: MapPinned, group: "Training" },
   { id: "overview", path: routePaths.overview, label: "Übersicht", icon: LayoutDashboard, group: "Server" },
   { id: "server", path: routePaths.server, label: "Einstellungen", icon: Server, group: "Server" },
-  { id: "reviews", path: routePaths.reviews, label: "Reviews", icon: ClipboardCheck, group: "Server" },
+  { id: "reviews", path: routePaths.reviews, label: "Reviews", icon: ClipboardCheck, group: "Verwaltung" },
   { id: "plugins", path: routePaths.plugins, label: "Modi & Plugins", icon: Boxes, group: "Server" },
   { id: "console", path: routePaths.console, label: "Konsole", icon: Terminal, group: "Server" },
-  { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Server" },
+  { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Verwaltung" },
   { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnose", icon: Activity, group: "Server" },
   { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Server" },
   { id: "maintenance", path: routePaths.maintenance, label: "Wartung", icon: CalendarClock, group: "Server" },
@@ -117,13 +129,18 @@ const defaultRoute = routePaths.maps;
 function isMapRoute(pathname) {
   return Boolean(matchPath("/maps/:mapSlug", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId/review", pathname));
 }
-function allowedTabs(role) { return tabs.filter(tab => role === "admin" || tab.group === "Training" || (role === "match_admin" && ["overview", "plugins", "console"].includes(tab.id))); }
+function allowedTabs(user) { return tabs.filter(tab => {
+  if (["Training", "Teams", "Strats", "Analyse"].includes(tab.group)) return true;
+  const action = tab.id === "reviews" ? "lineups.moderate" : ["access", "roles"].includes(tab.id) ? "users.manage" : tab.id === "console" ? "server.rcon" : ["overview", "plugins", "links"].includes(tab.id) ? "server.match" : "server.manage";
+  return authorize(user, action);
+}); }
+const isWorkspaceRoute = (path: string) => /^\/(teams|strats|analysis)(\/|$)/.test(path);
 
 function routeFromLoginSearch(search) {
   const requestedRoute = new URLSearchParams(search).get("redirect");
   if (!requestedRoute) return defaultRoute;
   const pathname = requestedRoute.split("?")[0];
-  return (tabs.some(item => item.path === pathname) || isMapRoute(pathname)) ? requestedRoute : defaultRoute;
+  return (tabs.some(item => item.path === pathname) || isMapRoute(pathname) || isWorkspaceRoute(pathname)) ? requestedRoute : defaultRoute;
 }
 
 function Message({ error = "" }: { error?: string }) {
@@ -133,7 +150,7 @@ function Message({ error = "" }: { error?: string }) {
 function Login() {
   const failed = new URLSearchParams(window.location.search).has("error");
   return <main className="login-shell login-grid grid min-h-screen place-items-center p-6">
-    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">PLAYBOOK</span></div><CardTitle className="control-title text-3xl">Deine Maps. Deine Nades.</CardTitle><CardDescription>Entdecke Lineups, lerne Wurfwege und bereite deine nächste Runde vor. Melde dich mit Steam an.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : ""} /><Button asChild><a href="/api/auth/steam">Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler erhalten die Rolle Player. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
+    <Card className="w-full max-w-lg"><CardHeader><div className="mb-4 flex items-center gap-3"><span className="control-brand-mark"><Crosshair /></span><span className="font-mono text-sm">PLAYBOOK</span></div><CardTitle className="control-title text-3xl">Deine Maps. Deine Nades.</CardTitle><CardDescription>Entdecke Lineups, lerne Wurfwege und bereite deine nächste Runde vor. Melde dich mit Steam an.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5"><Message error={failed ? "Steam-Anmeldung abgebrochen oder abgelaufen. Bitte erneut anmelden." : ""} /><Button asChild><a href={`/api/auth/steam?returnTo=${encodeURIComponent(routeFromLoginSearch(window.location.search))}`}>Mit Steam anmelden</a></Button><p className="text-sm text-muted-foreground">Neue Spieler können Teams gründen und Einladungen annehmen. Dein Steam-Passwort gibst du ausschließlich bei Steam ein.</p></CardContent></Card>
   </main>;
 }
 
@@ -186,14 +203,18 @@ function TestLogin() {
 }
 
 function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, operation, status, statusUnavailable, selectedMap, selectedNade, reviewing }) {
+  const connection = useLiveState();
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
-  const currentPage = reviewing ? "Review" : selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label);
+  const path = useLocation().pathname;
+  const workspacePage = tab === "teams" ? (path === "/teams" ? "Meine Teams" : path.includes("/join/") ? "Einladung" : "Mitglieder")
+    : tab === "strats" ? (path.includes("/live") ? "Live-Ansicht" : path.endsWith("/edit") ? "Editor" : path.endsWith("/new") ? "Neue Strat" : path === "/strats" ? "Bibliothek" : "Aufgaben") : tab === "analysis" ? (path.includes("/reviews/") ? "Team-Review" : path.includes("/demos/") ? "Matchanalyse" : "Matches und Reviews") : "";
+  const currentPage = workspacePage || (reviewing ? "Review" : selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label));
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <a className="skip-link" href="#main-content">Zum Inhalt</a>
-        <AppSidebar user={user} serverItems={allowedTabs(user.role).filter(item => item.group === "Server")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} status={status} operation={operation} unavailable={statusUnavailable} />
+        <AppSidebar user={user} serverItems={allowedTabs(user).filter(item => item.group === "Server")} adminItems={allowedTabs(user).filter(item => item.group === "Verwaltung")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} status={status} operation={operation} unavailable={statusUnavailable} />
         <SidebarInset className="workspace-inset min-w-0">
           <header className="control-topbar sticky top-0 z-30">
             <div className="topbar-inner">
@@ -202,7 +223,7 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem>
-                    <BreadcrumbLink asChild><NavLink to={activeTab.group === "Training" ? routePaths.maps : routePaths.overview}>{activeTab.group === "Training" ? "Maps" : "Server"}</NavLink></BreadcrumbLink>
+                    <BreadcrumbLink asChild><NavLink to={activeTab.group === "Training" ? routePaths.maps : activeTab.group === "Server" ? routePaths.overview : activeTab.path}>{activeTab.group === "Training" ? "Maps" : activeTab.group === "Teams" ? "Team-Management" : activeTab.group}</NavLink></BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   {selectedNade && selectedMap && <><BreadcrumbItem><BreadcrumbLink asChild><NavLink to={mapPath(selectedMap)}>{selectedMap.name}</NavLink></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /></>}
@@ -210,12 +231,13 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
                   <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate max-w-48 sm:max-w-80">{currentPage}</BreadcrumbPage></BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
-              <div className="topbar-status"><span className="topbar-caption">COUNTER-STRIKE 2</span></div>
+              <div className="topbar-status"><Badge variant={connection === "connected" ? "secondary" : "outline"} role="status">{connection === "connected" ? "Live verbunden" : connection === "connecting" ? "Verbindung wird aufgebaut …" : "Live-Verbindung unterbrochen"}</Badge></div>
             </div>
           </header>
         <div id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
+          <LiveRecordingStatus userId={user.identitySteam64} />
           <NadeFavoritesProvider key={user.identitySteam64}>{children}</NadeFavoritesProvider>
-          {user.role !== "player" && ["overview", "server", "plugins", "maintenance"].includes(tab) && <section className="server-save-panel" aria-label="Servereinstellungen speichern">
+          {authorize(user, "server.match") && ["overview", "server", "plugins", "maintenance"].includes(tab) && <section className="server-save-panel" aria-label="Servereinstellungen speichern">
             <div><h2>Servereinstellungen übernehmen</h2><p>{dirty ? "Du hast ungespeicherte Änderungen." : "Der aktuelle Entwurf ist gespeichert."} Ein Neustart trennt verbundene Spieler.</p></div>
             <div className="flex flex-wrap gap-2">
               <ActionButton variant="secondary" onClick={onSave} disabled={!dirty || busy} icon={Save} pendingLabel="Wird gespeichert …" successLabel="Gespeichert">Entwurf speichern</ActionButton>
@@ -719,13 +741,16 @@ function DockerLogs({ active }) {
   const [logError, setLogError] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
   const logRef = useRef(null);
+  const logVersion = useRef(0);
 
   const loadLogs = useCallback(async () => {
     if (!active) return;
     setLoading(true);
     setLogError("");
     try {
+      const version = logVersion.current;
       const result = await api(`/api/server/logs?tail=${tail}`);
+      if (version !== logVersion.current) return;
       setLogs(result.logs || "");
       setUpdatedAt(new Date().toLocaleTimeString());
       requestAnimationFrame(() => {
@@ -741,10 +766,13 @@ function DockerLogs({ active }) {
   useEffect(() => {
     if (!active) return undefined;
     loadLogs();
-    if (!autoRefresh) return undefined;
-    const timer = window.setInterval(loadLogs, 5000);
-    return () => window.clearInterval(timer);
-  }, [active, autoRefresh, loadLogs]);
+
+  }, [active, loadLogs]);
+  useLiveResource(active && autoRefresh ? `/api/server/logs?tail=${tail}` : null, result => {
+    logVersion.current++;
+    setLogs(result.logs || ""); setLogError(""); setUpdatedAt(new Date().toLocaleTimeString());
+    requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; });
+  }, error => { setLogError(error.message); if ([401, 403].includes(error.status)) setLogs(""); });
 
   return (
     <>
@@ -757,7 +785,7 @@ function DockerLogs({ active }) {
           </Button>
           <Button variant={autoRefresh ? "default" : "secondary"} onClick={() => setAutoRefresh((current) => !current)}>
             {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
-            {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
+            {autoRefresh ? "Live-Updates an" : "Live-Updates pausiert"}
           </Button>
           <Field className="ml-auto flex grid-cols-[auto_100px] items-center gap-2">
             <FieldLabel className="text-muted-foreground">Lines</FieldLabel>
@@ -802,10 +830,16 @@ function App() {
   const [operation, setOperation] = useState<ServerOperation>(null);
   const [savedSignature, setSavedSignature] = useState("");
   const [busy, setBusy] = useState(false);
+  const controlVersion = useRef(0);
+  const latestControl = useRef<any>(null);
+  const controlAccess = useRef("");
+  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings });
 
   async function loadAll({ preserveSettings = false } = {}) {
-    const control = await api("/api/control");
-    setAuthenticated(true);
+    const version = controlVersion.current;
+    const response = await api("/api/control");
+    const control = version !== controlVersion.current ? latestControl.current : response;
+    controlAccess.current = JSON.stringify(control.user.access);
     setUser(control.user);
     if (!preserveSettings) setSettings(control.settings || {});
     setAdmins(control.admins || []);
@@ -830,39 +864,36 @@ function App() {
   }
 
   useEffect(() => {
-    loadAll().catch(() => setAuthenticated(false));
+    api("/api/auth/me").then(({ user }) => {
+      setUser(user); setAuthenticated(true);
+      void loadAll().catch(() => setStatusUnavailable(true));
+    }).catch(() => setAuthenticated(false));
   }, []);
 
-  useLiveNades(authenticated === true, setNades);
-
-  useEffect(() => {
-    if (!authenticated || user?.role !== "admin" || busy) return;
-    let cancelled = false;
-    let timer: number;
-    const controller = new AbortController();
-    async function refreshStatus() {
-      try {
-        const next = await api("/api/server/status", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) });
-        if (!next?.service || typeof next.service.state !== "string") throw new Error("Unvollständiger Serverstatus");
-        if (!cancelled) {
-          setStatus(current => ({ ...current, ...next }));
-          setStatusUnavailable(false);
-        }
-      } catch {
-        if (!cancelled) setStatusUnavailable(true);
-      } finally {
-        if (!cancelled) timer = window.setTimeout(refreshStatus, 15000);
-      }
+  useLiveResource(authenticated ? "/api/auth/me" : null, result => setUser(result.user), error => {
+    if (error.status === 401) setAuthenticated(false);
+  });
+  useLiveResource(authenticated ? "/api/control" : null, control => {
+    controlVersion.current++;
+    latestControl.current = control;
+    setNades(control.nades || []);
+    const accessChanged = controlAccess.current !== JSON.stringify(control.user.access);
+    controlAccess.current = JSON.stringify(control.user.access);
+    setUser(control.user);
+    if (!dirty || accessChanged) {
+      setSettings(control.settings || {});
+      setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
     }
-    void refreshStatus();
-    return () => {
-      cancelled = true;
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [authenticated, user?.role, busy]);
+    setAdmins(control.admins || []);
+    setPolicy(control.policy || null);
+    setStatus(current => accessChanged ? control.status || null : { ...current, ...control.status });
+    setStatusUnavailable(false);
+  }, error => { if (error.status === 401) setAuthenticated(false); });
+  useLiveResource(authenticated && isServerAdmin(user) ? "/api/server/status" : null, next => {
+    setStatus(current => ({ ...current, ...next })); setStatusUnavailable(false);
+  }, () => setStatusUnavailable(true));
 
-  const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs[1];
+  const activeTab = tabs.find((item) => item.path === location.pathname.replace(/\/+$/, "")) || tabs.find(item => isWorkspaceRoute(location.pathname) && location.pathname.startsWith(item.path + "/")) || tabs.find(item => item.id === "maps");
   const libraryMaps = useMemo(() => mapsForLibrary(settings, status?.mapInventory, nades), [settings, status?.mapInventory, nades]);
   const mapRoute = matchPath("/maps/:mapSlug/*", location.pathname);
   const lineupRoute = matchPath("/maps/:mapSlug/lineups/:lineupId/*", location.pathname);
@@ -879,8 +910,6 @@ function App() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
-
-  const dirty = savedSignature !== "" && savedSignature !== JSON.stringify({ settings });
 
   function refreshLibrary() {
     return runAction(async () => {}, "library");
@@ -912,7 +941,7 @@ function App() {
 
   if (!authenticated) {
     if (location.pathname !== routePaths.login) {
-      const requestedRoute = (isMapRoute(location.pathname) || tabs.some((item) => item.path === location.pathname)) ? `${location.pathname}${location.search}` : defaultRoute;
+      const requestedRoute = (isWorkspaceRoute(location.pathname) || isMapRoute(location.pathname) || tabs.some((item) => item.path === location.pathname)) ? `${location.pathname}${location.search}` : defaultRoute;
       return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
     }
 
@@ -920,7 +949,7 @@ function App() {
   }
 
   const roleHome = defaultRoute;
-  if (location.pathname !== "/" && location.pathname !== routePaths.login && !isMapRoute(location.pathname) && !allowedTabs(user.role).some(tab => tab.path === location.pathname))
+  if (location.pathname !== "/" && location.pathname !== routePaths.login && !isMapRoute(location.pathname) && !isWorkspaceRoute(location.pathname) && location.pathname !== "/access" && !allowedTabs(user).some(tab => tab.path === location.pathname))
     return <Navigate to={roleHome} replace />;
 
 
@@ -947,11 +976,30 @@ function App() {
       }}
     >
       <Routes>
+        <Route path="/analysis" element={<AnalysisPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/live" element={<LiveSessionsPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/live/:sessionId" element={<LiveSessionPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/imports" element={<MatchImportsPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/prematch" element={<PrematchesPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/prematch/:preparationId" element={<PrematchPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/demos/:demoId" element={<DemoPage user={user} maps={libraryMaps} />} />
+        <Route path="/analysis/reviews/:reviewId" element={<ReviewPage user={user} maps={libraryMaps} />} />
+        <Route path="/teams" element={<TeamsPage user={user} />} />
+        <Route path="/teams/join/:token" element={<JoinTeamPage />} />
+        <Route path="/teams/:teamId" element={<TeamPage user={user} />} />
+        <Route path="/strats" element={<StratsPage user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/new" element={<StratEditor user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/:stratId/edit" element={<StratEditor user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/live" element={<LiveStratsPage user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/live/:teamId" element={<LiveStratsPage user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/:stratId" element={<StratPage user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/admin/roles" element={<RolesPage />} />
+        <Route path="/access" element={<Navigate to="/admin/users" replace />} />
         <Route path="/" element={<Navigate to={roleHome} replace />} />
         <Route
           path={routePaths.overview}
           element={(
-            user.role === "match_admin" ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><div className="my-5"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></div>{settings.serverMode === "matchzy" && <Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field>}</> : <Overview
+            !isServerAdmin(user) ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><div className="my-5"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></div>{settings.serverMode === "matchzy" && <Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field>}</> : <Overview
               settings={settings}
               setSettings={setSettings}
               onApply={applyControl}
@@ -979,7 +1027,7 @@ function App() {
           <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />
         </>} />
         <Route path={routePaths.reviews} element={<ReviewQueuePage maps={libraryMaps} nades={nades} user={user} onRefresh={refreshLibrary} onEntriesChange={setNades} />} />
-        <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={user.role === "admin"} /></>} />
+        <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={isServerAdmin(user)} /></>} />
         <Route
           path={routePaths.access}
           element={<UserManagement currentSteamId={user.identitySteam64} />}
@@ -1008,7 +1056,5 @@ function App() {
 }
 
 createRoot(document.getElementById("root")).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>
+  <RouterProvider router={createBrowserRouter([{ path: "*", element: <App /> }])} />
 );

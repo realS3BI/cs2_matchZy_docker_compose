@@ -1,3 +1,4 @@
+import { Changes, LiveResources, liveError } from "./live-resources.js";
 import crypto from "node:crypto";
 import express from "express";
 import cookieParser from "cookie-parser";
@@ -5,14 +6,20 @@ import rateLimit from "express-rate-limit";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installAuth } from "./auth.js";
+import { installAuth, authenticatedUser } from "./auth.js";
+import { authorize, isPlatformAdmin, isServerAdmin, accessOf, ROLE_CATALOG, ACTIONS } from "../shared/authorization.js";
+import { routeAllowed } from "./authorization.js";
+import { installWorkspace } from "./workspace-routes.js";
+import { installDemoAnalysis } from "./demo-routes.js";
+import { installRecordings } from "./recording-routes.js";
+import { installMatches } from "./match-routes.js";
 import {
   nadesToMatchZySavedNadesConfig,
   sanitizeAdmins,
   sanitizeSettings
 } from "./validators.js";
 import { buildDiagnostics } from "./diagnostics.js";
-import { ADMIN_ROLES, MATCH_ADMIN_SETTINGS, settingsForRole, buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
+import { MATCH_ADMIN_SETTINGS, settingsForRole, buildControlModel, normalizeSettings, SETTINGS_GROUPS, validateRunnableSettings, validateSettings } from "./policy.js";
 import { writeAdminRuntimeFiles, writeServerRuntimeFiles, writeServerRuntimeSettings } from "./runtime-files.js";
 import { currentMapFromStatus, executeRcon, mapChangeCommand } from "./rcon.js";
 import { applyWebNadeAction } from "./nade-review.js";
@@ -61,6 +68,8 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   }
 
   const app = express();
+  const live = new LiveResources(store.changes ||= new Changes());
+  app.locals.live = live;
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
@@ -85,25 +94,22 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   });
 
   app.get("/healthz", (req, res) => res.json({ ok: true, service: "playbook" }));
-  installAuth(app, { config, store, loginLimiter, steamVerifier });
+  installAuth(app, { config, store, loginLimiter, steamVerifier, live });
+  installWorkspace(app, { store, config, live });
+  installDemoAnalysis(app, { store, live });
+  installRecordings(app, { store, live, config });
+  installMatches(app, { store, live });
 
   // Deny by default. Content writes, users, credentials and diagnostics stay admin-only.
   app.use("/api", (req, res, next) => {
-    const role = res.locals.user.role;
-    const route = `${req.method} ${req.path}`;
-    const shared = ["GET /control", "GET /nades", "GET /nades/events", "GET /nades/status", "GET /nades/favorites", "PUT /nades/favorites", "POST /nades/entry", "GET /nades/review/config"];
-    const operator = ["PUT /control", "POST /control/apply", "GET /server/game", "POST /server/map", "POST /server/rcon"];
-    if (role === "admin" || shared.includes(route) ||
-        (req.method === "GET" && /^\/uploads\/[^/]+$/.test(req.path)) ||
-        (req.method === "GET" && /^\/nades\/video-preview\/[\w-]{1,256}$/.test(req.path)) ||
-        (role === "match_admin" && operator.includes(route))) return next();
+    if (routeAllowed(res.locals.user, req.method, req.path)) return next();
     res.status(403).json({ error: "Für diese Aktion fehlt dir die Berechtigung." });
   });
 
   app.get("/api/nades/review/config", (_req, res) => res.json({ uploadEnabled: !!config.uploadthingToken }));
   app.get("/api/nades/events", (req, res) => {
     if (!store.nadeEvents) { res.status(503).end(); return; }
-    void store.nadeEvents.stream(req, res, () => store.getNades());
+    void store.nadeEvents.stream(req, res, () => store.getNades(), async () => !!await authenticatedUser(req, config, store));
   });
   installReviewCapture(app, { config, store });
   installVideoPreviews(app, { store });
@@ -111,7 +117,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
   async function controlSettings(req, res) {
     const input: any = sanitizeSettings(req.body?.settings);
     if (req.body?.admins !== undefined) throw new Error("Benutzer bitte über die Benutzerverwaltung ändern.");
-    if (res.locals.user.role === "admin") return normalizeSettings(validateSettings(input));
+    if (isServerAdmin(res.locals.user)) return normalizeSettings(validateSettings(input));
     if (Object.keys(input).some(key => !MATCH_ADMIN_SETTINGS.includes(key))) throw new Error("Diese Einstellung darf nur ein Admin ändern.");
     const previous = await store.getSettings();
     // Match admins may add Workshop maps; changing/removing existing metadata is forbidden.
@@ -125,18 +131,34 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     return normalizeSettings(validateSettings({ ...previous, ...input }));
   }
 
-  app.get("/api/users", async (req, res, next) => {
-    try { res.json({ entries: await store.getAdmins(), roles: ADMIN_ROLES }); } catch (error) { next(error); }
+  live.get(app, "/api/users", async () => {
+      const teams = store.workspace ? await store.workspace.listTeams() : [];
+      const entries = (await store.getAdmins()).map(user => ({ ...user, access: accessOf(user),
+        teams: teams.filter(team => team.members.some(member => member.userId === user.identitySteam64))
+          .map(team => ({ id: team.id, name: team.name, role: team.members.find(member => member.userId === user.identitySteam64).role })) }));
+      return { entries, roles: ROLE_CATALOG };
+
   });
+  live.get(app, "/api/access", async () => {
+      let published = null, applied = null;
+      try { published = JSON.parse(await readFile(join(dirname(config.runtimeAdminsFile), "permissions.json"), "utf8")); } catch {}
+      try { applied = JSON.parse(await readFile(join(dirname(config.liveMatchZyNadesFile), "permissions-applied.json"), "utf8")); } catch {}
+      const history = store.actions ? await store.actions.find({ type: { $in: ["user_role", "team_change", "team_join", "team_invite"] } }).sort({ createdAt: -1 }).limit(50).toArray() : [];
+      return { roles: ROLE_CATALOG, actions: ACTIONS, history,
+        runtime: { publishedRevision: published?.revision || null, appliedRevision: applied?.revision || null,
+          appliedAt: applied?.appliedAt || null, synchronized: !!published && published.revision === applied?.revision } };
+
+  }, 3000);
   app.put("/api/users/:steamId", async (req, res, next) => {
     try {
       const user = sanitizeAdmins([{ ...req.body, identitySteam64: req.params.steamId }])[0];
-      if (user.identitySteam64 === res.locals.user.identitySteam64 && user.role !== "admin")
+      const previousAccess = accessOf(await store.getUser(user.identitySteam64));
+      if (user.identitySteam64 === res.locals.user.identitySteam64 && !isPlatformAdmin(user))
         return res.status(400).json({ error: "Die eigene Admin-Rolle kann nicht entfernt werden. Ein anderer Admin kann sie ändern." });
-      await store.saveUser(user);
+      const saved = await store.saveUser({ ...user, accessRevision: req.body?.accessRevision }, res.locals.user.identitySteam64);
       await writeAdminRuntimeFiles(config, () => store.getAdmins());
-      await store.logAction("user_role", "success", "Benutzer gespeichert", { actor: res.locals.user.identitySteam64, subject: user.identitySteam64, role: user.role });
-      res.json({ user });
+      await store.logAction("user_role", "success", "Benutzer gespeichert", { actor: res.locals.user.identitySteam64, subject: user.identitySteam64, previousAccess, access: accessOf(saved || user) });
+      res.json({ user: saved || user });
     } catch (error) { next(error); }
   });
 
@@ -169,7 +191,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     const key = String(req.params.key || "");
     if (!/^[0-9a-f-]+\.(?:jpg|png|webp|gif)$/i.test(key)) return res.status(404).end();
     try {
-      if (res.locals.user.role !== "admin" && !(await store.getNades())
+      if (!isPlatformAdmin(res.locals.user) && !(await store.getNades())
           .some(nade => nade.lineupImages?.some(image => image.url === `/api/uploads/${key}`))) return res.status(404).end();
       const content = await readFile(join(config.uploadDir, key));
       const contentTypes = { ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif" };
@@ -180,12 +202,12 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     }
   });
 
-  app.get("/api/settings", async (req, res) => {
-    res.json({
+  live.get(app, "/api/settings", async () => {
+    return {
       settings: await store.getSettings(),
       curatedFields: SETTINGS_GROUPS.flatMap((group) => group.fields),
       settingsGroups: SETTINGS_GROUPS
-    });
+    };
   });
 
   app.put("/api/settings", async (req, res) => {
@@ -193,46 +215,44 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     res.json({ settings: await store.saveSettings(settings) });
   });
 
-  app.get("/api/nades", async (req, res) => {
+  live.get(app, "/api/nades", async ({ user }) => {
     const document = await store.getNadesDocument();
-    res.json({
+    return {
       entries: document?.entries || [],
       library: nadesLibraryStatus(document),
-      sync: res.locals.user.role === "admin" ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
-    });
+      sync: isPlatformAdmin(user) ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
+    };
   });
 
-  app.get("/api/nades/status", async (req, res) => {
+  live.get(app, "/api/nades/status", async ({ user }) => {
     const document = await store.getNadesDocument();
-    res.json({
+    return {
       library: nadesLibraryStatus(document),
-      sync: res.locals.user.role === "admin" ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
-    });
-  });
+      sync: isPlatformAdmin(user) ? nadesSync?.status() || { enabled: false, state: "disabled" } : { enabled: false, state: "disabled" }
+    };
+  }, 3000);
 
-  app.get("/api/control", async (req, res, next) => {
-    try {
-      const user = res.locals.user;
+  live.get(app, "/api/control", async ({ user }) => {
       const settings = await store.getSettings();
       const document = await store.getNadesDocument();
       const nades = document?.entries || [];
       const status = { mapInventory: await readMapInventory() } as any;
-      if (user.role === "player" || user.role === "training_player") return res.json({ user, nades, status,
-        settings: { workshopMaps: settings.workshopMaps, workshopMapCatalog: settings.workshopMapCatalog } });
-      if (user.role === "admin") Object.assign(status, {
-        service: await compose.serviceStatus(), lastAction: await store.getLastAction(),
+      if (!authorize(user, "server.match")) return { user, nades, status,
+        settings: { workshopMaps: settings.workshopMaps, workshopMapCatalog: settings.workshopMapCatalog } };
+      if (isServerAdmin(user)) Object.assign(status, {
+        service: await Promise.resolve().then(() => compose.serviceStatus()).catch(() => ({ state: "unavailable" })), lastAction: await store.getLastAction(),
         maintenance: await restartScheduler?.status() || { enabled: false },
         nadesSync: nadesSync?.status() || { enabled: false, state: "disabled" }, nadesLibrary: nadesLibraryStatus(document)
       });
       const policy = buildControlModel(settings);
-      if (user.role !== "admin") { policy.settingsGroups = []; policy.adminRoles = []; }
-      res.json({ user, settings: settingsForRole(settings, user.role), admins: user.role === "admin" ? await store.getAdmins() : [], nades, status, policy });
-    } catch (error) { next(error); }
+      if (!isServerAdmin(user)) policy.settingsGroups = [];
+      if (!isPlatformAdmin(user)) policy.adminRoles = [];
+      return { user, settings: settingsForRole(settings, user), admins: isPlatformAdmin(user) ? await store.getAdmins() : [], nades, status, policy };
+
   });
 
-  app.get("/api/nades/favorites", async (req, res, next) => {
-    try { res.json({ entries: await store.getNadeFavorites(res.locals.user.identitySteam64) }); }
-    catch (error) { next(error); }
+  live.get(app, "/api/nades/favorites", async ({ user }) => {
+    return { entries: await store.getNadeFavorites(user.identitySteam64) };
   });
 
   app.put("/api/nades/favorites", async (req, res, next) => {
@@ -251,7 +271,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     try {
       const settings = await controlSettings(req, res);
       await store.saveSettings(settings);
-      res.json({ settings: settingsForRole(settings, res.locals.user.role) });
+      res.json({ settings: settingsForRole(settings, res.locals.user) });
     } catch (error) { next(error); }
   });
 
@@ -313,15 +333,12 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     return rcon({ host: config.serviceName || "cs2", password: settings.rconPassword, command });
   }
 
-  app.get("/api/server/game", async (req, res, next) => {
-    try {
+  live.get(app, "/api/server/game", async () => {
       const settings = await runtimeSettings();
       const output = await liveCommand(settings, "status");
-      res.json({ map: currentMapFromStatus(output), mode: settings.serverMode, startMap: settings.startMap });
-    } catch (error) {
-      next(error);
-    }
-  });
+      return { map: currentMapFromStatus(output), mode: settings.serverMode, startMap: settings.startMap };
+
+  }, 3000, true);
 
   app.post("/api/server/map", async (req, res, next) => {
     let command;
@@ -414,36 +431,37 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
     });
   });
 
-  app.get("/api/server/status", async (req, res) => {
-    res.json({
+  live.get(app, "/api/server/status", async () => {
+    return {
       service: await compose.serviceStatus(),
       nadesSync: nadesSync?.status() || { enabled: false },
       maintenance: restartScheduler ? await restartScheduler.status() : { enabled: false },
       lastAction: await store.getLastAction(["apply", "restart", "scheduled_restart", "map_change", "repair", "save", "nades_sync", "login_fail"])
-    });
-  });
+    };
+  }, 2000, true);
 
-  app.get("/api/server/diagnostics", async (req, res) => {
+  live.get(app, "/api/server/diagnostics", async () => {
     const [raw, desired] = await Promise.all([
       compose.serviceDiagnostics(),
       store.getSettings()
     ]);
-    res.json(buildDiagnostics({
+    return buildDiagnostics({
       ...raw,
       desired,
       controlMode: config.controlMode
-    }));
-  });
+    });
+  }, 10000, true);
 
-  app.get("/api/server/logs", async (req, res) => {
-    const result = await compose.serviceLogs({ tail: req.query.tail });
+  live.get(app, "/api/server/logs", async ({ query }) => {
+    const result = await compose.serviceLogs({ tail: query.tail });
     const output = `${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`.trimEnd();
-    res.status(result.ok ? 200 : 500).json({
+    if (!result.ok) throw liveError(503, actionMessage(result));
+    return {
       ok: result.ok,
       logs: output,
       message: actionMessage(result)
-    });
-  });
+    };
+  }, 1000, true);
 
   app.use("/api", (req, res) => res.status(404).json({ error: "API-Endpunkt nicht gefunden." }));
 
@@ -452,7 +470,7 @@ export function createApp({ config, store, compose, nadesSync, restartScheduler 
 
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
-    res.status(400).json({ error: error.message || "Bad request" });
+    res.status(error.status || 400).json({ error: error.message || "Ungültige Anfrage." });
   });
 
   return app;

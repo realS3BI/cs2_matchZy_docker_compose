@@ -21,6 +21,35 @@ export type PlaybookDesktop = {
   checkUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
   onStopVideo(callback: () => void): () => void;
+  liveStatus?(): Promise<{
+    recording: boolean;
+    sessionId: string;
+    muted: boolean;
+    pending: number;
+    error?: string;
+    microphoneControl?: boolean;
+    levels?: { game: number; discord: number };
+  }>;
+  liveDevices?(): Promise<{
+    devices: { id: string; name: string; level: number }[];
+    microphoneControl: boolean;
+  }>;
+  liveStart?(
+    sessionId: string,
+    options: {
+      gameDeviceId: string;
+      voiceDeviceId: string;
+      microphoneStrip: number;
+    },
+  ): Promise<void>;
+  liveStop?(): Promise<void>;
+  liveMute?(muted: boolean): Promise<void>;
+  liveRetry?(): Promise<void>;
 };
-declare global { interface Window { playbookDesktop?: PlaybookDesktop } }
-export const desktop = window.playbookDesktop?.version === 1 ? window.playbookDesktop : undefined;
+declare global {
+  interface Window {
+    playbookDesktop?: PlaybookDesktop;
+  }
+}
+export const desktop =
+  window.playbookDesktop?.version === 1 ? window.playbookDesktop : undefined;

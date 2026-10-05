@@ -1,3 +1,4 @@
+import { accessOf, ROLE_CATALOG, type Actor } from "../../../shared/authorization";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -11,16 +12,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 
-export type SidebarUser = {
-  name?: string;
-  identitySteam64: string;
-  role: string;
-};
+export type SidebarUser = Actor;
 
 export function NavUser({ user, onLogout }: { user: SidebarUser; onLogout: () => void }) {
   const { isMobile } = useSidebar();
   const name = user.name || user.identitySteam64;
-  const role = user.role === "admin" ? "Plattform-Admin" : user.role === "match_admin" ? "Match Admin" : user.role === "training_player" ? "Trainingsspieler" : "Spieler";
+  const access = accessOf(user);
+  const role = [access.platform, access.server].filter(id => id !== "none").map(id => ROLE_CATALOG.find(role => role.id === id)?.name).join(" · ");
 
   return (
     <SidebarMenu>

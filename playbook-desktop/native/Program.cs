@@ -14,6 +14,13 @@ Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 Native.SetProcessDpiAwarenessContext(new nint(-4));
 try
 {
+    if (args.Length == 1 && args[0] == "audio-devices") { LiveAudio.Devices(); return; }
+    if (args.Length == 2 && args[0] == "audio-recover") { LiveAudio.Recover(args[1]); return; }
+    if (args.Length > 0 && args[0] == "audio")
+    {
+        await LiveAudio.Run(args.Skip(1).ToArray());
+        return;
+    }
     if (args.Length == 2 && args[0] == "launch" && System.Text.RegularExpressions.Regex.IsMatch(args[1], "^[a-f0-9]{32}$"))
     {
         var running = Process.GetProcessesByName("cs2");

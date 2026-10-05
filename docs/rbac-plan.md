@@ -1,12 +1,12 @@
 # Plan für zentrale Benutzerverwaltung und RBAC
 
-Stand: 5. Oktober 2026. Dieser Entwurf ergänzt den [Plan für Team-Management und Strats](team-playbooks-plan.md). Er beschreibt die geplante Umstellung, keine bereits vorhandene Funktion.
+Stand: 5. Oktober 2026. Dieser Entwurf ergänzt den [Plan für Team-Management und Strats](team-playbooks-plan.md). Die erste Umsetzung ist vorhanden; dieses Dokument hält Entscheidungen und technische Begründungen fest.
 
 Vereinbart sind feste, zentral gepflegte Rollen und eine sichtbare Rechtematrix. Ein Benutzerkonto verwendet dieselbe Steam-Identität für Website, Server und Teams. Rollenzuweisungen haben einen Geltungsbereich. Alle Bereiche verwenden ein gemeinsames Autorisierungsmodul.
 
 ## Warum die bisherige Rolle nicht ausreicht
 
-Heute besitzt ein Benutzer genau ein Feld `role` mit `admin`, `match_admin`, `training_player` oder `player`. Die Rollen verbinden Website- und Serverrechte. Express prüft sie in einer globalen Allowlist, das Frontend vergleicht Rollennamen und das Server-Plugin liest dieselben vier Namen aus einer Runtime-Datei. Das sind konkrete Stellen für die Umstellung. [Benutzermodell](../admin-panel/src/store.ts), [Rollen und CSS-Flags](../admin-panel/src/policy.ts), [Express-Prüfungen](../admin-panel/src/app.ts), [Frontend-Prüfungen](../admin-panel/client/src/main.tsx), [Plugin-Prüfungen](../nades-plugin/MatchZyNades/AccessControl.cs).
+Vor der Umstellung besaß ein Benutzer genau ein Feld `role` mit `admin`, `match_admin`, `training_player` oder `player`. Die Rollen verbinden Website- und Serverrechte. Express prüft sie in einer globalen Allowlist, das Frontend vergleicht Rollennamen und das Server-Plugin liest dieselben vier Namen aus einer Runtime-Datei. Das sind konkrete Stellen für die Umstellung. [Benutzermodell](../admin-panel/src/store.ts), [Rollen und CSS-Flags](../admin-panel/src/policy.ts), [Express-Prüfungen](../admin-panel/src/app.ts), [Frontend-Prüfungen](../admin-panel/client/src/main.tsx), [Plugin-Prüfungen](../nades-plugin/MatchZyNades/AccessControl.cs).
 
 Zusätzlich gelten bereits Regeln pro Aufnahme. Ein Ersteller darf nur seine noch nicht offiziellen Wurfdaten bearbeiten; Kartenpositionen und das Zurücknehmen einer Freigabe folgen anderen Regeln. Ein zentrales RBAC muss diese Regeln erhalten. [Lineup-Rechte](../admin-panel/shared/lineup-policy.ts), [Projektregeln](../AGENTS.md).
 
@@ -97,7 +97,7 @@ Empfohlen ist folgendes Modell für die vorhandene MongoDB:
 | --- | --- |
 | Identität, Name, Favoriten | Bestehende `users`-Collection mit Steam-ID als stabiler Identität |
 | Rollendefinitionen und Aktionskatalog | Ein versionierter, typisierter Katalog im Code |
-| Plattform- und Serverzuweisungen | `roleAssignments` mit Benutzer, Rolle, Geltungsbereich, Revision und Änderungsdaten |
+| Plattform- und Serverzuweisungen | `roleAssignments/current` mit Benutzerzuweisungen für Plattform und Server sowie gemeinsamer Revision |
 | Teammitgliedschaften und Teamrollen | `members` im jeweiligen Team-Dokument, pro Mitglied genau eine Rolle |
 | Verbindliche Teamrolle | Ausschließlich dieser Eintrag im Team, keine zusätzliche Kopie in `users` oder `roleAssignments` |
 | Änderungen an Rechten | Bestehender Audit-Speicher mit strukturierten Angaben zur Änderung |
@@ -106,11 +106,11 @@ Das zentrale Autorisierungsmodul liest Plattform- und Serverzuweisungen sowie Te
 
 Die kleine CS-Team-Mitgliederliste im Team-Dokument erlaubt eine atomare Owner-Übertragung. Eine Änderung schreibt die validierte nächste Liste nur dann, wenn die gelesene Revision noch aktuell ist. Es bleibt genau ein Owner und jeder Benutzer kommt höchstens einmal vor. Parallel eingereichte Rollenänderungen oder Austritte müssen bei einem Konflikt erneut geprüft werden. MongoDB unterstützt solche atomaren Dokumentänderungen mit erwarteten Werten im Updatefilter. [MongoDB Atomicity and Transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/).
 
-Für Plattform- und Serverzuweisungen verhindert ein eindeutiger Index auf Benutzer und Geltungsbereich doppelte Einträge. Die Mindestanzahl der Plattform-Admins muss bei Rollenentzug ebenfalls atomar abgesichert werden; eine bloße vorherige Zählabfrage genügt bei gleichzeitigen Änderungen nicht.
+Die erste Implementierung speichert Plattform- und Serverzuweisungen in einem gemeinsamen Dokument mit einer nach Steam-ID indizierten Benutzerstruktur. Ein Revisionsvergleich schützt jede Änderung und die Mindestanzahl der Plattform-Admins atomar. Diese Wahl vermeidet Transaktionen auf der bestehenden MongoDB-Einzelinstanz. Bei einer erheblich größeren Benutzerbasis muss das Dokument wegen der MongoDB-Größenbegrenzung auf mehrere Datensätze mit Transaktionen umgestellt werden. Teamrollen bleiben ausschließlich im jeweiligen Team-Dokument.
 
 ## Anbindung an den Gameserver
 
-Heute exportiert [runtime-files.ts](../admin-panel/src/runtime-files.ts) Rollennamen und CSS-Flags. Das [Plugin](../nades-plugin/MatchZyNades/AccessControl.cs) interpretiert die Namen selbst. Die zentrale RBAC-Umstellung ersetzt diese zweite Rolleninterpretation durch aus dem Katalog abgeleitete Berechtigungen für den konkreten Server.
+Vor der Umstellung exportierte [runtime-files.ts](../admin-panel/src/runtime-files.ts) Rollennamen und CSS-Flags. Das Plugin interpretierte diese Namen selbst. Die zentrale RBAC-Umstellung ersetzt diese zweite Rolleninterpretation durch aus dem Katalog abgeleitete Berechtigungen für den konkreten Server.
 
 Der Export enthält Steam-ID, Server-ID, Schema-Version, Revision und die benötigten effektiven Rechte. CSS-Flags bleiben ein Adapter für CounterStrikeSharp und MatchZy. Ihre Zuordnung kommt aus demselben Katalog. Teams, Strat-Aufgaben und Plattformverwaltung werden nicht an das Plugin exportiert.
 
@@ -154,4 +154,4 @@ Die Einführung erfolgt in prüfbaren Schritten:
 - Tests vergleichen die aus dem Katalog erzeugten Serverrechte mit der Auswertung im Plugin. Unbekannte Berechtigungen und Formatversionen geben keine zusätzlichen Rechte.
 - Die Migration erhält die wirksamen Rechte aller vier bisherigen Rollen und ändert keine bestehenden Nade-Daten.
 
-Die Rechtematrix ist eine Grundlage für Tests. Zusätzlich prüfen Integrationstests echte Benutzer, Geltungsbereiche und Datensätze über authentifizierte Routen. Für diesen Entwurf wurde nur Dokumentation geändert; Anwendungstests folgen mit der Implementierung.
+Die Rechtematrix ist eine Grundlage für Tests. Zusätzlich prüfen Integrationstests echte Benutzer, Geltungsbereiche und Datensätze über authentifizierte Routen. Die Umsetzung prüft diese Grenzen zusätzlich mit authentifizierten API-Tests gegen MongoDB und Plugin-Tests.

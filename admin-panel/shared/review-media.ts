@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "./authorization.js";
 export const REVIEW_STEPS = [
   { id: "aim", title: "Ausrichtung", short: "Lineup", description: "Zeige aus der Ego-Perspektive genau, worauf das Fadenkreuz zielt. Orientierungspunkte müssen gut erkennbar sein." },
   { id: "position", title: "Standposition", short: "Position", description: "Zeige den Boden und die Kanten, an denen du dich für den Wurf positionierst." },
@@ -55,7 +56,7 @@ export function missingReviewMedia(nade: { reviewMedia?: ReviewMedia }) {
   return REVIEW_STEPS.filter(step => !nade.reviewMedia?.[step.id]);
 }
 export function canUploadReviewMedia(nade: { owner: string; official?: boolean }, user?: { identitySteam64: string; role: string }) {
-  return !!user && !nade.official && (user.role === "admin" || nade.owner !== "default" && nade.owner === user.identitySteam64);
+  return !!user && !nade.official && (isPlatformAdmin(user) || nade.owner !== "default" && nade.owner === user.identitySteam64);
 }
 export function reviewFileError(slot: ReviewSlot, file: { type: string; size: number }) {
   const video = slot === "video";

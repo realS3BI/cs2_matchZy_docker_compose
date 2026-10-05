@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../../../shared/authorization";
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Copy, RefreshCw, Save, Trash2 } from "lucide-react";
@@ -38,7 +39,7 @@ export function LineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
 export function NewLineupPage({ maps, nades, user, onEntriesChange, onRefresh }) {
   const { mapSlug: slug } = useParams();
   const map = maps.find(map => mapSlug(map) === slug);
-  if (user?.role !== "admin" || !map?.mapName) return <Navigate to={map ? mapPath(map) : "/maps"} replace />;
+  if (!isPlatformAdmin(user) || !map?.mapName) return <Navigate to={map ? mapPath(map) : "/maps"} replace />;
   const nade = { owner: user.identitySteam64, map: map.mapName, name: "", type: "Smoke", team: "both", click_type: "left" };
   return <LineupContent key={`new-${map.key}`} {...{ nade, map, nades, user, onEntriesChange, onRefresh }} back={mapPath(map)} creating />;
 }

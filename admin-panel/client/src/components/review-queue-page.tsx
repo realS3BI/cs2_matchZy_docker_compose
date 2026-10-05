@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../../../shared/authorization";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChevronDown, ClipboardCheck, RefreshCw } from "lucide-react";
 import { missingReviewMedia } from "../../../shared/review-media";
@@ -18,7 +19,7 @@ import { ReviewSessionWorkspace } from "./review-session-workspace";
 
 export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange = (_entries: any[]) => { void onRefresh(); } }) {
   const [search, setSearch] = useSearchParams();
-  if (user?.role !== "admin") return <Navigate to="/maps" replace />;
+  if (!isPlatformAdmin(user)) return <Navigate to="/maps" replace />;
   const entries = reviewQueue(nades, maps, search);
   const filter = (key: string, value: string) => setSearch(current => {
     const next = queueSearch(current);

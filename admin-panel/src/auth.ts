@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Express } from "express";
+import { capabilities } from "../shared/authorization.js";
 
 export const SESSION_COOKIE = "cs2_panel_session";
 // Reserved synthetic identity, outside the range of Steam-issued account IDs.
@@ -9,6 +10,7 @@ const STEAM_ENDPOINT = "https://steamcommunity.com/openid/login";
 const OPENID_NS = "http://specs.openid.net/auth/2.0";
 export const tokenHash = (token: string, secret: string) => crypto.createHmac("sha256", secret).update(token).digest("hex");
 const newToken = () => crypto.randomBytes(32).toString("base64url");
+export const safeReturnPath = (value: unknown) => typeof value === "string" && /^\/(?:teams|strats|maps|admin|analysis)(?:[/?][\w/?=&%.-]*)?$/.test(value) && value.length < 1000 ? value : "/";
 
 export async function authenticatedUser(req, config, store) {
   const token = req.cookies?.[SESSION_COOKIE];
@@ -16,7 +18,7 @@ export async function authenticatedUser(req, config, store) {
   if (!session || !["user", "test"].includes(session.purpose) ||
       (session.purpose === "test" && (!config.testLoginPassword || session.steamId !== TEST_USER_ID))) return null;
   const user = await store.getUser(session.steamId);
-  return user && (session.purpose === "test" ? { ...user, role: "player", flags: [] } : user);
+  return user && (session.purpose === "test" ? { ...user, role: "player", access: { platform: "user", server: "none" }, flags: [], authKind: "test" } : { ...user, authKind: "steam" });
 }
 
 export async function verifySteam(query, returnTo: string, fetcher = fetch) {
@@ -40,14 +42,14 @@ export async function verifySteam(query, returnTo: string, fetcher = fetch) {
   return match[1];
 }
 
-export function installAuth(app: Express, { config, store, loginLimiter, steamVerifier = verifySteam }) {
+export function installAuth(app: Express, { config, store, loginLimiter, steamVerifier = verifySteam, live }) {
   app.use("/api", (req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
   const hash = (token: string) => tokenHash(token, config.sessionSecret);
   const cookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: config.publicUrl?.startsWith("https://"), path: "/" };
   app.get("/api/auth/steam", loginLimiter, async (req, res, next) => {
     try {
       const token = newToken();
-      await store.createSession(hash(token), { purpose: "steam", expiresAt: new Date(Date.now() + 10 * 60_000) });
+      await store.createSession(hash(token), { purpose: "steam", returnPath: safeReturnPath(req.query.returnTo), expiresAt: new Date(Date.now() + 10 * 60_000) });
       res.cookie(STATE_COOKIE, token, { ...cookieOptions, maxAge: 10 * 60_000 });
       const params = new URLSearchParams({
         "openid.ns": OPENID_NS, "openid.mode": "checkid_setup",
@@ -73,7 +75,7 @@ export function installAuth(app: Express, { config, store, loginLimiter, steamVe
       const token = newToken();
       await store.createSession(hash(token), { purpose: "user", steamId, expiresAt: new Date(Date.now() + 12 * 60 * 60_000) });
       res.cookie(SESSION_COOKIE, token, { ...cookieOptions, maxAge: 12 * 60 * 60_000 });
-      res.redirect("/");
+      res.redirect(safeReturnPath(pending.returnPath));
     } catch {
       res.redirect("/login?error=steam");
     }
@@ -84,7 +86,7 @@ export function installAuth(app: Express, { config, store, loginLimiter, steamVe
     if (!["GET", "HEAD", "OPTIONS"].includes(req.method) &&
         ((req.headers.origin && req.headers.origin !== config.publicUrl) ||
          req.headers["sec-fetch-site"] === "cross-site" ||
-         (!req.is("application/json") && !req.is("image/*"))))
+         (req.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json" && !req.is("image/*") && !(req.method === "PUT" && /^\/analysis\/(?:demos\/[\w-]{1,100}\/file|audio\/[\w-]{1,100}\/segments\/\d{1,4})$/.test(req.path) && req.is("application/octet-stream")))))
       return res.status(403).json({ error: "Anfrage von dieser Herkunft ist nicht erlaubt." });
     next();
   });
@@ -121,5 +123,5 @@ export function installAuth(app: Express, { config, store, loginLimiter, steamVe
       next();
     } catch (error) { next(error); }
   });
-  app.get("/api/auth/me", (req, res) => res.json({ user: res.locals.user }));
+  live.get(app, "/api/auth/me", async ({ user }) => ({ user, permissions: capabilities(user) }));
 }

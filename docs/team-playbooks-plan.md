@@ -1,6 +1,8 @@
 # Planentwurf für Team-Management und Strats
 
-Stand: 5. Oktober 2026. Dieses Dokument ist die gemeinsame Planungsgrundlage, keine bereits beschlossene vollständige Spezifikation. Es verbindet die geprüften Funktionen aus `cs-playbook` mit der aktuellen Webanwendung. Es wurde noch kein Anwendungscode dafür geändert.
+Stand: 5. Oktober 2026. Die erste Web-Version ist umgesetzt. Dieses Dokument bewahrt die gemeinsame Planungsgrundlage und die Untersuchung von `cs-playbook`; die Bedienung steht in [README.md](../README.md#team-management-und-strats).
+
+Die Implementierung verwendet `shared/authorization.ts` als Rollenkatalog, `src/workspace-routes.ts` für Team- und Strat-Aktionen und `src/workspace-store.ts` für die atomaren MongoDB-Schreibvorgänge. Einladungen gelten sieben Tage. Live-Ansichten erhalten den aktuellen Teamstand sofort über die gemeinsame WebSocket-Verbindung. Die Bibliothek speichert den letzten veröffentlichten Stand; das Team hält zusätzlich seine aktive Fassung. Archivieren ändert diese aktive Fassung nicht. Nade-Verknüpfungen verwenden die vorhandenen kurzen IDs und zeigen bei gelöschten Nades einen allgemeinen Hinweis. Ein eigener Medien- oder Versionshistorienbereich gehört nicht zu diesem Stand.
 
 Das Ziel sind zwei eigene Sidebar-Bereiche `Team-Management` und `Strats` neben der Nade-Bibliothek. Strats enthält die Strategiebibliothek, persönliche Aufgaben, Teamübersicht und Live-Ansicht. Die erste Umsetzung läuft vollständig im Web. Eine gemeinsame Benutzerverwaltung mit zentralem RBAC verbindet Plattform-, Server- und Teamrechte; der Entwurf dazu steht in [rbac-plan.md](rbac-plan.md).
 
@@ -20,7 +22,7 @@ Das Ziel sind zwei eigene Sidebar-Bereiche `Team-Management` und `Strats` neben 
 - Die Nade-Bibliothek ist der bestehende Nachbarbereich.
 - Zunächst planen wir gemeinsam die Webintegration. Ingame-Funktionen werden später betrachtet.
 
-Die Produktentscheidungen oben sind abgestimmt. Die technischen Einzelheiten und der Rollenkatalog unten sind Planungsvorschläge, noch keine implementierten Funktionen.
+Die Produktentscheidungen oben sind abgestimmt und bilden den Umfang der ersten Implementierung. Die folgenden Abschnitte enthalten die ursprünglichen Begründungen und Erweiterungsmöglichkeiten.
 
 ## Empfohlenes Verhalten
 
@@ -80,7 +82,7 @@ Ein Owner oder Captain aktiviert genau eine veröffentlichte Taktik je Team. All
 
 Die Aktivierung hält die veröffentlichte Fassung und Besetzung fest. Spätere Entwürfe verändern den laufenden Ablauf erst beim bewussten erneuten Aktivieren. Der Server prüft weiterhin die aktuelle Mitgliedschaft. Beim Entfernen eines besetzten Mitglieds muss die Teamleitung die betroffene Besetzung korrigieren.
 
-Für den ersten Stand genügt ein regelmäßiger Abruf der aktiven Taktik, beispielsweise alle drei Sekunden und beim erneuten Öffnen des Tabs. Die Seite zeigt den letzten erfolgreichen Stand sowie Verbindungsprobleme. Ein eigener Datenstrom kann später ergänzt werden. Eine gemeinsame Schrittschaltung ist eine gesonderte spätere Funktion.
+Die aktive Taktik wird über die gemeinsame WebSocket-Verbindung unter `/api/live` aktualisiert. Nach einer Wiederverbindung erhält die Ansicht den aktuellen Stand. Die Seite zeigt Verbindungsprobleme und unterscheidet einen gespeicherten Stand von einer verbundenen Live-Ansicht. Eine gemeinsame Schrittschaltung ist eine gesonderte spätere Funktion.
 
 ## Verbindung zu Nades
 

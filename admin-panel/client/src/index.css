@@ -1446,3 +1446,50 @@ button:not(:disabled),
 
 .lineup-placement-dialog { width: min(880px, calc(100vw - 24px)); }
 .lineup-placement-dialog .radar-map svg { max-height: min(52svh, 32rem); }
+
+/* Match analysis: the map stays central; preparation sits alongside it. */
+.demo-match-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.demo-match-row { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; gap: 1.25rem; align-items: center; padding: 1.25rem; background: var(--card); }
+.demo-match-row + .demo-match-row { border-top: 1px solid var(--border); }
+.demo-match-row:hover { background: var(--accent); }
+.demo-match-map { display: grid; place-items: center; min-height: 3.25rem; padding: .5rem; border: 1px solid var(--border); border-radius: .4rem; color: var(--primary); font-weight: 600; }
+.demo-round-strip { display: flex; overflow-x: auto; gap: .4rem; padding-bottom: 1rem; margin-bottom: .5rem; }
+.demo-analysis-grid { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 1.5rem; align-items: start; }
+.demo-player { min-width: 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.demo-map { display: grid; place-items: center; overflow: hidden; border-radius: .5rem; background: #080e15; }
+.demo-map svg { display: block; width: 100%; max-height: clamp(18rem, calc(100dvh - 550px), 42rem); }
+.demo-map-compact svg { max-height: 26rem; }
+.demo-smoke { fill: #e6edf5; fill-opacity: .3; stroke: #e6edf5; stroke-opacity: .65; stroke-width: 2; }
+.demo-fire { fill: #f59844; fill-opacity: .4; stroke: #ffb36d; stroke-width: 2; }
+.demo-grenade { fill: #f8f2bf; stroke: #f8f2bf; }
+.demo-grenade polyline { fill: none; stroke-width: 3; stroke-dasharray: 8 4; }
+.demo-player-t { fill: #e7bb6c; stroke: #e7bb6c; }
+.demo-player-ct { fill: #80bdf0; stroke: #80bdf0; }
+.demo-player-t circle, .demo-player-ct circle { stroke: #0b1118; }
+.demo-player-t text, .demo-player-ct text { fill: #0b1118; stroke: none; font-weight: 700; }
+.demo-player-t .demo-player-name, .demo-player-ct .demo-player-name { fill: white; stroke: #080e15; stroke-width: 3; paint-order: stroke; }
+.demo-pointer { fill: none; stroke: #fff; stroke-width: 4; filter: drop-shadow(0 1px 3px #000); pointer-events: none; }
+.demo-timeline { padding: 1rem .5rem 0; }
+.demo-timeline input { display: block; width: 100%; accent-color: var(--primary); cursor: pointer; }
+.demo-timeline input:disabled { cursor: default; }
+.demo-event-track { position: relative; height: 1.4rem; margin: .15rem .5rem 0; }
+.demo-event-track button { position: absolute; top: 0; width: .4rem; height: .9rem; border-radius: 2px; transform: translateX(-50%); }
+.demo-event-track button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; z-index: 1; }
+.demo-event-kill { background: var(--destructive); }
+.demo-event-utility { background: var(--warning); }
+.demo-player-roster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem 1rem; border-top: 1px solid var(--border); padding-top: .75rem; }
+.demo-player-roster button { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; gap: .5rem; text-align: left; font-size: .75rem; padding: .3rem; border-radius: .25rem; }
+.demo-player-roster button[aria-pressed="true"] { background: var(--accent); }
+.demo-side-t { color: #e7bb6c; }
+.demo-side-ct { color: #80bdf0; }
+.demo-room-presence { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: 1rem; }
+.demo-agenda-item { border: 1px solid var(--border); border-radius: .5rem; padding: .5rem; }
+.demo-agenda-item[data-active="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+.demo-agenda-select { display: flex; width: 100%; gap: .65rem; text-align: left; align-items: center; padding: .25rem; }
+@media (max-width: 1100px) { .demo-analysis-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .demo-match-row { grid-template-columns: 4.5rem minmax(0, 1fr); gap: .75rem; padding: 1rem; }
+  .demo-match-row > :last-child { grid-column: 2; justify-content: flex-start; }
+  .demo-player { padding: .65rem; }
+  .demo-player-roster { grid-template-columns: minmax(0, 1fr); }
+}

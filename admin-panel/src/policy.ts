@@ -1,3 +1,4 @@
+import { isServerAdmin } from "../shared/authorization.js";
 type SettingValue = string | number | boolean;
 
 export type ServerSettings = {
@@ -321,6 +322,6 @@ export const MATCH_ADMIN_SETTINGS = ["serverMode", "weaponPaintsEnabled", "fortn
   "workshopMapsEnabled", "workshopMaps", "workshopMapCatalog", "matchZySmokeColor", "trainingHudEnabled"];
 
 export function settingsForRole(settings, role) {
-  if (role === "admin") return settings;
+  if (isServerAdmin(typeof role === "string" ? { identitySteam64: "legacy", role } : role)) return settings;
   return Object.fromEntries(MATCH_ADMIN_SETTINGS.map(key => [key, settings[key]]));
 }

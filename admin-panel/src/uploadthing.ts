@@ -6,6 +6,7 @@ import { authenticatedUser } from "./auth.js";
 import { attachReviewMedia, reviewEntry } from "./review-media.js";
 import { reviewFileError } from "../shared/review-media.js";
 import { getVideoPreview } from "./video-preview.js";
+import { accessOf, isPlatformAdmin } from "../shared/authorization.js";
 
 const inputSchema = z.object({
   owner: z.string().min(1).max(500), map: z.string().min(1).max(500), name: z.string().min(1).max(500),
@@ -23,7 +24,7 @@ export function createReviewFileRouter({ config, store, changeEntries, utapi, pr
     if (entry.updatedAt !== input.revision) throw new UploadThingError("Das Lineup wurde geändert. Bitte aktualisieren.");
     const error = files.length !== 1 ? "Bitte genau eine Datei hochladen." : reviewFileError(input.slot, files[0]);
     if (error) throw new UploadThingError(error);
-    return { ...input, actor: user.identitySteam64, role: user.role };
+    return { ...input, actor: user.identitySteam64, role: isPlatformAdmin(user) ? "admin" : "player", authKind: user.authKind };
   };
   const complete = async ({ metadata, file }) => {
     let previousKey: string | undefined;
@@ -32,7 +33,8 @@ export function createReviewFileRouter({ config, store, changeEntries, utapi, pr
       if (existing?.reviewMedia?.[metadata.slot]?.key === file.key) return { saved: true, updatedAt: existing.updatedAt };
       const currentUser = await store.getUser(metadata.actor);
       // A test/player session must never inherit a later admin elevation.
-      const user = currentUser && { ...currentUser, role: metadata.role === "admin" ? currentUser.role : "player" };
+      const user = currentUser && { ...currentUser, authKind: metadata.authKind,
+        access: { ...accessOf(currentUser), platform: metadata.role === "admin" ? accessOf(currentUser).platform : "user" } };
       if (!user) throw new Error("Die Upload-Berechtigung ist abgelaufen.");
       const entries = await changeEntries(entries => {
         const previous = reviewEntry(entries, metadata, user).reviewMedia?.[metadata.slot];

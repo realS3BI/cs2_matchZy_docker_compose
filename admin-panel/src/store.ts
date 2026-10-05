@@ -3,6 +3,16 @@ import { Collection, Db, MongoClient } from "mongodb";
 import { sanitizeAdmins, sanitizeNades, sanitizeSettings } from "./validators.js";
 import { normalizeSettings, migrateAdmins } from "./policy.js";
 import { NadeEvents } from "./nade-events.js";
+import { accessOf, legacyAccess, legacyRole, cssFlags, type Access } from "../shared/authorization.js";
+import { Changes } from "./live-resources.js";
+import { WorkspaceStore } from "./workspace-store.js";
+import { DemoStore } from "./demo-store.js";
+import { RecordingStore } from "./recording-store.js";
+import { AnalysisStorage } from "./analysis-storage.js";
+import { MatchStore } from "./match-store.js";
+import { MatchImports } from "./match-imports.js";
+import { join } from "node:path";
+import { problem } from "./strats.js";
 
 type UserDocument = {
   _id: string;
@@ -17,6 +27,7 @@ type UserDocument = {
 };
 
 export class Store {
+  readonly changes = new Changes();
   readonly nadeEvents = new NadeEvents();
   config: any;
   client: MongoClient;
@@ -28,6 +39,12 @@ export class Store {
   maintenance!: Collection<any>;
   users!: Collection<UserDocument>;
   sessions!: Collection<any>;
+  workspace!: WorkspaceStore;
+  analysis!: DemoStore;
+  recordings!: RecordingStore;
+  storage!: AnalysisStorage;
+  matches!: MatchStore;
+  imports!: MatchImports;
 
   constructor(config) {
     this.config = config;
@@ -49,11 +66,13 @@ export class Store {
     for (const entry of sanitizeAdmins(migrateAdmins(legacy?.entries || []))) {
       await this.users.updateOne({ _id: entry.identitySteam64 }, { $setOnInsert: { ...entry, createdAt: new Date() } }, { upsert: true });
     }
+    let insertedBootstrap = false;
     if (this.config.bootstrapAdminSteamId) {
       if (!/^[0-9]{17}$/.test(this.config.bootstrapAdminSteamId)) throw new Error("Ungültige ADMIN_PANEL_ADMIN_STEAM_ID.");
-      await this.users.updateOne({ _id: this.config.bootstrapAdminSteamId }, {
+      const result = await this.users.updateOne({ _id: this.config.bootstrapAdminSteamId }, {
         $setOnInsert: { identitySteam64: this.config.bootstrapAdminSteamId, name: "", role: "admin", createdAt: new Date() }
       }, { upsert: true });
+      insertedBootstrap = result.upsertedCount === 1;
       if (this.config.promoteBootstrapAdmin) {
         await this.users.updateOne({ _id: this.config.bootstrapAdminSteamId }, { $set: { role: "admin" } });
       }
@@ -76,6 +95,25 @@ export class Store {
         { _id: "current" },
         { $set: { settings: normalizeSettings(current.settings), updatedAt: new Date() } }
       );
+    }
+    this.workspace = new WorkspaceStore(this.db, () => this.changes.publish());
+    const existingUsers = await this.users.find({}).toArray();
+    await this.workspace.initialize(Object.fromEntries(existingUsers.map(user => [user._id, accessOf({ identitySteam64: user._id, role: user.role })])));
+    this.analysis = new DemoStore(this.db, this.config.demoDir || join(this.config.uploadDir || "/data/uploads", "demos-private"), this.workspace, this.changes);
+    await this.analysis.initialize();
+    this.recordings = new RecordingStore(this.db, join(this.analysis.directory, "recordings"), this.analysis, this.workspace, this.config);
+    await this.recordings.initialize();
+    this.storage = new AnalysisStorage(this.db, this.analysis.directory, this.config);
+    await this.storage.initialize();
+    this.matches = new MatchStore(this.db, this.analysis, this.workspace, this.config);
+    await this.matches.initialize();
+    this.imports = new MatchImports(this, this.config);
+    if ((insertedBootstrap || this.config.promoteBootstrapAdmin) && this.config.bootstrapAdminSteamId) {
+      for (;;) {
+        const document = await this.workspace.getAccessDocument();
+        if (document.users[this.config.bootstrapAdminSteamId]?.platform === "platform_admin" && document.users[this.config.bootstrapAdminSteamId]?.server === "server_admin") break;
+        if (await this.workspace.replaceAccess(document.revision, { ...document.users, [this.config.bootstrapAdminSteamId]: legacyAccess("admin") })) break;
+      }
     }
     await this.migrateNadeIds();
   }
@@ -116,17 +154,25 @@ export class Store {
       { $set: { settings: cleanSettings, updatedAt: new Date() } },
       { upsert: true }
     );
+    this.changes.publish();
     await this.logAction("save", "success", "Settings saved");
     return cleanSettings;
   }
 
   async getAdmins() {
-    return sanitizeAdmins(await this.users.find({}).sort({ createdAt: 1 }).toArray());
+    const document = await this.workspace.getAccessDocument();
+    return (await this.users.find({}).sort({ createdAt: 1 }).toArray()).map(user => this.userView(user, document));
   }
 
   async getUser(steamId) {
     const user = await this.users.findOne({ _id: steamId });
-    return user ? { ...sanitizeAdmins([user])[0], lastLoginAt: user.lastLoginAt || null } : null;
+    return user ? this.userView(user, await this.workspace.getAccessDocument()) : null;
+  }
+
+  private userView(user: UserDocument, document: { users: Record<string, Access>; revision: number }) {
+    const access = accessOf({ identitySteam64: user._id, access: document.users[user._id] || { platform: "user", server: "none" } });
+    return { identitySteam64: user._id, name: user.name || "", access, accessRevision: document.revision,
+      role: legacyRole(access), flags: cssFlags({ access }), lastLoginAt: user.lastLoginAt || null };
   }
 
   async recordLogin(steamId) {
@@ -134,6 +180,7 @@ export class Store {
       $setOnInsert: { identitySteam64: steamId, name: "", role: "player", createdAt: new Date() },
       $set: { lastLoginAt: new Date() }
     }, { upsert: true });
+    this.changes.publish();
   }
 
   async recordTestLogin(steamId: string, name: string) {
@@ -141,6 +188,7 @@ export class Store {
       $setOnInsert: { identitySteam64: steamId, createdAt: new Date() },
       $set: { name, role: "player", flags: [], lastLoginAt: new Date() }
     }, { upsert: true });
+    this.changes.publish();
   }
 
   async getNadeFavorites(steamId) {
@@ -152,21 +200,34 @@ export class Store {
     await this.users.updateOne({ _id: steamId }, favorite
       ? { $addToSet: { nadeFavorites: reference } }
       : { $pull: { nadeFavorites: reference } });
+    this.changes.publish();
     return this.getNadeFavorites(steamId);
   }
 
-  async saveUser(entry) {
+  async saveUser(entry, actorId?: string) {
     const clean = sanitizeAdmins([entry])[0];
+    const nextAccess = accessOf(clean);
+    for (;;) {
+      const document = await this.workspace.getAccessDocument();
+      if (actorId && document.users[actorId]?.platform !== "platform_admin") problem(403, "Deine Berechtigung zur Benutzerverwaltung wurde geändert.");
+      if (actorId === clean.identitySteam64 && nextAccess.platform !== "platform_admin") problem(400, "Die eigene Plattform-Admin-Rolle kann nur ein anderer Admin ändern.");
+      if (entry.accessRevision !== undefined && entry.accessRevision !== document.revision) problem(409, "Die Rollen wurden inzwischen geändert. Bitte neu laden.");
+      const users = { ...document.users, [clean.identitySteam64]: nextAccess };
+      if (!Object.values(users).some(access => access.platform === "platform_admin")) problem(400, "Mindestens ein Plattform-Admin muss erhalten bleiben.");
+      if (await this.workspace.replaceAccess(document.revision, users)) break;
+    }
     await this.users.updateOne({ _id: clean.identitySteam64 }, {
-      $set: { ...clean, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() }
+      $set: { identitySteam64: clean.identitySteam64, name: clean.name, updatedAt: new Date() },
+      $unset: { role: "", flags: "" }, $setOnInsert: { createdAt: new Date() }
     }, { upsert: true });
-    return clean;
+    this.changes.publish();
+    return this.getUser(clean.identitySteam64);
   }
 
   async createSession(id, value) { await this.sessions.insertOne({ _id: id, ...value }); }
   async getSession(id) { return this.sessions.findOne({ _id: id, expiresAt: { $gt: new Date() } }); }
   async consumeSession(id, purpose) { return this.sessions.findOneAndDelete({ _id: id, purpose, expiresAt: { $gt: new Date() } }); }
-  async deleteSession(id) { await this.sessions.deleteOne({ _id: id }); }
+  async deleteSession(id) { await this.sessions.deleteOne({ _id: id }); this.changes.publish(); }
 
   async ensureScheduledRestart(nextRunAt) {
     await this.maintenance.updateOne(
@@ -182,6 +243,7 @@ export class Store {
       { $set: { lastClaimedSlot: slot, claimedAt: now, state: "running", nextRunAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString() } },
       { returnDocument: "after" }
     );
+    if (result) this.changes.publish();
     return Boolean(result);
   }
 
@@ -190,6 +252,7 @@ export class Store {
       { _id: "scheduled-restart", lastClaimedSlot: slot },
       { $set: { state: result.state || (result.ok ? "success" : "failed"), nextRunAt: result.nextRunAt, lastRunAt: new Date(), lastMessage: String(result.message || "") } }
     );
+    this.changes.publish();
   }
 
   async getMaintenanceState() {
@@ -213,6 +276,7 @@ export class Store {
       { upsert: true }
     );
     await this.logAction("save", "success", "Nades saved");
+    this.changes.publish();
     this.nadeEvents.publish(cleanEntries);
     return cleanEntries;
   }
@@ -225,6 +289,7 @@ export class Store {
       { upsert: true }
     );
     await this.logAction("nades_sync", "success", "Nades imported from MatchZy savednades.json", details);
+    this.changes.publish();
     this.nadeEvents.publish(cleanEntries);
     return cleanEntries;
   }
@@ -237,6 +302,7 @@ export class Store {
       details,
       createdAt: new Date()
     });
+    this.changes.publish();
   }
 
   async getLastAction(types = []) {

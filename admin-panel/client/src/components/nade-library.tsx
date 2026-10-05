@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../../../shared/authorization";
 import { useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, Crosshair, Plus, Star, Target, Zap } from "lucide-react";
@@ -92,7 +93,7 @@ export function NadeLibrary({ nades, maps, user }) {
         <RadarBrowser map={map} side={side} groups={groups} selected={selected} counterparts={counterparts} expanded={expanded} onSelect={group => selectSpot(group.id)} onExpand={group => setExpandedId(group.id)} onDismiss={() => selectSpot()} onCloseOptions={() => setExpandedId(undefined)} href={href} />
       </section>
       <aside className="map-explorer-sidebar" aria-label="Radarfilter und Lineup-Auswahl">
-        <header className="map-explorer-heading"><h1>{map.name}</h1>{user?.role === "admin" && map.mapName && <Button asChild size="sm"><Link to={`${mapPath(map)}/lineups/new`}><Plus data-icon="inline-start" />Nade hinzufügen</Link></Button>}</header>
+        <header className="map-explorer-heading"><h1>{map.name}</h1>{isPlatformAdmin(user) && map.mapName && <Button asChild size="sm"><Link to={`${mapPath(map)}/lineups/new`}><Plus data-icon="inline-start" />Nade hinzufügen</Link></Button>}</header>
         <section className="explorer-control">
           <ToggleGroup type="single" variant="outline" value={side} onValueChange={value => { if (value) filter("position", value); }} aria-label="Positionen zuerst anzeigen" className="w-full">
             <ToggleGroupItem value="to" className="flex-1"><Target data-icon="inline-start" />Ziele</ToggleGroupItem>

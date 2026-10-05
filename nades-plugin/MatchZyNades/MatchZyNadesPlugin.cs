@@ -16,7 +16,7 @@ namespace MatchZyNades;
 public sealed partial class MatchZyNadesPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.3.18";
+    public override string ModuleVersion => "2.4.0";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Map-specific lineup browser and grenade practice menu.";
 

@@ -1,6 +1,7 @@
 import { BUILT_IN_MAPS } from "../client/src/lib/maps.js";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { accessOf, gamePermissions, SERVER_ID } from "../shared/authorization.js";
 import { dirname } from "node:path";
 import { normalizeSettings } from "./policy.js";
 import {
@@ -29,8 +30,19 @@ export async function writeAdminRuntimeFiles(config, admins) {
   // Read current roles inside the queue so a concurrent apply/restart cannot
   // republish permissions captured before a user's demotion.
   const write = (adminWrites.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
-    const entries = sanitizeAdmins(typeof admins === "function" ? await admins() : admins);
-    await writeJsonFile(`${dirname(key)}/platform-roles.json`, Object.fromEntries(entries.map(user => [user.identitySteam64, user.role])));
+    const entries = sanitizeAdmins(typeof admins === "function" ? await admins() : admins).sort((a, b) => a.identitySteam64.localeCompare(b.identitySteam64));
+    const snapshot = { schemaVersion: 1, serverId: SERVER_ID,
+      users: Object.fromEntries(entries.map(user => [user.identitySteam64, gamePermissions(user)])),
+      cssAdmins: adminsToCssConfig(entries) };
+    const revision = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+    await writeJsonFile(`${dirname(key)}/permissions.json`, { ...snapshot, revision });
+    // Compatibility during a plugin rollout: never turn a platform-only admin into a server admin.
+    await writeJsonFile(`${dirname(key)}/platform-roles.json`, Object.fromEntries(entries.map(user => {
+      const access = accessOf(user);
+      const role = access.server === "server_admin" ? (access.platform === "platform_admin" ? "admin" : "match_admin")
+        : access.server === "none" ? "player" : access.server;
+      return [user.identitySteam64, role];
+    })));
     await writeJsonFile(key, adminsToCssConfig(entries));
     await writeJsonFile(config.runtimeMatchZyAdminsFile, adminsToMatchZyConfig(entries));
   });

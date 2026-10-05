@@ -25,7 +25,7 @@ public sealed class AccessControlTests
     [InlineData(".rethrow")]
     [InlineData(".rt")]
     public void TrainingPlayerCanUsePanelWithoutAdminRights(string command) =>
-        Assert.False(PlatformRoles.Blocks("training_player", command));
+        Assert.False(ServerPermissions.Blocks(["training.use"], command));
 
     [Theory]
     [InlineData(".prac")]
@@ -45,17 +45,17 @@ public sealed class AccessControlTests
     [InlineData("sm_unpause")]
     [InlineData("reload_admins")]
     public void TrainingPlayerCannotAdministerServerOrWriteContent(string command) =>
-        Assert.True(PlatformRoles.Blocks("training_player", command));
+        Assert.True(ServerPermissions.Blocks(["training.use"], command));
 
     [Fact]
     public void TrainingPlayerCanUsePracticeToolsButCannotStartPractice()
     {
         foreach (var action in Enum.GetValues<TrainingAction>())
             if (TrainingMenu.Command(action) is { } command)
-                Assert.Equal(action == TrainingAction.StartPractice, PlatformRoles.Blocks("training_player", command));
-        Assert.True(PlatformRoles.CanUsePanel("training_player"));
-        Assert.False(PlatformRoles.CanUsePanel("player"));
-        Assert.False(PlatformRoles.CanUsePanel("unknown"));
+                Assert.Equal(action == TrainingAction.StartPractice, ServerPermissions.Blocks(["training.use"], command));
+        Assert.True(ServerPermissions.CanUsePanel(["training.use"]));
+        Assert.False(ServerPermissions.CanUsePanel([]));
+        Assert.False(ServerPermissions.CanUsePanel([]));
     }
 
     [Theory]
@@ -69,7 +69,7 @@ public sealed class AccessControlTests
     [InlineData("noclip")]
     [InlineData(".rethrow")]
     [InlineData(".rt")]
-    public void PlayerCannotExecutePluginCommands(string command) => Assert.True(PlatformRoles.Blocks("player", command));
+    public void PlayerCannotExecutePluginCommands(string command) => Assert.True(ServerPermissions.Blocks([], command));
 
     [Theory]
     [InlineData("css_sn test")]
@@ -79,17 +79,17 @@ public sealed class AccessControlTests
     [InlineData(".dn test")]
     [InlineData("css_delnade test")]
     [InlineData("css_deletenade test")]
-    public void MatchAdminCannotWriteNades(string command) => Assert.True(PlatformRoles.Blocks("match_admin", command));
+    public void MatchAdminCannotWriteNades(string command) => Assert.True(ServerPermissions.Blocks(["training.use", "commands.control"], command));
 
     [Fact]
     public void NormalGameplayAndMatchAdminControlsRemainAvailable()
     {
-        Assert.False(PlatformRoles.Blocks("player", "jointeam 2"));
-        Assert.False(PlatformRoles.Blocks("player", "hello team"));
-        Assert.False(PlatformRoles.Blocks("match_admin", ".prac"));
-        Assert.False(PlatformRoles.Blocks("match_admin", "css_training"));
-        Assert.False(PlatformRoles.Blocks("match_admin", "css_loadnade smoke"));
-        Assert.False(PlatformRoles.Blocks("admin", "css_savenade test"));
+        Assert.False(ServerPermissions.Blocks([], "jointeam 2"));
+        Assert.False(ServerPermissions.Blocks([], "hello team"));
+        Assert.False(ServerPermissions.Blocks(["training.use", "commands.control"], ".prac"));
+        Assert.False(ServerPermissions.Blocks(["training.use", "commands.control"], "css_training"));
+        Assert.False(ServerPermissions.Blocks(["training.use", "commands.control"], "css_loadnade smoke"));
+        Assert.False(ServerPermissions.Blocks(["training.use", "commands.control", "lineups.capture"], "css_savenade test"));
     }
 
     [Fact]
@@ -98,17 +98,18 @@ public sealed class AccessControlTests
         var path = Path.GetTempFileName();
         try
         {
-            var roles = new PlatformRoles(path);
-            Assert.Equal("player", roles.Role(123));
-            File.WriteAllText(path, "{\"123\":\"match_admin\"}");
-            Assert.Equal("match_admin", roles.Role(123));
-            Assert.Equal("player", roles.Role(456));
-            File.WriteAllText(path, "{\"123\":\"training_player\"}");
-            Assert.Equal("training_player", roles.Role(123));
-            File.WriteAllText(path, "{\"123\":\"player\"}");
-            Assert.Equal("player", roles.Role(123));
-            File.WriteAllText(path, "{\"123\":\"custom\"}");
-            Assert.Equal("player", roles.Role(123));
+            var permissions = new ServerPermissions(path);
+            Assert.Empty(permissions.Read().For(123));
+            void Publish(string[] grants) => File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(new { schemaVersion = 1, serverId = "primary", revision = new string('a', 64), users = new Dictionary<string, string[]> { ["123"] = grants }, cssAdmins = new { } }));
+            Publish(["training.use", "commands.control"]);
+            Assert.Contains("commands.control", permissions.Read().For(123));
+            Assert.Empty(permissions.Read().For(456));
+            Publish(["training.use"]);
+            Assert.DoesNotContain("commands.control", permissions.Read().For(123));
+            Publish(["unknown"]);
+            Assert.Empty(permissions.Read().For(123));
+            File.WriteAllText(path, "{}");
+            Assert.Equal("{}", permissions.Read().CssAdmins);
         }
         finally { File.Delete(path); }
     }
@@ -118,5 +119,30 @@ public sealed class AccessControlTests
     {
         var menu = TrainingMenu.Create([], "de_mirage", true, null, canWriteNades: false);
         Assert.DoesNotContain(menu.Current.Items, item => item.Label == "Neue Nade aufnehmen");
+    }
+
+    [Fact]
+    public void CapturingRequiresBothTrainingAndPlatformCapability()
+    {
+        Assert.True(ServerPermissions.Blocks(["lineups.capture"], ".sn test"));
+        Assert.False(ServerPermissions.CanUsePanel(["lineups.capture"]));
+        Assert.False(ServerPermissions.Blocks(["training.use", "lineups.capture"], ".sn test"));
+        Assert.True(ServerPermissions.Blocks(["training.use", "commands.control"], ".sn test"));
+    }
+
+    [Theory]
+    [InlineData(2, "primary")]
+    [InlineData(1, "other")]
+    public void WrongSchemaOrServerCannotGrantPermissions(int schemaVersion, string serverId)
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(new { schemaVersion, serverId, revision = new string('a', 64), users = new Dictionary<string, string[]> { ["123"] = ["commands.control"] }, cssAdmins = new { admin = new { flags = new[] { "@css/root" } } } }));
+            var snapshot = new ServerPermissions(path).Read();
+            Assert.Empty(snapshot.For(123));
+            Assert.Equal("{}", snapshot.CssAdmins);
+        }
+        finally { File.Delete(path); }
     }
 }

@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../../../shared/authorization";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Copy } from "lucide-react";
@@ -15,7 +16,7 @@ export function LineupReviewPage({ maps, nades, user, onEntriesChange }) {
   const { mapSlug: slug, lineupId } = useParams();
   const map = maps.find(map => mapSlug(map) === slug);
   const nade = findLineup<any>(nades, lineupId);
-  if (!map || !nade || !mapMatchesNade(map, nade.map)) return <Empty><EmptyHeader><EmptyTitle>Lineup nicht gefunden</EmptyTitle><EmptyDescription>Die Aufnahme wurde entfernt oder der Review-Link ist ungültig.</EmptyDescription></EmptyHeader><EmptyContent><Button asChild variant="secondary"><Link to={user?.role === "admin" ? REVIEW_QUEUE_PATH : "/maps"}>Zurück zur Übersicht</Link></Button></EmptyContent></Empty>;
+  if (!map || !nade || !mapMatchesNade(map, nade.map)) return <Empty><EmptyHeader><EmptyTitle>Lineup nicht gefunden</EmptyTitle><EmptyDescription>Die Aufnahme wurde entfernt oder der Review-Link ist ungültig.</EmptyDescription></EmptyHeader><EmptyContent><Button asChild variant="secondary"><Link to={isPlatformAdmin(user) ? REVIEW_QUEUE_PATH : "/maps"}>Zurück zur Übersicht</Link></Button></EmptyContent></Empty>;
   return <ReviewContent key={lineupKey(nade)} {...{ map, nade, maps, nades, user, onEntriesChange }} />;
 }
 function ReviewContent({ map, nade, maps, nades, user, onEntriesChange }) {
@@ -24,7 +25,7 @@ function ReviewContent({ map, nade, maps, nades, user, onEntriesChange }) {
   const [busy, setBusy] = useState(false);
   const [captureBusy, setCaptureBusy] = useState(false);
   const running = useRef(false);
-  const queued = user?.role === "admin" && search.get("queue") === "1";
+  const queued = isPlatformAdmin(user) && search.get("queue") === "1";
   const filters = queueSearch(search);
   const queue = queued ? reviewQueue(nades, maps, filters) : [];
   const position = queue.findIndex(entry => lineupKey(entry) === lineupKey(nade));

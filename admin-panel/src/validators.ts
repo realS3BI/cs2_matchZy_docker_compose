@@ -1,6 +1,7 @@
 import { assignNadeIds } from "./nade-ids.js";
 import { sanitizeReviewMedia } from "./review-media.js";
 import { isLineupTeam } from "../shared/lineup-teams.js";
+import { validAccess, cssFlags, legacyRole } from "../shared/authorization.js";
 import { CLICK_TYPES, THROW_FLAGS, THROW_ATTRIBUTE_FIELDS, MOVEMENT_FLAGS, movementType, movementPatch } from "../shared/throw-attributes.js";
 import { flagsForRole, SETTING_KEYS } from "./policy.js";
 
@@ -35,8 +36,9 @@ export function sanitizeAdmins(entries) {
     const name = String(entry.name ?? "").trim();
     if (name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("Der Benutzername darf höchstens 100 Zeichen ohne Steuerzeichen enthalten.");
     const identitySteam64 = String(entry.identitySteam64 ?? "").trim();
-    const role = String(entry.role || "player");
-    const flags = [...new Set(flagsForRole(role))];
+    if (entry.access !== undefined && !validAccess(entry.access)) throw new Error("Ungültige Plattform- oder Serverrolle.");
+    const role = entry.access ? legacyRole(entry.access) : String(entry.role || "player");
+    const flags = entry.access ? cssFlags(entry) : [...new Set(flagsForRole(role))];
 
     if (!STEAM64_RE.test(identitySteam64)) {
       throw new Error(`Invalid Steam64 ID: ${identitySteam64 || "(empty)"}`);
@@ -50,7 +52,8 @@ export function sanitizeAdmins(entries) {
       name,
       identitySteam64,
       role,
-      flags
+      flags,
+      ...(entry.access ? { access: entry.access } : {})
     };
   });
 }

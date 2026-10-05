@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveResource } from "./hooks/use-live-resource";
+import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import {
   Check,
   CircleDashed,
@@ -188,12 +189,15 @@ export function Diagnostics({ active, onOpenLogs }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [repairOpen, setRepairOpen] = useState(false);
+  const reportVersion = useRef(0);
 
   const loadDiagnostics = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setDiagnostics(await fetchDiagnostics());
+      const version = reportVersion.current;
+      const data = await fetchDiagnostics();
+      if (version === reportVersion.current) setDiagnostics(data);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -204,9 +208,9 @@ export function Diagnostics({ active, onOpenLogs }) {
   useEffect(() => {
     if (!active) return undefined;
     loadDiagnostics();
-    const timer = window.setInterval(loadDiagnostics, 30000);
-    return () => window.clearInterval(timer);
+
   }, [active, loadDiagnostics]);
+  useLiveResource(active ? "/api/server/diagnostics" : null, data => { reportVersion.current++; setDiagnostics(data); setError(""); }, error => { setError(error.message); if ([401, 403].includes(error.status)) setDiagnostics(null); });
 
   const reportText = useMemo(() => diagnostics ? JSON.stringify(diagnostics, null, 2) : "", [diagnostics]);
 

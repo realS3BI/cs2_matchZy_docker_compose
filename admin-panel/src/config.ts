@@ -26,6 +26,15 @@ export function getConfig() {
     liveMatchZyNadesFile: "/cs2-data/game/csgo/cfg/MatchZy/savednades.json",
     liveMatchZyConfigFile: "/cs2-data/game/csgo/cfg/MatchZy/config.cfg",
     uploadDir: "/uploads",
+    demoDir: "/demos",
+    recordingStorage: process.env.RECORDING_STORAGE || "local",
+    analysisStorageLimit: positiveBytes("ANALYSIS_STORAGE_LIMIT_GIB", 100),
+    analysisScopeLimit: positiveBytes("ANALYSIS_SCOPE_LIMIT_GIB", 20),
+    analysisMinimumFree: positiveBytes("ANALYSIS_MINIMUM_FREE_GIB", 2),
+    faceitApiKey: process.env.FACEIT_API_KEY || "",
+    faceitDownloadsToken: process.env.FACEIT_DOWNLOADS_TOKEN || "",
+    steamWebApiKey: process.env.STEAM_WEB_API_KEY || "",
+    steamGcRefreshToken: process.env.STEAM_GC_REFRESH_TOKEN || "",
     uploadthingToken: process.env.UPLOADTHING_TOKEN || "",
     nadesSyncEnabled: true,
     nadesSyncIntervalMs: 2000,
@@ -34,6 +43,12 @@ export function getConfig() {
     serviceName: "cs2",
     containerName: ""
   };
+}
+
+function positiveBytes(name: string, fallback: number) {
+  const value = Number(process.env[name] || fallback);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} muss eine positive Zahl sein.`);
+  return Math.floor(value * 1024 ** 3);
 }
 
 function publicOrigin(value: string) {

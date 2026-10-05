@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../shared/authorization.js";
 import { randomUUID } from "node:crypto";
 import { chmod, chown, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -159,7 +160,7 @@ export function installReviewCapture(app, { config, store }) {
   const bridge = config.liveMatchZyNadesFile ? new ReviewCaptureBridge(join(dirname(config.liveMatchZyNadesFile), "savednades.review")) : null;
   const route = (path, handler) => app.post(`/api/nades/review/capture/${path}`, async (req, res) => {
     try {
-      if (res.locals.user.role !== "admin") return res.status(403).json({ error: "Ingame-Aufnahmen sind nur für Plattform-Admins verfügbar." });
+      if (!isPlatformAdmin(res.locals.user)) return res.status(403).json({ error: "Ingame-Aufnahmen sind nur für Plattform-Admins verfügbar." });
       if (!config.uploadthingToken) return res.status(503).json({ error: "UploadThing ist noch nicht eingerichtet." });
       if (!bridge) return res.status(503).json({ error: "Die Verbindung zum Spielserver ist nicht eingerichtet." });
       res.json(await handler(req.body, res.locals.user));

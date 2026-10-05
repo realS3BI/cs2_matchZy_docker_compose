@@ -24,11 +24,40 @@ services:
       ADMIN_PANEL_TEST_USERNAME: ${ADMIN_PANEL_TEST_USERNAME:-test}
       ADMIN_PANEL_TEST_PASSWORD: ${ADMIN_PANEL_TEST_PASSWORD:-}
       UPLOADTHING_TOKEN: ${UPLOADTHING_TOKEN:-}
+      RECORDING_STORAGE: ${RECORDING_STORAGE:-local}
+      ANALYSIS_STORAGE_LIMIT_GIB: ${ANALYSIS_STORAGE_LIMIT_GIB:-100}
+      ANALYSIS_SCOPE_LIMIT_GIB: ${ANALYSIS_SCOPE_LIMIT_GIB:-20}
+      ANALYSIS_MINIMUM_FREE_GIB: ${ANALYSIS_MINIMUM_FREE_GIB:-2}
+      FACEIT_API_KEY: ${FACEIT_API_KEY:-}
+      FACEIT_DOWNLOADS_TOKEN: ${FACEIT_DOWNLOADS_TOKEN:-}
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      STEAM_GC_REFRESH_TOKEN: ${STEAM_GC_REFRESH_TOKEN:-}
     volumes:
       - admin_panel_runtime:/runtime
       - admin_panel_uploads:/uploads
+      - demo_data:/demos
       - cs2_data:/cs2-data
       - /var/run/docker.sock:/var/run/docker.sock
+
+  demo-worker:
+    build:
+      context: .
+      dockerfile: admin-panel/Dockerfile.demo-worker
+    restart: unless-stopped
+    init: true
+    depends_on:
+      mongodb:
+        condition: service_started
+    volumes:
+      - demo_data:/demos
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
 
   cs2:
     build:
@@ -47,4 +76,5 @@ volumes:
   admin_panel_mongodb:
   admin_panel_runtime:
   admin_panel_uploads:
+  demo_data:
   cs2_data:

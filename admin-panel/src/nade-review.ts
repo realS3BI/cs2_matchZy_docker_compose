@@ -1,3 +1,4 @@
+import { isPlatformAdmin } from "../shared/authorization.js";
 import { sanitizeNades } from "./validators.js";
 import { LINEUP_CAPTURE_FIELDS, LINEUP_EDIT_FIELDS, LINEUP_POSITION_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
 import { THROW_FLAGS, MOVEMENT_FLAGS } from "../shared/throw-attributes.js";
@@ -12,7 +13,7 @@ function reject(status: number, message: string): never {
 // The actor always comes from the authenticated session, never the request body.
 export function applyWebNadeAction(entries, request, user) {
   if (request?.action === "create") {
-    if (user?.role !== "admin" || !/^[0-9]{17}$/.test(user.identitySteam64 || ""))
+    if (!isPlatformAdmin(user) || !/^[0-9]{17}$/.test(user.identitySteam64 || ""))
       reject(403, "Nur Plattform-Admins dürfen Nades manuell hinzufügen.");
     if (typeof request.map !== "string" || !request.map.trim() || request.map.length > 500 || /[\u0000-\u0020\u007f]/.test(request.map))
       reject(400, "Ungültige Map.");
@@ -85,7 +86,7 @@ export function applyWebNadeAction(entries, request, user) {
 
 export function applyGameReviewDecision(entries, request, user) {
   if (!request || !/^[0-9a-f]{32}$/.test(request.id || "") || !/^[0-9]{17}$/.test(request.actor || "") ||
-      !["approve", "reject"].includes(request.action) || user?.role !== "admin" || user.identitySteam64 !== request.actor)
+      !["approve", "reject"].includes(request.action) || !isPlatformAdmin(user) || user.identitySteam64 !== request.actor)
     reject(403, "Nur Plattform-Admins dürfen Reviews abschließen.");
   return applyWebNadeAction(entries, request, user);
 }

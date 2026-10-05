@@ -12,6 +12,7 @@ import { startupLog } from './startup-log.js';
 import { Updates } from './updates.js';
 import { launchAndWait } from './launch.js';
 import { collectCS2Diagnostics, diagnosticReport } from './cs2-diagnostics.js';
+import { LiveRecorder, audioOptions } from './live-recorder.js';
 
 const { autoUpdater } = updater;
 const exec = promisify(execFile);
@@ -27,6 +28,7 @@ const consoleConnection = new CommandPipe({ log: connectionLog, inspect: async i
   if (!diagnosis.info.listeners.some(listener => listener.port === 29000 && listener.cs2 && ['127.0.0.1', '0.0.0.0', '::'].includes(listener.address))) throw Object.assign(new Error('CS2 öffnet noch keinen lokalen Antwortkanal auf Port 29000. Bitte auf das Hauptmenü warten und erneut verbinden.'), { code: 'EVCONWAIT' });
 } });
 let lastDiagnosis = '', diagnosing = false, recoveryError;
+let liveRecorder;
 
 function startupFailed(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -105,7 +107,7 @@ async function disconnect() {
 function handle(name, work) {
   ipcMain.handle('review:' + name, async (event, ...args) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || !trusted(event.senderFrame.url)) throw new Error('Diese Seite darf CS2 nicht steuern.');
-    const start = Date.now(), verbose = !['status', 'frame'].includes(name);
+    const start = Date.now(), verbose = !['status', 'frame', 'live-status', 'live-devices'].includes(name);
     if (verbose) startup.event('Review', `${name}.started`);
     try {
       const result = await work(...args);
@@ -156,6 +158,29 @@ else {
       { label: 'Ansicht', submenu: [{ role: 'resetZoom', label: 'Originalgröße' }, { role: 'zoomIn', label: 'Vergrößern' }, { role: 'zoomOut', label: 'Verkleinern' }, { role: 'togglefullscreen', label: 'Vollbild' }] },
     ]));
     const browser = session.defaultSession;
+    liveRecorder = new LiveRecorder({ directory: path.join(app.getPath('userData'), 'live-recordings'),
+      executable: app.isPackaged ? path.join(process.resourcesPath, 'Playbook.Windows.exe') : path.join(here, '../native/bin/publish/Playbook.Windows.exe'),
+      request: async (url, options = {}) => {
+        const response = await browser.fetch(ORIGIN + url, { ...options, headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...options.headers }, signal: AbortSignal.timeout(6 * 60_000) });
+        const data = await response.json(); if (!response.ok) throw Object.assign(new Error(data.error || 'Die Tonaufnahme konnte nicht mit dem Server synchronisiert werden.'), { status: response.status }); return data;
+      } });
+    setInterval(() => { void liveRecorder.retry(); }, 10_000).unref();
+    handle('live-status', () => liveRecorder.state());
+    handle('live-devices', async () => {
+      if (process.platform !== 'win32') throw new Error('Die Geräteaufnahme benötigt Windows.');
+      const result = await exec(liveRecorder.executable, ['audio-devices'], { windowsHide: true, timeout: 10000, maxBuffer: 128 * 1024 });
+      return JSON.parse(result.stdout);
+    });
+    handle('live-start', async (id, value) => {
+      if (process.platform !== 'win32') throw new Error('Die Geräteaufnahme benötigt Windows.');
+      const options = audioOptions(value);
+      const choice = await dialog.showMessageBox(window, { type: 'info', title: 'Live-Tonaufnahme', message: 'Spiel und Kommunikation getrennt aufnehmen?', detail: 'Es werden ausschließlich die beiden ausgewählten Aufnahmegeräte erfasst. Bei aktivierter Mikrofonsteuerung wird nur die B2-Zuleitung des gewählten Voicemeeter-Mikrofonkanals geändert. B3 bleibt unverändert. Discord-Mute und Push-to-Talk steuern die Aufnahme nicht.', buttons: ['Aufnahme starten', 'Abbrechen'], defaultId: 1, cancelId: 1 });
+      if (choice.response !== 0) return;
+      await liveRecorder.begin(id, options);
+    });
+    handle('live-stop', async () => { await liveRecorder.stop(false); void liveRecorder.retry(); });
+    handle('live-mute', value => liveRecorder.mute(value));
+    handle('live-retry', () => liveRecorder.retry());
     browser.setPermissionRequestHandler((contents, permission, callback, details) => {
       const allowed = contents === window.webContents && trusted(details.requestingUrl || '') && reviewPermission(permission, details, Boolean(target));
       startup.event('Aufnahme', 'permission.request', { permission, allowed, mainFrame: details.isMainFrame, trusted: trusted(details.requestingUrl || ''), mediaTypes: details.mediaTypes }, allowed ? 'INFO' : 'WARN');
@@ -220,6 +245,7 @@ else {
     handle('recover', async () => { await presentation.recover(); globalShortcut.unregister('F8'); });
     handle('update-check', () => updates.check());
     handle('update-install', async () => {
+      if (liveRecorder.state().recording) throw new Error('Beende die Tonaufnahme vor dem Neustart.');
       if (target || presentation.active || await presentation.saved()) throw new Error('Bitte den Review beenden und die Spieleinstellungen wiederherstellen, bevor die App neu startet.');
       if (updates.status.state !== 'ready') throw new Error('Es ist noch kein Update bereit.');
       quitting = true; autoUpdater.quitAndInstall(false, true);
@@ -240,7 +266,7 @@ else {
     window.on('close', event => {
       if (quitting) return;
       event.preventDefault();
-      void disconnect().then(() => { quitting = true; app.quit(); }).catch(async () => {
+      void liveRecorder.stop(false).then(() => disconnect()).then(() => { quitting = true; app.quit(); }).catch(async () => {
         const choice = await dialog.showMessageBox(window, { type: 'warning', buttons: ['Geöffnet lassen', 'Trotzdem beenden'], defaultId: 0, cancelId: 0, message: 'CS2 konnte noch nicht wiederhergestellt werden.', detail: 'Die ursprünglichen Einstellungen bleiben lokal gesichert. Verbinde CS2 erneut, damit Playbook sie wiederherstellen kann.' });
         if (choice.response === 1) { quitting = true; app.quit(); }
       });
