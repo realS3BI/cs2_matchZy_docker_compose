@@ -8,6 +8,14 @@ export type DesktopStatus = {
   recovery: boolean;
   active: boolean;
 };
+export type DemoFolderState = {
+  error?: string;
+  completed?: boolean;
+  folder: string;
+  running: boolean;
+  current: string;
+  results: { name: string; status: "uploaded" | "skipped" | "failed"; demoId?: string; message: string }[];
+};
 export type PlaybookDesktop = {
   version: 1;
   status(): Promise<DesktopStatus>;
@@ -45,6 +53,11 @@ export type PlaybookDesktop = {
   liveStop?(): Promise<void>;
   liveMute?(muted: boolean): Promise<void>;
   liveRetry?(): Promise<void>;
+  demoFolderStatus?(): Promise<DemoFolderState>;
+  demoFolderSet?(folder: string): Promise<DemoFolderState>;
+  demoFolderChoose?(): Promise<DemoFolderState>;
+  demoFolderImport?(options: { teamId: string | null; source: "faceit" | "premier" | "other" }): Promise<DemoFolderState>;
+  demoFolderCancel?(): Promise<DemoFolderState>;
 };
 declare global {
   interface Window {

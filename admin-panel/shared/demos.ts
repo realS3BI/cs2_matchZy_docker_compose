@@ -1,3 +1,5 @@
+import type { StratEconomy } from "./strats.js";
+
 export const ANALYSIS_VERSION = 1;
 export const DEMO_UPLOAD_LIMIT = 1024 * 1024 * 1024;
 export const DEMO_EXPANDED_LIMIT = 2 * DEMO_UPLOAD_LIMIT;
@@ -10,6 +12,21 @@ export type DemoRound = {
   endTick: number;
   duration: number;
   winner: number;
+  /** Seconds relative to freeze end; negative while the buy phase runs. Missing in older analyses. */
+  buyStart?: number;
+  /** End of the after-round period, relative to freeze end. */
+  afterEnd?: number;
+  roundTime?: number;
+  economy?: { t?: TeamEconomy; ct?: TeamEconomy };
+};
+export type RoundBuy = StratEconomy;
+export type TeamEconomy = {
+  buy: RoundBuy;
+  /** Team equipment value after buying. */
+  equipment: number;
+  /** Money left at freeze end. */
+  money: number;
+  players: number;
 };
 export type DemoSummary = {
   version: number;
@@ -52,6 +69,16 @@ export type PlayerFrame = {
   side: number;
   weapon: string;
 };
+/** Emitted whenever a player's inventory, money or armour changes. */
+export type PlayerLoadout = {
+  time: number;
+  id: string;
+  items: string[];
+  money: number;
+  armor: number;
+  helmet: boolean;
+  defuser: boolean;
+};
 export type DemoFrame = { time: number; players: PlayerFrame[] };
 export type DemoEvent = {
   time: number;
@@ -60,6 +87,7 @@ export type DemoEvent = {
   playerId: string;
   player: string;
   target?: string;
+  targetId?: string;
   weapon?: string;
   x?: number;
   y?: number;
@@ -77,6 +105,7 @@ export type RoundReplay = {
   frames: DemoFrame[];
   events: DemoEvent[];
   grenades: GrenadePath[];
+  loadouts?: PlayerLoadout[];
 };
 export type SceneReference = {
   demoId: string;
@@ -155,4 +184,76 @@ export function playbackTime(
 }
 export function sceneUrl(scene: SceneReference) {
   return `/analysis/demos/${scene.demoId}?round=${encodeURIComponent(scene.roundId)}&start=${scene.start}&end=${scene.end}&focus=${encodeURIComponent(scene.focusId)}`;
+}
+
+export const DEFAULT_ROUND_TIME = 115;
+export const BOMB_TIME = 40;
+/** Buy windows longer than this (timeouts, pauses) are trimmed to the last seconds before freeze end. */
+export const BUY_PHASE_LIMIT = 30;
+export const AFTER_ROUND_LIMIT = 10;
+export const BUY_WINDOW = 20;
+
+export const roundStart = (round: DemoRound) => round.buyStart ?? 0;
+export const roundEnd = (round: DemoRound) => round.afterEnd ?? round.duration;
+
+export type RoundPhase = "buy" | "live" | "planted" | "over";
+/** In-game style clock: freeze countdown, round timer, bomb timer and the pause until the next round. */
+export function roundClock(round: DemoRound, time: number, plantTime?: number) {
+  if (time < 0) return { phase: "buy" as RoundPhase, remaining: -time };
+  if (time > round.duration)
+    return { phase: "over" as RoundPhase, remaining: Math.max(0, roundEnd(round) - time) };
+  if (plantTime !== undefined && time >= plantTime)
+    return { phase: "planted" as RoundPhase, remaining: Math.max(0, plantTime + BOMB_TIME - time) };
+  return {
+    phase: "live" as RoundPhase,
+    remaining: Math.max(0, (round.roundTime || DEFAULT_ROUND_TIME) - time),
+  };
+}
+
+/**
+ * Average equipment value after buying decides the buy type. Pistol rounds are
+ * recognised by the start money, so overtime and shortened formats need no round numbers.
+ */
+export function classifyBuy(
+  players: { equipment: number; startMoney: number }[],
+): RoundBuy | undefined {
+  if (!players.length) return undefined;
+  if (players.every((player) => player.startMoney <= 1000)) return "pistol";
+  const average =
+    players.reduce((total, player) => total + player.equipment, 0) / players.length;
+  return average >= 3500 ? "fullbuy" : average >= 1500 ? "semi-buy" : "eco";
+}
+
+const pistols = new Set(
+  ["glock18", "usps", "p2000", "p250", "fiveseven", "tec9", "cz75auto", "deserteagle", "dualberettas", "r8revolver"],
+);
+const rifles = new Set([
+  "ak47", "m4a4", "m4a1s", "awp", "ssg08", "galilar", "famas", "aug", "sg553", "scar20", "g3sg1",
+  "mac10", "mp9", "mp7", "mp5sd", "ump45", "p90", "ppbizon", "nova", "xm1014", "sawedoff", "mag7", "m249", "negev",
+]);
+const grenadeKinds: [RegExp, Grenade][] = [
+  [/smoke/, "Smoke"],
+  [/flash/, "Flash"],
+  [/molotov|incendiary/, "Molly"],
+  [/highexplosive|hegrenade/, "HE"],
+  [/decoy/, "Decoy"],
+];
+export type Grenade = "Smoke" | "Flash" | "Molly" | "HE" | "Decoy";
+const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+export const isPistol = (name: string) => pistols.has(key(name));
+export const isPrimary = (name: string) => rifles.has(key(name));
+
+export function loadoutSummary(items: string[]) {
+  const grenades: Grenade[] = [];
+  for (const item of items) {
+    const kind = grenadeKinds.find(([pattern]) => pattern.test(key(item)))?.[1];
+    if (kind) grenades.push(kind);
+  }
+  return {
+    primary: items.find(isPrimary),
+    secondary: items.find(isPistol),
+    zeus: items.some((item) => key(item).startsWith("zeus")),
+    grenades,
+    bomb: items.some((item) => key(item).startsWith("c4")),
+  };
 }

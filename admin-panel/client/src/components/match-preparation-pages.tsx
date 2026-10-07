@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Check, Download, Link2, RefreshCw, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Actor } from "../../../shared/authorization";
+import { isPlatformAdmin } from "../../../shared/authorization";
 import type { Demo } from "../../../shared/demos";
 import type {
   Prematch,
@@ -30,8 +31,91 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "./ui/empty";
 import { Choice, Feedback, useResource, WorkspaceHeader } from "./workspace-ui";
 import { AnalysisNav } from "./live-session-pages";
 import { SceneExample } from "./demo-player";
+import { DemoFolderImport } from "./demo-folder-import";
 type Props = { user: Actor; maps: MapDefinition[] };
 const size = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(2)} GiB`;
+function FaceitAccess({ configured, downloadsConfigured, onSave }: {
+  configured: boolean;
+  downloadsConfigured: boolean;
+  onSave: () => void;
+}) {
+  const [apiKey, setApiKey] = useState("");
+  const [downloadsToken, setDownloadsToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  return (
+    <Card id="faceit-access">
+      <CardHeader>
+        <CardTitle>FACEIT-Zugang einrichten</CardTitle>
+        <CardDescription>
+          Als Plattform-Admin richtest du den Zugang für alle Benutzer ein.
+          Die Zugangsdaten werden verschlüsselt gespeichert.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form id="faceit-access-form" onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError("");
+          setSaved(false);
+          try {
+            await api("/api/analysis/providers/faceit", {
+              method: "PUT",
+              body: JSON.stringify({
+                ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+                ...(downloadsToken.trim() ? { downloadsToken: downloadsToken.trim() } : {}),
+              }),
+            });
+            setApiKey("");
+            setDownloadsToken("");
+            setSaved(true);
+            onSave();
+          } catch (cause) {
+            setError(cause.message);
+          } finally {
+            setBusy(false);
+          }
+        }}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel id="faceit-api-key-label">Data-API-Schlüssel</FieldLabel>
+              <Badge variant="secondary">{configured ? "Eingerichtet" : "Noch nicht eingerichtet"}</Badge>
+              <Input id="faceit-api-key" aria-labelledby="faceit-api-key-label" type="password" autoComplete="new-password"
+                required={!configured} disabled={busy} maxLength={8192}
+                value={apiKey} onChange={(event) => setApiKey(event.target.value)}
+                placeholder={configured ? "Leer lassen, um den Schlüssel zu behalten" : "Serverseitigen API-Schlüssel eingeben"} />
+              <FieldDescription>
+                Importiert deine Matchhistorie und einzelne Matchrooms. Erstelle einen serverseitigen Schlüssel im{" "}
+                <a href="https://developers.faceit.com/" target="_blank" rel="noreferrer">FACEIT Developer Portal</a>.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel id="faceit-downloads-token-label">Downloads-Token, optional</FieldLabel>
+              <Badge variant="secondary">{downloadsConfigured ? "Eingerichtet" : "Noch nicht eingerichtet"}</Badge>
+              <Input id="faceit-downloads-token" aria-labelledby="faceit-downloads-token-label" type="password" autoComplete="new-password"
+                disabled={busy} maxLength={8192} value={downloadsToken}
+                onChange={(event) => setDownloadsToken(event.target.value)}
+                placeholder={downloadsConfigured ? "Leer lassen, um den Token zu behalten" : "Freigegebenen Downloads-Token eingeben"} />
+              <FieldDescription>
+                Automatische Demodownloads benötigen eine separate{" "}
+                <a href="https://docs.faceit.com/getting-started/Guides/download-api/" target="_blank" rel="noreferrer">Freigabe von FACEIT</a>.
+                Ohne Token kannst du Matchdaten importieren und hochgeladene Demos zuordnen.
+              </FieldDescription>
+            </Field>
+            <Feedback error={error} />
+            {saved && <p role="status" className="text-sm">FACEIT-Zugang gespeichert. Du kannst deine Matchquelle jetzt verbinden.</p>}
+          </FieldGroup>
+        </form>
+      </CardContent>
+      <CardFooter>
+        <Button type="submit" form="faceit-access-form" disabled={busy || (!apiKey.trim() && !downloadsToken.trim())}>
+          {busy ? "Zugang wird geprüft …" : "FACEIT-Zugang speichern"}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
 export function MatchImportsPage({ user }: Props) {
   const teams = useResource<{ entries: TeamView[] }>("/api/teams"),
     sources = useResource<{ entries: MatchConnection[]; capabilities: any }>(
@@ -102,6 +186,7 @@ export function MatchImportsPage({ user }: Props) {
       </div>
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <section className="flex min-w-0 flex-col gap-4">
+          {canImport && <DemoFolderImport teamId={teamId || null} onImported={() => { matches.reload(); demos.reload(); storage.reload(); }} />}
           <Card>
             <CardHeader>
               <CardTitle>Verbundene Matchquellen</CardTitle>
@@ -335,6 +420,11 @@ export function MatchImportsPage({ user }: Props) {
           </div>
         </section>
         <aside className="flex flex-col gap-4">
+          {isPlatformAdmin(user) && sources.data && (
+            <FaceitAccess configured={sources.data.capabilities.faceit}
+              downloadsConfigured={sources.data.capabilities.faceitDownloads}
+              onSave={() => { sources.reload(); matches.reload(); setError(""); }} />
+          )}
           {canImport && (
             <Card>
               <CardHeader>
@@ -417,10 +507,15 @@ export function MatchImportsPage({ user }: Props) {
                       </>
                     )}
                     {provider === "faceit" && (
-                      <p className="text-sm text-muted-foreground">
+                      <FieldDescription>
                         Das FACEIT-Konto wird anhand deiner bestätigten Steam-ID
                         zugeordnet.
-                      </p>
+                        {sources.data && !sources.data.capabilities.faceit && (
+                          isPlatformAdmin(user)
+                            ? <> Richte zuerst oben den FACEIT-Zugang ein.</>
+                            : <> Ein Plattform-Admin muss zuerst den FACEIT-Zugang einrichten.</>
+                        )}
+                      </FieldDescription>
                     )}
                     <Field className="flex items-center gap-3">
                       <Checkbox
@@ -437,7 +532,7 @@ export function MatchImportsPage({ user }: Props) {
                 </form>
               </CardContent>
               <CardFooter>
-                <Button form="connect-source" type="submit" disabled={busy}>
+                <Button form="connect-source" type="submit" disabled={busy || (provider === "faceit" && !sources.data?.capabilities.faceit)}>
                   <Link2 data-icon="inline-start" />
                   Matchquelle verbinden
                 </Button>
@@ -464,7 +559,7 @@ export function MatchImportsPage({ user }: Props) {
               <CardFooter>
                 <Button
                   variant="outline"
-                  disabled={!matchId || busy}
+                  disabled={!matchId || busy || !sources.data?.capabilities.faceit}
                   onClick={() =>
                     void work(async () => {
                       await api("/api/analysis/matches/faceit", {

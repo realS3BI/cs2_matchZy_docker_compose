@@ -88,7 +88,11 @@ export class SteamDemoResolver {
     this.user = new SteamUser({ dataDirectory: null, autoRelogin: true });
     this.gc = new GlobalOffensive(this.user);
     this.user.on("error", () => {});
-    this.user.on("loggedOn", () => this.user.gamesPlayed([730]));
+    // The Game Coordinator ignores accounts without CS2; the free licence is requested once per login.
+    this.user.on("loggedOn", async () => {
+      await this.user.requestFreeLicense([730]).catch(() => {});
+      this.user.gamesPlayed([730]);
+    });
     this.user.logOn({ refreshToken });
   }
   get ready() {

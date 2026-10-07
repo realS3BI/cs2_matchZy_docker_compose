@@ -44,6 +44,7 @@ export function installWorkspace(app, { store, config, live }) {
     );
     return {
       ...team,
+      live: team.live ?? !!team.active,
       members,
       permissions: capabilities(user, team),
       invitations: authorize(user, "teams.manage", team)
@@ -97,6 +98,7 @@ export function installWorkspace(app, { store, config, live }) {
           },
         ],
         invitations: [],
+        live: false,
         active: null,
         createdAt: new Date().toISOString(),
       };
@@ -317,6 +319,8 @@ export function installWorkspace(app, { store, config, live }) {
       );
       revision(req, strat);
       if (action === "activate") {
+        if (!(team.live ?? !!team.active))
+          problem(400, "Gehe mit dem Team zuerst live.");
         if (!strat.published || strat.archived)
           problem(400, "Veröffentliche die Strat zuerst.");
         validateContent(strat.published.content, team);
@@ -382,15 +386,41 @@ export function installWorkspace(app, { store, config, live }) {
     const team = await teamFor(params.id, user);
     return { team: await view(team, user), active: team.active };
   });
+  router.post(
+    "/teams/:id/live",
+    route(async (req, res) => {
+      const team = await teamFor(req.params.id, actor(res));
+      requireAction(res, "strats.activate", team);
+      revision(req, team);
+      team.live = true;
+      await saveTeam(team);
+      await audit(res, "team_live_start", team.id);
+      res.json({ team: await view(team, actor(res)) });
+    }),
+  );
+  router.delete(
+    "/teams/:id/live/strat",
+    route(async (req, res) => {
+      const team = await teamFor(req.params.id, actor(res));
+      requireAction(res, "strats.activate", team);
+      revision(req, team);
+      team.live = team.live ?? !!team.active;
+      team.active = null;
+      await saveTeam(team);
+      await audit(res, "strat_deactivate", team.id);
+      res.json({ team: await view(team, actor(res)) });
+    }),
+  );
   router.delete(
     "/teams/:id/live",
     route(async (req, res) => {
       const team = await teamFor(req.params.id, actor(res));
       requireAction(res, "strats.activate", team);
       revision(req, team);
+      team.live = false;
       team.active = null;
       await saveTeam(team);
-      await audit(res, "strat_deactivate", team.id);
+      await audit(res, "team_live_stop", team.id);
       res.json({ team: await view(team, actor(res)) });
     }),
   );

@@ -1,3 +1,19 @@
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "./ui/dialog";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyMedia,
+  EmptyContent,
+} from "./ui/empty";
+import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, UsersRound, ArrowRight, Copy, Link2 } from "lucide-react";
@@ -30,100 +46,161 @@ export function TeamsPage({ user }: { user: Actor }) {
     "/api/teams",
   );
   const [name, setName] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [failure, setFailure] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   return (
     <>
       <WorkspaceHeader
-        title="Team-Management"
-        description="Deine Teams, Mitglieder und Einladungen. Du kannst in mehreren Teams mitspielen."
-      />
+        title="Meine Teams"
+        description="Eure Mitglieder, Strats und Live-Sessions. Jedes Team hat eigene Rollen und einen eigenen Spielplan."
+      >
+        {authorize(user, "teams.create") && (
+          <Button
+            onClick={() => {
+              setFailure("");
+              setCreateOpen(true);
+            }}
+          >
+            <Plus data-icon="inline-start" />
+            Team gründen
+          </Button>
+        )}
+      </WorkspaceHeader>
       <Feedback error={failure || error} />
-      {authorize(user, "teams.create") && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Ein Team gründen</CardTitle>
-            <CardDescription>
-              Als Owner verwaltest du Mitglieder und Teamrechte.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="flex flex-wrap items-end gap-3"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setBusy(true);
-                setFailure("");
-                try {
-                  const result = await api("/api/teams", {
-                    method: "POST",
-                    body: JSON.stringify({ name }),
-                  });
-                  navigate(`/teams/${result.team.id}`);
-                } catch (cause) {
-                  setFailure(cause.message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <Field className="min-w-48 flex-1">
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!busy) setCreateOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Team gründen</DialogTitle>
+            <DialogDescription>
+              Du wirst Owner und kannst Mitglieder über einen Einladungslink
+              hinzufügen.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              setFailure("");
+              try {
+                const result = await api("/api/teams", {
+                  method: "POST",
+                  body: JSON.stringify({ name }),
+                });
+                navigate(`/teams/${result.team.id}`);
+              } catch (cause) {
+                setFailure(cause.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <FieldGroup>
+              <Field htmlFor="new-team-name">
                 <FieldLabel>Teamname</FieldLabel>
                 <Input
+                  id="new-team-name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   maxLength={80}
                   required
+                  autoFocus
+                  disabled={busy}
+                  placeholder="Wie heißt euer Team?"
                 />
               </Field>
-              <Button disabled={busy}>
-                <Plus />
-                Team gründen
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+              <Feedback error={failure} />
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setCreateOpen(false)}
+                >
+                  Abbrechen
+                </Button>
+                <Button disabled={busy || !name.trim()}>
+                  {busy ? "Wird gegründet …" : "Team gründen"}
+                </Button>
+              </div>
+            </FieldGroup>
+          </form>
+        </DialogContent>
+      </Dialog>
       {loading ? (
         <p role="status">Teams werden geladen …</p>
+      ) : error ? (
+        <Button onClick={reload} variant="outline">
+          Erneut laden
+        </Button>
       ) : !data?.entries.length ? (
-        <Card>
-          <CardHeader>
-            <UsersRound className="size-8 text-muted-foreground" />
-            <CardTitle>Noch kein Team</CardTitle>
-            <CardDescription>
-              Gründe dein Team oder öffne einen Einladungslink deines Owners.
-            </CardDescription>
-          </CardHeader>
-          {error && (
-            <CardContent>
-              <Button onClick={reload}>Erneut laden</Button>
-            </CardContent>
-          )}
-        </Card>
+        <Empty className="min-h-64 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <UsersRound />
+            </EmptyMedia>
+            <EmptyTitle>Noch kein Team</EmptyTitle>
+            <EmptyDescription>
+              Gründe euer Team oder öffne einen Einladungslink, den dir ein
+              Owner geschickt hat.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            {authorize(user, "teams.create") && (
+              <Button onClick={() => setCreateOpen(true)}>Team gründen</Button>
+            )}
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.entries.map((team) => (
             <Card key={team.id}>
               <CardHeader>
                 <div className="flex items-center justify-between gap-3">
-                  <CardTitle>{team.name}</CardTitle>
+                  <CardTitle className="min-w-0 break-words">
+                    {team.name}
+                  </CardTitle>
                   <Badge variant="secondary">
                     {teamRoleLabel(teamRole(user, team))}
                   </Badge>
                 </div>
                 <CardDescription>
-                  {team.members.length} Mitglieder
+                  {team.members.length}{" "}
+                  {team.members.length === 1 ? "Mitglied" : "Mitglieder"} ·{" "}
+                  {team.live ? "Session läuft" : "Keine Live-Session"}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline">
-                  <Link to={`/teams/${team.id}`}>
-                    Team öffnen
-                    <ArrowRight />
-                  </Link>
-                </Button>
+              <CardContent className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">
+                  {team.active?.content.title ||
+                    (team.permissions["teams.manage"]
+                      ? "Du verwaltest Mitglieder und Einladungen."
+                      : team.permissions["strats.edit"]
+                        ? "Du bereitest Strats vor und steuerst Spielzüge."
+                        : "Du liest veröffentlichte Strats und deine Live-Aufgaben.")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild variant="outline">
+                    <Link to={`/teams/${team.id}`}>
+                      Mitglieder
+                      <ArrowRight data-icon="inline-end" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="ghost">
+                    <Link to={`/strats?team=${team.id}`}>Strats</Link>
+                  </Button>
+                  {team.live && (
+                    <Button asChild variant="ghost">
+                      <Link to={`/strats/live/${team.id}`}>Live-Ansicht</Link>
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -188,15 +265,32 @@ export function TeamPage({ user }: { user: Actor }) {
         title={team.name}
         description={`${team.members.length} ${team.members.length === 1 ? "Mitglied" : "Mitglieder"} · Deine Rolle: ${teamRoleLabel(teamRole(user, team))}`}
       >
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
             <Link to={`/strats?team=${team.id}`}>Strats</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to={`/strats/control/${team.id}`}>Live verwalten</Link>
           </Button>
           <Button asChild>
             <Link to={`/strats/live/${team.id}`}>Live-Ansicht</Link>
           </Button>
         </div>
       </WorkspaceHeader>
+      <Button asChild variant="ghost" size="sm" className="mb-4">
+        <Link to="/teams">← Alle Teams</Link>
+      </Button>
+      <Alert className="mb-6">
+        <AlertTitle>Deine Rechte in diesem Team</AlertTitle>
+        <AlertDescription>
+          {owner
+            ? "Als Owner verwaltest du Mitglieder, Einladungen und Teamrollen. Du kannst außerdem Strats bearbeiten, veröffentlichen und live auswählen."
+            : team.permissions["strats.edit"]
+              ? "Als Captain bearbeitest und veröffentlichst du Strats und steuerst die Live-Session. Mitglieder und Einladungen verwaltet der Owner."
+              : "Als Mitglied siehst du veröffentlichte Strats und deine Live-Aufgaben. Änderungen an Strats übernehmen Owner und Captains."}{" "}
+          Plattform- und Serverrechte werden separat vergeben.
+        </AlertDescription>
+      </Alert>
       <Feedback error={error || resource.error} message={message} />
       {error && (
         <Button
@@ -262,15 +356,22 @@ export function TeamPage({ user }: { user: Actor }) {
                     >
                       Entfernen
                     </ConfirmAction>
-                    <ConfirmAction
-                      title="Eigentum übertragen"
-                      description={`${member.name} wird Owner. Du wirst Mitglied und verlierst die Verwaltung dieses Teams. Alle bisherigen Einladungen werden widerrufen.`}
-                      onConfirm={() =>
-                        change("transfer", { userId: member.userId })
-                      }
-                    >
-                      Zum Owner machen
-                    </ConfirmAction>
+                    <details className="self-center text-xs text-muted-foreground">
+                      <summary className="cursor-pointer">
+                        Weitere Aktionen
+                      </summary>
+                      <div className="mt-2">
+                        <ConfirmAction
+                          title="Eigentum übertragen"
+                          description={`${member.name} wird Owner. Du wirst Mitglied und verlierst die Verwaltung dieses Teams. Alle bisherigen Einladungen werden widerrufen.`}
+                          onConfirm={() =>
+                            change("transfer", { userId: member.userId })
+                          }
+                        >
+                          Zum Owner machen
+                        </ConfirmAction>
+                      </div>
+                    </details>
                   </div>
                 )}
               </div>

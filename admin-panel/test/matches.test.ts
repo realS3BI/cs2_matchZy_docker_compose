@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { workspaceFixture, ids } from "./workspace-fixture.js";
 import { SourceSecrets, trustedDemoUrl } from "../src/match-sources.js";
+import { MatchStore } from "../src/match-store.js";
 
 const mongo = { skip: !process.env.TEST_MONGODB_URI };
 async function setup(t) {
@@ -48,6 +49,59 @@ function faceit(
     },
   };
 }
+test("FACEIT setup is admin-only, validates keys, encrypts credentials and enables imports after restart", mongo, async (t) => {
+  const f = await setup(t);
+  const endpoint = "/analysis/providers/faceit";
+  assert.equal((await f.request(1, endpoint, "PUT", { apiKey: "secret-key" })).status, 403);
+  assert.equal((await f.request(0, endpoint, "PUT", {})).status, 400);
+  assert.equal((await f.request(0, endpoint, "PUT", { apiKey: 123 })).status, 400);
+  assert.equal((await f.request(0, endpoint, "PUT", { apiKey: "invalid key" })).status, 400);
+  assert.equal((await f.request(0, endpoint, "PUT", { downloadsToken: "download-token" })).status, 400);
+  const originalFetch = globalThis.fetch;
+  const raw = faceit();
+  const playerId = randomUUID();
+  globalThis.fetch = async (url, options) => {
+    const address = String(url);
+    if (!address.startsWith("https://open.faceit.com/data/v4")) return originalFetch(url, options);
+    if (options?.headers?.["Authorization"] !== "Bearer secret-key") return new Response("{}", { status: 401 });
+    if (address.endsWith("/games/cs2")) return Response.json({ game_id: "cs2" });
+    if (address.includes("/players?game=cs2&game_player_id=")) return Response.json({ player_id: playerId });
+    if (address.includes("/history?")) return Response.json({ items: [{ match_id: raw.match_id }] });
+    if (address.endsWith(`/matches/${raw.match_id}`)) return Response.json(raw);
+    throw new Error(`Unexpected FACEIT request: ${address}`);
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  assert.equal((await f.request(0, endpoint, "PUT", { apiKey: "rejected-key" })).status, 502);
+  assert.equal(await f.store.matches.providerCredentials.findOne({ _id: "faceit" }), null);
+  const saved = await f.request(0, endpoint, "PUT", { apiKey: "secret-key" });
+  assert.deepEqual(saved, { status: 200, ok: true });
+  let capabilities = (await f.request(1, "/analysis/connections")).capabilities;
+  assert.equal(capabilities.faceit, true);
+  assert.equal(capabilities.faceitDownloads, false);
+  const imported = await f.request(1, "/analysis/matches/faceit", "POST", { matchId: raw.match_id });
+  assert.equal(imported.status, 201);
+  assert.equal((await f.store.matches.entries.findOne({ _id: imported.ids[0] })).demoStatus, "access_required");
+  assert.equal((await f.request(0, endpoint, "PUT", { downloadsToken: "download-token" })).status, 200);
+  const credentials = await f.store.matches.providerCredentials.findOne({ _id: "faceit" });
+  assert.notEqual(credentials.apiKey, "secret-key");
+  assert.notEqual(credentials.downloadsToken, "download-token");
+  assert.equal(f.store.matches.secrets.decrypt(credentials.apiKey), "secret-key");
+  assert.equal(f.store.matches.secrets.decrypt(credentials.downloadsToken), "download-token");
+  assert.equal((await f.store.matches.entries.findOne({ _id: imported.ids[0] })).demoStatus, "available");
+  const restarted = new MatchStore(f.store.db, f.store.analysis, f.store.workspace, { sessionSecret: f.config.sessionSecret });
+  await restarted.initialize();
+  assert.equal(restarted.config.faceitApiKey, "secret-key");
+  assert.equal(restarted.config.faceitDownloadsToken, "download-token");
+  const connection = await f.request(1, "/analysis/connections", "POST", { source: "faceit", autoDownload: true });
+  assert.equal(connection.status, 201);
+  assert.equal((await f.request(1, `/analysis/connections/${connection.id}/sync`, "POST")).status, 200);
+  const publicSources = await f.request(1, "/analysis/connections");
+  assert.equal(publicSources.entries[0].playerId, playerId);
+  assert.equal(publicSources.capabilities.faceitDownloads, true);
+  assert.equal(JSON.stringify(publicSources).includes("secret-key"), false);
+  assert.equal(JSON.stringify(publicSources).includes("download-token"), false);
+  assert.equal((await f.request(1, "/analysis/matches")).entries.length, 1);
+});
 test(
   "FACEIT history deduplicates maps within each scope and keeps series scores out of map statistics",
   mongo,

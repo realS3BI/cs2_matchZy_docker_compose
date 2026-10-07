@@ -29,6 +29,8 @@
     "express-rate-limit": "7.5.0",
     "globaloffensive": "3.3.0",
     "globaloffensive-sharecode": "1.1.1",
+    "hash-wasm": "^4.12.0",
+    "libarchive.js": "^2.0.2",
     "lucide-react": "^0.562.0",
     "mongodb": "6.13.0",
     "radix-ui": "^1.6.7",

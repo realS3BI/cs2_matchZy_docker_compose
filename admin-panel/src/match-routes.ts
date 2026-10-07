@@ -14,6 +14,10 @@ export function installMatches(app, { store, live }) {
   };
   const mutate = (handler) =>
     route((req, res) => store.analysis.mutate(() => handler(req, res)));
+  router.put(
+    "/analysis/providers/faceit",
+    mutate(async (req, res) => res.json(await matches.configureFaceit(res.locals.user, req.body))),
+  );
   live.get(router, "/analysis/matches", ({ user }) => matches.list(user), 5000);
   live.get(
     router,

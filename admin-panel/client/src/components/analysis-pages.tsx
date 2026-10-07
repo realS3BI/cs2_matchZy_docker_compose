@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Link,
   useNavigate,
@@ -11,6 +11,7 @@ import {
   BookOpen,
   Check,
   Film,
+  MapPinned,
   Plus,
   Radio,
   Share2,
@@ -22,10 +23,13 @@ import { api } from "@/lib/api";
 import { liveCommand, serverNow } from "@/lib/live";
 import { useLiveState } from "@/hooks/use-live-resource";
 import type { MapDefinition } from "@/lib/maps";
+import { MAP_CARD_ART } from "@/lib/map-card-art";
 import type { Actor } from "../../../shared/authorization";
 import type { TeamView } from "../../../shared/strats";
 import {
   DEMO_UPLOAD_LIMIT,
+  roundEnd,
+  roundStart,
   type Demo,
   type DemoReview,
   type DemoScene,
@@ -34,14 +38,6 @@ import {
   type SceneReference,
 } from "../../../shared/demos";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "./ui/card";
 import {
   Dialog,
   DialogContent,
@@ -62,7 +58,8 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Progress } from "./ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { DemoPlayer, demoTime } from "./demo-player";
+import { DemoPlayer, buyLabel, demoTime } from "./demo-player";
+import { economyOptions } from "../../../shared/strats";
 import {
   Choice,
   ConfirmAction,
@@ -99,6 +96,35 @@ const statusLabels = {
   ready: "Bereit",
   failed: "Verarbeitung fehlgeschlagen",
 };
+const statusTone = (status: Demo["status"]) =>
+  status === "ready" ? "ready" : status === "failed" ? "failed" : "busy";
+const sideKey = (winner: number) =>
+  winner === 2 ? "t" : winner === 3 ? "ct" : undefined;
+
+/** Side changes in MR12: after round 12 and 24, then every three overtime rounds. */
+function roundBreak(number: number, total: number) {
+  if (number >= total) return null;
+  if (number === 12) return "Seitenwechsel";
+  if (number === 24) return "Verlängerung";
+  if (number > 24 && (number - 24) % 3 === 0) return "Seitenwechsel";
+  return null;
+}
+
+function MapPoster({ map }: { map?: MapDefinition }) {
+  const art = map ? MAP_CARD_ART[map.mapName] : undefined;
+  return (
+    <div className="demo-match-poster" aria-hidden="true">
+      {art?.imageUrl && <img src={art.imageUrl} alt="" loading="lazy" />}
+      <div className="demo-match-emblem">
+        {art?.logoUrl ? (
+          <img src={art.logoUrl} alt="" loading="lazy" />
+        ) : (
+          <MapPinned />
+        )}
+      </div>
+    </div>
+  );
+}
 
 function UploadDemo({
   teams,
@@ -452,79 +478,118 @@ export function AnalysisPage({ user, maps }: Props) {
               </EmptyHeader>
             </Empty>
           ) : (
-            <div className="demo-match-list">
-              {filtered.map((demo) => (
-                <Link
-                  className="demo-match-row"
-                  key={demo.id}
-                  to={`/analysis/demos/${demo.id}`}
-                >
-                  <div className="demo-match-map">
-                    {demo.summary ? (
-                      maps.find((map) => map.mapName === demo.summary.map)
-                        ?.name || demo.summary.map
-                    ) : (
-                      <Film />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="truncate font-medium">{demo.title}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {sourceLabels[demo.source]} ·{" "}
-                      {demo.teamId
-                        ? entries.find((team) => team.id === demo.teamId)
-                            ?.name || "Team"
-                        : "Privat"}{" "}
-                      · {new Date(demo.createdAt).toLocaleDateString("de-AT")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {demo.summary && (
-                      <span className="text-xs text-muted-foreground">
-                        {demo.summary.rounds.length} Runden
+            <div className="demo-match-list demo-scope">
+              {filtered.map((demo) => {
+                const map = demo.summary
+                  ? maps.find((entry) => entry.mapName === demo.summary!.map)
+                  : undefined;
+                return (
+                  <Link
+                    className="demo-match-row"
+                    key={demo.id}
+                    to={`/analysis/demos/${demo.id}`}
+                  >
+                    <MapPoster map={map} />
+                    <div className="demo-match-body">
+                      <p className="demo-eyebrow">
+                        <strong>
+                          {map?.name || demo.summary?.map || "Karte folgt"}
+                        </strong>
+                        <i>·</i>
+                        <span>{sourceLabels[demo.source]}</span>
+                        <i>·</i>
+                        <span>
+                          {demo.teamId
+                            ? entries.find((team) => team.id === demo.teamId)
+                                ?.name || "Team"
+                            : "Privat"}
+                        </span>
+                      </p>
+                      <h2>{demo.title}</h2>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(demo.createdAt).toLocaleDateString("de-AT", {
+                          day: "2-digit",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                        {demo.summary &&
+                          ` · ${demo.summary.rounds.length} Runden · ${demo.summary.players.length} Spieler`}
+                      </p>
+                    </div>
+                    <div className="demo-match-side">
+                      <span
+                        className="demo-status"
+                        data-tone={statusTone(demo.status)}
+                      >
+                        {statusLabels[demo.status]}
                       </span>
-                    )}
-                    <Badge
-                      variant={
-                        demo.status === "ready" ? "secondary" : "outline"
-                      }
-                    >
-                      {statusLabels[demo.status]}
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
+                      {demo.summary?.rounds.some((r) => r.winner) && (
+                        <span
+                          className="demo-match-rounds"
+                          aria-label="Rundenverlauf"
+                        >
+                          {demo.summary.rounds.map((round) => (
+                            <span
+                              key={round.id}
+                              data-side={sideKey(round.winner)}
+                            />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </TabsContent>
         <TabsContent value="reviews">
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="demo-scope grid gap-3 lg:grid-cols-2">
             {reviews.data?.entries
               .filter((review) => !teamId || review.teamId === teamId)
               .map((review) => (
-                <Card key={review.id}>
-                  <CardHeader>
-                    <CardTitle>{review.title}</CardTitle>
-                    <CardDescription>
-                      {entries.find((team) => team.id === review.teamId)?.name}{" "}
-                      · {review.scenes.length} vorbereitete Szenen
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between gap-3">
-                      <Badge variant={review.session ? "secondary" : "outline"}>
-                        {review.session ? "Sitzung läuft" : "Vorbereitet"}
-                      </Badge>
-                      <Button asChild variant="outline">
-                        <Link to={`/analysis/reviews/${review.id}`}>
-                          {review.session
-                            ? "Review beitreten"
-                            : "Review öffnen"}
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <Link
+                  key={review.id}
+                  className="demo-review-card"
+                  to={`/analysis/reviews/${review.id}`}
+                >
+                  <p className="demo-eyebrow">
+                    <strong>
+                      {entries.find((team) => team.id === review.teamId)
+                        ?.name || "Team"}
+                    </strong>
+                    <i>·</i>
+                    <span>
+                      {review.scenes.length}{" "}
+                      {review.scenes.length === 1 ? "Szene" : "Szenen"}
+                    </span>
+                    {review.notes.length > 0 && (
+                      <>
+                        <i>·</i>
+                        <span>
+                          {review.notes.length}{" "}
+                          {review.notes.length === 1 ? "Notiz" : "Notizen"}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                  <h2>{review.title}</h2>
+                  <footer>
+                    {review.session ? (
+                      <span className="demo-review-live">Sitzung läuft</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Zuletzt bearbeitet{" "}
+                        {new Date(review.updatedAt).toLocaleDateString(
+                          "de-AT",
+                        )}
+                      </span>
+                    )}
+                    <span className="text-sm font-semibold text-primary">
+                      {review.session ? "Beitreten" : "Öffnen"}
+                    </span>
+                  </footer>
+                </Link>
               ))}
           </div>
           {!reviews.loading && !reviews.data?.entries.length && (
@@ -690,6 +755,7 @@ export function DemoPage({ maps }: Props) {
   const [share, setShare] = useState(false);
   const [shareTeam, setShareTeam] = useState("");
   const [busy, setBusy] = useState(false);
+  const [buyFilter, setBuyFilter] = useState({ t: "", ct: "" });
   const position = useRef(0);
   const selectedFocus = useRef("");
   const navigate = useNavigate();
@@ -713,16 +779,25 @@ export function DemoPage({ maps }: Props) {
     );
   const canPrepare = teams.data?.entries.find((team) => team.id === demo.teamId)
     ?.permissions["analysis.prepare"];
-  const startParam = Number(params.get("start"));
-  const endParam = Number(params.get("end"));
-  const from =
-    round && Number.isFinite(startParam)
-      ? Math.max(0, Math.min(round.duration - 0.001, startParam))
-      : 0;
+  // Without explicit bounds the whole round is shown, from the buy phase to the after-round pause.
+  const startParam = params.has("start") ? Number(params.get("start")) : NaN;
+  const endParam = params.has("end") ? Number(params.get("end")) : NaN;
+  const from = !round
+    ? 0
+    : Number.isFinite(startParam)
+      ? Math.max(roundStart(round), Math.min(roundEnd(round) - 0.001, startParam))
+      : roundStart(round);
   const to =
-    round && endParam > from && endParam <= round.duration
+    round && endParam > from && endParam <= roundEnd(round)
       ? endParam
-      : round?.duration || 1;
+      : round
+        ? roundEnd(round)
+        : 1;
+  const buyMatches = (entry: NonNullable<typeof round>) =>
+    (["t", "ct"] as const).every(
+      (side) => !buyFilter[side] || entry.economy?.[side]?.buy === buyFilter[side],
+    );
+  const hasEconomy = !!demo.summary?.rounds.some((entry) => entry.economy);
   const focus = demo.summary?.players.some(
     (player) => player.id === params.get("focus"),
   )
@@ -789,157 +864,242 @@ export function DemoPage({ maps }: Props) {
         </Empty>
       ) : (
         <>
-          <div className="demo-round-strip" aria-label="Runden auswählen">
-            {demo.summary.rounds.map((entry) => (
-              <Button
-                key={entry.id}
-                size="sm"
-                variant={round.id === entry.id ? "default" : "outline"}
-                aria-pressed={round.id === entry.id}
-                onClick={() => setParams({ round: entry.id })}
-              >
-                {entry.number}
-                <span className="text-[10px]">
-                  {entry.winner === 2 ? "T" : entry.winner === 3 ? "CT" : ""}
+          <div className="demo-scope">
+            <div className="demo-ribbon" aria-label="Runden auswählen">
+              {demo.summary.rounds.map((entry, at) => {
+                const scored = demo.summary.rounds.some((r) => r.winner);
+                const until = demo.summary.rounds.slice(0, at + 1);
+                const label = roundBreak(
+                  entry.number,
+                  demo.summary.rounds.length,
+                );
+                const economy = (["t", "ct"] as const)
+                  .filter((side) => entry.economy?.[side])
+                  .map((side) => `${side.toUpperCase()}: ${buyLabel(entry.economy![side]!.buy)}`)
+                  .join(", ");
+                return (
+                  <Fragment key={entry.id}>
+                    <button
+                      type="button"
+                      className="demo-ribbon-round"
+                      data-side={sideKey(entry.winner)}
+                      aria-pressed={round.id === entry.id}
+                      data-economy={hasEconomy || undefined}
+                      data-dimmed={!buyMatches(entry) || undefined}
+                      aria-label={`Runde ${entry.number}${entry.winner === 2 ? ", T gewinnt" : entry.winner === 3 ? ", CT gewinnt" : ""}${economy ? `, ${economy}` : ""}`}
+                      title={economy ? `Runde ${entry.number} · ${economy}` : undefined}
+                      onClick={() => setParams({ round: entry.id })}
+                    >
+                      {hasEconomy && (
+                        <span className="demo-ribbon-eco" aria-hidden="true">
+                          {(["t", "ct"] as const).map((side) => (
+                            <i
+                              key={side}
+                              data-side={side}
+                              data-buy={entry.economy?.[side]?.buy}
+                              style={{
+                                height: `${Math.max(8, Math.min(100, ((entry.economy?.[side]?.equipment || 0) / 25000) * 100))}%`,
+                              }}
+                            />
+                          ))}
+                        </span>
+                      )}
+                      <span>{entry.number}</span>
+                    </button>
+                    {label && (
+                      <span className="demo-ribbon-break" aria-hidden="true">
+                        {scored && (
+                          <strong>
+                            <span data-side="t">
+                              {until.filter((r) => r.winner === 2).length}
+                            </span>
+                            {" : "}
+                            <span data-side="ct">
+                              {until.filter((r) => r.winner === 3).length}
+                            </span>
+                          </strong>
+                        )}
+                        {label}
+                      </span>
+                    )}
+                  </Fragment>
+                );
+              })}
+              {demo.summary.rounds.some((r) => r.winner) && (
+                <span className="demo-ribbon-legend" aria-hidden="true">
+                  <span data-side="t">T gewinnt</span>
+                  <span data-side="ct">CT gewinnt</span>
                 </span>
-              </Button>
-            ))}
-          </div>
-          <div className="demo-analysis-grid">
-            <div>
-              <DemoPlayer
-                key={`${demo.id}:${round.id}:${from}:${to}`}
-                scene={scene}
-                maps={maps}
-                onPosition={(value, focusId) => {
-                  position.current = value;
-                  selectedFocus.current = focusId;
-                }}
-              />
+              )}
             </div>
-            <aside className="flex flex-col gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Eine Szene festhalten</CardTitle>
-                  <CardDescription>
-                    Markiere den Abschnitt, den ihr gemeinsam besprechen wollt.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <div className="flex flex-wrap gap-2">
+            {hasEconomy && (
+              <div className="demo-buy-filter" aria-label="Runden nach Buy filtern">
+                {(["t", "ct"] as const).map((side) => (
+                  <Choice
+                    key={side}
+                    label={`${side.toUpperCase()}-Buy`}
+                    value={buyFilter[side]}
+                    options={[
+                      { value: "", label: "Alle Buys" },
+                      ...economyOptions.map((option) => ({ value: option.value, label: option.label })),
+                    ]}
+                    onChange={(value) => setBuyFilter({ ...buyFilter, [side]: value })}
+                  />
+                ))}
+                <p>
+                  {demo.summary.rounds.filter(buyMatches).length} von {demo.summary.rounds.length} Runden ·
+                  Buy-Typ automatisch aus dem Ausrüstungswert nach dem Kauf erkannt
+                </p>
+              </div>
+            )}
+            <div className="demo-analysis-grid">
+              <div>
+                <DemoPlayer
+                  key={`${demo.id}:${round.id}:${from}:${to}`}
+                  scene={scene}
+                  maps={maps}
+                  range={{ start: start ?? from, end: end ?? to }}
+                  onPosition={(value, focusId) => {
+                    position.current = value;
+                    selectedFocus.current = focusId;
+                  }}
+                />
+              </div>
+              <aside className="flex flex-col gap-4">
+                <section className="demo-panel" aria-labelledby="scene-panel">
+                  <header>
+                    <h2 id="scene-panel">Szene festhalten</h2>
+                    <p>
+                      Setze Anfang und Ende an der aktuellen Wiedergabeposition.
+                      Der markierte Bereich erscheint auf der Zeitleiste.
+                    </p>
+                  </header>
+                  <div className="demo-panel-body">
+                    <div className="demo-markers">
+                      <label className="demo-marker">
+                        <span>Anfang</span>
+                        <output htmlFor="scene-start">
+                          {demoTime(start ?? from)}
+                        </output>
+                        <input
+                          id="scene-start"
+                          type="number"
+                          aria-label="Anfang in Sekunden"
+                          min={from}
+                          max={to}
+                          step="0.1"
+                          value={Math.round((start ?? from) * 10) / 10}
+                          onChange={(event) =>
+                            setStart(Number(event.target.value))
+                          }
+                        />
+                      </label>
+                      <span className="demo-marker-arrow" aria-hidden="true">
+                        <strong>
+                          {demoTime(
+                            Math.max(0, (end ?? to) - (start ?? from)),
+                          )}
+                        </strong>
+                        Dauer
+                      </span>
+                      <label className="demo-marker">
+                        <span>Ende</span>
+                        <output htmlFor="scene-end">
+                          {demoTime(end ?? to)}
+                        </output>
+                        <input
+                          id="scene-end"
+                          type="number"
+                          aria-label="Ende in Sekunden"
+                          min={from}
+                          max={to}
+                          step="0.1"
+                          value={Math.round((end ?? to) * 10) / 10}
+                          onChange={(event) =>
+                            setEnd(Number(event.target.value))
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="demo-marker-set">
+                      <Button
+                        variant="outline"
+                        onClick={() => setStart(position.current)}
+                      >
+                        Anfang hier
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setEnd(position.current)}
+                      >
+                        Ende hier
+                      </Button>
+                    </div>
+                    {canPrepare ? (
+                      <Button
+                        disabled={(end ?? to) <= (start ?? from)}
+                        onClick={() =>
+                          setSave({
+                            ...scene,
+                            focusId: selectedFocus.current,
+                            start: start ?? from,
+                            end: end ?? to,
+                          })
+                        }
+                      >
+                        <Plus data-icon="inline-start" />
+                        Zum Team-Review
+                      </Button>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {demo.teamId
+                          ? "Owner und Captains bereiten die gemeinsamen Reviews vor."
+                          : "Gib die Demo für dein Team frei, um sie in einen gemeinsamen Review aufzunehmen."}
+                      </p>
+                    )}
                     <Button
-                      variant="outline"
-                      onClick={() => setStart(position.current)}
+                      variant="ghost"
+                      onClick={() => {
+                        const next = new URLSearchParams({
+                          round: round.id,
+                          start: String(start ?? from),
+                          end: String(end ?? to),
+                          focus: selectedFocus.current,
+                        });
+                        setParams(next);
+                      }}
                     >
-                      Anfang setzen
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setEnd(position.current)}
-                    >
-                      Ende setzen
+                      Nur diesen Ausschnitt abspielen
                     </Button>
                   </div>
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="scene-start">
-                        Anfang in Sekunden
-                      </FieldLabel>
-                      <Input
-                        id="scene-start"
-                        type="number"
-                        min={from}
-                        max={to}
-                        step="0.1"
-                        value={start ?? from}
-                        onChange={(event) =>
-                          setStart(Number(event.target.value))
-                        }
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="scene-end">
-                        Ende in Sekunden
-                      </FieldLabel>
-                      <Input
-                        id="scene-end"
-                        type="number"
-                        min={from}
-                        max={to}
-                        step="0.1"
-                        value={end ?? to}
-                        onChange={(event) => setEnd(Number(event.target.value))}
-                      />
-                    </Field>
-                  </FieldGroup>
-                  {canPrepare ? (
-                    <Button
-                      disabled={(end ?? to) <= (start ?? from)}
-                      onClick={() =>
-                        setSave({
-                          ...scene,
-                          focusId: selectedFocus.current,
-                          start: start ?? from,
-                          end: end ?? to,
-                        })
-                      }
-                    >
-                      <Plus data-icon="inline-start" />
-                      Zum Team-Review
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {demo.teamId
-                        ? "Owner und Captains bereiten die gemeinsamen Reviews vor."
-                        : "Gib die Demo für dein Team frei, um sie in einen gemeinsamen Review aufzunehmen."}
+                </section>
+                <section className="demo-panel" aria-labelledby="match-panel">
+                  <header>
+                    <h2 id="match-panel">Aufstellung</h2>
+                    <p>
+                      {demo.summary.players.length} Spieler ·{" "}
+                      {demo.summary.rounds.length} Runden · Nummern wie auf
+                      der Karte
                     </p>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const next = new URLSearchParams({
-                        round: round.id,
-                        start: String(start ?? from),
-                        end: String(end ?? to),
-                        focus: selectedFocus.current,
-                      });
-                      setParams(next);
-                    }}
-                  >
-                    Ausschnitt öffnen
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Matchdetails</CardTitle>
-                  <CardDescription>
-                    {demo.summary.players.length} Spieler ·{" "}
-                    {demo.summary.rounds.length} Runden
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ol className="flex flex-col gap-2 text-sm">
-                    {demo.summary.players.map((player, index) => (
-                      <li key={player.id}>
-                        <span className="mr-2 font-mono text-muted-foreground">
-                          {index + 1}
-                        </span>
-                        {player.name}
-                      </li>
+                  </header>
+                  <div className="demo-panel-body">
+                    <ol className="demo-roster-list">
+                      {demo.summary.players.map((player, index) => (
+                        <li key={player.id}>
+                          <span>{index + 1}</span>
+                          <span>{player.name}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    {demo.summary.warnings.map((warning) => (
+                      <p key={warning} className="demo-warning">
+                        {warning}
+                      </p>
                     ))}
-                  </ol>
-                  {demo.summary.warnings.map((warning) => (
-                    <p
-                      key={warning}
-                      className="mt-3 text-xs text-muted-foreground"
-                    >
-                      {warning}
-                    </p>
-                  ))}
-                </CardContent>
-              </Card>
-            </aside>
+                  </div>
+                </section>
+              </aside>
+            </div>
           </div>
         </>
       )}
@@ -1141,18 +1301,50 @@ export function ReviewPage({ user, maps }: Props) {
         </div>
       </WorkspaceHeader>
       <Feedback error={error || resource.error} />
-      <div className="demo-room-presence">
-        <div className="flex flex-wrap items-center gap-2">
-          <UsersRound className="size-4" />
-          <span className="text-sm">{room.participants.length} anwesend</span>
-          {room.participants.map((participant) => (
-            <Badge variant="outline" key={participant.id}>
-              {participant.id === session?.moderatorId && "Captain · "}
-              {participant.name}
-              {session && (participant.ready ? " · bereit" : " · lädt")}
-              {!participant.following && " · sieht selbst nach"}
-            </Badge>
-          ))}
+      <div className="demo-room-bar demo-scope">
+        <div className="demo-room-people">
+          <span className="demo-room-count">
+            <UsersRound className="size-3.5" />
+            {room.participants.length} anwesend
+          </span>
+          {room.participants.map((participant) => {
+            const isModerator = participant.id === session?.moderatorId;
+            return (
+              <span
+                className="demo-person"
+                key={participant.id}
+                data-moderator={isModerator}
+                title={
+                  [
+                    isModerator ? "Captain" : "",
+                    session ? (participant.ready ? "bereit" : "lädt") : "",
+                    !participant.following ? "sieht selbst nach" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined
+                }
+              >
+                <span className="demo-person-initial" aria-hidden="true">
+                  {participant.name.trim().slice(0, 1) || "?"}
+                </span>
+                {participant.name}
+                {session && (
+                  <span
+                    className="demo-person-state"
+                    data-ready={participant.ready}
+                    data-following={participant.following}
+                    aria-label={
+                      !participant.following
+                        ? "sieht selbst nach"
+                        : participant.ready
+                          ? "bereit"
+                          : "lädt"
+                    }
+                  />
+                )}
+              </span>
+            );
+          })}
         </div>
         {session && (
           <Button
@@ -1168,7 +1360,7 @@ export function ReviewPage({ user, maps }: Props) {
         )}
       </div>
       {session && (
-        <p className="mb-4 text-sm text-muted-foreground">
+        <p className="demo-room-hint">
           {following
             ? moderator
               ? "Du steuerst die gemeinsame Wiedergabe. Ein Klick auf die Karte setzt den gemeinsamen Zeiger."
@@ -1197,7 +1389,7 @@ export function ReviewPage({ user, maps }: Props) {
           </Button>
         </Empty>
       ) : (
-        <div className="demo-analysis-grid">
+        <div className="demo-analysis-grid demo-scope">
           <div className="flex min-w-0 flex-col gap-5">
             <DemoPlayer
               key={`${scene.id}:${following ? "follow" : "local"}`}
@@ -1226,14 +1418,25 @@ export function ReviewPage({ user, maps }: Props) {
                   : undefined
               }
             />
-            <Card>
-              <CardHeader>
-                <CardTitle>{scene.title}</CardTitle>
-                <CardDescription className="whitespace-pre-wrap">
+            <section className="demo-scene-card" aria-labelledby="scene-title">
+              <header>
+                <p className="demo-eyebrow">
+                  <strong>
+                    Szene {index + 1} von {scenes.length}
+                  </strong>
+                  <i>·</i>
+                  <span>
+                    {demoTime(scene.start)} bis {demoTime(scene.end)}
+                  </span>
+                </p>
+                <h2 id="scene-title" className="mt-2">
+                  {scene.title}
+                </h2>
+                <p data-placeholder={!scene.note}>
                   {scene.note || "Welche Entscheidung hat diese Szene geprägt?"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+                </p>
+              </header>
+              <div className="demo-scene-body">
                 <div className="flex flex-wrap gap-2">
                   {room.canEdit && (
                     <Button
@@ -1273,7 +1476,6 @@ export function ReviewPage({ user, maps }: Props) {
                   </Button>
                 </div>
                 <form
-                  className="mt-5"
                   onSubmit={async (event) => {
                     event.preventDefault();
                     setBusy(true);
@@ -1305,45 +1507,50 @@ export function ReviewPage({ user, maps }: Props) {
                         placeholder="Was ändern wir im nächsten Training?"
                       />
                     </Field>
-                    <Button type="submit" disabled={busy || !note.trim()}>
-                      <Check data-icon="inline-start" />
-                      Festhalten
-                    </Button>
+                    <div>
+                      <Button type="submit" disabled={busy || !note.trim()}>
+                        <Check data-icon="inline-start" />
+                        Festhalten
+                      </Button>
+                    </div>
                   </FieldGroup>
                 </form>
-                <ol className="mt-5 flex flex-col gap-4">
-                  {review.notes
-                    .filter((note) => note.sceneId === scene.id)
-                    .map((note) => (
-                      <li key={note.id} className="border-l-2 pl-3">
-                        <p className="whitespace-pre-wrap text-sm">
-                          {note.text}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {note.authorName} ·{" "}
-                          {new Date(note.createdAt).toLocaleString("de-AT")}
-                        </p>
-                      </li>
-                    ))}
-                </ol>
-              </CardContent>
-            </Card>
+                {review.notes.some((entry) => entry.sceneId === scene.id) && (
+                  <ol className="demo-notes">
+                    {review.notes
+                      .filter((entry) => entry.sceneId === scene.id)
+                      .map((entry) => (
+                        <li key={entry.id}>
+                          <p>{entry.text}</p>
+                          <p>
+                            {entry.authorName} ·{" "}
+                            {new Date(entry.createdAt).toLocaleString("de-AT", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </li>
+                      ))}
+                  </ol>
+                )}
+              </div>
+            </section>
           </div>
           <aside className="flex min-w-0 flex-col gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>
+            <section className="demo-panel" aria-labelledby="agenda-title">
+              <header>
+                <h2 id="agenda-title">
                   {session ? "Gemeinsame Szenenfolge" : "Vorbereitete Szenen"}
-                </CardTitle>
-                <CardDescription>
-                  {scenes.length} Szenen ·{" "}
+                </h2>
+                <p>
+                  {scenes.length} {scenes.length === 1 ? "Szene" : "Szenen"} ·{" "}
                   {session
                     ? "Stand beim Start der Sitzung"
                     : "In dieser Reihenfolge besprecht ihr das Match"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ol className="flex flex-col gap-2">
+                </p>
+              </header>
+              <div className="demo-panel-body">
+                <ol className="demo-agenda">
                   {scenes.map((entry, at) => (
                     <li
                       key={entry.id}
@@ -1354,22 +1561,21 @@ export function ReviewPage({ user, maps }: Props) {
                         type="button"
                         className="demo-agenda-select"
                         disabled={busy}
+                        aria-current={index === at ? "true" : undefined}
                         onClick={() => changeScene(at)}
                       >
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {at + 1}
-                        </span>
+                        <span className="demo-agenda-number">{at + 1}</span>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
+                          <span className="demo-agenda-title">
                             {entry.title}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="demo-agenda-time">
                             {demoTime(entry.start)} bis {demoTime(entry.end)}
                           </span>
                         </span>
                       </button>
                       {room.canEdit && !session && (
-                        <div className="flex flex-wrap gap-1">
+                        <div className="demo-agenda-tools">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1426,19 +1632,19 @@ export function ReviewPage({ user, maps }: Props) {
                     </li>
                   ))}
                 </ol>
-                <Button asChild variant="outline" className="mt-4 w-full">
+                <Button asChild variant="outline" className="w-full">
                   <Link to={`/analysis?team=${review.teamId}`}>
                     Weitere Matches ansehen
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
-            {session && (
-              <p className="text-xs text-muted-foreground">
-                Neue Szenen werden für die nächste Sitzung vorbereitet. Diese
-                Szenenfolge bleibt während des Reviews erhalten.
-              </p>
-            )}
+                {session && (
+                  <p className="text-xs text-muted-foreground">
+                    Neue Szenen werden für die nächste Sitzung vorbereitet.
+                    Diese Szenenfolge bleibt während des Reviews erhalten.
+                  </p>
+                )}
+              </div>
+            </section>
           </aside>
         </div>
       )}

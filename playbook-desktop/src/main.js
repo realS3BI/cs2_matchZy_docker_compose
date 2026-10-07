@@ -13,6 +13,7 @@ import { Updates } from './updates.js';
 import { launchAndWait } from './launch.js';
 import { collectCS2Diagnostics, diagnosticReport } from './cs2-diagnostics.js';
 import { LiveRecorder, audioOptions } from './live-recorder.js';
+import { DemoFolder } from './demo-folder.js';
 
 const { autoUpdater } = updater;
 const exec = promisify(execFile);
@@ -28,7 +29,7 @@ const consoleConnection = new CommandPipe({ log: connectionLog, inspect: async i
   if (!diagnosis.info.listeners.some(listener => listener.port === 29000 && listener.cs2 && ['127.0.0.1', '0.0.0.0', '::'].includes(listener.address))) throw Object.assign(new Error('CS2 öffnet noch keinen lokalen Antwortkanal auf Port 29000. Bitte auf das Hauptmenü warten und erneut verbinden.'), { code: 'EVCONWAIT' });
 } });
 let lastDiagnosis = '', diagnosing = false, recoveryError;
-let liveRecorder;
+let liveRecorder, demoFolder;
 
 function startupFailed(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -107,7 +108,7 @@ async function disconnect() {
 function handle(name, work) {
   ipcMain.handle('review:' + name, async (event, ...args) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || !trusted(event.senderFrame.url)) throw new Error('Diese Seite darf CS2 nicht steuern.');
-    const start = Date.now(), verbose = !['status', 'frame', 'live-status', 'live-devices'].includes(name);
+    const start = Date.now(), verbose = !['status', 'frame', 'live-status', 'live-devices', 'demo-folder-status'].includes(name);
     if (verbose) startup.event('Review', `${name}.started`);
     try {
       const result = await work(...args);
@@ -158,6 +159,36 @@ else {
       { label: 'Ansicht', submenu: [{ role: 'resetZoom', label: 'Originalgröße' }, { role: 'zoomIn', label: 'Vergrößern' }, { role: 'zoomOut', label: 'Verkleinern' }, { role: 'togglefullscreen', label: 'Vollbild' }] },
     ]));
     const browser = session.defaultSession;
+    demoFolder = new DemoFolder({
+      directory: path.join(app.getPath('userData'), 'demo-imports'),
+      request: async (url, options = {}) => {
+        const response = await browser.fetch(ORIGIN + url, {
+          ...options, headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...options.headers },
+          signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(15 * 60_000)]) : AbortSignal.timeout(15 * 60_000),
+        });
+        const data = await response.json();
+        if (!response.ok) throw Object.assign(new Error(data.error || 'Der Demoimport konnte nicht abgeschlossen werden.'), { status: response.status });
+        return data;
+      },
+      extract: async (file, destination, signal) => {
+        const executable = app.isPackaged ? path.join(process.resourcesPath, 'Playbook.Windows.exe') : path.join(here, '../native/bin/publish/Playbook.Windows.exe');
+        try {
+          const result = await exec(executable, ['demo-extract', file, destination], { windowsHide: true, timeout: 5 * 60_000, maxBuffer: 256 * 1024, signal });
+          return JSON.parse(result.stdout);
+        } catch (error) { throw new Error(error.stderr?.trim() || 'Das Demo-Archiv konnte nicht entpackt werden.'); }
+      },
+    });
+    const demoFolderReady = demoFolder.initialize();
+    void demoFolderReady.catch(error => startup.event('Demoimport', 'initialize.failed', { error: error.message }, 'ERROR'));
+    handle('demo-folder-status', async () => { await demoFolderReady; return demoFolder.state(); });
+    handle('demo-folder-set', async folder => { await demoFolderReady; return demoFolder.setFolder(folder); });
+    handle('demo-folder-choose', async () => {
+      await demoFolderReady;
+      const choice = await dialog.showOpenDialog(window, { title: 'Demo-Ordner auswählen', properties: ['openDirectory'], defaultPath: demoFolder.folder || app.getPath('downloads') });
+      return choice.canceled ? demoFolder.state() : demoFolder.setFolder(choice.filePaths[0]);
+    });
+    handle('demo-folder-import', async options => { await demoFolderReady; return demoFolder.run(options); });
+    handle('demo-folder-cancel', () => demoFolder.cancel());
     liveRecorder = new LiveRecorder({ directory: path.join(app.getPath('userData'), 'live-recordings'),
       executable: app.isPackaged ? path.join(process.resourcesPath, 'Playbook.Windows.exe') : path.join(here, '../native/bin/publish/Playbook.Windows.exe'),
       request: async (url, options = {}) => {
@@ -246,6 +277,7 @@ else {
     handle('update-check', () => updates.check());
     handle('update-install', async () => {
       if (liveRecorder.state().recording) throw new Error('Beende die Tonaufnahme vor dem Neustart.');
+      if (demoFolder.state().running) throw new Error('Beende den Ordnerimport vor dem Neustart.');
       if (target || presentation.active || await presentation.saved()) throw new Error('Bitte den Review beenden und die Spieleinstellungen wiederherstellen, bevor die App neu startet.');
       if (updates.status.state !== 'ready') throw new Error('Es ist noch kein Update bereit.');
       quitting = true; autoUpdater.quitAndInstall(false, true);
@@ -266,6 +298,7 @@ else {
     window.on('close', event => {
       if (quitting) return;
       event.preventDefault();
+      demoFolder.cancel();
       void liveRecorder.stop(false).then(() => disconnect()).then(() => { quitting = true; app.quit(); }).catch(async () => {
         const choice = await dialog.showMessageBox(window, { type: 'warning', buttons: ['Geöffnet lassen', 'Trotzdem beenden'], defaultId: 0, cancelId: 0, message: 'CS2 konnte noch nicht wiederhergestellt werden.', detail: 'Die ursprünglichen Einstellungen bleiben lokal gesichert. Verbinde CS2 erneut, damit Playbook sie wiederherstellen kann.' });
         if (choice.response === 1) { quitting = true; app.quit(); }

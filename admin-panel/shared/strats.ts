@@ -1,6 +1,22 @@
 import type { TeamRole } from "./authorization.js";
 import type { SceneReference } from "./demos.js";
 
+export const economyOptions = [
+  { value: "fullbuy", label: "Fullbuy" },
+  { value: "semi-buy", label: "Semi-Buy" },
+  { value: "eco", label: "Eco" },
+  { value: "pistol", label: "Pistol" },
+] as const;
+export type StratEconomy = (typeof economyOptions)[number]["value"];
+
+// Missing or empty selections apply to every economy, including older strats.
+export function matchesEconomy(
+  applicable: StratEconomy[] | undefined,
+  selected: StratEconomy[],
+): boolean {
+  return !selected.length || !applicable?.length || selected.some((value) => applicable.includes(value));
+}
+
 export type TeamMember = {
   userId: string;
   role: TeamRole;
@@ -26,6 +42,8 @@ export type StratContent = {
   map: string;
   side: "t" | "ct";
   description: string;
+  ownEconomy?: StratEconomy[];
+  opponentEconomy?: StratEconomy[];
   slots: StratSlot[];
   scene?: SceneReference;
 };
@@ -64,11 +82,13 @@ export type Team = {
   revision: number;
   members: TeamMember[];
   invitations: Invitation[];
+  live?: boolean;
   active: ActiveStrat | null;
   createdAt: string;
 };
 export type TeamView = Omit<Team, "invitations"> & {
   invitations: Omit<Invitation, "hash">[];
+  live: boolean;
   permissions: Record<string, boolean>;
 };
 export type StratView = {
@@ -94,6 +114,8 @@ export function newStratContent(map = "de_mirage"): StratContent {
     map,
     side: "t",
     description: "",
+    ownEconomy: [],
+    opponentEconomy: [],
     slots: ["Entry", "Support A", "Support B", "Lurker", "AWP"].map(
       (label) => ({ id: newWorkspaceId(), label, userId: "", steps: [] }),
     ),

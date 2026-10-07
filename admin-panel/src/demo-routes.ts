@@ -9,6 +9,7 @@ import rateLimit from "express-rate-limit";
 import { DEMO_UPLOAD_LIMIT } from "../shared/demos.js";
 import { problem } from "./strats.js";
 import type { DemoStore } from "./demo-store.js";
+import { authorize } from "../shared/authorization.js";
 
 export function installDemoAnalysis(app, { store, live }) {
   const analysis: DemoStore = store.analysis;
@@ -31,6 +32,21 @@ export function installDemoAnalysis(app, { store, live }) {
     message: { error: "Bitte warte kurz vor dem nächsten Demo-Upload." },
   });
   live.get(router, "/analysis/demos", ({ user }) => analysis.list(user), 2000);
+  router.post(
+    "/analysis/demos/lookup",
+    route(async (req, res) => {
+      const actor = res.locals.user;
+      if (!authorize(actor, "demos.personal")) problem(403, "Melde dich mit Steam an.");
+      const { hash, teamId = null } = req.body || {};
+      if (typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) problem(400, "Ungültiger Datei-Fingerabdruck.");
+      if (teamId) await analysis.team(teamId, actor, "analysis.upload");
+      const existing = await analysis.demos.findOne({
+        scope: teamId ? `team:${teamId}` : `user:${actor.identitySteam64}`,
+        hash,
+      });
+      res.json({ demo: existing ? { id: existing.id, status: existing.status } : null });
+    }),
+  );
   live.get(
     router,
     "/analysis/demos/:id",

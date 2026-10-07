@@ -22,7 +22,13 @@ import { browserAudio, uploadAudioFile } from "@/lib/session-audio";
 import { LiveAudioDevices } from "./live-audio-devices";
 import { desktop } from "@/lib/playbook-desktop";
 import type { Actor } from "../../../shared/authorization";
-import type { Demo, SceneReference, Playback } from "../../../shared/demos";
+import {
+  roundEnd,
+  roundStart,
+  type Demo,
+  type SceneReference,
+  type Playback,
+} from "../../../shared/demos";
 import type { TeamView, StratView, StratContent } from "../../../shared/strats";
 import {
   audioTimeAtTick,
@@ -631,16 +637,16 @@ export function LiveSessionPage({ user, maps }: Props) {
           roundId: round.id,
           version: selectedDemo.summary.version,
           start:
-            ended && search.get("round") === round.id
-              ? Math.max(0, Number(search.get("start")) || 0)
-              : 0,
+            ended && search.get("round") === round.id && search.has("start")
+              ? Math.max(roundStart(round), Number(search.get("start")) || 0)
+              : roundStart(round),
           end:
             ended && search.get("round") === round.id
               ? Math.min(
-                  round.duration,
-                  Number(search.get("end")) || round.duration,
+                  roundEnd(round),
+                  Number(search.get("end")) || roundEnd(round),
                 )
-              : round.duration,
+              : roundEnd(round),
           focusId: "",
         }
       : null;

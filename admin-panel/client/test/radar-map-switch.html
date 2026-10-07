@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- Start pnpm dev:client and open /test/radar-map-switch.html.
+     Run await checkMapSwitch() to check the actual RadarBrowser image lifecycle.
+     For a visual loading check, pass a delayed image URL to switchMap(url). -->
+<html lang="de">
+<head><meta charset="UTF-8"><title>Kartenwechsel prüfen</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { MemoryRouter } from 'react-router-dom';
+import { RadarBrowser } from '/src/components/radar-browser.tsx';
+import { ACTIVE_DUTY_MAPS } from '/src/lib/maps.ts';
+import '/src/index.css';
+
+const root = createRoot(document.getElementById('root'));
+const map = key => ACTIVE_DUTY_MAPS.find(map => map.key === key);
+const render = value => flushSync(() => root.render(React.createElement(MemoryRouter, null,
+  React.createElement(RadarBrowser, { map: value, side: 'to', groups: [], counterparts: [],
+    onSelect() {}, onExpand() {}, onDismiss() {}, onCloseOptions() {}, href: () => '/' }))));
+const image = () => document.querySelector('.radar-browser-background image');
+const loaded = element => new Promise((resolve, reject) => {
+  const probe = new Image();
+  probe.onload = resolve;
+  probe.onerror = () => reject(Error('Radarbild konnte nicht geladen werden'));
+  probe.src = element.getAttribute('href');
+});
+const assert = (condition, message) => { if (!condition) throw Error(message); };
+
+window.switchMap = url => {
+  render({ ...map('nuke'), ...(url ? { radarUrl: url } : {}) });
+};
+window.checkMapSwitch = async () => {
+  for (const [from, to] of [['anubis', 'nuke'], ['nuke', 'ancient'], ['ancient', 'anubis']]) {
+    render(map(from));
+    await loaded(image());
+    const previous = image();
+    render(map(to));
+    assert(!previous.isConnected, 'Altes Bild bleibt beim Größenwechsel im SVG: ' + from + ' → ' + to);
+    assert(image().getAttribute('href') === map(to).radarUrl, 'Falsches Radarbild nach Kartenwechsel');
+    await loaded(image());
+    const current = image();
+    render(map(to));
+    assert(image() === current, 'Gleiches Radarbild wird unnötig neu erstellt');
+  }
+  render(map('nuke'));
+  await loaded(image());
+  const upper = image();
+  document.querySelector('.radar-level-switch button:last-child').click();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  assert(!upper.isConnected, 'Alte Ebene bleibt während des Bildwechsels im SVG');
+  assert(image().getAttribute('href') === map('nuke').radarLowerUrl, 'Untere Ebene fehlt');
+  await loaded(image());
+  return 'PASS: Karten- und Ebenenwechsel entfernen das alte Bild; unveränderte Bilder bleiben erhalten';
+};
+render(map('anubis'));
+</script></body></html>

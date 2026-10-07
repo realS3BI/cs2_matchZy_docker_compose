@@ -71,9 +71,9 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
   return (
     <Card className="mb-4">
       <CardHeader className="flex flex-wrap items-start justify-between gap-3 sm:flex-row">
-        <div className="grid gap-1.5"><CardTitle>Quick controls</CardTitle><CardDescription>Choose how and where to play.</CardDescription></div>
+        <div className="grid gap-1.5"><CardTitle>Nächste Session vorbereiten</CardTitle><CardDescription>Wähle den Spielmodus und die Map für eure Session.</CardDescription></div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={game?.map ? "success" : "outline"}><MapPinned className="size-3" />Live map: {game?.map || (loading ? "Checking…" : "Unavailable")}</Badge>
+          <Badge variant={game?.map ? "success" : "outline"}><MapPinned className="size-3" />Aktuelle Map: {game?.map || (loading ? "Wird geprüft …" : "Nicht verfügbar")}</Badge>
           <ActionButton variant="ghost" size="sm" onClick={refreshGame} disabled={disabled || loading || !running} icon={RefreshCw} pendingLabel="Wird aktualisiert …" successLabel="Aktualisiert">Live-Map aktualisieren</ActionButton>
           {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
         </div>
@@ -82,37 +82,37 @@ export function ServerControls({ settings, setSettings, policy, busy, running, o
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
             <Field>
-              <FieldLabel>Server mode</FieldLabel>
+              <FieldLabel>Spielmodus</FieldLabel>
               <Select value={settings.serverMode || "matchzy"} disabled={disabled} onValueChange={(value) => setSettings((current) => ({ ...current, serverMode: value }))}>
-                <SelectTrigger aria-label="Server mode"><SelectValue placeholder="Choose a mode" /></SelectTrigger>
+                <SelectTrigger aria-label="Spielmodus"><SelectValue placeholder="Modus auswählen" /></SelectTrigger>
                 <SelectContent>{(policy?.modes || []).map((mode) => <SelectItem key={mode.id} value={mode.id}>{mode.name}</SelectItem>)}</SelectContent>
               </Select>
               <FieldDescription>{mode?.description}</FieldDescription>
             </Field>
-            <p className="text-xs text-muted-foreground">Applied mode: {policy?.modes?.find((mode) => mode.id === game?.mode)?.name || "Unavailable"}. Applying saves all configuration edits and restarts CS2.</p>
+            <p className="text-xs text-muted-foreground">Aktiver Modus: {policy?.modes?.find((mode) => mode.id === game?.mode)?.name || "Nicht verfügbar"}. Übernehmen speichert alle Änderungen und startet CS2 neu.</p>
             <ActionButton variant="secondary" onClick={onApply} disabled={disabled} icon={UploadCloud} pendingLabel="Wird übernommen …" successLabel="Übernommen">Übernehmen & neu starten</ActionButton>
           </div>
           <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
             <Field>
-              <FieldLabel>Play map</FieldLabel>
+              <FieldLabel>Map spielen</FieldLabel>
               <Select value={selectedMap} disabled={disabled} onValueChange={setSelectedMap}>
-                <SelectTrigger aria-label="Play map"><SelectValue placeholder="Choose a map" /></SelectTrigger>
+                <SelectTrigger aria-label="Map spielen"><SelectValue placeholder="Map auswählen" /></SelectTrigger>
                 <SelectContent>
                   {!maps.some((map) => map.mapName === selectedMap) && !workshops.some((map) => map.key === selectedMap) ? <SelectItem value={selectedMap}>{selectedMap}</SelectItem> : null}
-                  <SelectGroup><SelectLabel>Server maps</SelectLabel>{maps.map((map) => <SelectItem key={map.key} value={map.mapName}>{map.name}</SelectItem>)}</SelectGroup>
-                  {workshops.length > 0 ? <SelectGroup><SelectLabel>Workshop maps</SelectLabel>{workshops.map((map) => <SelectItem key={map.key} value={map.key}>{map.name}</SelectItem>)}</SelectGroup> : null}
+                  <SelectGroup><SelectLabel>Server-Maps</SelectLabel>{maps.map((map) => <SelectItem key={map.key} value={map.mapName}>{map.name}</SelectItem>)}</SelectGroup>
+                  {workshops.length > 0 ? <SelectGroup><SelectLabel>Workshop-Maps</SelectLabel>{workshops.map((map) => <SelectItem key={map.key} value={map.key}>{map.name}</SelectItem>)}</SelectGroup> : null}
                 </SelectContent>
               </Select>
-              <FieldDescription>Switches the running game immediately. Players load the new map; the container stays running.</FieldDescription>
+              <FieldDescription>Wechselt sofort die Map im laufenden Spiel. Verbundene Spieler laden die neue Map.</FieldDescription>
             </Field>
-            <p className="text-xs text-muted-foreground">Start map: {settings.startMap}. Workshop maps must be applied first.</p>
+            <p className="text-xs text-muted-foreground">Startmap: {settings.startMap}. Neue Workshop-Maps musst du zuerst übernehmen.</p>
             <div className="mt-auto flex flex-wrap gap-2">
               <ActionButton variant="secondary" onClick={changeMap} disabled={disabled || loading || !running || liveMapSelected} icon={ArrowLeftRight} pendingLabel="Map wird gewechselt …" successLabel="Map-Wechsel gestartet">Map wechseln</ActionButton>
-              <Button variant="secondary" disabled={disabled || selectedMap.startsWith("workshop-") || settings.startMap === selectedMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap }))}>Use as start map</Button>
+              <Button variant="secondary" disabled={disabled || selectedMap.startsWith("workshop-") || settings.startMap === selectedMap} onClick={() => setSettings((current) => ({ ...current, startMap: selectedMap }))}>Als Startmap vormerken</Button>
             </div>
           </div>
         </div>
-        {!running ? <p className="text-sm text-muted-foreground">Start the server to use the live map controls.</p> : null}
+        {!running ? <p className="text-sm text-muted-foreground">Starte den Server, um die Map im laufenden Spiel zu wechseln.</p> : null}
       </CardContent>
     </Card>
   );

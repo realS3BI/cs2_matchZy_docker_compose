@@ -4,12 +4,53 @@ import { readFile, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Db } from "mongodb";
+import type { DemoSummary, RoundReplay } from "../shared/demos.js";
+
+async function verifiedSummary(folder: string): Promise<DemoSummary> {
+  const summary: DemoSummary = JSON.parse(await readFile(join(folder, "summary.json"), "utf8"));
+  if (!summary.rounds?.length) throw new Error("Die Analyse enthält keine Runden.");
+  for (const round of summary.rounds) {
+    if (!/^r\d+$/.test(round.id)) throw new Error("Ungültige Runde in der Analyse.");
+    const replay: RoundReplay = JSON.parse(await readFile(join(folder, `${round.id}.json`), "utf8"));
+    if (replay.round?.id !== round.id || !replay.frames?.length ||
+        !Array.isArray(replay.events) || !Array.isArray(replay.grenades))
+      throw new Error(`Die gespeicherten Replay-Daten für Runde ${round.number} sind unvollständig.`);
+  }
+  return summary;
+}
+
+// Persist ready results before deleting the source. A restart repeats unfinished cleanup.
+export async function removeAnalyzedOriginals(db: Db, directory: string) {
+  const assets = db.collection<any>("demoAssets");
+  const demos = await assets.find({
+    status: "ready",
+    originalCleanupPending: true,
+    $or: [{ originalCleanupRetryAt: { $exists: false } }, { originalCleanupRetryAt: { $lte: new Date() } }],
+  }).limit(10).toArray();
+  for (const demo of demos) {
+    try {
+      const folder = join(directory, demo.id);
+      await verifiedSummary(folder);
+      await rm(join(folder, "source"), { force: true });
+      await assets.updateOne({ _id: demo._id, status: "ready", originalCleanupPending: true }, {
+        $set: { originalRetained: false },
+        $unset: { originalCleanupPending: "", originalCleanupRetryAt: "", originalExpiresAt: "", analysisExpiresAt: "" },
+      });
+    } catch (error) {
+      console.error(`Originaldemo ${demo.id} konnte noch nicht entfernt werden:`, error.message);
+      await assets.updateOne({ _id: demo._id, originalCleanupPending: true }, {
+        $set: { originalCleanupRetryAt: new Date(Date.now() + 3600_000) },
+      });
+    }
+  }
+}
 
 export async function processDemoJob(
   db: Db,
   directory: string,
   signal?: AbortSignal,
 ) {
+  await removeAnalyzedOriginals(db, directory);
   const assets = db.collection<any>("demoAssets");
   const now = Date.now();
   await assets.updateMany(
@@ -102,15 +143,13 @@ export async function processDemoJob(
           );
       });
     });
-    const summary = JSON.parse(
-      await readFile(join(folder, "summary.json"), "utf8"),
-    );
+    const summary = await verifiedSummary(folder);
     const sizes = await Promise.all((await readdir(folder)).filter(file => file !== "source").map(async file => (await stat(join(folder, file))).size));
     const derivedBytes = sizes.reduce((total, size) => total + size, 0);
     await assets.updateOne(
       { _id: demo._id, claim },
       {
-        $set: { status: "ready", summary, derivedBytes, updatedAt: new Date().toISOString() },
+        $set: { status: "ready", summary, derivedBytes, originalRetained: true, originalCleanupPending: true, updatedAt: new Date().toISOString() },
         $unset: { error: "", leaseUntil: "", claim: "" },
       },
     );
@@ -137,5 +176,6 @@ export async function processDemoJob(
       );
     }
   }
+  await removeAnalyzedOriginals(db, directory);
   return true;
 }

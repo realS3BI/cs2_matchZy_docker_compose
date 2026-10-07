@@ -1,3 +1,6 @@
+import { WorkspaceNavigation } from "./components/workspace-navigation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { LiveStratsPage } from "./components/live-strats-page";
 import { useLiveResource, useLiveState } from "./hooks/use-live-resource";
 import { authorize, isServerAdmin } from "../../shared/authorization";
 import { TeamsPage, TeamPage, JoinTeamPage } from "./components/teams-page";
@@ -5,7 +8,7 @@ import { AnalysisPage, DemoPage, ReviewPage } from "./components/analysis-pages"
 import { LiveRecordingStatus } from "./components/live-recording-status";
 import { LiveSessionsPage, LiveSessionPage } from "./components/live-session-pages";
 import { MatchImportsPage, PrematchesPage, PrematchPage } from "./components/match-preparation-pages";
-import { StratsPage, StratPage, StratEditor, LiveStratsPage } from "./components/strats-page";
+import { StratsPage, StratPage, StratEditor, LiveStratSettingsPage } from "./components/strats-page";
 import { RolesPage } from "./components/roles-page";
 import { NadesMenuStatus } from "./components/nades-menu-status";
 import { AppSidebar } from "./components/app-sidebar";
@@ -25,7 +28,7 @@ import { mapPath, mapSlug, mapsForLibrary } from "./lib/maps";
 import { NadeLibrary, LegacyLibraryRedirect } from "./components/nade-library";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity,
   BookOpen,
@@ -107,7 +110,7 @@ const routePaths = {
 };
 
 const tabs = [
-  { id: "teams", path: "/teams", label: "Team-Management", icon: UsersRound, group: "Teams" },
+  { id: "teams", path: "/teams", label: "Teams", icon: UsersRound, group: "Teams" },
   { id: "analysis", path: "/analysis", label: "Analyse", icon: Activity, group: "Analyse" },
   { id: "strats", path: "/strats", label: "Strats", icon: BookOpen, group: "Strats" },
   { id: "roles", path: "/admin/roles", label: "Rollen und Rechte", icon: Shield, group: "Verwaltung" },
@@ -206,24 +209,26 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
   const connection = useLiveState();
   const activeTab = tabs.find((item) => item.id === tab) || tabs[0];
   const path = useLocation().pathname;
+  const livePage = path === "/strats/live" || path.startsWith("/strats/live/");
+  const immersive = livePage || /^\/strats\/control\/[^/]+$/.test(path);
   const workspacePage = tab === "teams" ? (path === "/teams" ? "Meine Teams" : path.includes("/join/") ? "Einladung" : "Mitglieder")
-    : tab === "strats" ? (path.includes("/live") ? "Live-Ansicht" : path.endsWith("/edit") ? "Editor" : path.endsWith("/new") ? "Neue Strat" : path === "/strats" ? "Bibliothek" : "Aufgaben") : tab === "analysis" ? (path.includes("/reviews/") ? "Team-Review" : path.includes("/demos/") ? "Matchanalyse" : "Matches und Reviews") : "";
+    : tab === "strats" ? (livePage ? "Live" : path.startsWith("/strats/control") ? "Live verwalten" : path.endsWith("/edit") ? "Editor" : path.endsWith("/new") ? "Neue Strat" : path === "/strats" ? "Bibliothek" : "Aufgaben") : tab === "analysis" ? (path.includes("/reviews/") ? "Team-Review" : path.includes("/demos/") ? "Matchanalyse" : "Matches und Reviews") : "";
   const currentPage = workspacePage || (reviewing ? "Review" : selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label));
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <a className="skip-link" href="#main-content">Zum Inhalt</a>
-        <AppSidebar user={user} serverItems={allowedTabs(user).filter(item => item.group === "Server")} adminItems={allowedTabs(user).filter(item => item.group === "Verwaltung")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} status={status} operation={operation} unavailable={statusUnavailable} />
-        <SidebarInset className="workspace-inset min-w-0">
-          <header className="control-topbar sticky top-0 z-30">
+        {!immersive && <AppSidebar user={user} serverItems={allowedTabs(user).filter(item => item.group === "Server")} adminItems={allowedTabs(user).filter(item => item.group === "Verwaltung")} onNavigate={() => {}} onLogout={onLogout} dirty={dirty} status={status} operation={operation} unavailable={statusUnavailable} />}
+        <SidebarInset className={immersive ? "workspace-inset live-workspace min-w-0" : "workspace-inset min-w-0"}>
+          {!immersive && <header className="control-topbar sticky top-0 z-30">
             <div className="topbar-inner">
               <SidebarTrigger />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem>
-                    <BreadcrumbLink asChild><NavLink to={activeTab.group === "Training" ? routePaths.maps : activeTab.group === "Server" ? routePaths.overview : activeTab.path}>{activeTab.group === "Training" ? "Maps" : activeTab.group === "Teams" ? "Team-Management" : activeTab.group}</NavLink></BreadcrumbLink>
+                    <BreadcrumbLink asChild><NavLink to={activeTab.group === "Training" ? routePaths.maps : activeTab.group === "Server" ? routePaths.overview : activeTab.path}>{activeTab.group === "Training" ? "Maps" : activeTab.group === "Teams" ? "Teams" : activeTab.group}</NavLink></BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   {selectedNade && selectedMap && <><BreadcrumbItem><BreadcrumbLink asChild><NavLink to={mapPath(selectedMap)}>{selectedMap.name}</NavLink></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /></>}
@@ -233,12 +238,13 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
               </Breadcrumb>
               <div className="topbar-status"><Badge variant={connection === "connected" ? "secondary" : "outline"} role="status">{connection === "connected" ? "Live verbunden" : connection === "connecting" ? "Verbindung wird aufgebaut …" : "Live-Verbindung unterbrochen"}</Badge></div>
             </div>
-          </header>
-        <div id="main-content" className="control-content control-main min-w-0" tabIndex={-1}>
-          <LiveRecordingStatus userId={user.identitySteam64} />
+          </header>}
+        <div id="main-content" className={immersive ? "live-content min-w-0" : "control-content control-main min-w-0"} tabIndex={-1}>
+          {!immersive && <LiveRecordingStatus userId={user.identitySteam64} />}
+          {["Server", "Verwaltung"].includes(activeTab.group) && <WorkspaceNavigation label={`${activeTab.group}-Navigation`} items={allowedTabs(user).filter(item => item.group === activeTab.group && (activeTab.group !== "Server" || ["overview", "server", "plugins", "maintenance"].includes(item.id))).sort((a, b) => activeTab.group === "Verwaltung" ? ["access", "roles", "reviews"].indexOf(a.id) - ["access", "roles", "reviews"].indexOf(b.id) : 0).map(item => ({ label: item.label, path: item.path }))} />}
           <NadeFavoritesProvider key={user.identitySteam64}>{children}</NadeFavoritesProvider>
           {authorize(user, "server.match") && ["overview", "server", "plugins", "maintenance"].includes(tab) && <section className="server-save-panel" aria-label="Servereinstellungen speichern">
-            <div><h2>Servereinstellungen übernehmen</h2><p>{dirty ? "Du hast ungespeicherte Änderungen." : "Der aktuelle Entwurf ist gespeichert."} Ein Neustart trennt verbundene Spieler.</p></div>
+            <div><h2>{dirty ? "Ungespeicherte Änderungen" : "Gespeicherter Entwurf"}</h2><p>Speichern hinterlegt den Entwurf. Übernehmen aktiviert alle Einstellungen und startet den Server neu.</p></div>
             <div className="flex flex-wrap gap-2">
               <ActionButton variant="secondary" onClick={onSave} disabled={!dirty || busy} icon={Save} pendingLabel="Wird gespeichert …" successLabel="Gespeichert">Entwurf speichern</ActionButton>
               <ActionButton onClick={onApply} disabled={busy} icon={RotateCcw} pendingLabel="Wird übernommen …" successLabel="Übernommen">Übernehmen & neu starten</ActionButton>
@@ -252,9 +258,9 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
 }
 
 function formatDate(value) {
-  if (!value) return "Not yet";
+  if (!value) return "Noch nicht";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Unbekannt" : date.toLocaleString();
 }
 
 function PageHeader({ eyebrow, title, description, actions = null }) {
@@ -279,27 +285,27 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
   const activeMode = (policy?.modes || []).find((mode) => mode.id === settings.serverMode) || policy?.mode;
   const enabledPlugins = (policy?.plugins || []).filter((plugin) => plugin.locked || (plugin.settingKey ? settings[plugin.settingKey] : plugin.enabled)).length;
   const metrics = [
-    { label: "Player slots", value: settings.maxPlayers || "Not set", detail: "Configured capacity", icon: UsersRound },
-    { label: "Plugins", value: enabledPlugins, detail: "Enabled components", icon: Boxes },
+    { label: "Spielerplätze", value: settings.maxPlayers || "Nicht festgelegt", detail: "Konfigurierte Kapazität", icon: UsersRound },
+    { label: "Plugins", value: enabledPlugins, detail: "Aktive Komponenten", icon: Boxes },
     { label: "Benutzer", value: admins.length, detail: "Registrierte Steam-Konten", icon: Shield },
-    { label: "Nade library", value: nades.length, detail: nades.length === 1 ? "Saved lineup" : "Saved lineups", icon: Crosshair }
+    { label: "Lineup-Bibliothek", value: nades.length, detail: nades.length === 1 ? "Gespeichertes Lineup" : "Gespeicherte Lineups", icon: Crosshair }
   ];
 
   return (
     <>
       <PageHeader
         eyebrow="Serververwaltung"
-        title={settings.serverName || "CS2 server"}
+        title={settings.serverName || "CS2-Server"}
         description="Verwalte deinen CS2-Server, wechsle den Modus und bereite die nächste Session vor."
-        actions={<div className="flex gap-2"><ActionButton variant="secondary" onClick={onRefresh} disabled={busy} icon={RefreshCw} pendingLabel="Wird aktualisiert …" successLabel="Aktualisiert">Aktualisieren</ActionButton><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Restart now</Button></div>}
+        actions={<div className="flex gap-2"><ActionButton variant="secondary" onClick={onRefresh} disabled={busy} icon={RefreshCw} pendingLabel="Wird aktualisiert …" successLabel="Aktualisiert">Aktualisieren</ActionButton><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Jetzt neu starten</Button></div>}
       />
       {setupRequired ? (
         <Alert className="mb-4" variant="warning">
-          <AlertTitle>Initial server setup required</AlertTitle>
-          <AlertDescription>Open Server, enter the Steam Game Server Login Token and an RCON password, then choose Apply &amp; restart. The CS2 process waits until both values exist.</AlertDescription>
+          <AlertTitle>Server noch nicht eingerichtet</AlertTitle>
+          <AlertDescription>Trage unter Einstellungen → Zugang & Sicherheit einen Steam-Token und ein RCON-Passwort ein. Mit „Übernehmen & neu starten“ startest du anschließend den Server.</AlertDescription>
         </Alert>
       ) : null}
-      <section className="overview-metrics mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Server at a glance">
+      <section className="overview-metrics mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Server auf einen Blick">
         {metrics.map((metric) => {
           const Icon = metric.icon;
           return (
@@ -321,101 +327,111 @@ function Overview({ settings, setSettings, admins, nades, status, policy, onRefr
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div className="grid gap-1.5">
-              <CardTitle>Server overview</CardTitle>
-              <CardDescription>{activeMode?.description || "Current runtime configuration."}</CardDescription>
+              <CardTitle>Serverstatus</CardTitle>
+              <CardDescription>{activeMode?.description || "Aktuelle Serverkonfiguration."}</CardDescription>
             </div>
             <Badge variant={setupRequired ? "warning" : service?.state === "running" ? "success" : "destructive"}>
               <span className="server-status-dot" />
-              {setupRequired ? "waiting for setup" : service?.state || "unknown"}
+              {setupRequired ? "Wartet auf Einrichtung" : ({ running: "Läuft", exited: "Beendet", restarting: "Startet neu", created: "Erstellt" }[service?.state] || "Unbekannt")}
             </Badge>
           </CardHeader>
           <CardContent className="grid gap-6">
             <dl className="grid gap-4 rounded-lg border border-border bg-muted/35 p-4 sm:grid-cols-3">
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Selected mode</dt><dd className="text-sm font-medium">{activeMode?.name || settings.serverMode || "Not set"}</dd></div>
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Start map</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{settings.startMap || "Not set"}</dd></div>
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Container</dt><dd className="font-mono text-xs">{service?.containerName || "Not detected"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Gewählter Modus</dt><dd className="text-sm font-medium">{activeMode?.name || settings.serverMode || "Nicht festgelegt"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Startmap</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{settings.startMap || "Nicht festgelegt"}</dd></div>
+              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Container</dt><dd className="font-mono text-xs">{service?.containerName || "Nicht erkannt"}</dd></div>
             </dl>
-            <div>
-              <p className="mb-4 text-sm font-medium">Lifecycle</p>
-              <ol className="lifecycle-rail">
-                {["Coolify image", "Bootstrap", "Game process", "Daily recycle"].map((label, index) => (
-                  <li key={label}><span className={cn("lifecycle-node", index < 3 && service?.state === "running" && "lifecycle-node-active")}>{index < 3 && service?.state === "running" ? <Check /> : <CircleDot />}</span><span>{label}</span></li>
-                ))}
-              </ol>
-            </div>
+
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Operations</CardTitle><CardDescription>Maintenance and the latest panel action.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Wartung</CardTitle><CardDescription>Zeitplan für den nächsten automatischen Neustart.</CardDescription></CardHeader>
           <CardContent className="grid gap-5">
             <div className="grid gap-1">
-              <p className="text-xs text-muted-foreground">Next maintenance</p>
+              <p className="text-xs text-muted-foreground">Automatischer Neustart</p>
               <p className="text-2xl font-semibold tracking-tight">{maintenance?.enabled ? "Alle 2 Stunden" : "Deaktiviert"}</p>
               <p className="text-xs text-muted-foreground">Bei Spielern: neuer Versuch in 1 Stunde</p>
             </div>
             <Separator />
             <div className="grid gap-1">
-              <p className="text-xs text-muted-foreground">Next run</p>
+              <p className="text-xs text-muted-foreground">Nächster Versuch</p>
               <p className="text-sm font-medium">{formatDate(maintenance?.nextRunAt)}</p>
             </div>
-            <Button variant="secondary" asChild><NavLink to={routePaths.maintenance}><CalendarClock data-icon="inline-start" />View maintenance</NavLink></Button>
+            <Button variant="secondary" asChild><NavLink to={routePaths.maintenance}><CalendarClock data-icon="inline-start" />Wartung öffnen</NavLink></Button>
           </CardContent>
         </Card>
         <Card className="xl:col-span-2">
-          <CardHeader><CardTitle>Latest control action</CardTitle><CardDescription>The newest saved operation from this control panel.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Letzte Serveraktion</CardTitle><CardDescription>Die zuletzt gespeicherte Aktion aus der Serververwaltung.</CardDescription></CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-[160px_130px_1fr] sm:items-start">
-            <span className="text-sm">{last?.type || "No action"}</span>
-            <Badge className="w-fit" variant={last?.status === "failed" ? "destructive" : "success"}>{last?.status || "idle"}</Badge>
-            <span className="line-clamp-2 text-sm text-muted-foreground">{last?.message || "The server has not recorded a control action yet."}</span>
+            <span className="text-sm">{last?.type || "Noch keine Aktion"}</span>
+            <Badge className="w-fit" variant={last?.status === "failed" ? "destructive" : "success"}>{({ failed: "Fehlgeschlagen", success: "Erfolgreich", completed: "Abgeschlossen", running: "Läuft" }[last?.status] || "Keine aktive Aktion")}</Badge>
+            <span className="line-clamp-2 text-sm text-muted-foreground">{last?.message || "Es wurde noch keine Serveraktion protokolliert."}</span>
           </CardContent>
         </Card>
       </section>
-      <nav className="quick-links mt-5" aria-label="Common destinations">
-        <p className="control-kicker">Explore workspace</p>
+      <nav className="quick-links mt-5" aria-label="Weitere Serverwerkzeuge">
+        <p className="control-kicker">Weitere Werkzeuge</p>
         <div className="quick-links-grid">
-          <NavLink to={routePaths.maps}><MapPinned aria-hidden="true" /><span>Map atlas</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={routePaths.nades}><Crosshair aria-hidden="true" /><span>Nade library</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={routePaths.diagnostics}><Activity aria-hidden="true" /><span>Diagnostics</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={routePaths.logs}><Terminal aria-hidden="true" /><span>Server logs</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.maps}><MapPinned aria-hidden="true" /><span>Maps</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.nades}><Crosshair aria-hidden="true" /><span>Lineup-Bibliothek</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.diagnostics}><Activity aria-hidden="true" /><span>Diagnose</span><ChevronRight aria-hidden="true" /></NavLink>
+          <NavLink to={routePaths.logs}><Terminal aria-hidden="true" /><span>Server-Logs</span><ChevronRight aria-hidden="true" /></NavLink>
         </div>
       </nav>
       <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. The last saved settings will be applied; unsaved edits will not.</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter>
+          <DialogHeader><DialogTitle>CS2-Server jetzt neu starten?</DialogTitle><DialogDescription>Verbundene Spieler werden getrennt. Der Server startet mit den zuletzt gespeicherten Einstellungen. Ungespeicherte Änderungen bleiben im Entwurf.</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
   );
 }
 
-function Settings({ settings, setSettings, policy }) {
+function Settings({ settings, setSettings, policy, status, busy }) {
+  const [params, setParams] = useSearchParams();
+  const categories = [
+    { id: "general", label: "Allgemein", groups: ["identity"] },
+    { id: "access", label: "Zugang & Sicherheit", groups: ["registration", "security"] },
+    { id: "maps", label: "Server-Maps", groups: [] },
+    { id: "training", label: "Training", groups: ["matchzy", "training-hud"] },
+    { id: "advanced", label: "Erweitert", groups: ["versions", "advanced"] },
+  ];
+  const category = categories.some(item => item.id === params.get("section")) ? params.get("section") : "general";
   function setValue(key, value) {
-    setSettings((current) => ({ ...current, [key]: value }));
+    setSettings(current => ({ ...current, [key]: value }));
   }
-
-  return (
-    <>
-      <PageHeader eyebrow="Configuration" title="Servereinstellungen" description="Verbindung, Spielbetrieb und Zugangsdaten für deinen CS2-Server." />
-      <div className="grid gap-4">
-        {(policy?.settingsGroups || []).filter((group) => group.id !== "workshop" && (group.id !== "matchzy" || settings.serverMode === "matchzy")).map((group) => (
-          <Card key={group.id}>
-            <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {group.fields.filter((field) => !["matchZySaveNadesGlobally", "startMap"].includes(field.key) && (field.key !== "matchZyVersion" || settings.serverMode === "matchzy")).map((field) => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={(value) => setValue(field.key, value)} />)}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </>
-  );
+  function groupsFor(ids: string[]) {
+    return (policy?.settingsGroups || []).filter(group => ids.includes(group.id) && (group.id !== "matchzy" || settings.serverMode === "matchzy")).map(group => {
+      const credentials = ["joinPassword", "rconPassword"];
+      const fields = group.fields.filter(field => !["matchZySaveNadesGlobally", "startMap"].includes(field.key) && (field.key !== "matchZyVersion" || settings.serverMode === "matchzy") && !credentials.includes(field.key));
+      return <Card key={group.id}>
+        <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
+        <CardContent><FieldGroup className="grid gap-5 md:grid-cols-2">
+          {fields.map(field => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={value => setValue(field.key, value)} />)}
+        </FieldGroup></CardContent>
+      </Card>;
+    });
+  }
+  const identity = policy?.settingsGroups?.find(group => group.id === "identity");
+  return <>
+    <PageHeader eyebrow="Server" title="Einstellungen" description="Passe den gespeicherten Entwurf an. Mit „Übernehmen & neu starten“ werden deine Änderungen auf dem Server wirksam." />
+    <Tabs className="workspace-tabs" value={category} onValueChange={section => setParams(current => { const next = new URLSearchParams(current); next.set("section", section); return next; })}>
+      <div className="overflow-x-auto pb-2"><TabsList variant="line" className="mb-4" aria-label="Einstellungsbereiche">{categories.map(item => <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>)}</TabsList></div>
+      {categories.map(item => <TabsContent key={item.id} value={item.id} className="flex flex-col gap-5">
+        {groupsFor(item.groups)}
+        {item.id === "access" && <Card><CardHeader><CardTitle>Passwörter</CardTitle><CardDescription>Das Serverpasswort regelt den Beitritt. Mit dem RCON-Passwort lässt sich der Server fernsteuern.</CardDescription></CardHeader><CardContent><FieldGroup className="grid gap-5 md:grid-cols-2">{(identity?.fields || []).filter(field => ["joinPassword", "rconPassword"].includes(field.key)).map(field => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={value => setValue(field.key, value)} />)}</FieldGroup></CardContent></Card>}
+        {item.id === "maps" && <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />}
+      </TabsContent>)}
+    </Tabs>
+  </>;
 }
 
 function SettingField({ field, value, onChange }) {
   if (field.type === "boolean") {
     const isVac = field.key === "vacEnabled";
     return (
-      <Field htmlFor={`setting-${field.key}`} className={cn("flex min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3", isVac && "justify-between md:col-span-2 xl:col-span-3")}>
+      <Field htmlFor={`setting-${field.key}`} className={cn("flex min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3", isVac && "justify-between md:col-span-2")}>
         <span className="min-w-0"><FieldLabel>{field.label}</FieldLabel>
           {isVac ? <FieldDescription id={`setting-${field.key}-description`} className="mt-1 block" aria-live="polite">
             {value === true ? "VAC aktiviert · Zugang mit -insecure nicht möglich." : "VAC deaktiviert · Zugang mit und ohne -insecure möglich. Automatische Playbook-Reviews sind möglich."}
@@ -428,9 +444,9 @@ function SettingField({ field, value, onChange }) {
   }
   const Control = field.type === "textarea" ? Textarea : Input;
   return (
-    <Field className={field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : ""}>
+    <Field htmlFor={`setting-${field.key}`} className={field.type === "textarea" ? "md:col-span-2" : ""}>
       <FieldLabel>{field.label}</FieldLabel>
-      <Control placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)} />
+      <Control id={`setting-${field.key}`} placeholder={field.placeholder} type={field.type === "password" ? "password" : field.type} value={value} onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)} />
       {field.description ? <FieldDescription>{field.description}</FieldDescription> : null}
     </Field>
   );
@@ -516,9 +532,9 @@ function Plugins({ settings, setSettings, policy, showDiagnostics = true }) {
   const mode = settings.serverMode || "matchzy";
   return (
     <>
-      <PageHeader eyebrow="Compatibility policy" title="Game modes & plugins" description="Choose one game mode and control the optional components installed with it." />
+      <PageHeader eyebrow="Server" title="Modi & Plugins" description="Wähle den Spielmodus und die zusätzlichen Plugins für den nächsten Serverstart." />
       <Card className="mb-4">
-        <CardHeader><CardTitle>Server mode</CardTitle><CardDescription>Choose the game flow for the next server start.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Spielmodus</CardTitle><CardDescription>Ein Modus ist aktiv. Die Auswahl wird mit „Übernehmen & neu starten“ wirksam.</CardDescription></CardHeader>
         <CardContent>
           <RadioGroup
             className="lg:grid-cols-3"
@@ -536,14 +552,14 @@ function Plugins({ settings, setSettings, policy, showDiagnostics = true }) {
       </Card>
       {showDiagnostics && <NadesMenuStatus selectedMode={mode} />}
       <Card>
-        <CardHeader><CardTitle>Plugin stack</CardTitle><CardDescription>Core dependencies are locked. Optional components default to off on new installations.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Plugins</CardTitle><CardDescription>Grundkomponenten sind immer aktiv. Zusätzliche Plugins kannst du einzeln einschalten.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
           {(policy?.plugins || []).filter((plugin) => !["matchzy", "nades"].includes(plugin.id)).map((plugin) => {
             const enabled = plugin.locked || settings[plugin.settingKey] === true;
             return (
               <div key={plugin.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">
-                <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{plugin.name}</h3>{plugin.locked ? <Badge variant="outline">core</Badge> : null}{enabled ? <Badge variant="success">enabled</Badge> : <Badge variant="outline">off</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{plugin.detail}</p><p className="mt-2 text-xs text-muted-foreground">Requires: {plugin.dependencies.length ? plugin.dependencies.join(" · ") : "none"}</p>{plugin.url ? <a className="plugin-reference-link" href={plugin.url} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Project &amp; documentation</a> : null}{plugin.warning && enabled ? <Alert className="mt-3" variant="warning"><AlertDescription>{plugin.warning}</AlertDescription></Alert> : null}</div>
-                {plugin.locked ? <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required</span> : <Switch aria-label={`Enable ${plugin.name}`} checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, [plugin.settingKey]: next }))} />}
+                <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{plugin.name}</h3>{plugin.locked ? <Badge variant="outline">Grundkomponente</Badge> : null}{enabled ? <Badge variant="success">Aktiv</Badge> : <Badge variant="outline">Aus</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{plugin.detail}</p><p className="mt-2 text-xs text-muted-foreground">Benötigt: {plugin.dependencies.length ? plugin.dependencies.join(" · ") : "Keine"}</p>{plugin.url ? <a className="plugin-reference-link" href={plugin.url} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Projekt &amp; Dokumentation</a> : null}{plugin.warning && enabled ? <Alert className="mt-3" variant="warning"><AlertDescription>{plugin.warning}</AlertDescription></Alert> : null}</div>
+                {plugin.locked ? <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Erforderlich</span> : <Switch aria-label={`${plugin.name} aktivieren`} checked={enabled} onCheckedChange={(next) => setSettings((current) => ({ ...current, [plugin.settingKey]: next }))} />}
               </div>
             );
           })}
@@ -577,7 +593,7 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
           </CardContent>
         </Card>
       </div>
-      <Dialog open={restartOpen} onOpenChange={setRestartOpen}><DialogContent><DialogHeader><DialogTitle>Restart the CS2 server now?</DialogTitle><DialogDescription>Connected players will be disconnected. This does not apply unsaved draft changes.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter></DialogContent></Dialog>
+      <Dialog open={restartOpen} onOpenChange={setRestartOpen}><DialogContent><DialogHeader><DialogTitle>CS2-Server jetzt neu starten?</DialogTitle><DialogDescription>Verbundene Spieler werden getrennt. Ungespeicherte Änderungen werden dabei nicht übernommen.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter></DialogContent></Dialog>
     </>
   );
 }
@@ -704,7 +720,7 @@ function WorkshopMapDialog({ open, onOpenChange, onAdd }) {
             {draft.radarUrl ? <img className="max-h-56 w-full rounded-lg border border-border bg-sidebar object-contain" src={draft.radarUrl} alt="Workshop radar preview" /> : null}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Abbrechen</Button>
             <Button type="submit" disabled={submitting}><PackagePlus data-icon="inline-start" />{submitting ? "Adding…" : "Add map"}</Button>
           </DialogFooter>
         </form>
@@ -788,7 +804,7 @@ function DockerLogs({ active }) {
 
   return (
     <>
-      <PageHeader eyebrow="Runtime output" title="Docker logs" description="Live output from the CS2 container, newest lines at the bottom." />
+      <PageHeader eyebrow="Serverbetrieb" title="Server-Logs" description="Live-Ausgabe des CS2-Containers. Die neuesten Einträge stehen unten." />
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center gap-2 p-3 sm:p-3">
           <Button variant="secondary" onClick={loadLogs} disabled={loading}>
@@ -800,26 +816,26 @@ function DockerLogs({ active }) {
             {autoRefresh ? "Live-Updates an" : "Live-Updates pausiert"}
           </Button>
           <Field className="ml-auto flex grid-cols-[auto_100px] items-center gap-2">
-            <FieldLabel className="text-muted-foreground">Lines</FieldLabel>
+            <FieldLabel className="text-muted-foreground">Zeilen</FieldLabel>
             <Select value={String(tail)} onValueChange={(value) => setTail(Number(value))}>
-              <SelectTrigger className="w-28" aria-label="Number of log lines"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-28" aria-label="Anzahl der Log-Zeilen"><SelectValue /></SelectTrigger>
               <SelectContent>{[100, 300, 800, 1500].map((count) => <SelectItem key={count} value={String(count)}>{count}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <span className="text-xs text-muted-foreground">{updatedAt ? `Updated ${updatedAt}` : ""}</span>
+          <span className="text-xs text-muted-foreground">{updatedAt ? `Aktualisiert um ${updatedAt}` : ""}</span>
         </CardContent>
       </Card>
       {logError ? <Message error={logError} /> : null}
       <Card>
         <CardHeader>
-          <CardTitle>CS2 Docker Logs</CardTitle>
+          <CardTitle>CS2-Container</CardTitle>
         </CardHeader>
         <CardContent>
           <pre
             ref={logRef}
             className="log-console h-[62vh] overflow-auto whitespace-pre-wrap rounded-lg border border-sidebar-border p-4 font-mono text-xs leading-relaxed"
           >
-            {logs || (loading ? "Loading logs..." : "No logs available.")}
+            {logs || (loading ? "Logs werden geladen …" : "Noch keine Logs vorhanden.")}
           </pre>
         </CardContent>
       </Card>
@@ -916,8 +932,8 @@ function App() {
   useEffect(() => {
     document.title = authenticated === false
       ? "Anmelden | Playbook"
-      : `${reviewing ? "Review · " : ""}${selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | Playbook`;
-  }, [activeTab.label, authenticated, selectedMap?.name, selectedNade, reviewing]);
+      : `${reviewing ? "Review · " : ""}${location.pathname.startsWith("/strats/live") ? "Live" : selectedNade?.displayName || selectedNade?.name || selectedMap?.name || activeTab.label} | Playbook`;
+  }, [activeTab.label, authenticated, selectedMap?.name, selectedNade, reviewing, location.pathname]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -1002,6 +1018,8 @@ function App() {
         <Route path="/strats" element={<StratsPage user={user} nades={nades} maps={libraryMaps} />} />
         <Route path="/strats/new" element={<StratEditor user={user} nades={nades} maps={libraryMaps} />} />
         <Route path="/strats/:stratId/edit" element={<StratEditor user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/control" element={<LiveStratSettingsPage user={user} nades={nades} maps={libraryMaps} />} />
+        <Route path="/strats/control/:teamId" element={<LiveStratSettingsPage user={user} nades={nades} maps={libraryMaps} />} />
         <Route path="/strats/live" element={<LiveStratsPage user={user} nades={nades} maps={libraryMaps} />} />
         <Route path="/strats/live/:teamId" element={<LiveStratsPage user={user} nades={nades} maps={libraryMaps} />} />
         <Route path="/strats/:stratId" element={<StratPage user={user} nades={nades} maps={libraryMaps} />} />
@@ -1029,14 +1047,13 @@ function App() {
           path={routePaths.diagnostics}
           element={(
             <>
-              <PageHeader eyebrow="Health trace" title="Diagnostics" description="Follow the container, installer, framework and selected game mode through one load path." />
+              <PageHeader eyebrow="Serverbetrieb" title="Diagnose" description="Prüfe den Zustand von Container, Installation, Framework und Spielmodus." />
               <Diagnostics active onOpenLogs={() => navigate(routePaths.logs)} />
             </>
           )}
         />
         <Route path={routePaths.server} element={<>
-          <Settings settings={settings} setSettings={setSettings} policy={policy} />
-          <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />
+          <Settings settings={settings} setSettings={setSettings} policy={policy} status={status} busy={busy} />
         </>} />
         <Route path={routePaths.reviews} element={<ReviewQueuePage maps={libraryMaps} nades={nades} user={user} onRefresh={refreshLibrary} onEntriesChange={setNades} />} />
         <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={isServerAdmin(user)} /></>} />

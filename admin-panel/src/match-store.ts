@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Db, Collection } from "mongodb";
-import { authorize, type Actor } from "../shared/authorization.js";
+import { authorize, isPlatformAdmin, type Actor } from "../shared/authorization.js";
 import type { MatchEntry, Prematch } from "../shared/matches.js";
 import { problem, textField } from "./strats.js";
 import {
@@ -22,6 +22,7 @@ export class MatchStore {
   readonly entries: Collection<any>;
   readonly connections: Collection<any>;
   readonly preparations: Collection<any>;
+  readonly providerCredentials: Collection<any>;
   readonly secrets: SourceSecrets | null;
   readonly steam = new SteamDemoResolver();
   private syncing = new Set<string>();
@@ -34,6 +35,7 @@ export class MatchStore {
     this.entries = db.collection("matchIndex");
     this.connections = db.collection("matchConnections");
     this.preparations = db.collection("prematches");
+    this.providerCredentials = db.collection("matchProviderCredentials");
     this.secrets = config.sessionSecret
       ? new SourceSecrets(config.sessionSecret)
       : null;
@@ -46,6 +48,49 @@ export class MatchStore {
     await this.entries.createIndex({ teamId: 1, playedAt: -1 });
     await this.connections.createIndex({ ownerId: 1 });
     await this.preparations.createIndex({ teamId: 1, updatedAt: -1 });
+    const credentials = await this.providerCredentials.findOne({ _id: "faceit" });
+    if (credentials && this.secrets) {
+      if (credentials.apiKey) this.config.faceitApiKey = this.secrets.decrypt(credentials.apiKey);
+      if (credentials.downloadsToken) this.config.faceitDownloadsToken = this.secrets.decrypt(credentials.downloadsToken);
+    }
+  }
+  async configureFaceit(actor: Actor, input: any) {
+    if (!isPlatformAdmin(actor)) problem(403, "Nur Plattform-Admins dürfen den FACEIT-Zugang einrichten.");
+    if (!this.secrets) problem(503, "Der sichere Quellenzugang ist noch nicht eingerichtet.");
+    if (!input || typeof input !== "object" || Array.isArray(input)) problem(400, "Gib einen FACEIT-Zugang ein.");
+    for (const field of ["apiKey", "downloadsToken"]) {
+      if (input[field] !== undefined && (typeof input[field] !== "string" || !/^[\x21-\x7e]{1,8192}$/.test(input[field])))
+        problem(400, "Der FACEIT-Zugang darf keine Leerzeichen enthalten und höchstens 8192 Zeichen lang sein.");
+    }
+    if (!input.apiKey && !input.downloadsToken) problem(400, "Gib einen API-Schlüssel oder einen Downloads-Token ein.");
+    if (!input.apiKey && !this.config.faceitApiKey) problem(400, "Richte zuerst den FACEIT-API-Schlüssel ein.");
+    if (input.apiKey) {
+      await sourceJson("https://open.faceit.com/data/v4/games/cs2", {
+        headers: { Authorization: `Bearer ${input.apiKey}` },
+      });
+    }
+    const encrypted: Record<string, string> = {};
+    if (input.apiKey) encrypted.apiKey = this.secrets.encrypt(input.apiKey);
+    if (input.downloadsToken) encrypted.downloadsToken = this.secrets.encrypt(input.downloadsToken);
+    await this.providerCredentials.updateOne(
+      { _id: "faceit" },
+      { $set: { ...encrypted, updatedAt: new Date(), updatedBy: actor.identitySteam64 } },
+      { upsert: true },
+    );
+    if (input.apiKey) this.config.faceitApiKey = input.apiKey;
+    if (input.downloadsToken) this.config.faceitDownloadsToken = input.downloadsToken;
+    if (input.downloadsToken) {
+      await this.entries.updateMany(
+        { source: "faceit", demoId: null, demoStatus: "access_required", "demoUrls.0": { $exists: true } },
+        { $set: { demoStatus: "available", nextDownloadAt: new Date() }, $unset: { error: "" } },
+      );
+    }
+    await this.connections.updateMany(
+      { source: "faceit", enabled: true },
+      { $set: { nextSyncAt: new Date() }, $unset: { lastError: "" } },
+    );
+    this.analysis.changed();
+    return { ok: true };
   }
   async scope(actor: Actor, teamId?: string | null, edit = false) {
     if (teamId) {

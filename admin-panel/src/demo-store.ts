@@ -11,6 +11,7 @@ import type {
   RoundReplay,
   ReviewRoom,
 } from "../shared/demos.js";
+import { roundEnd, roundStart } from "../shared/demos.js";
 import { newStratContent, type Team } from "../shared/strats.js";
 import { problem, textField, sceneReference } from "./strats.js";
 import type { WorkspaceStore } from "./workspace-store.js";
@@ -192,7 +193,8 @@ export class DemoStore {
       demo.status !== "ready" ||
       !round ||
       scene.version !== demo.summary.version ||
-      scene.end > round.duration + 0.001
+      scene.start < roundStart(round) - 0.001 ||
+      scene.end > roundEnd(round) + 0.001
     )
       problem(400, "Der Ausschnitt liegt außerhalb einer verfügbaren Runde.");
     if (

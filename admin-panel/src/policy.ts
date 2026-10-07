@@ -57,10 +57,10 @@ type SettingsGroup = {
 };
 
 export const GAME_MODES = [
-  { id: "matchzy", name: "MatchZy", description: "Competitive matches with MatchZy." },
+  { id: "matchzy", name: "MatchZy", description: "Wettkampf und Practice mit MatchZy." },
   { id: "nades", name: "Nades", description: "Eigenständiges Playbook-Granatentraining mit Lineups und Ingame-Panel, ohne MatchZy." },
-  { id: "warmup", name: "Warmup / Aim Botz", description: "Solo aim training with bots on the Aim Botz Workshop map." },
-  { id: "vanilla", name: "Vanilla + framework", description: "No match mode plugin; Metamod and CounterStrikeSharp remain available." }
+  { id: "warmup", name: "Warmup / Aim Botz", description: "Aim-Training mit Bots auf der Aim-Botz-Workshop-Map." },
+  { id: "vanilla", name: "Vanilla + framework", description: "CS2 ohne Match-Plugin. Metamod und CounterStrikeSharp bleiben verfügbar." }
 ];
 
 export const ADMIN_ROLES = [
@@ -72,20 +72,20 @@ export const ADMIN_ROLES = [
 
 export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
-    id: "registration", title: "Steam registration", description: "Required once before the game server can start.",
+    id: "registration", title: "Steam-Anmeldung", description: "Der Steam-Token wird für den ersten Serverstart benötigt.",
     fields: [
-      { key: "steamToken", label: "Steam Game Server Login Token", type: "password", description: "The GSLT for app 730. Stored in MongoDB and only written to the private runtime volume." }
+      { key: "steamToken", label: "Steam Game Server Login Token", type: "password", description: "Game Server Login Token für CS2, App 730. Wird im privaten Serverbereich gespeichert." }
     ]
   },
   {
-    id: "identity", title: "Server identity", description: "The public name, slots and initial map.",
+    id: "identity", title: "Name und Spielbetrieb", description: "Öffentlicher Servername, Spielerplätze und Nachrichten im Spiel.",
     fields: [
-      { key: "serverName", label: "Server name", type: "text" },
+      { key: "serverName", label: "Servername", type: "text" },
       { key: "matchZyChatPrefix", label: "Gemeinsamer Chat-Präfix", type: "text", placeholder: "[{Green}Playbook{Default}]", description: "Für Playbook und MatchZy. Leer verwendet Playbook." },
-      { key: "maxPlayers", label: "Max players", type: "number" },
-      { key: "startMap", label: "Start map", type: "text", description: "Used by MatchZy, Nades and Vanilla. Warmup always starts Aim Botz." },
-      { key: "joinPassword", label: "Join password", type: "password" },
-      { key: "rconPassword", label: "RCON password", type: "password" }
+      { key: "maxPlayers", label: "Maximale Spielerzahl", type: "number" },
+      { key: "startMap", label: "Startmap", type: "text", description: "Für MatchZy, Nades und Vanilla. Warmup startet immer Aim Botz." },
+      { key: "joinPassword", label: "Serverpasswort", type: "password" },
+      { key: "rconPassword", label: "RCON-Passwort", type: "password" }
     ]
   },
   {
@@ -95,22 +95,22 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ]
   },
   {
-    id: "matchzy", title: "MatchZy behavior", description: "Nur für den MatchZy-Modus.", mode: "matchzy",
+    id: "matchzy", title: "MatchZy-Training", description: "Nur für den MatchZy-Modus.", mode: "matchzy",
     fields: [
-      { key: "matchZySmokeColor", label: "Colored practice smokes", type: "boolean" },
-      { key: "matchZySaveNadesGlobally", label: "Share saved nades globally", type: "boolean" }
+      { key: "matchZySmokeColor", label: "Farbige Smokes im Practice-Modus", type: "boolean" },
+      { key: "matchZySaveNadesGlobally", label: "Gespeicherte Nades global teilen", type: "boolean" }
     ]
   },
   {
-    id: "workshop", title: "Workshop maps", description: "MultiAddonManager is installed automatically when maps are enabled.",
+    id: "workshop", title: "Workshop-Maps", description: "MultiAddonManager wird beim Aktivieren der Workshop-Maps automatisch installiert.",
     fields: [
-      { key: "workshopMapsEnabled", label: "Load workshop maps", type: "boolean" },
-      { key: "workshopMaps", label: "Workshop IDs or links", type: "textarea", placeholder: "3070244462, 3077265396" },
-      { key: "workshopForceDownload", label: "Check downloads on every map load", type: "boolean" }
+      { key: "workshopMapsEnabled", label: "Workshop-Maps laden", type: "boolean" },
+      { key: "workshopMaps", label: "Workshop-IDs oder Links", type: "textarea", placeholder: "3070244462, 3077265396" },
+      { key: "workshopForceDownload", label: "Downloads bei jedem Map-Wechsel prüfen", type: "boolean" }
     ]
   },
   {
-    id: "training-hud", title: "Trainings-HUD", description: "Für Nades und MatchZy. Änderungen mit Apply & restart übernehmen; dabei wird der Server neu gestartet.",
+    id: "training-hud", title: "Trainings-HUD", description: "Für Nades und MatchZy. Änderungen mit „Übernehmen & neu starten“ aktivieren.",
     fields: [
       { key: "trainingHudEnabled", label: "Trainings-HUD aktivieren", type: "boolean", description: "Erlaubt das Ingame-Panel. Die HUD-Dateien müssen lokal installiert oder über den Workshop verfügbar sein." },
       { key: "trainingHudWorkshopEnabled", label: "HUD über Workshop ausliefern", type: "boolean", description: "Aus: keine HUD-Workshop-ID an Spieler senden. Lokale Entwicklung benötigt weiterhin ein aktiviertes Trainings-HUD." },
@@ -118,13 +118,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ]
   },
   {
-    id: "advanced", title: "Advanced launch", description: "Optional process arguments passed to the dedicated server.",
+    id: "advanced", title: "Startparameter", description: "Zusätzliche Startparameter für den CS2-Server.",
     fields: [
-      { key: "additionalArgs", label: "Additional launch arguments", type: "textarea", description: "VAC ausschließlich unter „VAC und Spielzugang“ einstellen. -insecure und -secure hier nicht eintragen." }
+      { key: "additionalArgs", label: "Zusätzliche Startparameter", type: "textarea", description: "VAC ausschließlich unter „VAC und Spielzugang“ einstellen. -insecure und -secure hier nicht eintragen." }
     ]
   },
   {
-    id: "versions", title: "Component versions", description: "Use latest for automatic updates or enter a release tag to pin a component.",
+    id: "versions", title: "Komponentenversionen", description: "„latest“ verwendet die aktuelle Version. Ein Release-Tag legt eine bestimmte Version fest.",
     fields: [
       { key: "metamodVersion", label: "Metamod", type: "text", placeholder: "latest" },
       { key: "counterStrikeSharpVersion", label: "CounterStrikeSharp", type: "text", placeholder: "latest" },
@@ -281,11 +281,11 @@ export function normalizeSettings(input): ServerSettings {
 }
 
 const PLUGINS: any[] = [
-  { id: "metamod", name: "Metamod", detail: "Native plugin loader", url: "https://www.metamodsource.net/", locked: true, enabled: true, dependencies: [] },
-  { id: "counterstrikesharp", name: "CounterStrikeSharp", detail: "Admin and managed plugin framework", url: "https://docs.cssharp.dev/", locked: true, enabled: true, dependencies: ["Metamod"] },
-  { id: "weaponpaints", name: "WeaponPaints", detail: "Cosmetic weapon inventory", url: "https://github.com/Nereziel/cs2-WeaponPaints", settingKey: "weaponPaintsEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager", "MySQL"], warning: "Experimental plugin. It disables CounterStrikeSharp's server-guideline guard and may put the GSLT at risk." },
-  { id: "fortnite-emotes", name: "Fortnite Emotes", detail: "Emote and dance commands", url: "https://github.com/Cruze03/FortniteEmotesNDances", settingKey: "fortniteEmotesEnabled", dependencies: ["CounterStrikeSharp", "MultiAddonManager", "RayTrace", "Workshop addon"] },
-  { id: "workshop-maps", name: "Workshop maps", detail: "Mount configured Workshop map addons", url: "https://steamcommunity.com/app/730/workshop/", settingKey: "workshopMapsEnabled", dependencies: ["MultiAddonManager"] }
+  { id: "metamod", name: "Metamod", detail: "Lädt native Server-Plugins", url: "https://www.metamodsource.net/", locked: true, enabled: true, dependencies: [] },
+  { id: "counterstrikesharp", name: "CounterStrikeSharp", detail: "Framework für Server-Plugins und Administration", url: "https://docs.cssharp.dev/", locked: true, enabled: true, dependencies: ["Metamod"] },
+  { id: "weaponpaints", name: "WeaponPaints", detail: "Waffen-Skins und Inventar", url: "https://github.com/Nereziel/cs2-WeaponPaints", settingKey: "weaponPaintsEnabled", dependencies: ["CounterStrikeSharp", "PlayerSettings", "AnyBaseLib", "MenuManager", "MySQL"], warning: "Experimentelles Plugin. Deaktiviert die Richtlinienprüfung von CounterStrikeSharp und kann den Steam-Server-Token GSLT gefährden." },
+  { id: "fortnite-emotes", name: "Fortnite Emotes", detail: "Emote- und Tanzbefehle", url: "https://github.com/Cruze03/FortniteEmotesNDances", settingKey: "fortniteEmotesEnabled", dependencies: ["CounterStrikeSharp", "MultiAddonManager", "RayTrace", "Workshop addon"] },
+  { id: "workshop-maps", name: "Workshop-Maps", detail: "Lädt die konfigurierten Workshop-Maps", url: "https://steamcommunity.com/app/730/workshop/", settingKey: "workshopMapsEnabled", dependencies: ["MultiAddonManager"] }
 ];
 
 export function buildControlModel(input) {

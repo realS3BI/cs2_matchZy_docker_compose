@@ -1,11 +1,12 @@
 import type { StratContent, Team, Strat, StratView } from "../shared/strats.js";
 import { authorize, type Actor } from "../shared/authorization.js";
-import type { SceneReference } from "../shared/demos.js";
+import { BUY_PHASE_LIMIT, type SceneReference } from "../shared/demos.js";
+import { economyOptions, type StratEconomy } from "../shared/strats.js";
 
 const validId = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,100}$/.test(id);
 export function sceneReference(value: any): SceneReference {
   if (!value || !validId(value.demoId) || !validId(value.roundId) || value.version !== 1 ||
-    !Number.isFinite(value.start) || !Number.isFinite(value.end) || value.start < 0 || value.end <= value.start || value.end > 1800 ||
+    !Number.isFinite(value.start) || !Number.isFinite(value.end) || value.start < -BUY_PHASE_LIMIT || value.end <= value.start || value.end > 1800 ||
     typeof value.focusId !== "string" || !/^(?:[0-9]{1,20})?$/.test(value.focusId))
     problem(400, "Ungültiger Demo-Ausschnitt.");
   return { demoId: value.demoId, roundId: value.roundId, version: value.version, start: value.start, end: value.end, focusId: value.focusId };
@@ -44,6 +45,13 @@ export function validateContent(input: any, team: Team): StratContent {
     problem(400, "Ungültiger interner Mapname.");
   const ids = new Set<string>();
   const players = new Set<string>();
+  function economy(value: unknown, label: string): StratEconomy[] {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > economyOptions.length ||
+      value.some((entry) => !economyOptions.some((option) => option.value === entry)))
+      problem(400, `${label} ist ungültig.`);
+    return economyOptions.filter((option) => value.includes(option.value)).map((option) => option.value);
+  }
   function id(value: unknown) {
     const clean = textField(value, "ID", 100, true);
     if (!/^[\w-]+$/.test(clean) || ids.has(clean))
@@ -56,6 +64,8 @@ export function validateContent(input: any, team: Team): StratContent {
     map,
     side: input.side,
     description: textField(input.description ?? "", "Beschreibung", 5000),
+    ownEconomy: economy(input.ownEconomy, "Kaufsituation unseres Teams"),
+    opponentEconomy: economy(input.opponentEconomy, "Kaufsituation der Gegner"),
     ...(input.scene && { scene: sceneReference(input.scene) }),
     slots: input.slots.map((slot) => {
       const userId = textField(slot.userId ?? "", "Spieler", 17);

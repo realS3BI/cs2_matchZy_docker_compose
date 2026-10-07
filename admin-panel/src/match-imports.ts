@@ -301,52 +301,8 @@ export class MatchImports {
     }
   }
   async cleanup() {
-    const { analysis, recordings, matches, storage } = this.store;
+    const { analysis, recordings, storage } = this.store;
     const now = new Date().toISOString();
-    await analysis.demos.updateMany(
-      {
-        autoImport: true,
-        status: "ready",
-        originalExpiresAt: { $exists: false },
-      },
-      {
-        $set: {
-          originalRetained: true,
-          originalExpiresAt: new Date(
-            Date.now() + 14 * 86400_000,
-          ).toISOString(),
-          analysisExpiresAt: new Date(
-            Date.now() + 90 * 86400_000,
-          ).toISOString(),
-        },
-      },
-    );
-    for (const demo of await analysis.demos
-      .find({
-        autoImport: true,
-        status: "ready",
-        pinned: { $ne: true },
-        originalRetained: true,
-        originalExpiresAt: { $lt: now },
-      })
-      .limit(10)
-      .toArray()) {
-      await analysis.mutate(async () => {
-        if (
-          !(await analysis.demos.findOne({
-            _id: demo.id,
-            pinned: { $ne: true },
-            originalRetained: true,
-          }))
-        )
-          return;
-        await rm(analysis.path(demo.id, "source"), { force: true });
-        await analysis.demos.updateOne(
-          { _id: demo.id },
-          { $set: { originalRetained: false } },
-        );
-      });
-    }
     for (const session of await recordings.sessions
       .find({ status: "finished", pinned: false, expiresAt: { $lt: now } })
       .limit(5)
@@ -393,43 +349,6 @@ export class MatchImports {
             recursive: true,
           });
         }
-      });
-    }
-    for (const demo of await analysis.demos
-      .find({
-        autoImport: true,
-        status: "ready",
-        pinned: { $ne: true },
-        analysisExpiresAt: { $lt: now },
-      })
-      .limit(5)
-      .toArray()) {
-      await analysis.mutate(async () => {
-        if (await analysis.referenced(demo.id)) return;
-        if (
-          !(
-            await analysis.demos.deleteOne({
-              _id: demo.id,
-              status: "ready",
-              pinned: { $ne: true },
-            })
-          ).deletedCount
-        )
-          return;
-        await rm(join(analysis.directory, demo.id), {
-          force: true,
-          recursive: true,
-        });
-        await matches.entries.updateMany(
-          { demoId: demo.id },
-          {
-            $set: {
-              demoId: null,
-              demoStatus: "unavailable",
-              autoDownload: false,
-            },
-          },
-        );
       });
     }
     const completed = await analysis.demos

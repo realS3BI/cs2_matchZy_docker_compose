@@ -14,6 +14,10 @@ Unter **Analyse** befinden sich Matches und Team-Reviews. Der Ablauf ist:
 
 Der Player verwendet vorhandene kalibrierte Radarbilder. Smoke- und Feuerbereiche sind schematisch; Granatenbahnen stammen aus der Demo. Die Zeitbasis von 64 Ticks/s ist eine explizite Annahme des ersten Adapters. Nicht unterstützte Karten erhalten keine erfundene Projektion. Unvollständige Runden und Sonderfälle werden als Analysehinweise angezeigt. Der Kartenstand des vorhandenen Radarbilds kann vom historischen Match abweichen.
 
+Jede Runde umfasst die Kaufphase (höchstens 30 Sekunden vor Freeze-Ende, damit Timeouts nicht die Zeitleiste füllen) und die Zeit nach Rundenende bis zur nächsten Runde (höchstens 10 Sekunden). Die Zeitbasis bleibt das Freeze-Ende; die Kaufphase hat negative Zeiten, deshalb behalten gespeicherte Szenen ihre Bedeutung. Der Player zeigt eine Rundenuhr wie im Spiel (Kaufphase, Rundenzeit, Bomben-Countdown, Rundenende), Phasenbänder auf der Zeitleiste, einen Killfeed, die Bombe auf dem Radar sowie pro Spieler aktive Waffe, Hauptwaffe, Granaten, Bombe, Kit, Rüstung und Geld. Inventar und Geld werden nur bei Änderungen gespeichert.
+
+Der Buy-Typ pro Team und Runde wird automatisch erkannt: Pistol, wenn alle Spieler mit höchstens 1.000 $ starten; sonst entscheidet der durchschnittliche Ausrüstungswert nach dem Kauf (höchster Wert bis 20 Sekunden nach Freeze-Ende): ab 3.500 $ Fullbuy, ab 1.500 $ Semi-Buy, darunter Eco. Die Rundenleiste zeigt die Ausrüstungswerte beider Teams und lässt sich nach T- und CT-Buy filtern. Ältere Analysen enthalten diese Daten nicht; sie erscheinen erst nach einem neuen Upload.
+
 Private Demos sind auch für fremde Plattform-Admins verborgen. Teamzugriff setzt eine aktuelle Mitgliedschaft voraus. Demo-Dateien liegen außerhalb des öffentlichen Upload-Verzeichnisses. Verknüpfte Demos können erst nach dem Entfernen ihrer Review-, Entwurfs-, veröffentlichten und aktiven Strat-Verweise gelöscht werden. Demo-Szenen erzeugen keine öffentlichen oder offiziellen Nades.
 
 ### Betrieb
@@ -82,7 +86,7 @@ Der Captain fügt FACEIT-Matchroom oder Team hinzu, ordnet den tatsächlichen We
 
 Die erste Berichtsebene verwendet Matchmetadaten: gespielte Maps, Ergebnisse, Aktualität und Besetzung. Mit analysierten Demos kommen wiederholte Eröffnungen, frühe Utility, CT-Positionen und ausgewählte Beispielrunden hinzu. Jede Tendenz nennt Stichprobe und Filter und öffnet ihre Quellen. Der Captain verbindet Beobachtungen mit eigenen Strats und Nades und veröffentlicht daraus eine kurze Vorbereitung für das Team.
 
-Der aktuelle Parser benötigt dafür zusätzliche Daten: stabile Identitäten beider Beteiligten an Ereignissen, Buy-/Freeze-Phase, Economy und nachvollziehbare Rundentypen. Der vorhandene Viewer allein liefert noch keine belastbare Full-Buy- oder Trade-Analyse. Neue Analyseversionen ersetzen bestehende Szenen nicht stillschweigend.
+Kill-Ereignisse tragen inzwischen die Identitäten beider Beteiligten, Runden enthalten Buy-/Freeze-Phase und einen automatisch erkannten Buy-Typ. Für eine belastbare Trade-Analyse fehlen weiterhin Auswertungen über mehrere Runden. Neue Analyseversionen ersetzen bestehende Szenen nicht stillschweigend.
 
 Pick-/Ban-Aussagen benötigen tatsächliche Veto-Daten. FACEIT dokumentiert ein `voting`-Feld, dessen Inhalt in der Spezifikation offen bleibt. Der Bericht zeigt eine Veto-Historie erst nach Prüfung dieser Daten. Team und Turnier allein reichen nicht, um eine Spielweise zu behaupten. Die [ergänzende Quellenprüfung](demo-analysis-research.md#ergänzende-prüfung-automatische-imports-und-gegnerberichte) beschreibt die verfügbaren Schnittstellen und ihre Grenzen.
 
@@ -98,19 +102,20 @@ Der Import speichert dauerhafte Cursor, wiederholt begrenzte Fehlversuche und be
 
 ### Speicher begrenzen und Lernmaterial erhalten
 
-Der heutige Stand speichert Original und Replay-Daten im lokalen Demo-Volume. Es gibt noch keine automatische Bereinigung fertiger Demos. UploadThing ist derzeit an Nade-Review-Bilder und -Videos gebunden. Neue Teamaufnahmen benötigen einen eigenen privaten Medienzugang.
+Der Worker speichert Replay-Daten im lokalen Demo-Volume. Bei neuen Uploads und Importen entfernt er das Original nach erfolgreicher Analyse und Prüfung aller gespeicherten Runden. Bereits vorhandene Originale aus älteren Versionen bleiben erhalten; Demo-Auswertungen laufen nicht automatisch ab. UploadThing ist derzeit an Nade-Review-Bilder und -Videos gebunden. Neue Teamaufnahmen benötigen einen eigenen privaten Medienzugang.
 
-Vorgeschlagene Startwerte für **neu automatisch importierte** Inhalte, noch nicht aktiviert:
+Aufbewahrung für Demos und Aufzeichnungen:
 
-| Inhalt | Aufbewahrungsvorschlag |
+| Inhalt | Aufbewahrung |
 | --- | --- |
 | Matchindex und Quellenverweise | Bis zur Löschung durch den Berechtigten oder zum Ende des verbundenen Arbeitsbereichs. |
-| Originaldemo | 14 Tage nach erfolgreicher Verarbeitung. `Original behalten` erlaubt eine bewusste Archivierung innerhalb der Quote. |
-| Nicht verknüpfte Replay-Daten und Live-Aufzeichnungen | 90 Tage. Vor Ablauf sichtbar markieren; wichtige Inhalte können behalten werden. |
+| Originaldemo | Bei neuen Uploads und Importen nach erfolgreicher Verarbeitung und Prüfung der gespeicherten Rundendaten entfernen. |
+| Replay-Daten | Bis zur ausdrücklichen Löschung behalten, einschließlich Granaten und Smoke-Ereignissen. |
+| Live-Aufzeichnungen | 90 Tage nach Sitzungsende, sofern nicht angeheftet oder als Erklärung verwendet. |
 | In Strats oder gespeicherten Erklärungen benötigte Daten | Durch die Verknüpfung vor automatischer Löschung schützen. Später können eigenständige Szenenpakete den benötigten Umfang verkleinern. |
 | Lokale Arbeitsdateien und fehlgeschlagene Uploads | Nach Abschluss beziehungsweise einer begrenzten Wiederholungsfrist entfernen. Aktive Verarbeitung und noch nicht gesicherte Aufnahmen bleiben geschützt. |
 
-Bestehende manuelle Uploads bekommen diese Ablaufregeln nicht rückwirkend. Auch eine verknüpfte Szene schützt nicht automatisch die gesamte Originaldemo: Für Wiedergabe genügen die erhaltenen Replay-Daten, für eine spätere Neuberechnung wird das Original oder ein noch verfügbarer erneuter Download benötigt. Diese Unterscheidung steht beim Archivieren in der Oberfläche.
+Bereits verarbeitete Originale aus älteren Versionen werden nicht rückwirkend entfernt. Bei neuen Demos schützt auch eine verknüpfte Szene nicht die Originaldatei: Für Wiedergabe genügen die erhaltenen Replay-Daten, für eine spätere Neuberechnung wird das Original oder ein noch verfügbarer erneuter Download benötigt. Diese Unterscheidung steht beim Archivieren in der Oberfläche.
 
 Vor Downloads reserviert der Worker Platz für Original, Entpacken und Ausgabedaten. Teamquote, Gesamtkontingent und freier lokaler Arbeitsraum werden getrennt geprüft. Bei voller Quote stoppt der Dateinachschub; der Matchindex kann weiter aktualisiert werden. Geschütztes Lernmaterial wird nicht automatisch verdrängt. Eine Speicheransicht zeigt tatsächliche Bytes, vorgemerkte Importe und das nächste Ablaufdatum. Konkrete Gesamtquoten werden an der Kapazität des Deployment-Servers festgelegt, nicht am freien Platz des Entwicklungsrechners.
 

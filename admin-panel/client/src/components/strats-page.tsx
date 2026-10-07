@@ -1,6 +1,16 @@
+import { WorkspaceNavigation } from "./workspace-navigation";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "./ui/empty";
 import { SceneExample } from "./demo-player";
 import { StratExplanations } from "./live-session-pages";
 import { ScenePicker } from "./scene-picker";
+import { EconomySelection, StratEconomySummary } from "./strat-economy";
 import { useEffect, useRef, useState } from "react";
 import {
   Link,
@@ -9,7 +19,16 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { ArrowDown, ArrowUp, Plus, Radio, Save, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Plus,
+  Radio,
+  Save,
+  Trash2,
+  BookOpen,
+  ChevronRight,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { lineupPath } from "@/lib/lineups";
 import type { MapDefinition } from "@/lib/maps";
@@ -17,6 +36,8 @@ import type { Actor } from "../../../shared/authorization";
 import {
   newStratContent,
   newWorkspaceId,
+  matchesEconomy,
+  type StratEconomy,
   type StratContent,
   type StratSlot,
   type StratView,
@@ -58,8 +79,6 @@ const sideOptions = [
   { value: "t", label: "T" },
   { value: "ct", label: "CT" },
 ];
-const titleOf = (strat: StratView) =>
-  strat.published?.content.title || strat.content.title;
 
 export function StratsPage({ maps }: LibraryProps) {
   const teams = useResource<{ entries: TeamView[] }>("/api/teams");
@@ -69,156 +88,285 @@ export function StratsPage({ maps }: LibraryProps) {
   const [query, setQuery] = useState("");
   const [map, setMap] = useState("");
   const [side, setSide] = useState("");
+  const [ownEconomy, setOwnEconomy] = useState<StratEconomy[]>([]);
+  const [opponentEconomy, setOpponentEconomy] = useState<StratEconomy[]>([]);
   const [archived, setArchived] = useState(false);
   const editable =
     teams.data?.entries.filter((team) => team.permissions["strats.edit"]) || [];
-  const entries = (strats.data?.entries || []).filter(
+  const available = (strats.data?.entries || []).filter(
     (strat) =>
-      (!teamId || strat.teamId === teamId) &&
+      (!teamId || strat.teamId === teamId) && strat.archived === archived,
+  );
+  const entries = available.filter(
+    (strat) =>
       (!map || strat.content.map === map) &&
       (!side || strat.content.side === side) &&
-      strat.archived === archived &&
+      matchesEconomy(strat.content.ownEconomy, ownEconomy) &&
+      matchesEconomy(strat.content.opponentEconomy, opponentEconomy) &&
       `${strat.content.title} ${strat.content.description}`
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
   );
+  const filtered = Boolean(
+    query || map || side || ownEconomy.length || opponentEconomy.length,
+  );
+  const createPath = `/strats/new?team=${editable.find((team) => team.id === teamId)?.id || editable[0]?.id || ""}`;
+  function resetFilters() {
+    setQuery("");
+    setMap("");
+    setSide("");
+    setOwnEconomy([]);
+    setOpponentEconomy([]);
+  }
   return (
     <>
       <WorkspaceHeader
-        title="Strats"
-        description="Taktiken deiner Teams lesen, vorbereiten und gemeinsam spielen."
+        title="Strat-Bibliothek"
+        description="Der Spielplan deiner Teams. Finde eine Taktik, lies die Aufgaben und bereite die nächste Runde vor."
       >
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link to={teamId ? `/strats/live/${teamId}` : "/strats/live"}>
-              <Radio />
-              Live-Ansicht
+        {editable.length > 0 && (
+          <Button asChild>
+            <Link to={createPath}>
+              <Plus data-icon="inline-start" />
+              Neue Strat
             </Link>
           </Button>
-          {editable.length > 0 && (
-            <Button asChild>
-              <Link
-                to={`/strats/new?team=${editable.find((team) => team.id === teamId)?.id || editable[0].id}`}
-              >
-                <Plus />
-                Neue Strat
-              </Link>
+        )}
+      </WorkspaceHeader>
+      <WorkspaceNavigation
+        label="Strats-Navigation"
+        items={[
+          {
+            label: "Bibliothek",
+            path: teamId ? `/strats?team=${teamId}` : "/strats",
+            active: true,
+          },
+          {
+            label: "Live verwalten",
+            path: teamId ? `/strats/control/${teamId}` : "/strats/control",
+          },
+        ]}
+      />
+      <Feedback error={teams.error || strats.error} />
+      <Card className="mb-5">
+        <CardContent className="pt-5">
+          <FieldGroup className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_0.8fr]">
+            <Field htmlFor="strat-search">
+              <FieldLabel>Suchen</FieldLabel>
+              <Input
+                id="strat-search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Name oder Beschreibung"
+              />
+            </Field>
+            <Choice
+              label="Team"
+              value={teamId}
+              onChange={(team) =>
+                setSearch((current) => {
+                  const next = new URLSearchParams(current);
+                  if (team) next.set("team", team);
+                  else next.delete("team");
+                  return next;
+                })
+              }
+              options={[
+                { value: "", label: "Alle Teams" },
+                ...(teams.data?.entries || []).map((team) => ({
+                  value: team.id,
+                  label: team.name,
+                })),
+              ]}
+            />
+            <Choice
+              label="Map"
+              value={map}
+              onChange={setMap}
+              options={[{ value: "", label: "Alle Maps" }, ...mapOptions(maps)]}
+            />
+            <Choice
+              label="Seite"
+              value={side}
+              onChange={setSide}
+              options={[{ value: "", label: "T und CT" }, ...sideOptions]}
+            />
+          </FieldGroup>
+          <details className="mt-5 border-t pt-4">
+            <summary className="w-fit cursor-pointer text-sm text-muted-foreground">
+              Kaufsituation filtern
+              {ownEconomy.length + opponentEconomy.length > 0
+                ? ` · ${ownEconomy.length + opponentEconomy.length} ausgewählt`
+                : ""}
+            </summary>
+            <FieldGroup className="mt-4 grid gap-4 sm:grid-cols-2">
+              <EconomySelection
+                label="Unsere Kaufsituation"
+                value={ownEconomy}
+                onChange={setOwnEconomy}
+              />
+              <EconomySelection
+                label="Kaufsituation der Gegner"
+                value={opponentEconomy}
+                onChange={setOpponentEconomy}
+              />
+            </FieldGroup>
+          </details>
+        </CardContent>
+      </Card>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Tabs
+          className="workspace-tabs"
+          value={archived ? "archive" : "library"}
+          onValueChange={(value) => setArchived(value === "archive")}
+        >
+          <TabsList variant="line">
+            <TabsTrigger value="library">Aktuelle Strats</TabsTrigger>
+            {editable.length > 0 && (
+              <TabsTrigger value="archive">Archiv</TabsTrigger>
+            )}
+          </TabsList>
+        </Tabs>
+        <div className="flex items-center gap-3">
+          <span role="status" className="text-xs text-muted-foreground">
+            {entries.length} von {available.length} Strats
+          </span>
+          {filtered && (
+            <Button variant="ghost" size="sm" onClick={resetFilters}>
+              Filter zurücksetzen
             </Button>
           )}
         </div>
-      </WorkspaceHeader>
-      <Feedback error={teams.error || strats.error} />
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Field>
-          <FieldLabel>Suchen</FieldLabel>
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Name oder Beschreibung"
-          />
-        </Field>
-        <Choice
-          label="Team"
-          value={teamId}
-          onChange={(team) => setSearch(team ? { team } : {})}
-          options={[
-            { value: "", label: "Alle Teams" },
-            ...(teams.data?.entries || []).map((team) => ({
-              value: team.id,
-              label: team.name,
-            })),
-          ]}
-        />
-        <Choice
-          label="Map"
-          value={map}
-          onChange={setMap}
-          options={[{ value: "", label: "Alle Maps" }, ...mapOptions(maps)]}
-        />
-        <Choice
-          label="Seite"
-          value={side}
-          onChange={setSide}
-          options={[{ value: "", label: "T und CT" }, ...sideOptions]}
-        />
       </div>
-      {editable.length > 0 && (
-        <div className="mb-5 flex gap-2">
-          <Button
-            variant={!archived ? "secondary" : "ghost"}
-            onClick={() => setArchived(false)}
-          >
-            Strats
-          </Button>
-          <Button
-            variant={archived ? "secondary" : "ghost"}
-            onClick={() => setArchived(true)}
-          >
-            Archiv
-          </Button>
-        </div>
-      )}
-      {strats.loading ? (
+      {strats.loading || teams.loading ? (
         <p role="status">Strats werden geladen …</p>
+      ) : strats.error || teams.error ? (
+        <Button
+          variant="outline"
+          onClick={() => {
+            strats.reload();
+            teams.reload();
+          }}
+        >
+          Erneut laden
+        </Button>
       ) : entries.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Keine Strats gefunden</CardTitle>
-            <CardDescription>
-              {teams.data?.entries.length
-                ? "Passe die Filter an. Owner und Captains können hier Taktiken anlegen; Mitglieder sehen veröffentlichte Strats."
-                : "Gründe zuerst ein Team oder tritt über eine Einladung bei."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild variant="outline">
-              <Link to="/teams">Zum Team-Management</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <Empty className="min-h-64 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BookOpen />
+            </EmptyMedia>
+            <EmptyTitle>
+              {filtered
+                ? "Keine passende Strat"
+                : archived
+                  ? "Das Archiv ist leer"
+                  : "Dein Spielplan beginnt hier"}
+            </EmptyTitle>
+            <EmptyDescription>
+              {filtered
+                ? "Passe die Suche oder die Filter an, um weitere Taktiken zu sehen."
+                : teams.data?.entries.length
+                  ? "Owner und Captains legen Taktiken an und veröffentlichen sie für das Team."
+                  : "Gründe ein Team oder tritt über einen Einladungslink bei. Danach findest du hier eure Strats."}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            {filtered ? (
+              <Button variant="outline" onClick={resetFilters}>
+                Filter zurücksetzen
+              </Button>
+            ) : editable.length && !archived ? (
+              <Button asChild>
+                <Link to={createPath}>Erste Strat anlegen</Link>
+              </Button>
+            ) : !teams.data?.entries.length ? (
+              <Button asChild variant="outline">
+                <Link to="/teams">Zu meinen Teams</Link>
+              </Button>
+            ) : null}
+          </EmptyContent>
+        </Empty>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {entries.map((strat) => (
-            <Card key={strat.id}>
-              <CardHeader>
-                <div className="mb-2 flex flex-wrap gap-2">
-                  <Badge variant="outline">{strat.teamName}</Badge>
+        <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {entries.map((strat) => {
+            const mapInfo = maps.find(
+              (map) => map.mapName === strat.content.map,
+            );
+            const assigned = strat.content.slots.filter(
+              (slot) => slot.userId,
+            ).length;
+            return (
+              <Card key={strat.id} className="strat-library-card">
+                <div className="strat-map-strip">
+                  {mapInfo?.radarUrl && (
+                    <img src={mapInfo.radarUrl} alt="" loading="lazy" />
+                  )}
+                  <span>{mapInfo?.name || strat.content.map}</span>
                   <Badge variant="secondary">
-                    {maps.find((map) => map.mapName === strat.content.map)
-                      ?.name || strat.content.map}{" "}
-                    · {strat.content.side.toUpperCase()}
+                    {strat.content.side.toUpperCase()}
                   </Badge>
                 </div>
-                <CardTitle>
-                  <Link to={`/strats/${strat.id}`} className="hover:underline">
-                    {strat.content.title}
-                  </Link>
-                </CardTitle>
-                <CardDescription className="line-clamp-3 whitespace-pre-wrap">
-                  {strat.content.description || "Noch keine Beschreibung."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-xs text-muted-foreground">
-                  {strat.archived
-                    ? "Archiviert"
-                    : strat.published
-                      ? `Veröffentlicht · Version ${strat.published.version}`
-                      : "Entwurf"}
-                </span>
-                <div className="flex gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <Link to={`/strats/${strat.id}`}>Lesen</Link>
-                  </Button>
-                  {strat.canEdit && (
-                    <Button asChild size="sm">
-                      <Link to={`/strats/${strat.id}/edit`}>Bearbeiten</Link>
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardDescription>{strat.teamName}</CardDescription>
+                    <Badge
+                      variant={
+                        strat.archived
+                          ? "outline"
+                          : strat.published
+                            ? "secondary"
+                            : "outline"
+                      }
+                    >
+                      {strat.archived
+                        ? "Archiviert"
+                        : strat.published
+                          ? `Veröffentlicht · V${strat.published.version}`
+                          : "Entwurf"}
+                    </Badge>
+                  </div>
+                  <CardTitle>
+                    <Link
+                      to={`/strats/${strat.id}`}
+                      className="hover:underline"
+                    >
+                      {strat.content.title}
+                    </Link>
+                  </CardTitle>
+                  <CardDescription className="line-clamp-2 whitespace-pre-wrap">
+                    {strat.content.description || "Noch keine Beschreibung."}
+                  </CardDescription>
+                  <StratEconomySummary content={strat.content} />
+                </CardHeader>
+                <CardContent className="mt-auto flex flex-col gap-4">
+                  <p className="text-xs text-muted-foreground">
+                    {assigned} von {strat.content.slots.length} Rollen besetzt ·{" "}
+                    {strat.content.slots.reduce(
+                      (count, slot) => count + slot.steps.length,
+                      0,
+                    )}{" "}
+                    {strat.content.slots.reduce(
+                      (count, slot) => count + slot.steps.length,
+                      0,
+                    ) === 1
+                      ? "Schritt"
+                      : "Schritte"}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/strats/${strat.id}`}>Strat öffnen</Link>
                     </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    {strat.canEdit && (
+                      <Button asChild variant="ghost" size="sm">
+                        <Link to={`/strats/${strat.id}/edit`}>Bearbeiten</Link>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </>
@@ -280,7 +428,9 @@ function SlotTasks({
                       )}
                     </dl>
                   )}
-                  {step.scene && <SceneExample scene={step.scene} maps={maps} />}
+                  {step.scene && (
+                    <SceneExample scene={step.scene} maps={maps} />
+                  )}
                   <div className="mt-2 flex flex-wrap gap-2">
                     {step.nadeIds.map((id) => {
                       const nade = nades.find((nade) => nade.id === id);
@@ -435,10 +585,20 @@ export function StratPage(props: LibraryProps) {
               <Button asChild variant="outline">
                 <Link to={`/strats/${strat.id}/edit`}>Entwurf bearbeiten</Link>
               </Button>
+              {!resource.data?.team.live && (
+                <Button asChild variant="outline">
+                  <Link to={`/strats/control/${strat.teamId}`}>
+                    Team live schalten
+                  </Link>
+                </Button>
+              )}
               {strat.published && !strat.archived && (
-                <Button disabled={busy} onClick={() => void action("activate")}>
+                <Button
+                  disabled={busy || !resource.data?.team.live}
+                  onClick={() => void action("activate")}
+                >
                   <Radio />
-                  Für Team aktivieren
+                  Spielzug auswählen
                 </Button>
               )}
               <Button
@@ -472,6 +632,9 @@ export function StratPage(props: LibraryProps) {
         </div>
       </WorkspaceHeader>
       <Feedback error={error || resource.error} />
+      <div className="mb-6">
+        <StratEconomySummary content={content} />
+      </div>
       {strat.archived && (
         <p className="mb-4 text-sm text-muted-foreground">
           Diese Strat ist archiviert.
@@ -712,245 +875,301 @@ function EditorForm({
                     placeholder="Ziel, Voraussetzungen und gemeinsame Abläufe"
                   />
                 </Field>
+                <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                  <EconomySelection
+                    label="Unsere Kaufsituation"
+                    value={content.ownEconomy || []}
+                    disabled={busy}
+                    onChange={(ownEconomy) =>
+                      setContent((current) => ({ ...current, ownEconomy }))
+                    }
+                  />
+                  <EconomySelection
+                    label="Kaufsituation der Gegner"
+                    value={content.opponentEconomy || []}
+                    disabled={busy}
+                    onChange={(opponentEconomy) =>
+                      setContent((current) => ({ ...current, opponentEconomy }))
+                    }
+                  />
+                </FieldGroup>
               </FieldGroup>
             </CardContent>
           </Card>
-          <ScenePicker teamId={team.id} map={content.map} value={content.scene} onChange={scene => setContent(current => ({ ...current, scene }))} />
+          <ScenePicker
+            teamId={team.id}
+            map={content.map}
+            value={content.scene}
+            onChange={(scene) =>
+              setContent((current) => ({ ...current, scene }))
+            }
+          />
           {content.slots.map((slot, index) => (
-            <Card key={slot.id}>
-              <CardHeader>
-                <CardTitle>
+            <details
+              key={slot.id}
+              className="disclosure-panel"
+              onInvalid={(event) => {
+                event.currentTarget.open = true;
+              }}
+            >
+              <summary className="flex flex-wrap items-center gap-3">
+                <ChevronRight
+                  className="disclosure-chevron size-4"
+                  aria-hidden="true"
+                />
+                <span className="flex-1">
                   Platz {index + 1} · {slot.label}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <FieldGroup>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field>
-                      <FieldLabel>Rollenname</FieldLabel>
-                      <Input
-                        required
-                        value={slot.label}
-                        maxLength={80}
-                        onChange={(event) =>
-                          patchSlot(index, { label: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <Choice
-                      label={`Spieler für Platz ${index + 1}`}
-                      value={slot.userId}
-                      onChange={(userId) => patchSlot(index, { userId })}
-                      options={[
-                        { value: "", label: "Noch nicht besetzt" },
-                        ...team.members
-                          .filter(
-                            (member) =>
-                              member.userId === slot.userId ||
-                              !content.slots.some(
-                                (other) => other.userId === member.userId,
-                              ),
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {team.members.find((member) => member.userId === slot.userId)
+                    ?.name || "Noch nicht besetzt"}{" "}
+                  · {slot.steps.length}{" "}
+                  {slot.steps.length === 1 ? "Schritt" : "Schritte"}
+                </span>
+              </summary>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Rolle und Aufgaben</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FieldGroup>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel>Rollenname</FieldLabel>
+                        <Input
+                          required
+                          value={slot.label}
+                          maxLength={80}
+                          onChange={(event) =>
+                            patchSlot(index, { label: event.target.value })
+                          }
+                        />
+                      </Field>
+                      <Choice
+                        label={`Spieler für Platz ${index + 1}`}
+                        value={slot.userId}
+                        onChange={(userId) => patchSlot(index, { userId })}
+                        options={[
+                          { value: "", label: "Noch nicht besetzt" },
+                          ...team.members
+                            .filter(
+                              (member) =>
+                                member.userId === slot.userId ||
+                                !content.slots.some(
+                                  (other) => other.userId === member.userId,
+                                ),
+                            )
+                            .map((member) => ({
+                              value: member.userId,
+                              label: member.name || member.userId,
+                            })),
+                          ...(slot.userId &&
+                          !team.members.some(
+                            (member) => member.userId === slot.userId,
                           )
-                          .map((member) => ({
-                            value: member.userId,
-                            label: member.name || member.userId,
-                          })),
-                        ...(slot.userId &&
-                        !team.members.some(
-                          (member) => member.userId === slot.userId,
-                        )
-                          ? [
-                              {
-                                value: slot.userId,
-                                label:
-                                  "Nicht mehr im Team · bitte neu besetzen",
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                  </div>
-                  {slot.steps.map((step, stepIndex) => {
-                    const update = (change: object) =>
-                      patchSlot(index, {
-                        steps: slot.steps.map((item) =>
-                          item.id === step.id ? { ...item, ...change } : item,
-                        ),
-                      });
-                    const move = (direction: number) => {
-                      const steps = [...slot.steps];
-                      [steps[stepIndex], steps[stepIndex + direction]] = [
-                        steps[stepIndex + direction],
-                        steps[stepIndex],
-                      ];
-                      patchSlot(index, { steps });
-                    };
-                    return (
-                      <div
-                        key={step.id}
-                        className="rounded-lg border bg-muted/20 p-4"
-                      >
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <h3 className="text-sm font-medium">
-                            Schritt {stepIndex + 1}
-                          </h3>
-                          <div className="flex gap-1">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              disabled={stepIndex === 0}
-                              aria-label={`Schritt ${stepIndex + 1} nach oben`}
-                              onClick={() => move(-1)}
-                            >
-                              <ArrowUp />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              disabled={stepIndex === slot.steps.length - 1}
-                              aria-label={`Schritt ${stepIndex + 1} nach unten`}
-                              onClick={() => move(1)}
-                            >
-                              <ArrowDown />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              aria-label={`Schritt ${stepIndex + 1} entfernen`}
-                              onClick={() =>
-                                patchSlot(index, {
-                                  steps: slot.steps.filter(
-                                    (item) => item.id !== step.id,
-                                  ),
-                                })
-                              }
-                            >
-                              <Trash2 />
-                            </Button>
-                          </div>
-                        </div>
-                        <FieldGroup>
-                          <Field>
-                            <FieldLabel>Aufgabe</FieldLabel>
-                            <Textarea
-                              required
-                              maxLength={2000}
-                              value={step.text}
-                              onChange={(event) =>
-                                update({ text: event.target.value })
-                              }
-                            />
-                          </Field>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <Field>
-                              <FieldLabel>Position</FieldLabel>
-                              <Input
-                                maxLength={200}
-                                value={step.position}
-                                onChange={(event) =>
-                                  update({ position: event.target.value })
+                            ? [
+                                {
+                                  value: slot.userId,
+                                  label:
+                                    "Nicht mehr im Team · bitte neu besetzen",
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                    </div>
+                    {slot.steps.map((step, stepIndex) => {
+                      const update = (change: object) =>
+                        patchSlot(index, {
+                          steps: slot.steps.map((item) =>
+                            item.id === step.id ? { ...item, ...change } : item,
+                          ),
+                        });
+                      const move = (direction: number) => {
+                        const steps = [...slot.steps];
+                        [steps[stepIndex], steps[stepIndex + direction]] = [
+                          steps[stepIndex + direction],
+                          steps[stepIndex],
+                        ];
+                        patchSlot(index, { steps });
+                      };
+                      return (
+                        <div
+                          key={step.id}
+                          className="rounded-lg border bg-muted/20 p-4"
+                        >
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-medium">
+                              Schritt {stepIndex + 1}
+                            </h3>
+                            <div className="flex gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                disabled={stepIndex === 0}
+                                aria-label={`Schritt ${stepIndex + 1} nach oben`}
+                                onClick={() => move(-1)}
+                              >
+                                <ArrowUp />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                disabled={stepIndex === slot.steps.length - 1}
+                                aria-label={`Schritt ${stepIndex + 1} nach unten`}
+                                onClick={() => move(1)}
+                              >
+                                <ArrowDown />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                aria-label={`Schritt ${stepIndex + 1} entfernen`}
+                                onClick={() =>
+                                  patchSlot(index, {
+                                    steps: slot.steps.filter(
+                                      (item) => item.id !== step.id,
+                                    ),
+                                  })
                                 }
-                                placeholder="z. B. T-Ramp"
+                              >
+                                <Trash2 />
+                              </Button>
+                            </div>
+                          </div>
+                          <FieldGroup>
+                            <Field>
+                              <FieldLabel>Aufgabe</FieldLabel>
+                              <Textarea
+                                required
+                                maxLength={2000}
+                                value={step.text}
+                                onChange={(event) =>
+                                  update({ text: event.target.value })
+                                }
                               />
                             </Field>
-                            <Field>
-                              <FieldLabel>Timing</FieldLabel>
-                              <Input
-                                maxLength={200}
-                                value={step.timing}
-                                onChange={(event) =>
-                                  update({ timing: event.target.value })
-                                }
-                                placeholder="z. B. Auf Call oder bei 1:45"
-                              />
-                            </Field>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {step.nadeIds.map((id) => {
-                              const nade = nades.find((nade) => nade.id === id);
-                              return (
-                                <Button
-                                  key={id}
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    update({
-                                      nadeIds: step.nadeIds.filter(
-                                        (value) => value !== id,
-                                      ),
-                                    })
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <Field>
+                                <FieldLabel>Position</FieldLabel>
+                                <Input
+                                  maxLength={200}
+                                  value={step.position}
+                                  onChange={(event) =>
+                                    update({ position: event.target.value })
                                   }
-                                >
-                                  {nade?.displayName ||
-                                    nade?.name ||
-                                    "Nade fehlt"}
-                                  {nade && nade.map !== content.map
-                                    ? " · Andere Map"
-                                    : ""}
-                                  <span aria-label="Verknüpfung entfernen">
-                                    ×
-                                  </span>
-                                </Button>
-                              );
-                            })}
-                          </div>
-                          <ScenePicker teamId={team.id} map={content.map} value={step.scene} onChange={scene => update({ scene })} />
-                          <Choice
-                            label="Nade verknüpfen"
-                            value=""
-                            disabled={step.nadeIds.length >= 10}
-                            options={[
-                              { value: "", label: "Nade dieser Map auswählen" },
-                              ...nades
-                                .filter(
-                                  (nade) =>
-                                    nade.map === content.map &&
-                                    nade.id &&
-                                    !step.nadeIds.includes(nade.id),
-                                )
-                                .map((nade) => ({
-                                  value: nade.id,
-                                  label: nade.displayName || nade.name,
-                                })),
-                            ]}
-                            onChange={(id) => {
-                              if (id)
-                                update({ nadeIds: [...step.nadeIds, id] });
-                            }}
-                          />
-                        </FieldGroup>
-                      </div>
-                    );
-                  })}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={slot.steps.length >= 40}
-                    onClick={() =>
-                      patchSlot(index, {
-                        steps: [
-                          ...slot.steps,
-                          {
-                            id: newWorkspaceId(),
-                            text: "",
-                            position: "",
-                            timing: "",
-                            nadeIds: [],
-                          },
-                        ],
-                      })
-                    }
-                  >
-                    <Plus />
-                    Schritt hinzufügen
-                  </Button>
-                </FieldGroup>
-              </CardContent>
-            </Card>
+                                  placeholder="z. B. T-Ramp"
+                                />
+                              </Field>
+                              <Field>
+                                <FieldLabel>Timing</FieldLabel>
+                                <Input
+                                  maxLength={200}
+                                  value={step.timing}
+                                  onChange={(event) =>
+                                    update({ timing: event.target.value })
+                                  }
+                                  placeholder="z. B. Auf Call oder bei 1:45"
+                                />
+                              </Field>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {step.nadeIds.map((id) => {
+                                const nade = nades.find(
+                                  (nade) => nade.id === id,
+                                );
+                                return (
+                                  <Button
+                                    key={id}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      update({
+                                        nadeIds: step.nadeIds.filter(
+                                          (value) => value !== id,
+                                        ),
+                                      })
+                                    }
+                                  >
+                                    {nade?.displayName ||
+                                      nade?.name ||
+                                      "Nade fehlt"}
+                                    {nade && nade.map !== content.map
+                                      ? " · Andere Map"
+                                      : ""}
+                                    <span aria-label="Verknüpfung entfernen">
+                                      ×
+                                    </span>
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                            <ScenePicker
+                              teamId={team.id}
+                              map={content.map}
+                              value={step.scene}
+                              onChange={(scene) => update({ scene })}
+                            />
+                            <Choice
+                              label="Nade verknüpfen"
+                              value=""
+                              disabled={step.nadeIds.length >= 10}
+                              options={[
+                                {
+                                  value: "",
+                                  label: "Nade dieser Map auswählen",
+                                },
+                                ...nades
+                                  .filter(
+                                    (nade) =>
+                                      nade.map === content.map &&
+                                      nade.id &&
+                                      !step.nadeIds.includes(nade.id),
+                                  )
+                                  .map((nade) => ({
+                                    value: nade.id,
+                                    label: nade.displayName || nade.name,
+                                  })),
+                              ]}
+                              onChange={(id) => {
+                                if (id)
+                                  update({ nadeIds: [...step.nadeIds, id] });
+                              }}
+                            />
+                          </FieldGroup>
+                        </div>
+                      );
+                    })}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={slot.steps.length >= 40}
+                      onClick={() =>
+                        patchSlot(index, {
+                          steps: [
+                            ...slot.steps,
+                            {
+                              id: newWorkspaceId(),
+                              text: "",
+                              position: "",
+                              timing: "",
+                              nadeIds: [],
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      <Plus />
+                      Schritt hinzufügen
+                    </Button>
+                  </FieldGroup>
+                </CardContent>
+              </Card>
+            </details>
           ))}
           <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border bg-background p-4 shadow-lg">
             <Button type="submit" disabled={!dirty && !!strat}>
@@ -1021,182 +1240,4 @@ function EditorForm({
   );
 }
 
-export function LiveStratsPage(props: LibraryProps) {
-  const { teamId } = useParams();
-  const teams = useResource<{ entries: TeamView[] }>("/api/teams");
-  const navigate = useNavigate();
-  return (
-    <>
-      <WorkspaceHeader
-        title="Live-Ansicht"
-        description="Eine aktive Taktik für das ganze Team. Deine Aufgaben wechseln automatisch mit."
-      />
-      <div className="mb-6 max-w-sm">
-        <Choice
-          label="Team"
-          value={teamId || ""}
-          onChange={(id) =>
-            navigate(id ? `/strats/live/${id}` : "/strats/live")
-          }
-          options={[
-            { value: "", label: "Team auswählen" },
-            ...(teams.data?.entries || []).map((team) => ({
-              value: team.id,
-              label: team.name,
-            })),
-          ]}
-        />
-      </div>
-      <Feedback error={teams.error} />
-      {teamId ? (
-        <LiveTeam key={teamId} {...props} teamId={teamId} />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Für welches Team spielst du?</CardTitle>
-            <CardDescription>
-              Wähle oben ein Team, um seine aktive Taktik zu öffnen.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-    </>
-  );
-}
-
-function LiveTeam({ teamId, ...props }: LibraryProps & { teamId: string }) {
-  const live = useResource<{ team: TeamView }>(`/api/teams/${teamId}/live`);
-  const strats = useResource<{ entries: StratView[] }>("/api/strats");
-  const [selected, setSelected] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const team = live.data?.team;
-  const active = team?.active;
-  const choices = (strats.data?.entries || []).filter(
-    (strat) => strat.teamId === teamId && strat.published && !strat.archived,
-  );
-  async function activate() {
-    setBusy(true);
-    setError("");
-    try {
-      const strat = choices.find((strat) => strat.id === selected);
-      await api(`/api/strats/${selected}/activate`, {
-        method: "POST",
-        body: JSON.stringify({ revision: strat?.revision }),
-      });
-      live.reload();
-    } catch (cause) {
-      setError(cause.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <Feedback error={error || live.error} />
-      {live.error && team && (
-        <p role="status" className="mb-4 text-sm text-muted-foreground">
-          Verbindung unterbrochen. Angezeigt wird der letzte bestätigte Stand.
-          Neuer Versuch erfolgt automatisch.
-        </p>
-      )}
-      {!team ? (
-        <p role="status">
-          {live.loading
-            ? "Teamstand wird geladen …"
-            : "Kein zugänglicher Teamstand."}
-        </p>
-      ) : (
-        <>
-          {team.permissions["strats.activate"] && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Taktik auswählen</CardTitle>
-                <CardDescription>
-                  Die Aktivierung gilt für alle geöffneten Live-Ansichten von{" "}
-                  {team.name}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-end gap-3">
-                <div className="min-w-52 flex-1">
-                  <Choice
-                    label="Veröffentlichte Strat"
-                    value={selected}
-                    onChange={setSelected}
-                    options={[
-                      { value: "", label: "Strat auswählen" },
-                      ...choices.map((strat) => ({
-                        value: strat.id,
-                        label: `${titleOf(strat)} · V${strat.published.version}`,
-                      })),
-                    ]}
-                  />
-                </div>
-                <Button
-                  disabled={!selected || busy || !!live.error}
-                  onClick={() => void activate()}
-                >
-                  <Radio />
-                  Aktivieren
-                </Button>
-                {active && (
-                  <ConfirmAction
-                    title="Aktive Taktik beenden"
-                    description="Alle Teammitglieder sehen danach, dass keine Taktik aktiv ist."
-                    onConfirm={async () => {
-                      await api(`/api/teams/${team.id}/live`, {
-                        method: "DELETE",
-                        body: JSON.stringify({ revision: team.revision }),
-                      });
-                      live.reload();
-                    }}
-                  >
-                    Beenden
-                  </ConfirmAction>
-                )}
-              </CardContent>
-            </Card>
-          )}
-          {active ? (
-            <>
-              <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
-                <div>
-                  <h2 className="control-title text-2xl">
-                    {active.content.title}
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {active.content.map} · {active.content.side.toUpperCase()} ·
-                    Version {active.version}
-                  </p>
-                </div>
-                <Badge variant="secondary">
-                  {live.error
-                    ? "Letzter Stand"
-                    : live.connection === "connected"
-                      ? "Live · verbunden"
-                      : "Verbindung unterbrochen · wird wiederhergestellt"}
-                </Badge>
-              </div>
-              <StratTasks
-                key={active.activationId}
-                {...props}
-                content={active.content}
-                team={team}
-              />
-            </>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Keine Taktik aktiv</CardTitle>
-                <CardDescription>
-                  Ein Owner oder Captain kann eine veröffentlichte Strat für{" "}
-                  {team.name} aktivieren.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          )}
-        </>
-      )}
-    </>
-  );
-}
+export { LiveStratSettingsPage } from "./live-strat-control";

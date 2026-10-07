@@ -33,11 +33,10 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange 
   };
   return <article className="playbook-page grid gap-6">
     <header className="flex flex-wrap items-end justify-between gap-4">
-      <div><p className="control-kicker">Server · Plattform-Admin</p><h1 className="control-title mt-2 text-3xl">Reviews</h1><p className="mt-2 text-sm text-muted-foreground">Eingereichte Lineups prüfen und ausstehende Aufnahmen vervollständigen.</p></div>
+      <div><p className="control-kicker">Verwaltung · Plattform-Admin</p><h1 className="control-title mt-2 text-3xl">Reviews</h1><p className="mt-2 text-sm text-muted-foreground">Eingereichte Lineups prüfen und ausstehende Aufnahmen vervollständigen.</p></div>
       <ActionButton variant="outline" icon={RefreshCw} onClick={onRefresh} successLabel="Aktualisiert">Aktualisieren</ActionButton>
     </header>
-    <ReviewSessionWorkspace {...{ nades, user, onEntriesChange }} />
-    <Collapsible defaultOpen={false} className="grid gap-4">
+    <Collapsible defaultOpen={true} className="grid gap-4">
     <CollapsibleTrigger asChild><Button variant="outline" className="w-full justify-between">Reviews und Filter · {entries.length} offen<ChevronDown data-icon="inline-end" /></Button></CollapsibleTrigger>
     <CollapsibleContent className="grid gap-4">
     <Card><CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
@@ -58,5 +57,6 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange 
     })}</ul> : <Empty><EmptyHeader><EmptyTitle>Keine offenen Reviews</EmptyTitle><EmptyDescription>Für diese Filter ist nichts ausstehend. Wähle eine andere Map oder einen anderen Status.</EmptyDescription></EmptyHeader></Empty>}
     </CollapsibleContent>
     </Collapsible>
+    <ReviewSessionWorkspace {...{ nades, user, onEntriesChange }} />
   </article>;
 }

@@ -9,7 +9,7 @@ async function invoke(channel, ...args) {
 }
 
 // Expose individual operations only. Never expose ipcRenderer, console commands,
-// filesystem paths, arbitrary URLs, or screen/window IDs to the remote website.
+// arbitrary filesystem access, URLs, or screen/window IDs to the remote website.
 if (location.origin === 'https://playbook.schlossers.at' && window === window.top) {
   contextBridge.exposeInMainWorld('playbookDesktop', Object.freeze({
     version: 1,
@@ -34,5 +34,10 @@ if (location.origin === 'https://playbook.schlossers.at' && window === window.to
     liveStop: () => invoke('review:live-stop'),
     liveMute: muted => invoke('review:live-mute', muted),
     liveRetry: () => invoke('review:live-retry'),
+    demoFolderStatus: () => invoke('review:demo-folder-status'),
+    demoFolderSet: folder => invoke('review:demo-folder-set', folder),
+    demoFolderChoose: () => invoke('review:demo-folder-choose'),
+    demoFolderImport: options => invoke('review:demo-folder-import', options),
+    demoFolderCancel: () => invoke('review:demo-folder-cancel'),
   }));
 }

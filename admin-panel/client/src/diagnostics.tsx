@@ -27,21 +27,21 @@ import {
 } from "./components/ui/dialog";
 
 const STATUS_META = {
-  pass: { label: "ready", badge: "success", icon: Check },
-  warn: { label: "unconfirmed", badge: "warning", icon: CircleDashed },
-  fail: { label: "blocked", badge: "destructive", icon: X }
+  pass: { label: "Bereit", badge: "success", icon: Check },
+  warn: { label: "Nicht bestätigt", badge: "warning", icon: CircleDashed },
+  fail: { label: "Blockiert", badge: "destructive", icon: X }
 } as const;
 
 function formatDate(value) {
-  if (!value) return "unknown";
+  if (!value) return "Unbekannt";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Unbekannt" : date.toLocaleString();
 }
 
 function overallLabel(overall) {
-  if (overall === "healthy") return "Healthy";
-  if (overall === "degraded") return "Needs review";
-  return "Action required";
+  if (overall === "healthy") return "In Ordnung";
+  if (overall === "degraded") return "Prüfung nötig";
+  return "Handlungsbedarf";
 }
 
 function overallVariant(overall) {
@@ -52,7 +52,7 @@ function overallVariant(overall) {
 
 function LoadChain({ checks, label }) {
   return (
-    <ol className="diagnostic-rail" aria-label={`${label} load chain`}>
+    <ol className="diagnostic-rail" aria-label={`${label} Startprüfung`}>
       {checks.map((item) => {
         const meta = STATUS_META[item.status] || STATUS_META.warn;
         const Icon = meta.icon;
@@ -83,8 +83,8 @@ function DiagnosticsReport({ diagnostics }) {
         <CardHeader className="relative">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex flex-col gap-2">
-              <p className="diagnostic-kicker">Live load path</p>
-              <CardTitle className="diagnostic-title">{diagnostics.mode?.name || "Server"} startup trace</CardTitle>
+              <p className="diagnostic-kicker">Aktueller Serverstand</p>
+              <CardTitle className="diagnostic-title">{diagnostics.mode?.name || "Server"} · Startprüfung</CardTitle>
               <CardDescription>{diagnostics.summary}</CardDescription>
             </div>
             <Badge variant={overallVariant(diagnostics.overall)}>{overallLabel(diagnostics.overall)}</Badge>
@@ -108,20 +108,20 @@ function DiagnosticsReport({ diagnostics }) {
 
       {diagnostics.plugins?.length > 0 ? (
         <Card>
-          <CardHeader><CardTitle>Configured plugin health</CardTitle><CardDescription>Enabled optional plugins and the dependency markers expected inside the container.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Plugin-Status</CardTitle><CardDescription>Aktivierte Plugins und ihre benötigten Komponenten.</CardDescription></CardHeader>
           <CardContent className="divide-y divide-border">
             {diagnostics.plugins.map((plugin) => (
-              <div key={plugin.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"><span className="text-sm font-semibold">{plugin.label}</span><Badge variant={plugin.status === "pass" ? "success" : "destructive"}>{plugin.status === "pass" ? "complete" : `${plugin.missingFiles.length} missing`}</Badge></div>
+              <div key={plugin.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"><span className="text-sm font-semibold">{plugin.label}</span><Badge variant={plugin.status === "pass" ? "success" : "destructive"}>{plugin.status === "pass" ? "Vollständig" : `${plugin.missingFiles.length} fehlen`}</Badge></div>
             ))}
           </CardContent>
         </Card>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+      <details className="disclosure-panel"><summary>Versionen und Containerdetails</summary><div className="p-4">      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Installed versions</CardTitle>
-            <CardDescription>Read from the installer state inside the CS2 volume.</CardDescription>
+            <CardTitle>Installierte Versionen</CardTitle>
+            <CardDescription>Versionen aus dem Installationsstand des Servers.</CardDescription>
           </CardHeader>
           <CardContent>
             {detectedVersions.length > 0 ? (
@@ -130,55 +130,55 @@ function DiagnosticsReport({ diagnostics }) {
                   <div key={item.key} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1.3fr_1fr_1fr] sm:items-center">
                     <dt className="text-sm font-semibold">{item.label}</dt>
                     <dd className="font-mono text-xs text-foreground">{item.installed}</dd>
-                    <dd className="text-xs text-muted-foreground">wanted: {item.wanted}</dd>
+                    <dd className="text-xs text-muted-foreground">Gewünscht: {item.wanted}</dd>
                   </div>
                 ))}
               </dl>
             ) : (
-              <p className="text-sm text-muted-foreground">No installer state was detected.</p>
+              <p className="text-sm text-muted-foreground">Kein Installationsstand erkannt.</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Runtime</CardTitle>
-            <CardDescription>Safe Docker metadata, without environment values.</CardDescription>
+            <CardTitle>Container</CardTitle>
+            <CardDescription>Zustand und letzte Startzeit des Servercontainers.</CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-3 text-sm">
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">Container</dt>
-                <dd className="truncate font-mono text-xs">{diagnostics.service.containerName || "not found"}</dd>
+                <dd className="truncate font-mono text-xs">{diagnostics.service.containerName || "Nicht gefunden"}</dd>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">ID</dt>
-                <dd className="font-mono text-xs">{diagnostics.service.containerId || "none"}</dd>
+                <dd className="font-mono text-xs">{diagnostics.service.containerId || "Keine"}</dd>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">Started</dt>
+                <dt className="text-muted-foreground">Gestartet</dt>
                 <dd className="text-right text-xs">{formatDate(diagnostics.service.startedAt)}</dd>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">Restarts</dt>
+                <dt className="text-muted-foreground">Neustarts</dt>
                 <dd><Badge variant="outline">{diagnostics.service.restartCount}</Badge></dd>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">Control</dt>
+                <dt className="text-muted-foreground">Steuerung</dt>
                 <dd><Badge variant="outline">{diagnostics.service.controlMode}</Badge></dd>
               </div>
               {diagnostics.mode?.id === "matchzy" ? <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">MatchZy config</dt>
-                <dd><Badge variant={diagnostics.nades.configPresent ? "success" : "warning"}>{diagnostics.nades.configPresent ? "present" : "missing"}</Badge></dd>
+                <dt className="text-muted-foreground">MatchZy-Konfiguration</dt>
+                <dd><Badge variant={diagnostics.nades.configPresent ? "success" : "warning"}>{diagnostics.nades.configPresent ? "Vorhanden" : "Fehlt"}</Badge></dd>
               </div> : null}
               {diagnostics.nades.relevant ? <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">Saved nades</dt>
-                <dd><Badge variant={diagnostics.nades.savedNadesPresent ? "success" : "warning"}>{diagnostics.nades.savedNadesPresent ? "present" : "missing"}</Badge></dd>
+                <dt className="text-muted-foreground">Gespeicherte Nades</dt>
+                <dd><Badge variant={diagnostics.nades.savedNadesPresent ? "success" : "warning"}>{diagnostics.nades.savedNadesPresent ? "Vorhanden" : "Fehlt"}</Badge></dd>
               </div> : null}
             </dl>
           </CardContent>
         </Card>
-      </section>
+      </section></div></details>
     </div>
   );
 }
@@ -217,7 +217,7 @@ export function Diagnostics({ active, onOpenLogs }) {
   async function copyReport() {
     if (!reportText) return;
     await copyText(reportText);
-    setMessage("Diagnostic report copied.");
+    setMessage("Diagnosebericht kopiert.");
   }
 
   async function repair() {
@@ -243,35 +243,35 @@ export function Diagnostics({ active, onOpenLogs }) {
         <CardContent className="flex flex-wrap items-center gap-2 p-3 sm:p-3">
           <Button variant="secondary" onClick={loadDiagnostics} disabled={loading}>
             <RefreshCw data-icon="inline-start" className={cn(loading && "animate-spin")} />
-            Run diagnostics
+            Diagnose starten
           </Button>
           <Button variant="secondary" onClick={copyReport} disabled={!diagnostics}>
             <Clipboard data-icon="inline-start" />
-            Copy report
+            Bericht kopieren
           </Button>
           <Button variant="secondary" onClick={onOpenLogs}>
             <Terminal data-icon="inline-start" />
-            Open Docker logs
+            Server-Logs öffnen
           </Button>
           <Button onClick={() => setRepairOpen(true)} disabled={!diagnostics?.repairAvailable || loading}>
             <Wrench data-icon="inline-start" />
-            Repair mods once
+            Plugins reparieren
           </Button>
           {diagnostics?.generatedAt ? (
-            <span className="ml-auto text-xs text-muted-foreground">Checked {formatDate(diagnostics.generatedAt)}</span>
+            <span className="ml-auto text-xs text-muted-foreground">Geprüft am {formatDate(diagnostics.generatedAt)}</span>
           ) : null}
         </CardContent>
       </Card>
 
       {error ? (
         <Alert variant="destructive" className="mb-4">
-          <AlertTitle>Diagnostics failed</AlertTitle>
+          <AlertTitle>Diagnose fehlgeschlagen</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
       {message ? (
         <Alert variant="success" className="mb-4">
-          <AlertTitle>Action completed</AlertTitle>
+          <AlertTitle>Aktion abgeschlossen</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
@@ -279,8 +279,8 @@ export function Diagnostics({ active, onOpenLogs }) {
       {diagnostics ? <DiagnosticsReport diagnostics={diagnostics} /> : (
         <Card>
           <CardHeader>
-            <CardTitle>{loading ? "Inspecting the CS2 container" : "No diagnostic report yet"}</CardTitle>
-            <CardDescription>{loading ? "Reading startup logs and plugin markers." : "Diagnose der Serverkomponenten starten."}</CardDescription>
+            <CardTitle>{loading ? "CS2-Container wird geprüft" : "Noch kein Diagnosebericht"}</CardTitle>
+            <CardDescription>{loading ? "Startprotokoll und Plugin-Installation werden geprüft." : "Diagnose der Serverkomponenten starten."}</CardDescription>
           </CardHeader>
         </Card>
       )}
@@ -288,20 +288,20 @@ export function Diagnostics({ active, onOpenLogs }) {
       <Dialog open={repairOpen} onOpenChange={setRepairOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Repair the mod installation?</DialogTitle>
+            <DialogTitle>Plugin-Installation reparieren?</DialogTitle>
             <DialogDescription>
-              This enables a one-shot mod repair and restarts the CS2 container. Connected players will be disconnected.
+              Die Plugins werden einmal repariert und der CS2-Container wird neu gestartet. Verbundene Spieler werden getrennt.
             </DialogDescription>
           </DialogHeader>
           <Alert role="status" variant="warning">
-            <AlertTitle>One restart</AlertTitle>
-            <AlertDescription>The panel resets the repair switch after the bootstrap hook finishes, including a failed hook.</AlertDescription>
+            <AlertTitle>Einmalige Reparatur</AlertTitle>
+            <AlertDescription>Nach dem Installationsversuch wird die Reparaturoption automatisch zurückgesetzt.</AlertDescription>
           </Alert>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setRepairOpen(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setRepairOpen(false)}>Abbrechen</Button>
             <Button onClick={repair}>
               <Wrench data-icon="inline-start" />
-              Repair and restart
+              Reparieren & neu starten
             </Button>
           </DialogFooter>
         </DialogContent>

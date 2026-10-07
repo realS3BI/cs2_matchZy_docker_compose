@@ -11,9 +11,10 @@ using System.Runtime.Versioning;
 Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 
 // Separate process: physical pixel coordinates, independent of Electron's DPI mode.
-Native.SetProcessDpiAwarenessContext(new nint(-4));
 try
 {
+    if (args.Length == 3 && args[0] == "demo-extract") { DemoArchives.Extract(args[1], args[2]); return; }
+    Native.SetProcessDpiAwarenessContext(new nint(-4));
     if (args.Length == 1 && args[0] == "audio-devices") { LiveAudio.Devices(); return; }
     if (args.Length == 2 && args[0] == "audio-recover") { LiveAudio.Recover(args[1]); return; }
     if (args.Length > 0 && args[0] == "audio")

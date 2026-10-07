@@ -73,7 +73,7 @@ export function NavMain({ items, onNavigate }: { items: SidebarSection[]; onNavi
   return (
     <SidebarGroup>
       <nav aria-label="Hauptnavigation">
-        <SidebarMenu className="gap-4">
+        <SidebarMenu className="gap-1">
           {items.map(item => <NavSection key={item.title} item={item} onNavigate={onNavigate} />)}
         </SidebarMenu>
       </nav>

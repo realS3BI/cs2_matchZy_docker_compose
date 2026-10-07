@@ -284,6 +284,9 @@ test(
         .content.title,
       "Published title",
     );
+    team = (await f.request(0, `/teams/${team.id}/live`, "POST", { revision: team.revision })).team;
+    const waiting = await member.wait(m => m.path === path && m.data?.team.live && m.data.active === null);
+    assert.equal(waiting.data.team.live, true);
     let result = await f.request(0, `/strats/${strat.id}/activate`, "POST", {
       revision: strat.revision,
     });
@@ -294,6 +297,10 @@ test(
         .content.title,
       "Published title",
     );
+    result = await f.request(0, `/teams/${team.id}/live/strat`, "DELETE", { revision: team.revision });
+    team = result.team;
+    await member.wait(m => m.path === path && m.data?.team.live && m.data.active === null);
+    assert.equal(team.live, true);
     await f.request(0, `/strats/${strat.id}`, "PUT", {
       revision: strat.revision,
       content: { ...content, title: "Secret draft" },
@@ -303,7 +310,7 @@ test(
     });
     team = result.team;
     await member.wait(
-      (m) => m.path === path && m.type === "snapshot" && m.data.active === null,
+      (m) => m.path === path && m.type === "snapshot" && m.data.team.live === false && m.data.active === null,
     );
     assert.ok(!JSON.stringify(member.messages).includes("Secret draft"));
     await f.request(0, `/teams/${team.id}`, "PATCH", {

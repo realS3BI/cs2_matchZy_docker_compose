@@ -12,11 +12,11 @@ import { TEAM_LABELS, isLineupTeam } from "../../../shared/lineup-teams";
 import { copyText } from "../lib/clipboard";
 import { CLICK_LABELS, MOVEMENT_LABELS, movementType } from "../../../shared/throw-attributes";
 
-export function CrosshairView({ nade, open, onOpenChange }) {
+export function CrosshairView({ nade, open, onOpenChange, className = "" }) {
   const [zoom, setZoom] = useState(3);
   const image = nade?.reviewMedia?.aim;
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="crosshair-dialog" onEscapeKeyDown={event => event.stopPropagation()}>
+    <DialogContent className={`crosshair-dialog ${className}`} onEscapeKeyDown={event => event.stopPropagation()}>
       <DialogHeader><DialogTitle>{nade?.displayName || nade?.name} · Ausrichtung</DialogTitle><DialogDescription>Der Zoom ist auf das Fadenkreuz in der Bildmitte ausgerichtet.</DialogDescription></DialogHeader>
       {image ? <>
         <div className="crosshair-viewport"><img src={image.url} alt={`Ausrichtung für ${nade.displayName || nade.name}`} style={{ transform: `scale(${zoom})` }} /></div>

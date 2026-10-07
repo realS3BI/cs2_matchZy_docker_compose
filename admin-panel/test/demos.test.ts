@@ -3,16 +3,39 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { WebSocket } from "ws";
 import { workspaceFixture, ids } from "./workspace-fixture.js";
-import { demoRounds } from "../src/demo-parser.js";
-import { processDemoJob } from "../src/demo-worker.js";
-import { playbackTime, type SceneReference } from "../shared/demos.js";
+import { demoRounds, roundEconomy, roundLoadouts } from "../src/demo-parser.js";
+import { processDemoJob, removeAnalyzedOriginals } from "../src/demo-worker.js";
+import {
+  classifyBuy,
+  loadoutSummary,
+  playbackTime,
+  roundClock,
+  type SceneReference,
+} from "../shared/demos.js";
 import { newStratContent } from "../shared/strats.js";
 
 const mongo = { skip: !process.env.TEST_MONGODB_URI };
+test("folder import lookup finds content only within an authorized personal or team scope", mongo, async t => {
+  const f = await workspaceFixture();
+  t.after(() => f.close());
+  const hash = "a".repeat(64);
+  const personal = await f.request(0, "/analysis/demos", "POST", { title: "Ordnerdemo", source: "faceit", filename: "first.dem" });
+  await f.store.analysis.demos.updateOne({ _id: personal.demo.id }, { $set: { hash, status: "queued" } });
+  const own = await f.request(0, "/analysis/demos/lookup", "POST", { hash });
+  assert.deepEqual(own.demo, { id: personal.demo.id, status: "queued" });
+  assert.equal((await f.request(1, "/analysis/demos/lookup", "POST", { hash })).demo, null);
+  assert.equal((await f.request(0, "/analysis/demos/lookup", "POST", { hash: "invalid" })).status, 400);
+  const team = (await f.request(0, "/teams", "POST", { name: "Import-Team" })).team;
+  assert.equal((await f.request(0, "/analysis/demos/lookup", "POST", { hash, teamId: team.id })).demo, null);
+  assert.equal((await f.request(1, "/analysis/demos/lookup", "POST", { hash, teamId: team.id })).status, 404);
+  const shared = await f.request(0, "/analysis/demos", "POST", { title: "Teamdemo", source: "faceit", filename: "team.dem", teamId: team.id });
+  await f.store.analysis.demos.updateOne({ _id: shared.demo.id }, { $set: { hash, status: "ready" } });
+  assert.equal((await f.request(0, "/analysis/demos/lookup", "POST", { hash, teamId: team.id })).demo.id, shared.demo.id);
+});
 async function fixture(t) {
   const f = await workspaceFixture();
   t.after(() => f.close());
@@ -156,6 +179,11 @@ test("round intervals handle warmup transitions, counter rollover, overtime and 
   const result = demoRounds(events);
   assert.equal(result.rounds.length, 26);
   assert.equal(result.rounds[0].startTick, 164);
+  // Times stay relative to freeze end: the buy phase reaches back to round start, the after-round pause is capped.
+  assert.equal(result.rounds[0].buyStart, -163 / 64);
+  assert.equal(result.rounds[0].afterEnd, 3136 / 64 + 10);
+  assert.equal(result.rounds[1].buyStart, -1);
+  assert.equal(result.rounds[25].afterEnd, 3136 / 64 + 10);
   assert.equal(result.rounds[25].number, 26);
   assert.equal(result.warnings.length, 1);
   const scene = {
@@ -229,6 +257,7 @@ test(
       { end: 101 },
       { focusId: ids[3] },
       { start: -1 },
+      { start: -31 },
     ])
       assert.equal(
         (
@@ -485,6 +514,7 @@ test(
     const failed = await f.request(1, `/analysis/demos/${first.demo.id}`);
     assert.equal(failed.demo.status, "failed");
     assert.match(failed.demo.error, /CS2-Demo/);
+    assert.deepEqual(await readFile(f.store.analysis.path(first.demo.id, "source")), data);
     assert.equal(
       (await f.request(3, `/analysis/demos/${first.demo.id}`)).status,
       404,
@@ -538,9 +568,105 @@ test(
     assert.ok(replay.events.length);
     assert.ok(
       replay.frames.every(
-        (frame) => frame.time >= 0 && frame.time <= replay.round.duration,
+        (frame) =>
+          frame.time >= replay.round.buyStart &&
+          frame.time <= replay.round.afterEnd,
       ),
     );
+    assert.ok(replay.round.buyStart < 0);
+    assert.ok(replay.round.afterEnd > replay.round.duration);
+    assert.ok(replay.loadouts.length);
+    assert.ok(result.demo.summary.rounds.every((round) => round.economy?.t && round.economy?.ct));
     assert.ok(replay.grenades.length);
+    assert.equal(result.demo.originalRetained, false);
+    await assert.rejects(stat(f.store.analysis.path(demo.id, "source")), { code: "ENOENT" });
+    assert.equal((await f.store.storage.usage(`team:${f.team.id}`)).originals, 0);
   },
 );
+
+test("original cleanup preserves replay and grenades, resumes after deletion and leaves incomplete analyses intact", mongo, async (t) => {
+  const f = await fixture(t);
+  for (const mode of ["complete", "missing-round", "incomplete-round", "already-deleted", "legacy"] as const) {
+    const { demo } = await readyDemo(f, f.team.id);
+    const path = f.store.analysis.path(demo.id, "source");
+    const replayPath = f.store.analysis.path(demo.id, "r1.json");
+    const replay = JSON.parse(await readFile(replayPath, "utf8"));
+    const asset = await f.store.analysis.demos.findOne({ _id: demo.id });
+    await writeFile(f.store.analysis.path(demo.id, "summary.json"), JSON.stringify(asset.summary));
+    replay.frames = [{ time: 0, players: [] }];
+    replay.events = [{ time: 1, kind: "smokegrenade_detonate" }];
+    replay.grenades = [{ id: "smoke", kind: "smoke", points: [{ time: 0, x: 1, y: 2, z: 3 }] }];
+    if (mode === "incomplete-round") delete replay.grenades;
+    await writeFile(replayPath, JSON.stringify(replay));
+    if (mode === "missing-round") await rm(replayPath);
+    if (mode !== "already-deleted") await writeFile(path, "original demo");
+    await f.store.analysis.demos.updateOne({ _id: demo.id }, {
+      $set: { originalCleanupPending: mode !== "legacy", originalRetained: true, bytes: 13, derivedBytes: 42,
+        autoImport: true, pinned: false, analysisExpiresAt: new Date(0).toISOString() },
+    });
+    await removeAnalyzedOriginals(f.store.db, f.store.analysis.directory);
+    const stored = await f.store.analysis.demos.findOne({ _id: demo.id });
+    assert.equal(stored.status, "ready");
+    if (mode === "missing-round" || mode === "incomplete-round" || mode === "legacy") {
+      assert.equal(await readFile(path, "utf8"), "original demo");
+      assert.equal(stored.originalRetained, true);
+      continue;
+    }
+    assert.equal(stored.originalRetained, false);
+    assert.equal(stored.originalCleanupPending, undefined);
+    await assert.rejects(stat(path), { code: "ENOENT" });
+    const fetched = await f.request(2, `/analysis/demos/${demo.id}/rounds/r1`);
+    assert.equal(fetched.status, 200);
+    assert.deepEqual(fetched.grenades, replay.grenades);
+    assert.deepEqual(fetched.events, replay.events);
+    await f.store.imports.cleanup();
+    assert.ok(await f.store.analysis.demos.findOne({ _id: demo.id }));
+    await removeAnalyzedOriginals(f.store.db, f.store.analysis.directory);
+    assert.deepEqual(JSON.parse(await readFile(replayPath, "utf8")), replay);
+  }
+});
+
+test("buy types follow start money and equipment value", () => {
+  const team = (equipment: number, startMoney = 4000) =>
+    Array.from({ length: 5 }, () => ({ equipment, startMoney }));
+  assert.equal(classifyBuy(team(900, 800)), "pistol");
+  assert.equal(classifyBuy(team(4500)), "fullbuy");
+  assert.equal(classifyBuy([...team(4800).slice(0, 4), { equipment: 700, startMoney: 1500 }]), "fullbuy");
+  assert.equal(classifyBuy(team(2400)), "semi-buy");
+  assert.equal(classifyBuy(team(650, 1900)), "eco");
+  // Overtime money is never mistaken for a pistol round.
+  assert.equal(classifyBuy(team(800, 12500)), "eco");
+  assert.equal(classifyBuy([]), undefined);
+});
+
+test("round clock covers buy phase, round timer, bomb timer and after-round pause", () => {
+  const round = { id: "r1", number: 1, startTick: 0, endTick: 0, duration: 100, winner: 2, buyStart: -20, afterEnd: 107 };
+  assert.deepEqual(roundClock(round, -12), { phase: "buy", remaining: 12 });
+  assert.deepEqual(roundClock(round, 15), { phase: "live", remaining: 100 });
+  assert.deepEqual(roundClock({ ...round, roundTime: 135 }, 15), { phase: "live", remaining: 120 });
+  assert.deepEqual(roundClock(round, 70, 60), { phase: "planted", remaining: 30 });
+  assert.deepEqual(roundClock(round, 103, 60), { phase: "over", remaining: 4 });
+});
+
+test("loadouts list the active kit, grenades and bomb and only store changes", () => {
+  assert.deepEqual(
+    loadoutSummary(["Butterfly Knife", "Glock-18", "AK-47", "Smoke Grenade", "Flashbang", "Molotov", "C4 Explosive"]),
+    { primary: "AK-47", secondary: "Glock-18", zeus: false, grenades: ["Smoke", "Flash", "Molly"], bomb: true },
+  );
+  assert.deepEqual(loadoutSummary(["Knife", "USP-S", "Incendiary Grenade", "High Explosive Grenade", "Decoy Grenade"]).grenades, ["Molly", "HE", "Decoy"]);
+  const state = (items: string[], money: number, equipment = 200, spent = 0) => ({
+    items, money, spent, equipment, armor: 0, helmet: false, defuser: false,
+  });
+  const states: [number, Map<string, any>][] = [
+    [0, new Map([["a", state(["Glock-18"], 4000)], ["b", state(["USP-S"], 800)]])],
+    [64, new Map([["a", state(["Glock-18"], 4000)], ["b", state(["USP-S"], 800)]])],
+    [128, new Map([["a", state(["Glock-18", "AK-47"], 1300, 2900, 2700)], ["b", state(["USP-S"], 800)]])],
+    [192, new Map([["a", state(["Glock-18", "AK-47"], 1300, 2900, 2700)], ["b", state(["USP-S"], 800)]])],
+  ];
+  const loadouts = roundLoadouts(states, 128);
+  assert.deepEqual(loadouts.map((entry) => [entry.id, entry.time]), [["a", -2], ["b", -2], ["a", 0]]);
+  const frames = [{ time: 0, players: [{ id: "a", side: 2 }, { id: "b", side: 3 }] as any[] }];
+  const economy = roundEconomy(states, frames, 128, 192);
+  assert.deepEqual(economy.t, { buy: "semi-buy", equipment: 2900, money: 1300, players: 1 });
+  assert.deepEqual(economy.ct, { buy: "pistol", equipment: 200, money: 800, players: 1 });
+});

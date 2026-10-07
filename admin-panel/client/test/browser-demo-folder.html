@@ -1,0 +1,112 @@
+<!doctype html>
+<!-- Start pnpm dev:client and open /test/browser-demo-folder.html.
+     Run await checkBrowserDemoFolder(). Real browser workers and hashing, mocked API; no uploads leave this fixture. -->
+<html lang="de">
+<head><meta charset="UTF-8"><title>Browser-Ordnerimport prüfen</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { BrowserDemoFolderImport } from '/src/components/browser-demo-folder-import.tsx';
+import { BrowserDemoImporter, browserFileHash, topLevelDemoFiles } from '/src/lib/browser-demo-folder.ts';
+import '/src/index.css';
+
+const assert = (condition, message) => { if (!condition) throw Error(message); };
+const waitFor = async predicate => {
+  for (let i = 0; i < 400; i++) {
+    if (predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw Error('Die erwartete Oberfläche erscheint nicht.');
+};
+const fromBase64 = value => Uint8Array.from(atob(value), character => character.charCodeAt(0));
+const fixtures = [
+  new File([fromBase64('UEsDBBQAAAAIAGi5R10mJacAMgAAADAAAAAOAAAALi4vb3V0c2lkZS5kZW0LcHJx9Q02YihOzC3ISVVISc3NVyhIrMzJT0xRSMsvUkitKClKTC7JzM9TKEktLikGAFBLAwQUAAAACABouUddJiWnADIAAAAwAAAAFAAAAG5lc3RlZC9zZWNvbmQuZGVtLmd6C3BycfUNNmIoTswtyElVSEnNzVcoSKzMyU9MUUjLL1JIrSgpSkwuyczPUyhJLS4pBgBQSwMEFAAAAAgAaLlHXSyZBAgJAAAABwAAAAkAAABub3Rlcy50eHQrzs4sUMhNBQBQSwECFAMUAAAACABouUddJiWnADIAAAAwAAAADgAAAAAAAAAAAAAAgAEAAAAALi4vb3V0c2lkZS5kZW1QSwECFAMUAAAACABouUddJiWnADIAAAAwAAAAFAAAAAAAAAAAAAAAgAFeAAAAbmVzdGVkL3NlY29uZC5kZW0uZ3pQSwECFAMUAAAACABouUddLJkECAkAAAAHAAAACQAAAAAAAAAAAAAAgAHCAAAAbm90ZXMudHh0UEsFBgAAAAADAAMAtQAAAPIAAAAAAA==')], 'demos.zip'),
+  new File([fromBase64('UmFyIRoHAM+QcwAADQAAAAAAAADMXnQAgCkAMAAAADAAAAACJiWnAAAAAAAUMAkAIAAAAGZpcnN0LmRlbVBCREVNUzIAc2FtcGxlIGRlbW8gcGF5bG9hZCBmb3IgZXh0cmFjdGlvbiB0ZXN0cwSwewAABwA=')], 'demos.rar'),
+];
+const stored = new Map();
+let uploads = 0;
+let account = 'fixture-owner';
+const request = async (url, options = {}) => {
+  if (url === '/api/auth/me') return { user: { identitySteam64: account } };
+  if (url.endsWith('/lookup')) {
+    const { hash, teamId } = JSON.parse(options.body);
+    return { demo: stored.get(`${teamId}:${hash}`) || null };
+  }
+  if (url === '/api/analysis/demos') return { demo: { id: 'fixture-' + (uploads + 1), ...JSON.parse(options.body) } };
+  if (options.method === 'PUT') {
+    const hash = await browserFileHash(options.body, new AbortController().signal);
+    uploads++;
+    const demo = { id: 'fixture-' + uploads, status: 'queued' };
+    stored.set(`null:${hash}`, demo);
+    return { demo };
+  }
+  throw Error('Unerwartete API: ' + url);
+};
+const originalFetch = window.fetch.bind(window);
+window.fetch = async (url, options) => typeof url === 'string' && url.startsWith('/api/')
+  ? new Response(JSON.stringify(await request(url, options)), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  : originalFetch(url, options);
+// Exercise the directory-input fallback, including repeated user selection.
+Object.defineProperty(window, 'showDirectoryPicker', { configurable: true, value: undefined });
+const root = createRoot(document.getElementById('root'));
+const render = key => root.render(React.createElement(MemoryRouter, null,
+  React.createElement(BrowserDemoFolderImport, { key, teamId: null, onImported() {} })));
+render('fallback');
+
+window.checkBrowserDemoFolder = async () => {
+  stored.clear(); uploads = 0; account = 'fixture-owner';
+  assert(await browserFileHash(new Blob(['test']), new AbortController().signal) === '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', 'Falscher SHA-256-Fingerabdruck');
+  const nested = new File(['PBDEMS2\0ignored nested demo'], 'nested.dem');
+  Object.defineProperty(nested, 'webkitRelativePath', { value: 'Demos/sub/nested.dem' });
+  assert(!topLevelDemoFiles([nested, new File(['text'], 'notes.txt')]).length, 'Unterordner oder andere Dateien werden importiert');
+  const first = await new BrowserDemoImporter(request).run(fixtures, null, 'other', () => {});
+  assert(first.results.length === 3 && first.results.filter(result => result.status === 'uploaded').length === 1 && uploads === 1, 'ZIP/RAR-Extraktion oder Duplikaterkennung fehlerhaft: ' + JSON.stringify(first.results));
+  assert(first.results.every(result => result.demoId), 'Extrahierte Demo fehlt');
+  const second = await new BrowserDemoImporter(request).run(fixtures, null, 'other', () => {});
+  assert(second.results.every(result => result.status === 'skipped') && uploads === 1, 'Wiederholter Import lädt vorhandene Dateien hoch');
+  const cancelled = new BrowserDemoImporter(request);
+  const stopped = await cancelled.run(fixtures, null, 'other', state => { if (state.current.includes('Archiv')) cancelled.cancel(); });
+  assert(!stopped.running && uploads === 1, 'Abbruch beendet den Archivimport nicht');
+  const changed = await new BrowserDemoImporter(async (url, options) => {
+    const result = await request(url, options);
+    if (url === '/api/auth/me') account = 'different-owner';
+    return result;
+  }).run([new File(['PBDEMS2\0some other demo content'], 'new.dem')], null, 'other', () => {});
+  assert(changed.results[0]?.status === 'failed' && uploads === 1, 'Kontowechsel verhindert den Upload nicht');
+  account = 'fixture-owner';
+  await waitFor(() => document.querySelector('input[type=file]'));
+  const selection = new DataTransfer();
+  for (const file of fixtures) {
+    Object.defineProperty(file, 'webkitRelativePath', { configurable: true, value: 'Demos/' + file.name });
+    selection.items.add(file);
+  }
+  const input = document.querySelector('input[type=file]');
+  input.files = selection.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  const button = () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Ordner importieren');
+  await waitFor(() => !button().disabled);
+  button().click();
+  await waitFor(() => document.querySelector('[role=status]')?.textContent.includes('3 bereits vorhanden'));
+  assert(uploads === 1 && document.querySelectorAll('a').length === 3, 'Ordnerauswahl oder Ergebnisanzeige fehlerhaft');
+  const contents = [...fixtures];
+  const directory = { kind: 'directory', name: 'Gespeicherter Ordner',
+    async queryPermission() { return 'granted'; },
+    async *values() { for (const file of contents) yield { kind: 'file', async getFile() { return file; } }; },
+  };
+  Object.defineProperty(window, 'showDirectoryPicker', { configurable: true, value: async () => directory });
+  render('directory-handle');
+  await waitFor(() => button().disabled);
+  [...document.querySelectorAll('button')].find(button => button.textContent === 'Ordner auswählen').click();
+  await waitFor(() => document.body.textContent.includes('Gespeicherter Ordner'));
+  button().click();
+  await waitFor(() => document.querySelector('[role=status]')?.textContent.includes('3 bereits vorhanden'));
+  contents.push(new File(['PBDEMS2\0new file added after selection'], 'added.dem'));
+  button().click();
+  await waitFor(() => document.querySelector('[role=status]')?.textContent.includes('1 hochgeladen · 3 bereits vorhanden'));
+  assert(uploads === 2, 'Neue Dateien werden ohne erneute Ordnerauswahl nicht eingelesen');
+  Object.defineProperty(window, 'showDirectoryPicker', { configurable: true, value: undefined });
+  render('fallback');
+  return 'PASS: SHA-256, ZIP/RAR, Duplikate, Abbruch, Kontowechsel, Ordnerauswahl und erneutes Einlesen';
+};
+</script></body></html>

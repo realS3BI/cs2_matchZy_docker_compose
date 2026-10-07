@@ -269,6 +269,24 @@ test(
         revision: strat.revision,
       });
     strat = (await post("publish")).strat;
+    assert.equal(team.live, false);
+    assert.equal((await post("activate")).status, 400);
+    assert.equal((await f.request(2, `/teams/${team.id}/live`, "POST", { revision: team.revision })).status, 403);
+    assert.equal((await f.request(1, `/teams/${team.id}/live`, "POST", { revision: 999 })).status, 409);
+    team = (await f.request(1, `/teams/${team.id}/live`, "POST", { revision: team.revision })).team;
+    assert.equal(team.live, true);
+    assert.equal(team.active, null);
+    const waiting = await f.request(2, `/teams/${team.id}/live`);
+    assert.equal(waiting.team.live, true);
+    assert.equal(waiting.active, null);
+    assert.equal((await f.request(2, "/teams")).entries.find(entry => entry.id === team.id).live, true);
+    assert.equal((await post("activate")).status, 200);
+    team = (await f.request(1, `/teams/${team.id}/live`)).team;
+    assert.equal((await f.request(2, `/teams/${team.id}/live/strat`, "DELETE", { revision: team.revision })).status, 403);
+    assert.equal((await f.request(1, `/teams/${team.id}/live/strat`, "DELETE", { revision: 999 })).status, 409);
+    team = (await f.request(1, `/teams/${team.id}/live/strat`, "DELETE", { revision: team.revision })).team;
+    assert.equal(team.live, true);
+    assert.equal(team.active, null);
     assert.equal((await post("activate")).status, 200);
     assert.equal(
       (
@@ -349,6 +367,12 @@ test(
       ).status,
       200,
     );
+    team = (await f.request(2, `/teams/${team.id}/live`)).team;
+    assert.equal(team.live, false);
+    assert.equal(team.active, null);
+    team = (await f.request(0, `/teams/${team.id}/live`, "POST", { revision: team.revision })).team;
+    assert.equal(team.live, true);
+    assert.equal(team.active, null);
     strat = (await post("archive")).strat;
     assert.equal((await f.request(2, `/strats/${strat.id}`)).status, 404);
     strat = (await post("restore")).strat;
