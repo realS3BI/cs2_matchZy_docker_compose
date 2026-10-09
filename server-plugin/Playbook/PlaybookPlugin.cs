@@ -16,7 +16,7 @@ namespace Playbook;
 public sealed partial class PlaybookPlugin : BasePlugin
 {
     public override string ModuleName => "Playbook";
-    public override string ModuleVersion => "2.4.0";
+    public override string ModuleVersion => "2.4.1";
     public override string ModuleAuthor => "Playbook";
     public override string ModuleDescription => "Playbook für CS2: Training, Lineups, Reviews und Rollenprüfung.";
 

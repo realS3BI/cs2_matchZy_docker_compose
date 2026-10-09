@@ -57,11 +57,11 @@ function LoadChain({ checks, label }) {
         const meta = STATUS_META[item.status] || STATUS_META.warn;
         const Icon = meta.icon;
         return (
-          <li key={item.id} className="diagnostic-step">
+          <li key={item.id} className={cn("diagnostic-step", `diagnostic-step-${item.status}`)}>
             <span className={cn("diagnostic-node", `diagnostic-node-${item.status}`)}>
               <Icon aria-hidden="true" />
             </span>
-            <div className="flex min-w-0 flex-col gap-1">
+            <div className="diagnostic-step-body">
               <span className="text-sm font-semibold text-foreground">{item.label}</span>
               <Badge variant={meta.badge}>{meta.label}</Badge>
               <span className="text-xs leading-relaxed text-muted-foreground">{item.detail}</span>
@@ -73,38 +73,50 @@ function LoadChain({ checks, label }) {
   );
 }
 
+function DiagnosticsHero({ diagnostics, actions = null }) {
+  return (
+    <Card className="diagnostic-hero">
+      <CardHeader className="relative">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-2">
+            <p className="diagnostic-kicker">Aktueller Serverstand</p>
+            <CardTitle className="diagnostic-title">{diagnostics.mode?.name || "Server"} · Startprüfung</CardTitle>
+            <CardDescription>{diagnostics.summary}</CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Badge variant={overallVariant(diagnostics.overall)}>{overallLabel(diagnostics.overall)}</Badge>
+            {actions}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <LoadChain checks={diagnostics.checks} label={diagnostics.mode?.name || "Server"} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function DiagnosticsFindings({ findings }) {
+  return findings.map((finding, index) => (
+    <Alert
+      key={`${finding.title}-${index}`}
+      role="status"
+      variant={finding.severity === "error" ? "destructive" : "warning"}
+    >
+      <AlertTitle>{finding.title}</AlertTitle>
+      <AlertDescription>{finding.detail}</AlertDescription>
+    </Alert>
+  ));
+}
+
 function DiagnosticsReport({ diagnostics }) {
   const relevantVersions = diagnostics.versions.filter((item) => item.relevant);
   const detectedVersions = relevantVersions.filter((item) => item.installed !== "not detected");
 
   return (
     <div className="grid gap-4">
-      <Card className="diagnostic-hero">
-        <CardHeader className="relative">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex flex-col gap-2">
-              <p className="diagnostic-kicker">Aktueller Serverstand</p>
-              <CardTitle className="diagnostic-title">{diagnostics.mode?.name || "Server"} · Startprüfung</CardTitle>
-              <CardDescription>{diagnostics.summary}</CardDescription>
-            </div>
-            <Badge variant={overallVariant(diagnostics.overall)}>{overallLabel(diagnostics.overall)}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <LoadChain checks={diagnostics.checks} label={diagnostics.mode?.name || "Server"} />
-        </CardContent>
-      </Card>
-
-      {diagnostics.findings.map((finding, index) => (
-        <Alert
-          key={`${finding.title}-${index}`}
-          role="status"
-          variant={finding.severity === "error" ? "destructive" : "warning"}
-        >
-          <AlertTitle>{finding.title}</AlertTitle>
-          <AlertDescription>{finding.detail}</AlertDescription>
-        </Alert>
-      ))}
+      <DiagnosticsHero diagnostics={diagnostics} />
+      <DiagnosticsFindings findings={diagnostics.findings} />
 
       {diagnostics.plugins?.length > 0 ? (
         <Card>
@@ -307,5 +319,43 @@ export function Diagnostics({ active, onOpenLogs }) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Overview copy of the Betrieb report: same start check, without toolbar and details. */
+export function DiagnosticsSummary({ actions = null }) {
+  const [diagnostics, setDiagnostics] = useState(null);
+  const [error, setError] = useState("");
+  const reportVersion = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const version = reportVersion.current;
+    fetchDiagnostics()
+      .then((data) => { if (!cancelled && version === reportVersion.current) setDiagnostics(data); })
+      .catch((loadError) => { if (!cancelled) setError(loadError.message); });
+    return () => { cancelled = true; };
+  }, []);
+  useLiveResource("/api/server/diagnostics", data => { reportVersion.current++; setDiagnostics(data); setError(""); }, loadError => setError(loadError.message));
+
+  if (!diagnostics) return (
+    <Card className="diagnostic-hero">
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-2">
+            <p className="diagnostic-kicker">Aktueller Serverstand</p>
+            <CardTitle>{error ? "Diagnose fehlgeschlagen" : "Diagnose wird geladen …"}</CardTitle>
+            {error && <CardDescription role="alert" className="text-destructive">{error}</CardDescription>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div>
+        </div>
+      </CardHeader>
+    </Card>
+  );
+  return (
+    <div className="grid gap-4">
+      <DiagnosticsHero diagnostics={diagnostics} actions={actions} />
+      <DiagnosticsFindings findings={diagnostics.findings} />
+    </div>
   );
 }

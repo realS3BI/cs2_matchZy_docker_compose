@@ -174,6 +174,24 @@ test("placement restricts actors and fields, and owners can withdraw their own r
   }
 });
 
+test("reviewers complete start and end position of pending recordings without withdrawing the review", () => {
+  const pending = { ...entry, throwFromTitle: "", throwToTitle: "", reviewStatus: "pending" };
+  const patch = { throwFromTitle: "T-Spawn", throwToTitle: "Fenster" };
+  assert.equal(lineupPermissions(pending, admin).details, true);
+  const [completed] = applyWebNadeAction([pending], { ...request, action: "details", patch }, admin);
+  assert.equal(completed.throwFromTitle, "T-Spawn");
+  assert.equal(completed.throwToTitle, "Fenster");
+  assert.equal(completed.reviewStatus, "pending");
+  assert.equal(completed.desc, entry.desc);
+  const [edited] = applyWebNadeAction([pending], { ...request, action: "details", patch }, player);
+  assert.equal(edited.reviewStatus, "");
+  for (const role of ["player", "training_player", "match_admin"])
+    assert.throws(() => applyWebNadeAction([pending], { ...request, action: "details", patch }, { ...admin, role }), denied(403));
+  assert.throws(() => applyWebNadeAction([{ ...pending, official: true, reviewStatus: "approved" }], { ...request, action: "details", patch }, admin), denied(403));
+  for (const invalid of [null, {}, { desc: "Neu" }, { team: "ct" }, { radarFrom: { x: .2, y: .3 } }, { throwFromTitle: 3 }])
+    assert.throws(() => applyWebNadeAction([pending], { ...request, action: "details", patch: invalid }, admin), denied(400));
+});
+
 test("authenticated endpoint enforces owner and role from the session, and serializes revisions", async t => {
   let user = player;
   let entries = [{ ...entry, reviewMedia: reviewMediaFixture }];

@@ -26,7 +26,7 @@ export function SidebarServerStatus({ status, operation, unavailable, dirty, can
     <div className="sidebar-server-status" data-tone={presentation.tone}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link className="sidebar-server-link" to={presentation.tone === "destructive" ? "/diagnostics" : "/overview"} onClick={onNavigate}>
+          <Link className="sidebar-server-link" to={presentation.tone === "destructive" ? "/operations#diagnose" : "/overview"} onClick={onNavigate}>
             <span className="sidebar-server-icon" data-spinning={presentation.icon === "loading"}><Icon aria-hidden="true" /></span>
             <span className="sidebar-server-copy">
               <span className="sidebar-server-caption">CS2-Server</span>
@@ -40,7 +40,7 @@ export function SidebarServerStatus({ status, operation, unavailable, dirty, can
       <div className="sidebar-server-notices" aria-live="polite">
         {dirty && <Link to="/overview" onClick={onNavigate} className="sidebar-server-notice"><Save aria-hidden="true" /><span>Ungespeicherte Änderungen</span><ChevronRight aria-hidden="true" /></Link>}
         {!unavailable && !operation && failedAction && <Link to="/overview" onClick={onNavigate} className="sidebar-server-notice" data-tone="destructive"><TriangleAlert aria-hidden="true" /><span>Letzte Aktion fehlgeschlagen</span><ChevronRight aria-hidden="true" /></Link>}
-        {!unavailable && syncError && <Link to="/diagnostics" onClick={onNavigate} className="sidebar-server-notice" data-tone="destructive"><TriangleAlert aria-hidden="true" /><span>Nade-Sync fehlgeschlagen</span><ChevronRight aria-hidden="true" /></Link>}
+        {!unavailable && syncError && <Link to="/operations#diagnose" onClick={onNavigate} className="sidebar-server-notice" data-tone="destructive"><TriangleAlert aria-hidden="true" /><span>Nade-Sync fehlgeschlagen</span><ChevronRight aria-hidden="true" /></Link>}
       </div>
     </div>
   );

@@ -57,7 +57,7 @@ export function NadesMenuStatus({ selectedMode }: { selectedMode: string }) {
         {menu?.state === "missing" && !menu.bundled ? <Alert variant="warning"><AlertDescription>Baue das CS2-Image in Coolify oder Docker Compose neu. „Übernehmen & neu starten“ verwendet das vorhandene Image und installiert keinen fehlenden Playbook-Code.</AlertDescription></Alert> : null}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" disabled={loading} onClick={() => void refresh()}><RefreshCw aria-hidden="true" className={loading ? "animate-spin" : ""} />{loading ? "Wird geprüft …" : "Status aktualisieren"}</Button>
-          <NavLink className="text-sm font-medium underline underline-offset-4" to="/diagnostics">Diagnose öffnen</NavLink>
+          <NavLink className="text-sm font-medium underline underline-offset-4" to="/operations#diagnose">Diagnose öffnen</NavLink>
           {!error && report?.generatedAt ? <span className="text-xs text-muted-foreground">Geprüft um {new Date(report.generatedAt).toLocaleTimeString()} · Live-Updates</span> : null}
         </div>
       </CardContent>

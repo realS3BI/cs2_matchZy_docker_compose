@@ -5,12 +5,13 @@ export function lineupPermissions(nade: { owner: string; official?: boolean }, u
   const own = Boolean(user && nade.owner !== "default" && nade.owner === user.identitySteam64);
   const ownDraft = own && !nade.official;
   const admin = isPlatformAdmin(user);
-  return { edit: ownDraft, position: own || admin, revoke: own || admin,
+  return { edit: ownDraft, details: ownDraft || (admin && !nade.official), position: own || admin, revoke: own || admin,
     delete: ownDraft || admin, submit: ownDraft, moderate: admin };
 }
 
 export const LINEUP_POSITION_FIELDS = ["radarFrom", "radarTo"] as const;
-export const LINEUP_EDIT_FIELDS = ["team", "throwFromTitle", "throwToTitle", ...LINEUP_POSITION_FIELDS] as const;
+export const LINEUP_DETAIL_FIELDS = ["throwFromTitle", "throwToTitle"] as const;
+export const LINEUP_EDIT_FIELDS = ["team", ...LINEUP_DETAIL_FIELDS, ...LINEUP_POSITION_FIELDS] as const;
 
 export const LINEUP_CAPTURE_FIELDS = [
   "displayName", "desc", "type", "team", "flightDuration", "throwFromTitle", "throwToTitle",

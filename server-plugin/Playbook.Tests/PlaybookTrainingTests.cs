@@ -143,11 +143,18 @@ public sealed class PlaybookTrainingTests
     }
 
     [Fact]
-    public void HumansTakeDamageButResetToFullHealthBeforeDeath()
+    public void PlayersAndBotsTakeDamageButResetToFullHealthBeforeDeath()
     {
         Assert.Equal("1", PlaybookCommands.PracticeSettings["buddha"]);
-        Assert.Equal("1", PlaybookCommands.PracticeSettings["buddha_ignore_bots"]);
+        Assert.Equal("0", PlaybookCommands.PracticeSettings["buddha_ignore_bots"]);
         Assert.Equal("100", PlaybookCommands.PracticeSettings["buddha_reset_hp"]);
+    }
+
+    [Fact]
+    public void ShotFeedbackNamesDamageAndHitZone()
+    {
+        Assert.Equal("Bot: 98 Schaden (Kopf), 2 HP verbleibend.", DamageFeedback.Hit("Bot", 98, 1, 2));
+        Assert.Equal("Bot: 12 Schaden, 88 HP verbleibend.", DamageFeedback.Hit("Bot", 12, 0, 88));
     }
 
     [Fact]

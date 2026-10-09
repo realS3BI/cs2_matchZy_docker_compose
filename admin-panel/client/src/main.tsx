@@ -1,5 +1,4 @@
 import { WorkspaceNavigation } from "./components/workspace-navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { LiveStratsPage } from "./components/live-strats-page";
 import { useLiveResource, useLiveState } from "./hooks/use-live-resource";
 import { authorize, isServerAdmin } from "../../shared/authorization";
@@ -28,12 +27,10 @@ import { mapPath, mapSlug, mapsForLibrary } from "./lib/maps";
 import { NadeLibrary, LegacyLibraryRedirect } from "./components/nade-library";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate, NavLink, Route, Routes, matchPath, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   BookOpen,
-  Boxes,
-  CalendarClock,
   ClipboardCheck,
   Check,
   ChevronRight,
@@ -48,12 +45,14 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Gamepad2,
   Server,
   Shield,
   Terminal,
   Trash2,
   UploadCloud,
-  UsersRound
+  UsersRound,
+  Wrench
 } from "lucide-react";
 import { api } from "./lib/api";
 import type { ServerOperation } from "./lib/server-status";
@@ -90,25 +89,33 @@ import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
-import { Diagnostics } from "./diagnostics";
-import { ServerControls } from "./components/server-controls";
+import { Diagnostics, DiagnosticsSummary } from "./diagnostics";
+import { MapControls, ModeControls, useLiveGame } from "./components/server-controls";
 import { PageHeader } from "./components/page-header";
+import { PageSection } from "./components/page-sections";
 
 const routePaths = {
   login: "/login",
   overview: "/overview",
+  game: "/game",
   server: "/server",
+  operations: "/operations",
   reviews: REVIEW_QUEUE_PATH,
-  plugins: "/plugins",
   access: "/admin/users",
-  maintenance: "/maintenance",
   maps: "/maps",
   nades: "/nades",
-  diagnostics: "/diagnostics",
-  logs: "/logs",
   console: "/console",
   links: "/links"
 };
+
+/** Former Server tabs, merged into Spiel and Betrieb; old bookmarks keep working. */
+const legacyServerPaths = {
+  "/plugins": routePaths.game,
+  "/maintenance": `${routePaths.operations}#wartung`,
+  "/diagnostics": `${routePaths.operations}#diagnose`,
+  "/logs": `${routePaths.operations}#logs`
+};
+const isLegacyServerPath = (path: string) => Object.hasOwn(legacyServerPaths, path);
 
 const tabs = [
   { id: "teams", path: "/teams", label: "Teams", icon: UsersRound, group: "Teams" },
@@ -118,15 +125,13 @@ const tabs = [
   { id: "nades", path: routePaths.nades, label: "Nades", icon: Crosshair, group: "Training" },
   { id: "maps", path: routePaths.maps, label: "Maps", icon: MapPinned, group: "Training" },
   { id: "overview", path: routePaths.overview, label: "Übersicht", icon: LayoutDashboard, group: "Server" },
-  { id: "server", path: routePaths.server, label: "Einstellungen", icon: Server, group: "Server" },
-  { id: "reviews", path: routePaths.reviews, label: "Reviews", icon: ClipboardCheck, group: "Verwaltung" },
-  { id: "plugins", path: routePaths.plugins, label: "Modi & Plugins", icon: Boxes, group: "Server" },
+  { id: "game", path: routePaths.game, label: "Spiel", icon: Gamepad2, group: "Server" },
+  { id: "server", path: routePaths.server, label: "Server", icon: Server, group: "Server" },
+  { id: "operations", path: routePaths.operations, label: "Betrieb", icon: Wrench, group: "Server" },
   { id: "console", path: routePaths.console, label: "Konsole", icon: Terminal, group: "Server" },
+  { id: "reviews", path: routePaths.reviews, label: "Reviews", icon: ClipboardCheck, group: "Verwaltung" },
   { id: "access", path: routePaths.access, label: "Benutzer", icon: Shield, group: "Verwaltung" },
-  { id: "diagnostics", path: routePaths.diagnostics, label: "Diagnose", icon: Activity, group: "Server" },
-  { id: "logs", path: routePaths.logs, label: "Logs", icon: Terminal, group: "Server" },
-  { id: "maintenance", path: routePaths.maintenance, label: "Wartung", icon: CalendarClock, group: "Server" },
-  { id: "links", path: routePaths.links, label: "Dokumentation", icon: BookOpen, group: "Server" }
+  { id: "links", path: routePaths.links, label: "Dokumentation", icon: BookOpen, group: "Hilfe" }
 ];
 
 const defaultRoute = routePaths.maps;
@@ -134,8 +139,8 @@ function isMapRoute(pathname) {
   return Boolean(matchPath("/maps/:mapSlug", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId", pathname) || matchPath("/maps/:mapSlug/lineups/:lineupId/review", pathname));
 }
 function allowedTabs(user) { return tabs.filter(tab => {
-  if (["Training", "Teams", "Strats", "Analyse"].includes(tab.group)) return true;
-  const action = tab.id === "reviews" ? "lineups.moderate" : ["access", "roles"].includes(tab.id) ? "users.manage" : tab.id === "console" ? "server.rcon" : ["overview", "plugins", "links"].includes(tab.id) ? "server.match" : "server.manage";
+  if (["Training", "Teams", "Strats", "Analyse", "Hilfe"].includes(tab.group)) return true;
+  const action = tab.id === "reviews" ? "lineups.moderate" : ["access", "roles"].includes(tab.id) ? "users.manage" : tab.id === "console" ? "server.rcon" : ["overview", "game"].includes(tab.id) ? "server.match" : "server.manage";
   return authorize(user, action);
 }); }
 const isWorkspaceRoute = (path: string) => /^\/(teams|strats|analysis)(\/|$)/.test(path);
@@ -144,7 +149,7 @@ function routeFromLoginSearch(search) {
   const requestedRoute = new URLSearchParams(search).get("redirect");
   if (!requestedRoute) return defaultRoute;
   const pathname = requestedRoute.split("?")[0];
-  return (tabs.some(item => item.path === pathname) || isMapRoute(pathname) || isWorkspaceRoute(pathname)) ? requestedRoute : defaultRoute;
+  return (tabs.some(item => item.path === pathname) || isLegacyServerPath(pathname) || isMapRoute(pathname) || isWorkspaceRoute(pathname)) ? requestedRoute : defaultRoute;
 }
 
 function Message({ error = "" }: { error?: string }) {
@@ -215,6 +220,11 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
   const workspacePage = tab === "teams" ? (path === "/teams" ? "Meine Teams" : path.includes("/join/") ? "Einladung" : "Mitglieder")
     : tab === "strats" ? (livePage ? "Live" : path.startsWith("/strats/control") ? "Live verwalten" : path.endsWith("/edit") ? "Editor" : path.endsWith("/new") ? "Neue Strat" : path === "/strats" ? "Bibliothek" : "Aufgaben") : tab === "analysis" ? (path.includes("/reviews/") ? "Team-Review" : path.includes("/demos/") ? "Matchanalyse" : "Matches und Reviews") : "";
   const currentPage = workspacePage || (reviewing ? "Review" : selectedNade?.displayName || selectedNade?.name || selectedMap?.name || (tab === "maps" ? "Alle Maps" : activeTab.label));
+  const serverActions = authorize(user, "server.match") && activeTab.group === "Server" ? <>
+    {dirty && <span className="workspace-navigation-note">Ungespeicherte Änderungen</span>}
+    <ActionButton size="sm" variant="secondary" onClick={onSave} disabled={!dirty || busy} icon={Save} pendingLabel="Wird gespeichert …" successLabel="Gespeichert" title="Hinterlegt den Entwurf, ohne den Server neu zu starten.">Entwurf speichern</ActionButton>
+    <ActionButton size="sm" onClick={onApply} disabled={busy} icon={RotateCcw} pendingLabel="Wird übernommen …" successLabel="Übernommen" title="Aktiviert alle Einstellungen und startet den Server neu.">Übernehmen & neu starten</ActionButton>
+  </> : undefined;
 
   return (
     <TooltipProvider>
@@ -242,15 +252,8 @@ function Shell({ user, children, tab, onLogout, dirty, busy, onSave, onApply, op
           </header>}
         <div id="main-content" className={immersive ? "live-content min-w-0" : "control-content control-main min-w-0"} tabIndex={-1}>
           {!immersive && <LiveRecordingStatus userId={user.identitySteam64} />}
-          {["Server", "Verwaltung"].includes(activeTab.group) && <WorkspaceNavigation label={`${activeTab.group}-Navigation`} items={allowedTabs(user).filter(item => item.group === activeTab.group && (activeTab.group !== "Server" || ["overview", "server", "plugins", "maintenance"].includes(item.id))).sort((a, b) => activeTab.group === "Verwaltung" ? ["access", "roles", "reviews"].indexOf(a.id) - ["access", "roles", "reviews"].indexOf(b.id) : 0).map(item => ({ label: item.label, path: item.path }))} />}
+          {["Server", "Verwaltung"].includes(activeTab.group) && <WorkspaceNavigation label={`${activeTab.group}-Navigation`} items={allowedTabs(user).filter(item => item.group === activeTab.group).sort((a, b) => activeTab.group === "Verwaltung" ? ["access", "roles", "reviews"].indexOf(a.id) - ["access", "roles", "reviews"].indexOf(b.id) : 0).map(item => ({ label: item.label, path: item.path }))} actions={serverActions} />}
           <NadeFavoritesProvider key={user.identitySteam64}>{children}</NadeFavoritesProvider>
-          {authorize(user, "server.match") && ["overview", "server", "plugins", "maintenance"].includes(tab) && <section className="server-save-panel" aria-label="Servereinstellungen speichern">
-            <div><h2>{dirty ? "Ungespeicherte Änderungen" : "Gespeicherter Entwurf"}</h2><p>Speichern hinterlegt den Entwurf. Übernehmen aktiviert alle Einstellungen und startet den Server neu.</p></div>
-            <div className="flex flex-wrap gap-2">
-              <ActionButton variant="secondary" onClick={onSave} disabled={!dirty || busy} icon={Save} pendingLabel="Wird gespeichert …" successLabel="Gespeichert">Entwurf speichern</ActionButton>
-              <ActionButton onClick={onApply} disabled={busy} icon={RotateCcw} pendingLabel="Wird übernommen …" successLabel="Übernommen">Übernehmen & neu starten</ActionButton>
-            </div>
-          </section>}
         </div>
         </SidebarInset>
       </SidebarProvider>
@@ -265,154 +268,100 @@ function formatDate(value) {
 }
 
 
-function Overview({ settings, setSettings, admins, nades, status, policy, onRefresh, onRestart, onApply, busy }) {
+function OverviewPanel({ title, description = "", to = "", className = "", children }) {
+  return <Card className={className}>
+    <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <div className="grid gap-1.5"><CardTitle>{title}</CardTitle>{description && <CardDescription>{description}</CardDescription>}</div>
+      {to && <Button variant="ghost" size="sm" asChild><NavLink to={to} aria-label={`${title} öffnen`}>Öffnen<ChevronRight data-icon="inline-end" /></NavLink></Button>}
+    </CardHeader>
+    <CardContent>{children}</CardContent>
+  </Card>;
+}
+
+/** Policy field when available; match admins receive no settings groups. */
+function settingFieldFor(policy, key, label) {
+  return (policy?.settingsGroups || []).flatMap(group => group.fields).find(field => field.key === key) || { key, label, type: "boolean" };
+}
+
+function Overview({ settings, setSettings, status, policy, busy, serverAdmin, onAddWorkshop }) {
   const service = status?.service;
-  const last = status?.lastAction;
-  const maintenance = status?.maintenance;
-  const [restartOpen, setRestartOpen] = useState(false);
-  const setupRequired = !String(settings.steamToken || "").trim() || !String(settings.rconPassword || "").trim();
-  const activeMode = (policy?.modes || []).find((mode) => mode.id === settings.serverMode) || policy?.mode;
-  const enabledPlugins = (policy?.plugins || []).filter((plugin) => plugin.locked || (plugin.settingKey ? settings[plugin.settingKey] : plugin.enabled)).length;
-  const metrics = [
-    { label: "Spielerplätze", value: settings.maxPlayers || "Nicht festgelegt", detail: "Konfigurierte Kapazität", icon: UsersRound },
-    { label: "Plugins", value: enabledPlugins, detail: "Aktive Komponenten", icon: Boxes },
-    { label: "Benutzer", value: admins.length, detail: "Registrierte Steam-Konten", icon: Shield },
-    { label: "Lineup-Bibliothek", value: nades.length, detail: nades.length === 1 ? "Gespeichertes Lineup" : "Gespeicherte Lineups", icon: Crosshair }
+  const running = serverAdmin ? service?.state === "running" : true;
+  const live = useLiveGame({ busy, running });
+  const setupRequired = serverAdmin && (!String(settings.steamToken || "").trim() || !String(settings.rconPassword || "").trim());
+  const setValue = key => value => setSettings(current => ({ ...current, [key]: value }));
+  const trainingFields = [
+    settingFieldFor(policy, "trainingHudEnabled", "Trainings-HUD aktivieren"),
+    ...(settings.serverMode === "matchzy" ? [settingFieldFor(policy, "matchZySmokeColor", "Farbige Smokes im Practice-Modus")] : [])
   ];
 
   return (
     <>
       <PageHeader
-        eyebrow="Serververwaltung"
-        title={settings.serverName || "CS2-Server"}
-        description="Verwalte deinen CS2-Server, wechsle den Modus und bereite die nächste Session vor."
-        actions={<div className="flex gap-2"><ActionButton variant="secondary" onClick={onRefresh} disabled={busy} icon={RefreshCw} pendingLabel="Wird aktualisiert …" successLabel="Aktualisiert">Aktualisieren</ActionButton><Button variant="destructive" onClick={() => setRestartOpen(true)} disabled={busy}><RotateCcw data-icon="inline-start" /> Jetzt neu starten</Button></div>}
+        eyebrow={serverAdmin ? "Serververwaltung" : "Match Admin"}
+        title={serverAdmin ? settings.serverName || "CS2-Server" : "Serversteuerung"}
+        description="Zustand des Servers und die wichtigsten Schalter für die nächste Session."
       />
       {setupRequired ? (
         <Alert className="mb-4" variant="warning">
           <AlertTitle>Server noch nicht eingerichtet</AlertTitle>
-          <AlertDescription>Trage unter Einstellungen → Zugang & Sicherheit einen Steam-Token und ein RCON-Passwort ein. Mit „Übernehmen & neu starten“ startest du anschließend den Server.</AlertDescription>
+          <AlertDescription>Trage unter <NavLink className="underline underline-offset-4" to={`${routePaths.server}#zugang`}>Server → Zugang & Sicherheit</NavLink> einen Steam-Token und ein RCON-Passwort ein. Mit „Übernehmen & neu starten“ startest du anschließend den Server.</AlertDescription>
         </Alert>
       ) : null}
-      <section className="overview-metrics mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Server auf einen Blick">
-        {metrics.map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <Card key={metric.label} className="metric-card">
-              <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
-                <div className="grid gap-1">
-                  <CardDescription>{metric.label}</CardDescription>
-                  <CardTitle className="text-2xl">{metric.value}</CardTitle>
-                </div>
-                <span className="metric-icon"><Icon aria-hidden="true" /></span>
-              </CardHeader>
-              <CardContent><p className="text-xs text-muted-foreground">{metric.detail}</p></CardContent>
-            </Card>
-          );
-        })}
-      </section>
-      <ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running={service?.state === "running"} onApply={onApply} />
-      <section className="grid gap-4 xl:grid-cols-[1.55fr_0.75fr]">
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div className="grid gap-1.5">
-              <CardTitle>Serverstatus</CardTitle>
-              <CardDescription>{activeMode?.description || "Aktuelle Serverkonfiguration."}</CardDescription>
-            </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {serverAdmin && <section className="md:col-span-2 xl:col-span-3" aria-label="Diagnose">
+          <DiagnosticsSummary actions={<>
             <Badge variant={setupRequired ? "warning" : service?.state === "running" ? "success" : "destructive"}>
               <span className="server-status-dot" />
-              {setupRequired ? "Wartet auf Einrichtung" : ({ running: "Läuft", exited: "Beendet", restarting: "Startet neu", created: "Erstellt" }[service?.state] || "Unbekannt")}
+              Server: {setupRequired ? "Wartet auf Einrichtung" : ({ running: "Läuft", exited: "Beendet", restarting: "Startet neu", created: "Erstellt" }[service?.state] || "Unbekannt")}
             </Badge>
-          </CardHeader>
-          <CardContent className="grid gap-6">
-            <dl className="grid gap-4 rounded-lg border border-border bg-muted/35 p-4 sm:grid-cols-3">
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Gewählter Modus</dt><dd className="text-sm font-medium">{activeMode?.name || settings.serverMode || "Nicht festgelegt"}</dd></div>
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Startmap</dt><dd className="flex items-center gap-2 font-mono text-xs"><MapPinned className="size-4 text-muted-foreground" aria-hidden="true" />{settings.startMap || "Nicht festgelegt"}</dd></div>
-              <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Container</dt><dd className="font-mono text-xs">{service?.containerName || "Nicht erkannt"}</dd></div>
-            </dl>
-
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Wartung</CardTitle><CardDescription>Zeitplan für den nächsten automatischen Neustart.</CardDescription></CardHeader>
-          <CardContent className="grid gap-5">
-            <div className="grid gap-1">
-              <p className="text-xs text-muted-foreground">Automatischer Neustart</p>
-              <p className="text-2xl font-semibold tracking-tight">{maintenance?.enabled ? "Alle 2 Stunden" : "Deaktiviert"}</p>
-              <p className="text-xs text-muted-foreground">Bei Spielern: neuer Versuch in 1 Stunde</p>
-            </div>
-            <Separator />
-            <div className="grid gap-1">
-              <p className="text-xs text-muted-foreground">Nächster Versuch</p>
-              <p className="text-sm font-medium">{formatDate(maintenance?.nextRunAt)}</p>
-            </div>
-            <Button variant="secondary" asChild><NavLink to={routePaths.maintenance}><CalendarClock data-icon="inline-start" />Wartung öffnen</NavLink></Button>
-          </CardContent>
-        </Card>
-        <Card className="xl:col-span-2">
-          <CardHeader><CardTitle>Letzte Serveraktion</CardTitle><CardDescription>Die zuletzt gespeicherte Aktion aus der Serververwaltung.</CardDescription></CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-[160px_130px_1fr] sm:items-start">
-            <span className="text-sm">{last?.type || "Noch keine Aktion"}</span>
-            <Badge className="w-fit" variant={last?.status === "failed" ? "destructive" : "success"}>{({ failed: "Fehlgeschlagen", success: "Erfolgreich", completed: "Abgeschlossen", running: "Läuft" }[last?.status] || "Keine aktive Aktion")}</Badge>
-            <span className="line-clamp-2 text-sm text-muted-foreground">{last?.message || "Es wurde noch keine Serveraktion protokolliert."}</span>
-          </CardContent>
-        </Card>
-      </section>
-      <nav className="quick-links mt-5" aria-label="Weitere Serverwerkzeuge">
-        <p className="control-kicker">Weitere Werkzeuge</p>
-        <div className="quick-links-grid">
-          <NavLink to={routePaths.maps}><MapPinned aria-hidden="true" /><span>Maps</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={routePaths.nades}><Crosshair aria-hidden="true" /><span>Lineup-Bibliothek</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={routePaths.diagnostics}><Activity aria-hidden="true" /><span>Diagnose</span><ChevronRight aria-hidden="true" /></NavLink>
-          <NavLink to={routePaths.logs}><Terminal aria-hidden="true" /><span>Server-Logs</span><ChevronRight aria-hidden="true" /></NavLink>
+            <Button variant="ghost" size="sm" asChild><NavLink to={`${routePaths.operations}#diagnose`} aria-label="Diagnose öffnen">Öffnen<ChevronRight data-icon="inline-end" /></NavLink></Button>
+          </>} />
+        </section>}
+        <OverviewPanel title="Maps" to={serverAdmin ? `${routePaths.game}#maps` : ""} className="md:col-span-2 xl:col-span-3">
+          <MapControls settings={settings} setSettings={setSettings} busy={busy} live={live} />
+          {!serverAdmin && <Button className="mt-4" variant="secondary" onClick={onAddWorkshop}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button>}
+        </OverviewPanel>
+        <OverviewPanel title="Spielmodus" description="Modus für den nächsten Serverstart." to={`${routePaths.game}#spielmodus`} className="md:col-span-2 xl:col-span-3">
+          <ModeControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} live={live} />
+        </OverviewPanel>
+        <div className="grid content-start gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-3">
+          {serverAdmin && <OverviewPanel title="VAC" to={`${routePaths.server}#zugang`}>
+            <SettingField field={settingFieldFor(policy, "vacEnabled", "VAC aktivieren")} value={settings.vacEnabled} onChange={setValue("vacEnabled")} />
+          </OverviewPanel>}
+          <OverviewPanel title="Training" to={serverAdmin ? `${routePaths.game}#training` : ""}>
+            <div className="grid gap-3">{trainingFields.map(field => <SettingField key={field.key} field={field} value={settings[field.key]} onChange={setValue(field.key)} />)}</div>
+          </OverviewPanel>
         </div>
-      </nav>
-      <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>CS2-Server jetzt neu starten?</DialogTitle><DialogDescription>Verbundene Spieler werden getrennt. Der Server startet mit den zuletzt gespeicherten Einstellungen. Ungespeicherte Änderungen bleiben im Entwurf.</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </div>
     </>
   );
 }
 
-function Settings({ settings, setSettings, policy, status, busy }) {
-  const [params, setParams] = useSearchParams();
-  const categories = [
-    { id: "general", label: "Allgemein", groups: ["identity"] },
-    { id: "access", label: "Zugang & Sicherheit", groups: ["registration", "security"] },
-    { id: "maps", label: "Server-Maps", groups: [] },
-    { id: "training", label: "Training", groups: ["matchzy", "training-hud"] },
-    { id: "advanced", label: "Erweitert", groups: ["versions", "advanced"] },
-  ];
-  const category = categories.some(item => item.id === params.get("section")) ? params.get("section") : "general";
-  function setValue(key, value) {
-    setSettings(current => ({ ...current, [key]: value }));
-  }
-  function groupsFor(ids: string[]) {
-    return (policy?.settingsGroups || []).filter(group => ids.includes(group.id) && (group.id !== "matchzy" || settings.serverMode === "matchzy")).map(group => {
-      const credentials = ["joinPassword", "rconPassword"];
-      const fields = group.fields.filter(field => !["matchZySaveNadesGlobally", "startMap"].includes(field.key) && (field.key !== "matchZyVersion" || settings.serverMode === "matchzy") && !credentials.includes(field.key));
-      return <Card key={group.id}>
-        <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
-        <CardContent><FieldGroup className="grid gap-5 md:grid-cols-2">
-          {fields.map(field => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={value => setValue(field.key, value)} />)}
-        </FieldGroup></CardContent>
-      </Card>;
-    });
-  }
+/** Cards for the policy's settings groups; credentials and the start map have their own controls. */
+function SettingsGroups({ ids, settings, setSettings, policy }) {
+  return (policy?.settingsGroups || []).filter(group => ids.includes(group.id) && (group.id !== "matchzy" || settings.serverMode === "matchzy")).map(group => {
+    const credentials = ["joinPassword", "rconPassword"];
+    const fields = group.fields.filter(field => !["matchZySaveNadesGlobally", "startMap"].includes(field.key) && (field.key !== "matchZyVersion" || settings.serverMode === "matchzy") && !credentials.includes(field.key));
+    return <Card key={group.id}>
+      <CardHeader><CardTitle>{group.title}</CardTitle><CardDescription>{group.description}</CardDescription></CardHeader>
+      <CardContent><FieldGroup className="grid gap-5 md:grid-cols-2">
+        {fields.map(field => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={value => setSettings(current => ({ ...current, [field.key]: value }))} />)}
+      </FieldGroup></CardContent>
+    </Card>;
+  });
+}
+
+function PasswordSettings({ settings, setSettings, policy }) {
   const identity = policy?.settingsGroups?.find(group => group.id === "identity");
+  return <Card><CardHeader><CardTitle>Passwörter</CardTitle><CardDescription>Das Serverpasswort regelt den Beitritt. Mit dem RCON-Passwort lässt sich der Server fernsteuern.</CardDescription></CardHeader><CardContent><FieldGroup className="grid gap-5 md:grid-cols-2">{(identity?.fields || []).filter(field => ["joinPassword", "rconPassword"].includes(field.key)).map(field => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={value => setSettings(current => ({ ...current, [field.key]: value }))} />)}</FieldGroup></CardContent></Card>;
+}
+
+function ServerSettings({ settings, setSettings, policy }) {
+  const props = { settings, setSettings, policy };
   return <>
-    <PageHeader eyebrow="Server" title="Einstellungen" description="Passe den gespeicherten Entwurf an. Mit „Übernehmen & neu starten“ werden deine Änderungen auf dem Server wirksam." />
-    <Tabs className="workspace-tabs" value={category} onValueChange={section => setParams(current => { const next = new URLSearchParams(current); next.set("section", section); return next; })}>
-      <div className="overflow-x-auto pb-2"><TabsList variant="line" className="mb-4" aria-label="Einstellungsbereiche">{categories.map(item => <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>)}</TabsList></div>
-      {categories.map(item => <TabsContent key={item.id} value={item.id} className="flex flex-col gap-5">
-        {groupsFor(item.groups)}
-        {item.id === "access" && <Card><CardHeader><CardTitle>Passwörter</CardTitle><CardDescription>Das Serverpasswort regelt den Beitritt. Mit dem RCON-Passwort lässt sich der Server fernsteuern.</CardDescription></CardHeader><CardContent><FieldGroup className="grid gap-5 md:grid-cols-2">{(identity?.fields || []).filter(field => ["joinPassword", "rconPassword"].includes(field.key)).map(field => <SettingField key={field.key} field={field} value={settings[field.key] ?? ""} onChange={value => setValue(field.key, value)} />)}</FieldGroup></CardContent></Card>}
-        {item.id === "maps" && <ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} />}
-      </TabsContent>)}
-    </Tabs>
+    <PageSection id="allgemein" title="Allgemein"><SettingsGroups ids={["identity"]} {...props} /></PageSection>
+    <PageSection id="zugang" title="Zugang & Sicherheit"><SettingsGroups ids={["registration", "security"]} {...props} /><PasswordSettings {...props} /></PageSection>
+    <PageSection id="erweitert" title="Erweitert"><SettingsGroups ids={["advanced"]} {...props} /></PageSection>
   </>;
 }
 
@@ -517,13 +466,15 @@ function Links() {
   );
 }
 
-function Plugins({ settings, setSettings, policy, showDiagnostics = true }) {
+/** Match admins only see mode and plugins; maps and training stay with server admins. */
+function GamePage({ settings, setSettings, policy, status, busy, serverAdmin }) {
   const mode = settings.serverMode || "matchzy";
   return (
     <>
-      <PageHeader eyebrow="Server" title="Modi & Plugins" description="Wähle den Spielmodus und die zusätzlichen Plugins für den nächsten Serverstart." />
-      <Card className="mb-4">
-        <CardHeader><CardTitle>Spielmodus</CardTitle><CardDescription>Ein Modus ist aktiv. Die Auswahl wird mit „Übernehmen & neu starten“ wirksam.</CardDescription></CardHeader>
+      {serverAdmin && <PageSection id="maps" title="Maps"><ServerMapSettings settings={settings} setSettings={setSettings} status={status} busy={busy} /></PageSection>}
+      <PageSection id="spielmodus" title="Spielmodus">
+      <Card>
+        <CardHeader><CardTitle>Modus für den nächsten Start</CardTitle><CardDescription>Ein Modus ist aktiv. Die Auswahl wird mit „Übernehmen & neu starten“ wirksam.</CardDescription></CardHeader>
         <CardContent>
           <RadioGroup
             className="lg:grid-cols-3"
@@ -539,9 +490,12 @@ function Plugins({ settings, setSettings, policy, showDiagnostics = true }) {
           </RadioGroup>
         </CardContent>
       </Card>
-      {showDiagnostics && <NadesMenuStatus selectedMode={mode} />}
+      {serverAdmin && <NadesMenuStatus selectedMode={mode} />}
+      </PageSection>
+      {serverAdmin && <PageSection id="training" title="Training"><SettingsGroups ids={["matchzy", "training-hud"]} settings={settings} setSettings={setSettings} policy={policy} /></PageSection>}
+      <PageSection id="plugins" title="Plugins">
       <Card>
-        <CardHeader><CardTitle>Plugins</CardTitle><CardDescription>Grundkomponenten sind immer aktiv. Zusätzliche Plugins kannst du einzeln einschalten.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Zusätzliche Plugins</CardTitle><CardDescription>Grundkomponenten sind immer aktiv. Zusätzliche Plugins kannst du einzeln einschalten.</CardDescription></CardHeader>
         <CardContent className="divide-y divide-border">
           {(policy?.plugins || []).filter((plugin) => !["matchzy", "nades"].includes(plugin.id)).map((plugin) => {
             const enabled = plugin.locked || settings[plugin.settingKey] === true;
@@ -554,6 +508,7 @@ function Plugins({ settings, setSettings, policy, showDiagnostics = true }) {
           })}
         </CardContent>
       </Card>
+      </PageSection>
     </>
   );
 }
@@ -563,7 +518,6 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
   const [restartOpen, setRestartOpen] = useState(false);
   return (
     <>
-      <PageHeader eyebrow="Serverbetrieb" title="Wartung" description="Automatischer Neustart alle zwei Stunden, sobald keine Spieler verbunden sind." />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>
           <CardHeader><CardTitle>Automatischer Serverneustart</CardTitle><CardDescription>Nach einem automatischen Neustart wartet das Panel zwei Stunden. Sind noch Spieler verbunden, versucht es den Neustart eine Stunde später erneut.</CardDescription></CardHeader>
@@ -585,6 +539,15 @@ function Maintenance({ settings, setSettings, status, onRestart, busy }) {
       <Dialog open={restartOpen} onOpenChange={setRestartOpen}><DialogContent><DialogHeader><DialogTitle>CS2-Server jetzt neu starten?</DialogTitle><DialogDescription>Verbundene Spieler werden getrennt. Ungespeicherte Änderungen werden dabei nicht übernommen.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" onClick={() => setRestartOpen(false)}>Abbrechen</Button><ActionButton variant="destructive" onClick={async () => { await onRestart(); setRestartOpen(false); }} disabled={busy} icon={RotateCcw} pendingLabel="Server startet neu …" successLabel="Neu gestartet">Server neu starten</ActionButton></DialogFooter></DialogContent></Dialog>
     </>
   );
+}
+
+function Operations({ settings, setSettings, policy, status, busy, onRestart }) {
+  return <>
+    <PageSection id="diagnose" title="Diagnose"><div><Diagnostics active onOpenLogs={() => document.getElementById("logs")?.scrollIntoView({ block: "start" })} /></div></PageSection>
+    <PageSection id="wartung" title="Wartung"><Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={onRestart} /></PageSection>
+    <PageSection id="logs" title="Logs"><div><DockerLogs active /></div></PageSection>
+    <PageSection id="komponenten" title="Komponenten"><SettingsGroups ids={["versions"]} settings={settings} setSettings={setSettings} policy={policy} /></PageSection>
+  </>;
 }
 
 function LineupImageUpload({ onUploaded, onError, label = "Upload lineup images", multiple = true }) {
@@ -722,7 +685,7 @@ function ServerMapSettings({ settings, setSettings, status, busy }) {
   const [workshopOpen, setWorkshopOpen] = useState(false);
   const maps = mapsForInventory(settings, status?.mapInventory);
   const workshops = workshopMapsFromSettings(settings);
-  return <Card className="mt-5">
+  return <Card>
     <CardHeader><CardTitle>Maps auf dem Server</CardTitle><CardDescription>Lege die Startmap fest und verwalte installierte Workshop-Maps. Übernimm die Änderungen anschließend mit einem Serverneustart.</CardDescription></CardHeader>
     <CardContent>
       <FieldGroup>
@@ -793,7 +756,6 @@ function DockerLogs({ active }) {
 
   return (
     <>
-      <PageHeader eyebrow="Serverbetrieb" title="Server-Logs" description="Live-Ausgabe des CS2-Containers. Die neuesten Einträge stehen unten." />
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center gap-2 p-3 sm:p-3">
           <Button variant="secondary" onClick={loadLogs} disabled={loading}>
@@ -839,7 +801,6 @@ function App() {
   const [user, setUser] = useState(null);
   const [workshopOpen, setWorkshopOpen] = useState(false);
   const [settings, setSettings] = useState<any>({});
-  const [admins, setAdmins] = useState([]);
   const [nades, setNades] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [status, setStatus] = useState(null);
@@ -859,7 +820,6 @@ function App() {
     controlAccess.current = JSON.stringify(control.user.access);
     setUser(control.user);
     if (!preserveSettings) setSettings(control.settings || {});
-    setAdmins(control.admins || []);
     setNades(control.nades || []);
     setPolicy(control.policy || null);
     setStatus(control.status || null);
@@ -901,7 +861,6 @@ function App() {
       setSettings(control.settings || {});
       setSavedSignature(JSON.stringify({ settings: control.settings || {} }));
     }
-    setAdmins(control.admins || []);
     setPolicy(control.policy || null);
     setStatus(current => accessChanged ? control.status || null : { ...current, ...control.status });
     setStatusUnavailable(false);
@@ -958,7 +917,7 @@ function App() {
 
   if (!authenticated) {
     if (location.pathname !== routePaths.login) {
-      const requestedRoute = (isWorkspaceRoute(location.pathname) || isMapRoute(location.pathname) || tabs.some((item) => item.path === location.pathname)) ? `${location.pathname}${location.search}` : defaultRoute;
+      const requestedRoute = (isWorkspaceRoute(location.pathname) || isMapRoute(location.pathname) || isLegacyServerPath(location.pathname) || tabs.some((item) => item.path === location.pathname)) ? `${location.pathname}${location.search}` : defaultRoute;
       return <Navigate to={`${routePaths.login}?redirect=${encodeURIComponent(requestedRoute)}`} replace />;
     }
 
@@ -966,7 +925,7 @@ function App() {
   }
 
   const roleHome = defaultRoute;
-  if (location.pathname !== "/" && location.pathname !== routePaths.login && !isMapRoute(location.pathname) && !isWorkspaceRoute(location.pathname) && location.pathname !== "/access" && !allowedTabs(user).some(tab => tab.path === location.pathname))
+  if (location.pathname !== "/" && location.pathname !== routePaths.login && !isMapRoute(location.pathname) && !isWorkspaceRoute(location.pathname) && location.pathname !== "/access" && !isLegacyServerPath(location.pathname) && !allowedTabs(user).some(tab => tab.path === location.pathname))
     return <Navigate to={roleHome} replace />;
 
 
@@ -1018,41 +977,25 @@ function App() {
         <Route
           path={routePaths.overview}
           element={(
-            !isServerAdmin(user) ? <><PageHeader eyebrow="Match Admin" title="Serversteuerung" description="Modus wechseln, Plugins steuern und Workshop-Maps hinzufügen." /><ServerControls settings={settings} setSettings={setSettings} policy={policy} busy={busy} running onApply={applyControl} /><div className="my-5"><Button variant="secondary" onClick={() => setWorkshopOpen(true)}><PackagePlus data-icon="inline-start" />Workshop-Map hinzufügen</Button></div>{settings.serverMode === "matchzy" && <Field className="mb-5"><FieldLabel>Colored Smokes</FieldLabel><Switch checked={settings.matchZySmokeColor === true} onCheckedChange={value => setSettings(current => ({ ...current, matchZySmokeColor: value }))} /></Field>}</> : <Overview
+            <Overview
               settings={settings}
               setSettings={setSettings}
-              onApply={applyControl}
-              admins={admins}
-              nades={nades}
               status={status}
               policy={policy}
               busy={busy}
-              onRefresh={() => runAction(async () => {})}
-              onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "server", "restart")}
+              serverAdmin={isServerAdmin(user)}
+              onAddWorkshop={() => setWorkshopOpen(true)}
             />
           )}
         />
-        <Route
-          path={routePaths.diagnostics}
-          element={(
-            <>
-              <PageHeader eyebrow="Serverbetrieb" title="Diagnose" description="Prüfe den Zustand von Container, Installation, Framework und Spielmodus." />
-              <Diagnostics active onOpenLogs={() => navigate(routePaths.logs)} />
-            </>
-          )}
-        />
-        <Route path={routePaths.server} element={<>
-          <Settings settings={settings} setSettings={setSettings} policy={policy} status={status} busy={busy} />
-        </>} />
+        <Route path={routePaths.server} element={<ServerSettings settings={settings} setSettings={setSettings} policy={policy} />} />
+        <Route path={routePaths.game} element={<GamePage settings={settings} setSettings={setSettings} policy={policy} status={status} busy={busy} serverAdmin={isServerAdmin(user)} />} />
+        <Route path={routePaths.operations} element={<Operations settings={settings} setSettings={setSettings} policy={policy} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "server", "restart")} />} />
+        {Object.entries(legacyServerPaths).map(([from, to]) => <Route key={from} path={from} element={<Navigate to={to} replace />} />)}
         <Route path={routePaths.reviews} element={<ReviewQueuePage maps={libraryMaps} nades={nades} user={user} onRefresh={refreshLibrary} onEntriesChange={setNades} />} />
-        <Route path={routePaths.plugins} element={<><Plugins settings={settings} setSettings={setSettings} policy={policy} showDiagnostics={isServerAdmin(user)} /></>} />
         <Route
           path={routePaths.access}
           element={<UserManagement currentSteamId={user.identitySteam64} />}
-        />
-        <Route
-          path={routePaths.maintenance}
-          element={<Maintenance settings={settings} setSettings={setSettings} status={status} busy={busy} onRestart={() => runAction(() => api("/api/server/restart", { method: "POST", body: "{}" }), "server", "restart")} />}
         />
         <Route path={routePaths.maps} element={new URLSearchParams(location.search).has("map") || new URLSearchParams(location.search).get("view") === "library"
           ? <LegacyLibraryRedirect maps={libraryMaps} />
@@ -1063,7 +1006,6 @@ function App() {
         <Route path="/maps/:mapSlug/lineups/:lineupId/review" element={<LineupReviewPage maps={libraryMaps} nades={nades} user={user} onEntriesChange={setNades} />} />
         <Route path={routePaths.nades} element={<LegacyLibraryRedirect maps={libraryMaps} />} />
         <Route path={routePaths.console} element={<RconChat />} />
-        <Route path={routePaths.logs} element={<DockerLogs active />} />
         <Route path={routePaths.links} element={<Links />} />
         <Route path={routePaths.login} element={<Navigate to={routeFromLoginSearch(location.search)} replace />} />
         <Route path="*" element={<Navigate to={roleHome} replace />} />

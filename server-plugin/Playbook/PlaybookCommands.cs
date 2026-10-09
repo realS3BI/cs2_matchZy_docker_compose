@@ -131,7 +131,7 @@ public static class PlaybookCommands
         ["mp_respawnwavetime_ct"] = "0", ["mp_respawnwavetime_t"] = "0",
         ["mp_buy_anywhere"] = "1", ["mp_buytime"] = "9999", ["mp_maxmoney"] = "60000", ["mp_startmoney"] = "60000",
         ["ammo_grenade_limit_total"] = "5", ["mp_free_armor"] = "2", ["mp_forcecamera"] = "0", ["bot_quota"] = "0",
-        ["buddha"] = "1", ["buddha_ignore_bots"] = "1", ["buddha_reset_hp"] = "100",
+        ["buddha"] = "1", ["buddha_ignore_bots"] = "0", ["buddha_reset_hp"] = "100",
         ["bot_quota_mode"] = "normal", ["bot_join_after_player"] = "0", ["bot_stop"] = "1", ["bot_freeze"] = "1", ["bot_zombie"] = "1",
         ["mp_ct_default_primary"] = "weapon_ssg08", ["mp_t_default_primary"] = "weapon_ssg08",
         ["mp_ct_default_secondary"] = "weapon_hkp2000", ["mp_t_default_secondary"] = "weapon_glock",

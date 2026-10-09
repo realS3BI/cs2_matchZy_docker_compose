@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Server-Übersicht prüfen</title></head><body><main id="root" class="control-content control-main workspace-inset" style="max-width:1400px"></main><script type="module">
+// ?stopped: Server aus · ?other: Overpass läuft, Startmap Train · ?fail: Map-Wechsel schlägt fehl
+import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {MemoryRouter} from 'react-router-dom';
+import {MapControls, ModeControls} from '/src/components/server-controls.tsx';
+import {DiagnosticsSummary} from '/src/diagnostics.tsx';
+import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '/src/components/ui/card.tsx';
+import {Badge} from '/src/components/ui/badge.tsx';
+import '/src/index.css';
+
+const params = new URLSearchParams(location.search);
+const h = React.createElement;
+const modes = [
+  {id: 'matchzy', name: 'MatchZy', description: 'Wettkampf und Practice mit MatchZy.'},
+  {id: 'nades', name: 'Nades', description: 'Eigenständiges Playbook-Granatentraining mit Lineups und Ingame-Panel, ohne MatchZy.'},
+  {id: 'warmup', name: 'Warmup / Aim Botz', description: 'Aim-Training mit Bots auf der Aim-Botz-Workshop-Map.'},
+  {id: 'vanilla', name: 'Vanilla + framework', description: 'CS2 ohne Match-Plugin. Metamod und CounterStrikeSharp bleiben verfügbar.'}
+];
+const diagnostics = {
+  overall: 'degraded', summary: 'MatchZy ist geladen, ein Plugin wurde noch nicht bestätigt.', generatedAt: new Date().toISOString(), mode: {id: 'matchzy', name: 'MatchZy'},
+  checks: [
+    {id: 'container', label: 'CS2 container', status: 'pass', detail: 'Läuft seit 2 Stunden.'},
+    {id: 'bootstrap', label: 'Mod bootstrap', status: 'pass', detail: 'Installer state gespeichert.'},
+    {id: 'metamod', label: 'Metamod', status: 'pass', detail: 'Version 2.0 geladen.'},
+    {id: 'css', label: 'CounterStrikeSharp', status: 'fail', detail: 'Native loader or API assembly is missing.'},
+    {id: 'panel', label: 'Playbook Ingame-Panel', status: 'warn', detail: 'The CS2 container is not running. Start it before checking the in-game menu.'},
+    {id: 'matchzy', label: 'MatchZy', status: 'fail', detail: 'MatchZy.dll is missing.'}
+  ],
+  findings: [{severity: 'warning', title: 'MatchZy nicht bestätigt', detail: 'Im Startprotokoll fehlt die Ladebestätigung.'}],
+  versions: [], plugins: [], service: {}, nades: {}
+};
+let liveMap = params.has('other') ? 'de_overpass' : 'de_mirage';
+window.WebSocket = class { constructor() { this.readyState = 0; } close() {} send() {} };
+window.WebSocket.OPEN = 1;
+window.fetch = async (url, init) => {
+  const path = String(url);
+  await new Promise(r => setTimeout(r, path.includes('/map') ? 700 : 50));
+  if (path.includes('/api/server/map')) {
+    if (params.has('fail')) return new Response(JSON.stringify({error: 'RCON antwortet nicht.'}), {status: 502, headers: {'Content-Type': 'application/json'}});
+    liveMap = JSON.parse(init.body).map || 'workshop'; return new Response('{}', {headers: {'Content-Type': 'application/json'}});
+  }
+  if (path.includes('/api/server/game')) return new Response(JSON.stringify({map: liveMap, mode: 'matchzy'}), {headers: {'Content-Type': 'application/json'}});
+  if (path.includes('/api/server/diagnostics')) return new Response(JSON.stringify(diagnostics), {headers: {'Content-Type': 'application/json'}});
+  return new Response('{}', {headers: {'Content-Type': 'application/json'}});
+};
+
+const panel = (title, className, ...children) => h(Card, {className}, h(CardHeader, null, h(CardTitle, null, title)), h(CardContent, null, ...children));
+
+function App() {
+  const running = !params.has('stopped');
+  const [settings, setSettings] = useState({serverMode: 'nades', startMap: params.has('other') ? 'de_train' : 'de_mirage', workshopMaps: '3070284539', workshopMapCatalog: JSON.stringify([{workshopId: '3070284539', title: 'Aim Botz', mapName: 'aim_botz'}])});
+  const [game, setGame] = useState(running ? {map: liveMap, mode: 'matchzy'} : null);
+  const live = {game, setGame: g => { setGame(g); if (!g) setTimeout(() => setGame({map: liveMap, mode: 'matchzy'}), 300); }, loading: false, error: window.__err || '', setError: e => { window.__err = e; rerender(); }, refresh: async () => setGame({map: liveMap, mode: 'matchzy'}), running};
+  const [, force] = useState(0); const rerender = () => force(n => n + 1);
+  return h(MemoryRouter, null, h('div', {className: 'grid gap-4 md:grid-cols-2 xl:grid-cols-3'},
+    h('section', {className: 'md:col-span-2 xl:col-span-3'}, h(DiagnosticsSummary, {actions: h(Badge, {variant: 'success'}, 'Server: Läuft')})),
+    panel('Maps', 'md:col-span-2 xl:col-span-3', h(MapControls, {settings, setSettings, busy: false, live})),
+    panel('Spielmodus', 'md:col-span-2 xl:col-span-3', h(ModeControls, {settings, setSettings, policy: {modes}, busy: false, live})),
+    h('div', {className: 'grid content-start gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-3'}, panel('VAC', '', 'VAC-Schalter'), panel('Training', '', 'Training-Schalter'))
+  ));
+}
+createRoot(document.getElementById('root')).render(h(App));
+</script></body></html>

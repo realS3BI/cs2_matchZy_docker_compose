@@ -1,35 +1,138 @@
-import { useState } from "react";
-import { Send, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, Send, Terminal, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
-import { Field, FieldGroup, FieldLabel } from "./ui/field";
-import { Input } from "./ui/input";
-import { Message, MessageContent, MessageHeader } from "./ui/message";
-import { Bubble, BubbleContent } from "./ui/bubble";
-import { MessageScrollerProvider, MessageScroller, MessageScrollerViewport, MessageScrollerContent, MessageScrollerItem, MessageScrollerButton } from "./ui/message-scroller";
+import { Spinner } from "./ui/spinner";
+
+type Entry = { id: string; command: string; time: string; output?: string; error?: string };
+
+/** Read-only commands that are safe to suggest; clicking only fills the prompt. */
+const QUICK_COMMANDS = ["status", "css_plugins list", "meta list"];
+const MAX_ENTRIES = 100;
+
+function OutputCopy({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  return (
+    <button type="button" className="rcon-copy" aria-label={copied ? "Ausgabe kopiert" : "Ausgabe kopieren"} onClick={async () => { await copyText(text); setCopied(true); }}>
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    </button>
+  );
+}
 
 export function RconChat() {
   const [command, setCommand] = useState("");
-  const [messages, setMessages] = useState([{ id: "welcome", role: "server", text: "Verbinde dich mit dem Server, indem du einen Befehl sendest, zum Beispiel status." }]);
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [busy, setBusy] = useState(false);
+  const history = useRef<string[]>([]);
+  const historyIndex = useRef(-1);
+  const outputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const output = outputRef.current;
+    if (output) output.scrollTop = output.scrollHeight;
+  }, [entries, busy]);
+
   async function send(event) {
     event.preventDefault();
-    if (busy || !command.trim()) return;
-    const sent = command.trim(); setCommand(""); setBusy(true);
-    const append = (role, text) => setMessages(current => [...current.slice(-99), { id: crypto.randomUUID(), role, text }]);
-    append("user", sent);
-    try { const result = await api("/api/server/rcon", { method: "POST", body: JSON.stringify({ command: sent }) }); append("server", result.output); }
-    catch (error) { append("error", error.message); }
-    finally { setBusy(false); }
+    const sent = command.trim();
+    if (busy || !sent) return;
+    const id = crypto.randomUUID();
+    const time = new Date().toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    history.current = [sent, ...history.current.filter(item => item !== sent)].slice(0, 50);
+    historyIndex.current = -1;
+    setCommand("");
+    setBusy(true);
+    setEntries(current => [...current.slice(-(MAX_ENTRIES - 1)), { id, command: sent, time }]);
+    const settle = (patch: Partial<Entry>) => setEntries(current => current.map(entry => entry.id === id ? { ...entry, ...patch } : entry));
+    try {
+      const result = await api("/api/server/rcon", { method: "POST", body: JSON.stringify({ command: sent }) });
+      settle({ output: String(result.output ?? "") });
+    } catch (error) {
+      settle({ error: error.message });
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
+    }
   }
-  return <Card>
-    <CardHeader className="flex-row items-start justify-between"><div className="grid gap-2"><CardTitle>Server-Konsole</CardTitle><CardDescription>Sende RCON-Befehle und lies die Antwort von CS2. Der Verlauf bleibt nur in diesem geöffneten Fenster.</CardDescription></div><Button variant="outline" size="icon" aria-label="Verlauf leeren" disabled={busy} onClick={() => setMessages([])}><Trash2 /></Button></CardHeader>
-    <CardContent><div className="h-[min(55vh,560px)] rounded-lg border bg-console p-4" role="log" aria-label="RCON-Verlauf" aria-live="polite">
-      <MessageScrollerProvider autoScroll><MessageScroller><MessageScrollerViewport><MessageScrollerContent>
-        {messages.map(message => <MessageScrollerItem key={message.id} messageId={message.id} scrollAnchor={message.role === "user"}><Message align={message.role === "user" ? "end" : "start"}><MessageContent><MessageHeader>{message.role === "user" ? "Du → CS2" : message.role === "error" ? "Verbindungsfehler" : "CS2 → Du"}</MessageHeader><Bubble><BubbleContent><pre className="whitespace-pre-wrap break-all font-mono text-xs">{message.text}</pre></BubbleContent></Bubble></MessageContent></Message></MessageScrollerItem>)}
-      </MessageScrollerContent></MessageScrollerViewport><MessageScrollerButton /></MessageScroller></MessageScrollerProvider>
-    </div></CardContent>
-    <CardFooter><form className="w-full" onSubmit={send}><FieldGroup className="sm:flex-row sm:items-end"><Field><FieldLabel><label htmlFor="rcon-command">RCON-Befehl</label></FieldLabel><Input id="rcon-command" value={command} onChange={event => setCommand(event.target.value)} placeholder="status" maxLength={1024} autoComplete="off" spellCheck={false} /></Field><Button disabled={busy || !command.trim()}><Send data-icon="inline-start" />{busy ? "Wartet auf CS2…" : "Senden"}</Button></FieldGroup></form></CardFooter>
-  </Card>;
+
+  // Shell-style history: ↑ walks back through sent commands, ↓ returns to an empty prompt.
+  function browseHistory(event) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    const items = history.current;
+    if (!items.length) return;
+    event.preventDefault();
+    const next = event.key === "ArrowUp" ? Math.min(historyIndex.current + 1, items.length - 1) : historyIndex.current - 1;
+    historyIndex.current = Math.max(next, -1);
+    setCommand(historyIndex.current === -1 ? "" : items[historyIndex.current]);
+  }
+
+  function prefill(value: string) {
+    setCommand(value);
+    historyIndex.current = -1;
+    inputRef.current?.focus();
+  }
+
+  return (
+    <section className="rcon-console" aria-labelledby="rcon-console-title">
+      <header className="rcon-console-bar">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Terminal className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <h2 id="rcon-console-title" className="text-sm font-semibold">Server-Konsole</h2>
+          <span className="truncate text-xs text-muted-foreground">RCON · Verlauf bleibt nur in diesem Fenster</span>
+        </div>
+        <Button variant="ghost" size="sm" disabled={busy || entries.length === 0} onClick={() => setEntries([])}><Trash2 data-icon="inline-start" />Leeren</Button>
+      </header>
+
+      <div ref={outputRef} className="rcon-console-output" role="log" aria-label="RCON-Verlauf" aria-live="polite">
+        {entries.length === 0 ? (
+          <p className="rcon-console-empty">Noch keine Befehle. Sende zum Beispiel <code>status</code>, um die Verbindung zu prüfen.</p>
+        ) : entries.map(entry => (
+          <div key={entry.id} className="rcon-entry">
+            <div className="rcon-entry-command">
+              <span className="rcon-prompt" aria-hidden="true">›</span>
+              <span className="min-w-0 flex-1 break-all">{entry.command}</span>
+              <time className="rcon-entry-time">{entry.time}</time>
+            </div>
+            {entry.output !== undefined && (
+              <div className="rcon-entry-output">
+                <pre>{entry.output.trim() || "Keine Ausgabe."}</pre>
+                {entry.output.trim() && <OutputCopy text={entry.output} />}
+              </div>
+            )}
+            {entry.error && <p className="rcon-entry-error" role="alert">{entry.error}</p>}
+            {entry.output === undefined && !entry.error && <p className="rcon-entry-pending"><Spinner className="size-3" />Wartet auf CS2 …</p>}
+          </div>
+        ))}
+      </div>
+
+      <form className="rcon-console-form" onSubmit={send}>
+        <div className="rcon-console-suggestions" aria-label="Schnellbefehle">
+          {QUICK_COMMANDS.map(item => <button key={item} type="button" onClick={() => prefill(item)}>{item}</button>)}
+        </div>
+        <div className="rcon-console-prompt">
+          <span className="rcon-prompt" aria-hidden="true">›</span>
+          <label htmlFor="rcon-command" className="sr-only">RCON-Befehl</label>
+          <input
+            ref={inputRef}
+            id="rcon-command"
+            value={command}
+            onChange={event => { setCommand(event.target.value); historyIndex.current = -1; }}
+            onKeyDown={browseHistory}
+            placeholder="RCON-Befehl eingeben …"
+            maxLength={1024}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <Button size="sm" type="submit" disabled={busy || !command.trim()}>{busy ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}Senden</Button>
+        </div>
+      </form>
+    </section>
+  );
 }

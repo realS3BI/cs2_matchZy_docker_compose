@@ -155,7 +155,8 @@ export function AppSidebar({
       url: "/overview",
       icon: Server,
       isActive: serverItems.some((item) => location.pathname === item.path),
-      items: serverItems.map((item) => ({
+      // "Server" itself opens the overview, like "Maps" opens the atlas.
+      items: serverItems.filter((item) => item.path !== "/overview").map((item) => ({
         title: item.label,
         url: item.path,
         icon: item.icon,
@@ -213,6 +214,16 @@ export function AppSidebar({
         <NavMain items={sections} onNavigate={navigate} />
       </SidebarContent>
       <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={location.pathname === "/links"}>
+              <Link to="/links" onClick={navigate}>
+                <BookOpen aria-hidden="true" />
+                <span>Dokumentation</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         {serverItems.length > 0 && (
           <SidebarServerStatus
             status={status}

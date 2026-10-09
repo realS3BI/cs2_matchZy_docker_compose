@@ -23,9 +23,14 @@ public sealed partial class PlaybookPlugin
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerHurt>((e, _) => {
-            if (StandaloneTraining && TrainingEnabled && e.Attacker is { IsValid: true, IsBot: false } attacker &&
-                e.Userid is { IsValid: true } victim && e.DmgHealth > 0 && (ThrownKind(e.Weapon) != NadeKind.Other || e.Weapon == "inferno"))
-                Tell(attacker, $"{MenuRenderer.Plain(victim.PlayerName, 60)}: {e.DmgHealth} Granatenschaden, {e.Health} HP verbleibend.");
+            if (!StandaloneTraining || !TrainingEnabled || e.Attacker is not { IsValid: true, IsBot: false } attacker ||
+                e.Userid is not { IsValid: true } victim || e.DmgHealth <= 0) return HookResult.Continue;
+            var name = MenuRenderer.Plain(victim.PlayerName, 60);
+            if (ThrownKind(e.Weapon) != NadeKind.Other || e.Weapon == "inferno")
+                Tell(attacker, $"{name}: {e.DmgHealth} Granatenschaden, {e.Health} HP verbleibend.");
+            // Buddha keeps training bots alive, so shots are only measured, never lethal.
+            else if (victim.IsBot)
+                Tell(attacker, DamageFeedback.Hit(name, e.DmgHealth, e.Hitgroup, e.Health));
             return HookResult.Continue;
         });
     }

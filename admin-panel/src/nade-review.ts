@@ -1,6 +1,6 @@
 import { isPlatformAdmin } from "../shared/authorization.js";
 import { sanitizeNades } from "./validators.js";
-import { LINEUP_CAPTURE_FIELDS, LINEUP_EDIT_FIELDS, LINEUP_POSITION_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
+import { LINEUP_CAPTURE_FIELDS, LINEUP_DETAIL_FIELDS, LINEUP_EDIT_FIELDS, LINEUP_POSITION_FIELDS, lineupPermissions } from "../shared/lineup-policy.js";
 import { THROW_FLAGS, MOVEMENT_FLAGS } from "../shared/throw-attributes.js";
 import { randomUUID } from "node:crypto";
 import { missingReviewMedia, missingReviewDetails } from "../shared/review-media.js";
@@ -36,13 +36,14 @@ export function applyWebNadeAction(entries, request, user) {
   if (index < 0) reject(404, "Dieses Lineup ist nicht mehr verfügbar.");
   const entry = entries[index];
   const permissions = lineupPermissions(entry, user);
-  const ownerAction = ["edit", "delete", "submit", "position"].includes(request.action);
+  const ownerAction = ["edit", "details", "delete", "submit", "position"].includes(request.action);
   const adminAction = ["approve", "reject", "revoke", "mustKnow"].includes(request.action);
   if (!ownerAction && !adminAction) reject(400, "Unbekannte Lineup-Aktion.");
-  const allowed = request.action === "position" ? permissions.position : request.action === "revoke" ? permissions.revoke : request.action === "delete" ? permissions.delete : ownerAction ? permissions.edit : permissions.moderate;
+  const allowed = request.action === "position" ? permissions.position : request.action === "details" ? permissions.details : request.action === "revoke" ? permissions.revoke : request.action === "delete" ? permissions.delete : ownerAction ? permissions.edit : permissions.moderate;
   if (!allowed) {
     if (["position", "revoke"].includes(request.action)) reject(403, "Nur der Ersteller oder ein Plattform-Admin darf die Positionierung ändern oder die Freigabe zurücknehmen.");
     if (request.action === "delete") reject(403, "Nur der Ersteller seiner noch nicht offiziellen Aufnahme oder ein Plattform-Admin darf dieses Lineup löschen.");
+    if (request.action === "details") reject(403, "Nur der Ersteller seiner noch nicht offiziellen Aufnahme oder ein Plattform-Admin darf Startposition und Endposition ändern.");
     reject(403, ownerAction ? "Nur der Ersteller darf seine noch nicht offiziellen Aufnahmen ändern." : "Nur Plattform-Admins dürfen Lineups freigeben.");
   }
   if (typeof request.revision !== "string" || request.revision !== (entry.updatedAt || ""))
@@ -55,6 +56,12 @@ export function applyWebNadeAction(entries, request, user) {
         Object.keys(request.patch).length === 0 || Object.keys(request.patch).some(key => !LINEUP_POSITION_FIELDS.includes(key as any)))
       reject(400, "Nur Start und Ziel auf der Karte dürfen geändert werden.");
     patch = validateWebNadePatch(request.patch);
+  } else if (request.action === "details") {
+    if (!request.patch || typeof request.patch !== "object" || Array.isArray(request.patch) ||
+        Object.keys(request.patch).length === 0 || Object.keys(request.patch).some(key => !LINEUP_DETAIL_FIELDS.includes(key as any)))
+      reject(400, "Nur Startposition und Endposition dürfen hier geändert werden.");
+    // Reviewers complete details without withdrawing the pending review.
+    patch = { ...validateWebNadePatch(request.patch), ...(permissions.moderate ? {} : { reviewStatus: "" }) };
   } else if (request.action === "edit") {
     if (!request.patch || Object.keys(request.patch).some(key => !LINEUP_EDIT_FIELDS.includes(key as any)))
       reject(400, "Wurfdaten werden vom Server gemessen. Nur Startposition, Endposition und Seite dürfen geändert werden.");
