@@ -35,16 +35,17 @@ type NadeFlightMapProps = {
   onLevelChange?: (level: RadarLevel) => void;
 };
 
+// Radar-Tinte aus docs/design-system.md; Werte stehen in styles/tokens.css.
 const TYPE_COLORS = {
-  Smoke: "#8ea5b6",
-  Flash: "#f6c453",
-  HE: "#ef6461",
-  Molly: "#f58b45",
-  Decoy: "#ae8eff"
+  Smoke: "var(--nade-smoke)",
+  Flash: "var(--nade-flash)",
+  HE: "var(--nade-he)",
+  Molly: "var(--nade-molly)",
+  Decoy: "var(--nade-decoy)"
 };
 
 function colorForType(type = "") {
-  return TYPE_COLORS[type] || "#a5f3c6";
+  return TYPE_COLORS[type] || "var(--nade-other)";
 }
 
 function pixelPoint(point: RadarPoint, width: number, height: number) {
@@ -129,7 +130,7 @@ export function NadeFlightMap({
             </marker>
           ))}
           <marker id={`${markerPrefix}-other`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#a5f3c6" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--nade-other)" />
           </marker>
         </defs>
         <g className="radar-routes">

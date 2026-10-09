@@ -6,6 +6,7 @@ import { MAP_CARD_ART } from "../lib/map-card-art";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "./ui/empty";
+import { PageHeader } from "./page-header";
 
 const groups = [
   { key: "active", title: "Active Duty" },
@@ -37,7 +38,7 @@ function MapCard({ map }: { map: MapDefinition }) {
 
 export function MapAtlas({ maps }: { maps: MapDefinition[] }) {
   return <div className="playbook-page map-atlas-page">
-    <header className="playbook-heading"><h1>Alle Maps</h1></header>
+    <PageHeader size="display" eyebrow="Bibliothek" title="Alle Maps" description="Wähle eine Map, um Lineups auf dem Radar zu entdecken und Favoriten zu sammeln." />
     {maps.length === 0 && <Empty><EmptyHeader><EmptyTitle>Noch keine Maps</EmptyTitle><EmptyDescription>Verfügbare Maps erscheinen hier.</EmptyDescription></EmptyHeader></Empty>}
     {groups.map(group => {
       const entries = maps.filter(map => groupFor(map) === group.key);

@@ -43,7 +43,9 @@ public sealed class FavoritesAndSpawnsTests
         Assert.Equal("Home", menu.Breadcrumb);
         menu.Select(1);
         menu.Select(1);
-        Assert.Equal(new[] { "Favoriten (1)", "Offiziell (0)", "Must Know (1)", "Alle (2)" }, menu.Visible.Select(i => i.Label));
+        Assert.Equal(new[] { "Favoriten", "Offiziell", "Must Know", "Alle" }, menu.Visible.Select(i => i.Label));
+        Assert.Equal(new[] { "1", "0", "1", "2" }, menu.Visible.Select(i => i.Meta));
+        Assert.All(menu.Visible, item => Assert.Equal(NadeKind.Smoke, item.Kind));
         menu.Select(4);
         menu.Select(2);
         Assert.Equal(own, menu.Select(1)!.Lineup);

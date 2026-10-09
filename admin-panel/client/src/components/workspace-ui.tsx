@@ -3,6 +3,7 @@ import { subscribeLive } from "@/lib/live";
 import { useLiveState } from "@/hooks/use-live-resource";
 import { api } from "@/lib/api";
 import { Button } from "./ui/button";
+import { PageHeader } from "./page-header";
 import { Field, FieldLabel } from "./ui/field";
 import {
   Select,
@@ -31,17 +32,7 @@ export function WorkspaceHeader({
   description: string;
   children?: ReactNode;
 }) {
-  return (
-    <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="control-title text-3xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          {description}
-        </p>
-      </div>
-      {children}
-    </header>
-  );
+  return <PageHeader title={title} description={description} actions={children} />;
 }
 export function Feedback({ error = "", message = "" }) {
   return error ? (

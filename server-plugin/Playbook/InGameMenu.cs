@@ -10,17 +10,46 @@ public enum TrainingAction
     ReviewPhoto, ReviewVideoStart, ReviewVideoStop, ReviewHelp, ReviewApprove, ReviewReject, ReviewTeleportEffect
 }
 
+// Tone of a panel notice: colours the description area (docs/ingame-panel-ux.md, A7).
+public enum NoticeTone { Info, Success, Error }
+
 public sealed record MenuRequest(TrainingAction Action, NadeLineup? Lineup = null, NadeKind Kind = NadeKind.Other,
     string Setting = "", string Value = "", CompetitiveSpawn? Spawn = null);
+
+// Row presentation (docs/ingame-panel-ux.md, A4/A5): Meta is the right-aligned text, Kind and Side
+// pick the radar ink, Favorite/Review/Official drive the state glyph, Status feeds the status line,
+// Lineup enables the inline favourite button. Label stays the plain name.
 public sealed record MenuItem(string Label, string Hint = "", MenuPage? Page = null,
-    MenuRequest? Request = null, bool Enabled = true);
-public sealed record MenuPage(string Title, string Description, IReadOnlyList<MenuItem> Items, string Key = "", NadeLineup? ReviewLineup = null, string ReviewStep = "");
+    MenuRequest? Request = null, bool Enabled = true, string Meta = "", NadeKind? Kind = null,
+    string Side = "", bool Favorite = false, bool Review = false, bool Official = false,
+    string Status = "", NadeLineup? Lineup = null, bool MustKnow = false, bool Danger = false, bool MetaChip = false);
+// Kind tints the panel rail while the page shows one grenade type; Danger marks confirmation pages.
+public sealed record MenuPage(string Title, string Description, IReadOnlyList<MenuItem> Items, string Key = "",
+    NadeLineup? ReviewLineup = null, string ReviewStep = "", bool Danger = false, NadeKind? Kind = null);
+
+// Notices arrive from many call sites as plain text. Infer the tone from the wording so the
+// panel can colour them without touching every message; explicit tones always win.
+public static class PanelNotice
+{
+    private static readonly string[] ErrorMarks = ["nicht", "konnte", "Ungültig", "ungültig", "fehlt", "fehlgeschlagen", "abgelehnt", "abgelaufen",
+        "schreibgeschützt", "besetzt", "bereits", "Zuerst", "zuerst", "Noch kein", "Nur ", "nur für", "Bitte warte", "prüfen."];
+    private static readonly string[] SuccessMarks = ["gespeichert", "geladen", "entfernt", "gesendet", "teleportiert", "umgeschaltet", "angefordert",
+        "Ausgerüstet", "bereit.", "erkannt", "Favoriten", "platziert", "freigegeben", "kopiert"];
+
+    public static NoticeTone ToneFor(string message)
+    {
+        if (ErrorMarks.Any(mark => message.Contains(mark, StringComparison.Ordinal))) return NoticeTone.Error;
+        if (SuccessMarks.Any(mark => message.Contains(mark, StringComparison.Ordinal))) return NoticeTone.Success;
+        return NoticeTone.Info;
+    }
+}
 
 // No game API: navigation, rendering and the action gateway have separate responsibilities.
 public sealed class InGameMenu(MenuPage root, string map)
 {
     public const int PageSize = 9;
     private readonly Stack<(MenuPage Page, int Index)> _history = new();
+    private string _notice = "";
     public string Map { get; } = map;
     public MenuPage Current { get; private set; } = root;
     public int Index { get; private set; }
@@ -28,12 +57,32 @@ public sealed class InGameMenu(MenuPage root, string map)
     public int Page => Index / PageSize;
     public int PageCount => Math.Max(1, (Current.Items.Count + PageSize - 1) / PageSize);
     public bool IsRoot => _history.Count == 0;
-    public string Notice { get; set; } = "";
+    public NoticeTone NoticeTone { get; private set; } = NoticeTone.Info;
+    public string Notice
+    {
+        get => _notice;
+        set { _notice = value; NoticeTone = value.Length == 0 ? NoticeTone.Info : PanelNotice.ToneFor(value); }
+    }
+    public void SetNotice(string text, NoticeTone tone) { _notice = text; NoticeTone = text.Length == 0 ? NoticeTone.Info : tone; }
     public IEnumerable<MenuItem> Visible => Current.Items.Skip(Page * PageSize).Take(PageSize);
     public MenuItem? Selected => Current.Items.ElementAtOrDefault(Index);
     public bool ContainsPage(string key) => Current.Key == key || _history.Any(frame => frame.Page.Key == key);
     public string Breadcrumb => string.Join(" › ", _history.Reverse().Select(frame => frame.Page)
         .Append(Current).Select((page, index) => index == 0 ? "Home" : MenuRenderer.Plain(page.Title, 36)));
+
+    // One line above the description: what the selected row is, or where the player is in the list.
+    public string Status
+    {
+        get
+        {
+            var item = Selected;
+            if (item is { Status.Length: > 0 }) return item.Status;
+            if (item is { Enabled: false }) return "Nicht verfügbar";
+            var count = Current.Items.Count;
+            var entries = count == 1 ? "1 Eintrag" : $"{count} Einträge";
+            return PageCount > 1 ? $"{entries} · Seite {Page + 1}/{PageCount}" : entries;
+        }
+    }
 
     public void Home()
     {
@@ -46,7 +95,8 @@ public sealed class InGameMenu(MenuPage root, string map)
     public void Refresh(MenuPage root)
     {
         var path = _history.Reverse().Append((Current, Index)).ToArray();
-        var notice = Notice;
+        var notice = _notice;
+        var tone = NoticeTone;
         _history.Clear();
         Current = root;
         Index = 0;
@@ -58,11 +108,11 @@ public sealed class InGameMenu(MenuPage root, string map)
             Index = found >= 0 ? found : Math.Clamp(oldIndex, 0, Math.Max(0, Current.Items.Count - 1));
             if (depth + 1 == path.Length) break;
             var child = Current.Items.FirstOrDefault(item => item.Page != null && SamePage(item.Page, path[depth + 1].Item1));
-            if (child?.Page == null) { notice = "Die Bibliothek wurde aktualisiert."; break; }
+            if (child?.Page == null) { notice = "Die Bibliothek wurde aktualisiert."; tone = NoticeTone.Info; break; }
             Index = Current.Items.ToList().IndexOf(child);
             Enter(child.Page);
         }
-        Notice = notice;
+        SetNotice(notice, tone);
     }
 
     private static bool SamePage(MenuPage a, MenuPage b) => a.Key.Length > 0 || b.Key.Length > 0
@@ -107,7 +157,7 @@ public sealed class InGameMenu(MenuPage root, string map)
         if (item == null) return null;
         Index = Page * PageSize + key - 1;
         Notice = "";
-        if (!item.Enabled) { Notice = item.Hint; return null; }
+        if (!item.Enabled) { SetNotice(item.Hint, NoticeTone.Info); return null; }
         if (item.Page is { } page)
         {
             Enter(page);

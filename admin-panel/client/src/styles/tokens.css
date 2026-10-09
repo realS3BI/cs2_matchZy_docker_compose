@@ -1,0 +1,180 @@
+/*
+ * Playbook Design Tokens
+ * Quelle der Wahrheit für Farbe, Typografie, Radien, Elevation und Bewegung.
+ * Beschrieben in docs/design-system.md. Komponenten greifen nur über diese
+ * Variablen bzw. die daraus abgeleiteten Tailwind-Utilities auf Werte zu.
+ */
+
+@theme inline {
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* shadcn-Semantik */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-console: var(--console);
+  --color-console-foreground: var(--console-foreground);
+
+  /* Spielwelt: Granaten und Seiten (Radar-Tinte) */
+  --color-nade-smoke: var(--nade-smoke);
+  --color-nade-flash: var(--nade-flash);
+  --color-nade-he: var(--nade-he);
+  --color-nade-molly: var(--nade-molly);
+  --color-nade-decoy: var(--nade-decoy);
+  --color-nade-other: var(--nade-other);
+  --color-side-t: var(--side-t);
+  --color-side-ct: var(--side-ct);
+
+  /* Radien */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-pill: 999px;
+
+  /* Elevation (dunkle Oberfläche: Kanten statt Schatten, Schatten nur für Schwebendes) */
+  --shadow-raised: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 10px 30px rgb(0 0 0 / 8%);
+  --shadow-hover: 0 12px 28px rgb(0 0 0 / 18%);
+  --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 6%), 0 24px 60px rgb(0 0 0 / 45%);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Flächen: von der tiefsten Konsole bis zur schwebenden Ebene */
+  --surface-0: #080e15;
+  --surface-1: #0b1118;
+  --surface-2: #111923;
+  --surface-3: #151e29;
+  --surface-4: #1b2633;
+  --surface-5: #263341;
+  --surface-6: #304052;
+
+  /* Text */
+  --text-strong: #f5f8fb;
+  --text-default: #edf3f8;
+  --text-secondary: #bbcada;
+  --text-muted: #a3b3c3;
+
+  /* Linien */
+  --line-subtle: #2a3a49;
+  --line-default: #334253;
+  --line-strong: #45566a;
+
+  /* Marke */
+  --brand: #80cabc;
+  --brand-strong: #a0ddd2;
+  --brand-ink: #102b2a;
+
+  /* Status */
+  --status-success: #86d394;
+  --status-success-ink: #06200f;
+  --status-warning: #e7bb6c;
+  --status-warning-text: #f5d28e;
+  --status-danger: #f6747e;
+  --status-danger-ink: #26090d;
+
+  /* Spielwelt: Granaten */
+  --nade-smoke: #9fb3c4;
+  --nade-flash: #f7dd6a;
+  --nade-he: #ef6461;
+  --nade-molly: #f58345;
+  --nade-decoy: #ae8eff;
+  --nade-other: #a5f3c6;
+
+  /* Spielwelt: Seiten */
+  --side-t: #de9a3a;
+  --side-ct: #6aa9ec;
+
+  /* shadcn-Aliase */
+  --radius: 0.75rem;
+  --background: var(--surface-1);
+  --foreground: var(--text-default);
+  --card: var(--surface-3);
+  --card-foreground: var(--text-default);
+  --popover: var(--surface-4);
+  --popover-foreground: var(--text-default);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--surface-5);
+  --secondary-foreground: var(--text-default);
+  --muted: #202c39;
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-6);
+  --accent-foreground: #ffffff;
+  --border: var(--line-default);
+  --input: var(--line-strong);
+  --ring: var(--brand-strong);
+  --destructive: var(--status-danger);
+  --destructive-foreground: var(--status-danger-ink);
+  --success: var(--status-success);
+  --success-foreground: var(--status-success-ink);
+  --warning: var(--status-warning);
+  --warning-foreground: var(--status-warning-text);
+  --sidebar: #0a1119;
+  --sidebar-foreground: var(--text-secondary);
+  --sidebar-accent: #1b2a37;
+  --sidebar-accent-foreground: var(--text-strong);
+  --sidebar-border: var(--line-subtle);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-ring: var(--ring);
+  --console: var(--surface-0);
+  --console-foreground: #c4d5e5;
+
+  /* Typografie-Skala (eigener Namensraum, kollidiert nicht mit Tailwind text-*) */
+  --type-2xs: 0.6875rem;
+  --type-xs: 0.75rem;
+  --type-sm: 0.8125rem;
+  --type-base: 0.875rem;
+  --type-md: 1rem;
+  --type-lg: 1.25rem;
+  --type-xl: 1.5rem;
+  --type-2xl: 1.75rem;
+  --type-display: clamp(2rem, 3.7vw, 3.4rem);
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+  --tracking-tight: -0.025em;
+  --tracking-tighter: -0.04em;
+  --tracking-label: 0.1em;
+
+  /* Bewegung */
+  --motion-fast: 140ms;
+  --motion-base: 180ms;
+  --motion-slow: 240ms;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Layout */
+  --content-max: 1440px;
+  --topbar-height: 3.75rem;
+}

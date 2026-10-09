@@ -1,6 +1,6 @@
 # Playbook im Spiel
 
-Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Es hat eine mittige Überschrift, Breadcrumb, neun feste Listenplätze, Zurück/Seitenwechsel/Seitenzahl/Home und vier Beschreibungszeilen über die volle Breite. Längere Texte werden mit Auslassungspunkten gekürzt. Unterhalb der Beschreibung gibt es keine Hinweise oder Modusindikatoren mehr.
+Das kompakte Panorama-HUD bleibt am rechten Bildschirmrand. Oben stehen die Marke mit der aktuellen Map und rechts der Eingabezustand („Maus“ oder „Spiel“), darunter der Seitentitel und der Breadcrumb. Ein Farbstreifen oben zeigt den Granatentyp der aktuellen Liste. Es folgen neun feste Listenplätze mit Nummer, Granatenicon in Radar-Tinte (Must Know in Mint), Name, rechtsbündiger Meta (Seite oder Zähler), Statusglyphe (★ Favorit, ✓ Offiziell, „Review“) und einem Stern zum direkten Merken. Darunter Zurück/Seitenwechsel/Seitenzahl/Home, die nur sichtbar sind, wenn sie etwas bewirken; bei zwei bis fünf Seiten ersetzen Punkte die Seitenzahl. Dann eine Statuszeile zur Auswahl, während einer Aufnahme ein Countdown mit Fortschrittsbalken, und vier Beschreibungszeilen. Rückmeldungen erscheinen in der Beschreibung mit Ton: Erfolg grün, Fehler rot. Die Panelkante wird Mint, solange die Maus das Panel steuert, und rot auf Löschbestätigungen. Längere Texte werden mit Auslassungspunkten gekürzt. Gestaltung und Begründung: [Ingame-Panel: Gestaltung und UX](ingame-panel-ux.md).
 
 ## Aktivieren und Practice prüfen
 
@@ -20,7 +20,7 @@ Im Practice-Modus einem Team beitreten, spawnen und `css_training` ausführen. O
 
 1. **Granaten-Bibliothek:** Typ auswählen, dann Favoriten, Offiziell, Must Know oder Alle. „Alle“ enthält sämtliche Spieleraufnahmen auf dieser Map, auch ungeprüfte.
 2. **Must Know:** direkter Einstieg in die vom Plattform-Admin ausgewählten Grundlagen dieser Map.
-3. **Trainingswerkzeuge:** letzten Wurf wiederholen, zum letzten Abwurfpunkt, Position merken/laden, Granaten entfernen, Bots, Trainingshilfen und Positionsdiagnose.
+3. **Trainingswerkzeuge:** letzten Wurf wiederholen, zum letzten Abwurfpunkt, Position merken/laden, Granaten entfernen, Bots, Trainingshilfen, Positionsdiagnose und **Zuletzt trainiert** mit den fünf zuletzt geladenen Lineups dieser Map.
 4. **Neue Nade aufnehmen:** Aufnahme starten, innerhalb von drei Minuten werfen, Wirkung abwarten, mit KP_0 zurück ins HUD und speichern. Ein automatischer Name wird vergeben; der Ersteller bleibt als Steam-ID erhalten.
 5. **Favoriten:** persönlich gemerkte Granaten auf dieser Map. Die Identität ist Owner + Map + interner Name; Umbenennen des Anzeigenamens verliert keine Favoriten.
 6. **Competitive-Spawns:** CT- oder T-Startposition wählen und dorthin teleportieren.

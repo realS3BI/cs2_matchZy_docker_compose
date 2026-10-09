@@ -5,10 +5,11 @@ namespace Playbook;
 
 public static class MenuRenderer
 {
-    private const string Accent = "#7DD3FC";
-    private const string Focus = "#FDE68A";
-    private const string Text = "#F8FAFC";
-    private const string Muted = "#CBD5E1";
+    // docs/design-system.md: --brand, --nade-flash, --text-default, --text-muted
+    private const string Accent = "#80CABC";
+    private const string Focus = "#F7DD6A";
+    private const string Text = "#EDF3F8";
+    private const string Muted = "#A3B3C3";
 
     // CS2 center HTML supports a small subset of tags, not browser CSS or a mouse cursor.
     public static string Render(InGameMenu menu, bool practice)

@@ -129,10 +129,10 @@ export function NadeLibrary({ nades, maps, user }) {
             {visible.length === 0 ? <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><Crosshair /></EmptyMedia><EmptyTitle>{collection === "favorites" ? "Keine passenden Favoriten" : "Keine passenden Lineups"}</EmptyTitle><EmptyDescription>{collection === "favorites" ? "Merke dir Lineups über den Stern. Deine Favoriten findest du anschließend hier." : mapNades.length ? "Passe die Filter an oder suche nach einem anderen Spot." : "Für diese Map wurden noch keine Nades aufgenommen."}</EmptyDescription></EmptyHeader></Empty> :
               <ol className="map-lineup-list">{visible.map(nade => <li key={lineupKey(nade)}>
                 <Link className="map-lineup-row" to={href(nade)}>
-                  <span className="map-lineup-kind" role="img" aria-label={nade.type === "Molly" ? "Molotov" : nade.type || "Nade"}><GrenadeIcon type={nade.type} /></span>
+                  <span className="map-lineup-kind" data-kind={nade.type} role="img" aria-label={nade.type === "Molly" ? "Molotov" : nade.type || "Nade"}><GrenadeIcon type={nade.type} /></span>
                   <div className="map-lineup-name"><strong>{nade.displayName || nade.name}</strong><span>{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Landeposition"}</span></div>
                   <span className="map-lineup-technique">{throwAttributeSummary(nade)}{typeof nade.flightDuration === "number" && ` · ${nade.flightDuration.toLocaleString("de-AT", { maximumFractionDigits: 2 })} s`}</span>
-                  <div className="map-lineup-badges">{isLineupTeam(nade.team) && <Badge variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}{nade.mustKnow && <Badge>Must Know</Badge>}{nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div>
+                  <div className="map-lineup-badges">{isLineupTeam(nade.team) && <Badge tone={nade.team === "t" || nade.team === "ct" ? nade.team : undefined} variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}{nade.mustKnow && <Badge variant="highlight">Must Know</Badge>}{nade.official ? <Badge variant="success">Offiziell</Badge> : <Badge variant="outline">Aufnahme</Badge>}</div>
                 </Link>
                 <FavoriteButton nade={nade} compact />
               </li>)}</ol>}

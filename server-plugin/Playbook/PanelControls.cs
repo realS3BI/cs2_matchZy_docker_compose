@@ -80,6 +80,11 @@ public sealed partial class PlaybookPlugin
         if (!Alive(player) || !_menus.TryGetValue(player.Slot, out var session) ||
             !session.Visible || !session.Focused || !session.Panel.Owns(layout)) return;
         session.LastInput = CounterStrikeSharp.API.Server.CurrentTime;
+        if (FavoriteRow(buttonId) is { } favoriteRow)
+        {
+            if (session.Menu.Visible.ElementAtOrDefault(favoriteRow)?.Lineup is { } lineup) ToggleFavorite(player, lineup);
+            return;
+        }
         if (buttonId.StartsWith("row_", StringComparison.Ordinal) &&
             int.TryParse(buttonId.AsSpan(4), out var row) && row is >= 0 and < InGameMenu.PageSize)
         { Select(player, row + 1); return; }
@@ -92,6 +97,11 @@ public sealed partial class PlaybookPlugin
         };
         RunPanelAction(player, action);
     }
+
+    // "row_3_fav" → 3. The star sits inside the row button; its own id reaches the handler first.
+    internal static int? FavoriteRow(string buttonId) =>
+        buttonId.StartsWith("row_", StringComparison.Ordinal) && buttonId.EndsWith("_fav", StringComparison.Ordinal) &&
+        int.TryParse(buttonId.AsSpan(4, buttonId.Length - 8), out var row) && row is >= 0 and < InGameMenu.PageSize ? row : null;
 
     private void RunPanelAction(CCSPlayerController player, string action)
     {

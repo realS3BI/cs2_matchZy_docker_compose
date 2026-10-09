@@ -92,6 +92,7 @@ import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./index.css";
 import { Diagnostics } from "./diagnostics";
 import { ServerControls } from "./components/server-controls";
+import { PageHeader } from "./components/page-header";
 
 const routePaths = {
   login: "/login",
@@ -263,18 +264,6 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "Unbekannt" : date.toLocaleString();
 }
 
-function PageHeader({ eyebrow, title, description, actions = null }) {
-  return (
-    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-8">
-      <div className="max-w-3xl">
-        <p className="control-kicker">{eyebrow}</p>
-        <h1 className="control-title mt-2 text-2xl sm:text-3xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
-      </div>
-      {actions}
-    </header>
-  );
-}
 
 function Overview({ settings, setSettings, admins, nades, status, policy, onRefresh, onRestart, onApply, busy }) {
   const service = status?.service;

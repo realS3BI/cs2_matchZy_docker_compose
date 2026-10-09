@@ -190,8 +190,8 @@ function LineupContent({ nade, map, nades, user, onEntriesChange, onRefresh, bac
           <h1>{creating ? "Nade hinzufügen" : nade.displayName || nade.name}</h1>
           {creating && <p className="text-sm text-muted-foreground">Trage die Wurfdaten und eine Anleitung ein. Startkoordinaten und Blickwinkel sind erforderlich, damit die Nade im Spiel geladen werden kann. Radarpositionen kannst du per Klick setzen. Die Nade wird als dein Entwurf gespeichert.</p>}
           <div className="flex flex-wrap gap-2">
-            {isLineupTeam(nade.team) && <Badge variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}
-            {nade.official && <Badge variant="success">Offiziell</Badge>}{nade.mustKnow && <Badge>Must Know</Badge>}
+            {isLineupTeam(nade.team) && <Badge tone={nade.team === "t" || nade.team === "ct" ? nade.team : undefined} variant="outline"><TeamIcon team={nade.team} className="size-4" />{TEAM_LABELS[nade.team]}</Badge>}
+            {nade.official && <Badge variant="success">Offiziell</Badge>}{nade.mustKnow && <Badge variant="highlight">Must Know</Badge>}
             {!nade.official && nade.reviewStatus === "pending" && <Badge variant="outline">Im Review</Badge>}
             {!nade.official && nade.reviewStatus === "rejected" && <Badge variant="outline">Überarbeitung angefragt</Badge>}
           </div>

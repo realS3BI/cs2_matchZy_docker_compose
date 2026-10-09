@@ -10,3 +10,4 @@ training-hud/dist/
 training-hud/.local/
 playbook-desktop/dist/
 playbook-desktop/.startup-test-*/
+.turbo/

@@ -13,10 +13,13 @@ public static class TrainingMenu
         toggles ??= new();
         MenuItem Toggle(string title, TrainingAction action, bool active, string hint) =>
             Action($"{title} {(active ? "ausschalten" : "einschalten")}", action, $"Aktuell {(active ? "an" : "aus")}. {hint}");
+        static string Count(int value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        static string SideLabel(string team) => team switch { "ct" => "CT", "t" => "T", "both" => "Beide", _ => "" };
         MenuItem Lineup(NadeLineup n)
         {
             var own = canWriteNades && n.Owner == steamId && n.Owner != "default" && !n.Official;
-            var status = n.Official ? "Offiziell" : n.ReviewStatus == "pending" ? "Im Review" : "Aufnahme";
+            var pending = n.ReviewStatus == "pending";
+            var status = n.Official ? "Offiziell" : pending ? "Im Review" : "Aufnahme";
             var items = new List<MenuItem> {
                 new("Lineup laden & trainieren", "Teleportiert dich zum Abwurfpunkt, stellt die Blickrichtung ein und rüstet die passende Granate aus. Danach selbst werfen.", Request: new(TrainingAction.LoadLineup, n)),
                 new(settings.IsFavorite(n) ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen", "Speichert diese Granate in deiner persönlichen Favoritenliste für diese Map.", Request: new(TrainingAction.ToggleFavorite, n))
@@ -30,10 +33,10 @@ public static class TrainingMenu
                         new("Aufnahme speichern", "Ersetzt den gespeicherten Wurf durch die fertig gemessene Neuaufnahme. Review und bisherige Medien werden zurückgesetzt.", Request: new(TrainingAction.SaveCapture)),
                         new("Aufnahme verwerfen", "Verwirft die Neuaufnahme. Der bisherige Wurf bleibt erhalten.", Request: new(TrainingAction.CancelCapture)),
                         new("Abbrechen", "Behält die gespeicherten Wurfdaten.", Request: new(TrainingAction.Back))], Key: $"edit:{n.Owner}:{n.Map}:{n.Name}")));
-                items.Add(new(n.ReviewStatus == "pending" ? "Review angefragt" : "Zum Review freigeben", n.ReviewStatus == "pending" ? "Ein Plattform-Admin prüft deine Aufnahme. Nach seiner Freigabe erscheint sie zusätzlich unter Offiziell." : "Reicht deine Aufnahme zur Prüfung ein. Unter Alle bleibt sie sichtbar; Offiziell erfordert die Admin-Freigabe.", Request: new(TrainingAction.RequestReview, n), Enabled: n.ReviewStatus != "pending"));
+                items.Add(new(pending ? "Review angefragt" : "Zum Review freigeben", pending ? "Ein Plattform-Admin prüft deine Aufnahme. Nach seiner Freigabe erscheint sie zusätzlich unter Offiziell." : "Reicht deine Aufnahme zur Prüfung ein. Unter Alle bleibt sie sichtbar; Offiziell erfordert die Admin-Freigabe.", Request: new(TrainingAction.RequestReview, n), Enabled: !pending));
                 items.Add(new("Eigene Aufnahme löschen", "Löscht ausschließlich diese eigene, noch nicht veröffentlichte Aufnahme. Du bestätigst im nächsten Schritt.", Page: new("Aufnahme löschen", n.Title, [
                     new("Abbrechen", "Behält die Aufnahme und geht zurück.", Request: new(TrainingAction.Back)),
-                    new("Aufnahme endgültig löschen", "Entfernt diese Aufnahme aus deiner Bibliothek. Das kann nicht rückgängig gemacht werden.", Request: new(TrainingAction.DeleteLineup, n))], Key: $"delete:{n.Owner}:{n.Map}:{n.Name}")));
+                    new("Aufnahme endgültig löschen", "Entfernt diese Aufnahme aus deiner Bibliothek. Das kann nicht rückgängig gemacht werden.", Request: new(TrainingAction.DeleteLineup, n), Danger: true)], Key: $"delete:{n.Owner}:{n.Map}:{n.Name}", Danger: true)));
             }
             MenuItem Setting(string field, string label, string value) => new($"{label}: {value}",
                 own ? LineupEditFields.Prompt(field) : "Gespeicherte Angabe.",
@@ -60,46 +63,61 @@ public static class TrainingMenu
             var facts = new List<string>();
             if (n.Team.Length > 0) facts.Add(n.Team switch { "ct" => "CT", "t" => "T", _ => "Beide Seiten" });
             if (n.ThrowFromTitle.Length > 0 || n.ThrowToTitle.Length > 0) facts.Add($"{n.ThrowFromTitle} → {n.ThrowToTitle}");
+            var technique = new List<string>();
             if (n.Attributes is { } a) {
-                facts.AddRange(LineupEditFields.Flags.Where(flag => a.Flag(flag.Key)).Select(flag => flag.Value));
-                facts.Add(a.MovementLabel);
-                facts.Add(a.ClickType switch { "right" => "Rechtsklick", "both" => "Beide Maustasten", _ => "Linksklick" });
+                technique.AddRange(LineupEditFields.Flags.Where(flag => a.Flag(flag.Key)).Select(flag => flag.Value));
+                technique.Add(a.MovementLabel);
+                technique.Add(a.ClickType switch { "right" => "Rechtsklick", "both" => "Beide Maustasten", _ => "Linksklick" });
             }
+            facts.AddRange(technique);
             if (n.FlightDuration is { } seconds) facts.Add(FormattableString.Invariant($"Flugzeit {seconds:0.00} s"));
             if (facts.Count > 0) description = string.Join(" · ", facts) + ". " + description;
-            return new((settings.IsFavorite(n) ? "★ " : "") + n.Title + (n.ReviewStatus == "pending" ? " [Review]" : ""), $"{status}. {description}",
-                Page: new(n.Title, description, items, Key: $"lineup:{n.Owner}:{n.Map}:{n.Name}"));
+            // Status line (A8): what the row is, in the order a player scans it.
+            var statusParts = new List<string> { status, NadeCatalog.Label(n.Kind) };
+            if (SideLabel(n.Team) is { Length: > 0 } sideLabel) statusParts.Add(sideLabel);
+            statusParts.AddRange(technique);
+            if (n.FlightDuration is { } flight) statusParts.Add(FormattableString.Invariant($"{flight:0.00} s"));
+            var side = n.Team is "t" or "ct" ? n.Team : "";
+            return new(n.Title, $"{status}. {description}",
+                Page: new(n.Title, description, items, Key: $"lineup:{n.Owner}:{n.Map}:{n.Name}"),
+                Meta: SideLabel(n.Team), Kind: n.Kind, Side: side, Favorite: settings.IsFavorite(n), Review: pending, Official: n.Official,
+                Status: string.Join(" · ", statusParts), Lineup: n, MustKnow: n.MustKnow);
         }
-        MenuPage Lineups(string title, IEnumerable<NadeLineup> entries, string key) => new(title,
+        MenuPage Lineups(string title, IEnumerable<NadeLineup> entries, string key, string? emptyHint = null, NadeKind? kind = null) => new(title,
             libraryError.Length > 0 ? libraryError : entries.Any() ? "Granate auswählen, Beschreibung lesen und zum Abwurfpunkt springen."
-                : "Noch keine Granaten in dieser Auswahl. Eigene Würfe über Neue Nade aufnehmen speichern.", entries.Select(Lineup).ToArray(), Key: key);
+                : emptyHint ?? "Noch keine Granaten in dieser Auswahl. Eigene Würfe über Neue Nade aufnehmen speichern.", entries.Select(Lineup).ToArray(), Key: key, Kind: kind);
         MenuItem Filter(NadeKind kind, string title, Func<NadeLineup, bool> predicate, string key, string hint)
         {
             var entries = library.Where(n => n.Kind == kind && predicate(n)).ToArray();
-            return new($"{title} ({entries.Length})", hint, Page: Lineups(title, entries, $"filter:{kind}:{key}"));
+            return new(title, hint, Page: Lineups(title, entries, $"filter:{kind}:{key}", kind: kind), Meta: Count(entries.Length), Kind: kind);
         }
         var categories = Enum.GetValues<NadeKind>().Where(k => k != NadeKind.Other || library.Any(n => n.Kind == k))
-            .Select(kind => new MenuItem($"{NadeCatalog.Label(kind)} ({library.Count(n => n.Kind == kind)})",
+            .Select(kind => new MenuItem(NadeCatalog.Label(kind),
                 $"{NadeCatalog.Label(kind)} auf {map}: Favoriten, geprüfte offizielle Lineups, Must Know oder alle verfügbaren Aufnahmen.",
                 Page: new(NadeCatalog.Label(kind), "Wähle eine Sammlung für diesen Granatentyp.", [
                     Filter(kind, "Favoriten", settings.IsFavorite, "favorites", "Deine persönlich gemerkten Granaten dieses Typs auf dieser Map."),
                     Filter(kind, "Offiziell", n => n.Official, "official", "Vom Plattform-Admin geprüfte und für alle freigegebene Lineups."),
                     Filter(kind, "Must Know", n => n.MustKnow, "must-know", "Vom Admin ausgewählte Grundlagen, die du auf dieser Map beherrschen solltest."),
                     Filter(kind, "Alle", _ => true, "all", "Alle für dich verfügbaren Granaten: alle Spieleraufnahmen und offizielle Lineups.")
-                ], Key: $"category:{kind}"))).ToArray();
+                ], Key: $"category:{kind}", Kind: kind), Meta: Count(library.Count(n => n.Kind == kind)), Kind: kind)).ToArray();
         if (canWriteNades) categories = [..categories, new("Medien-Reviews", "Aufnahmen dieser Map dokumentieren und prüfen. Eingereichte Reviews stehen zuerst.",
-            Page: Lineups("Medien-Reviews", library.Where(n => !n.Official).OrderByDescending(n => n.ReviewStatus == "pending"), "reviews"))];
+            Page: Lineups("Medien-Reviews", library.Where(n => !n.Official).OrderByDescending(n => n.ReviewStatus == "pending"), "reviews"),
+            Meta: Count(library.Count(n => !n.Official)))];
         var favoriteEntries = library.Where(settings.IsFavorite).ToArray();
         var mustKnow = library.Where(n => n.MustKnow).ToArray();
+        // Recently loaded lineups in training order, newest first (B3).
+        var recent = settings.Recent.Select(reference => library.FirstOrDefault(n => NadeReference.From(n) == reference))
+            .Where(n => n != null).Select(n => n!).ToArray();
         var spawnMenu = new MenuPage("Competitive-Spawns", "CT- oder T-Seite wählen. Teleportiert dich, ohne dein Team zu ändern.",
             new[] { 3, 2 }.Select(team => {
                 var name = team == 3 ? "CT" : "T";
                 var points = spawns.Where(s => s.Team == team).ToArray();
-                return new MenuItem($"{name}-Spawns ({points.Length})", $"Startpositionen der {name}-Seite für ein Competitive-Match auf dieser Map.",
+                return new MenuItem($"{name}-Spawns", $"Startpositionen der {name}-Seite für ein Competitive-Match auf dieser Map.",
                     Page: new($"{name}-Spawns", points.Length == 0 ? "Keine aktiven Competitive-Spawns gefunden." : "Spawn wählen. Belegte Positionen werden nicht benutzt.",
                         points.Select((spawn, index) => new MenuItem($"{name}-Spawn {index + 1:00}",
                             $"Teleportiert dich zu {name}-Startposition {index + 1} mit deren Blickrichtung. Dein Team bleibt unverändert.",
-                            Request: new(TrainingAction.TeleportSpawn, Spawn: spawn))).ToArray(), Key: $"spawns:{team}"));
+                            Request: new(TrainingAction.TeleportSpawn, Spawn: spawn), Side: team == 3 ? "ct" : "t")).ToArray(), Key: $"spawns:{team}"),
+                    Meta: Count(points.Length), Side: team == 3 ? "ct" : "t");
             }).ToArray(), Key: "spawns");
         var bots = new MenuPage("Bots", "Trainingsziele platzieren oder die Trainingsbots entfernen.", [
             Action("Bot hier platzieren", TrainingAction.Bot, "Platziert einen stehenden Trainingsbot an deiner Position und mit deiner Blickrichtung."),
@@ -120,17 +138,19 @@ public static class TrainingMenu
             Action("Granaten entfernen", TrainingAction.ClearGrenades, "Entfernt sofort aktive Granaten und ihre Effekte. Betrifft das Training aller Spieler."),
             new("Bots", "Stehenden oder duckenden Bot platzieren oder Trainingsbots entfernen.", Page: bots),
             new("Trainingshilfen", "Flugbahnvorschau, Einschläge, Flashschutz und God Mode ein- oder ausschalten.", Page: switches),
-            Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt deine aktuellen Koordinaten und Blickwinkel im Beschreibungsbereich.")], Key: "tools");
+            Action("Position & Blickwinkel prüfen", TrainingAction.CheckPosition, "Zeigt deine aktuellen Koordinaten und Blickwinkel im Beschreibungsbereich."),
+            new("Zuletzt trainiert", "Die letzten fünf Lineups, die du auf dieser Map geladen hast. Das neueste steht oben.",
+                Page: Lineups("Zuletzt trainiert", recent, "recent", "Noch nichts trainiert. Lade ein Lineup aus der Bibliothek; es erscheint danach hier."), Meta: Count(recent.Length))], Key: "tools");
         var home = new List<MenuItem> {
-            new("Granaten-Bibliothek", $"{library.Count} verfügbare Granaten auf {map}. Wähle zuerst den Granatentyp und danach deine Sammlung. {libraryError}", Page: new("Granaten-Bibliothek", "Granatentyp auswählen.", categories), Enabled: practice),
-            new($"Must Know ({mustKnow.Length})", "Starte hier: wichtige Lineups für diese Map, vom Plattform-Admin ausgewählt.", Page: Lineups("Must Know", mustKnow, "must-know"), Enabled: practice),
-            new("Trainingswerkzeuge", "Würfe wiederholen, Positionen merken, Bots platzieren und Trainingshilfen einstellen.", Page: tools, Enabled: practice),
+            new("Granaten-Bibliothek", $"{library.Count} verfügbare Granaten auf {map}. Wähle zuerst den Granatentyp und danach deine Sammlung. {libraryError}", Page: new("Granaten-Bibliothek", "Granatentyp auswählen.", categories), Enabled: practice, Meta: Count(library.Count)),
+            new("Must Know", "Starte hier: wichtige Lineups für diese Map, vom Plattform-Admin ausgewählt.", Page: Lineups("Must Know", mustKnow, "must-know"), Enabled: practice, Meta: Count(mustKnow.Length)),
+            new("Trainingswerkzeuge", "Würfe wiederholen, Positionen merken, Bots platzieren, Trainingshilfen einstellen und zuletzt trainierte Lineups erneut laden.", Page: tools, Enabled: practice),
             new("Neue Nade aufnehmen", "Aufnahme starten, eine Granate werfen und nach ihrer Wirkung speichern. Sie erscheint unter Alle und ist noch nicht offiziell geprüft.",
                 Page: new("Nade aufnehmen", "Nach dem Wurf mit KP_0 zurück ins Panel wechseln und Aufnahme speichern wählen.", [
                     Action("Aufnahme starten", TrainingAction.StartCapture, "Wirf innerhalb von drei Minuten eine Granate. Abwurfpunkt, Blickwinkel, Jumpthrow, Ducken, Bewegung, Maustaste, Ziel und Flugzeit werden automatisch erfasst."),
                     Action("Aufnahme speichern", TrainingAction.SaveCapture, "Speichert die fertige Aufnahme mit einem automatischen Namen. Unter Alle kannst du Name und Beschreibung bearbeiten und einen Review anfragen."),
                     Action("Aufnahme verwerfen", TrainingAction.CancelCapture, "Verwirft die laufende oder noch ungespeicherte Aufnahme. Bereits gespeicherte Granaten bleiben erhalten.")]), Enabled: practice),
-            new($"Favoriten ({favoriteEntries.Length})", "Deine gemerkten Granaten auf dieser Map. Über die Detailansicht einer Granate hinzufügen oder entfernen.", Page: Lineups("Favoriten", favoriteEntries, "favorites"), Enabled: practice),
+            new("Favoriten", "Deine gemerkten Granaten auf dieser Map. Über den Stern in der Liste oder die Detailansicht hinzufügen oder entfernen.", Page: Lineups("Favoriten", favoriteEntries, "favorites"), Enabled: practice, Meta: Count(favoriteEntries.Length)),
             new("Competitive-Spawns", "Startpositionen der CT- oder T-Seite auswählen und direkt dorthin teleportieren.", Page: spawnMenu, Enabled: practice),
             new("Map wechseln", "Startet eine 30-Sekunden-Abstimmung. Mehr als die Hälfte der beim Start verbundenen Spieler muss zustimmen; Bots zählen nicht.", Page: maps ?? new("Map wechseln", "Keine Maps verfügbar.", [], Key: "maps"), Enabled: practice),
             Action("Keybinds", TrainingAction.Settings, "Feste Tastenbelegung nachlesen und Bind-Befehle für die einmalige Einrichtung in deiner Konsole anzeigen."),
@@ -139,8 +159,8 @@ public static class TrainingMenu
         if (!canWriteNades) home.RemoveAll(item => item.Label == "Neue Nade aufnehmen");
         if (canWriteNades) {
             var pending = library.Where(n => n.Map == map && !n.Official && n.ReviewStatus == "pending").ToArray();
-            home.Insert(7, new($"Reviews ({pending.Length})", "Ausstehende Reviews dieser Map öffnen, Angaben und Medien prüfen und anschließend freigeben.",
-                Page: Lineups("Ausstehende Reviews", pending, "home-reviews"), Enabled: practice));
+            home.Insert(7, new("Reviews", "Ausstehende Reviews dieser Map öffnen, Angaben und Medien prüfen und anschließend freigeben.",
+                Page: Lineups("Ausstehende Reviews", pending, "home-reviews"), Enabled: practice, Meta: Count(pending.Length), Review: pending.Length > 0));
         }
         return new(new("Playbook", "Practice-Werkzeuge und Granaten für die aktuelle Map.", home), map);
     }

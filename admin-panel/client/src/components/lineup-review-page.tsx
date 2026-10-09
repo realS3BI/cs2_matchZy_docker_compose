@@ -9,6 +9,7 @@ import { mapMatchesNade, mapSlug } from "../lib/maps";
 import { queueSearch, reviewQueue, REVIEW_QUEUE_PATH } from "../lib/review-queue";
 import { LineupReview } from "./lineup-review";
 import { ActionButton } from "./action-button";
+import { PageHeader } from "./page-header";
 import { Button } from "./ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 
@@ -49,7 +50,8 @@ function ReviewContent({ map, nade, maps, nades, user, onEntriesChange }) {
   }
   return <article className="playbook-page grid gap-5">
     <div className="flex flex-wrap gap-2"><Button asChild variant="ghost" size="sm"><Link to={lineupPath(map, nade)}><ArrowLeft data-icon="inline-start" />Zur Detailseite</Link></Button>{queued && <Button asChild variant="ghost" size="sm"><Link to={`${REVIEW_QUEUE_PATH}${filters.size ? `?${filters}` : ""}`}>Alle Reviews</Link></Button>}</div>
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="control-kicker">{map.name} · Review</p><h1 className="control-title mt-2 text-2xl sm:text-3xl">{nade.displayName || nade.name}</h1></div><ActionButton variant="outline" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton></header>
+    <PageHeader size="compact" eyebrow={`${map.name} · Review`} title={nade.displayName || nade.name} className="mb-0"
+      actions={<ActionButton variant="outline" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton>} />
     <LineupReview nade={nade} user={user} disabled={busy} mutate={mutate} onEntriesChange={onEntriesChange} onBusyChange={setCaptureBusy} />
     {queued && <nav aria-label="Zwischen Reviews wechseln" className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
       <Button variant="outline" disabled={busy || captureBusy || !previous || !href(previous)} onClick={() => { if (previous && href(previous)) navigate(href(previous)); }}><ArrowLeft data-icon="inline-start" />Vorheriges Lineup</Button>

@@ -4,7 +4,7 @@ Die [Projektregeln](AGENTS.md) gelten für Code, Oberfläche und Dokumentation. 
 
 ## Umgebung
 
-`./dev.sh` oder `node dev.mjs` startet Website, API und MongoDB mit Docker. Details zu Steam-Anmeldung und LAN-Adressen stehen im [README](README.md#lokal-starten). Die lokale Umgebung enthält keinen CS2-Server.
+`./dev.sh` oder `node dev.mjs` startet MongoDB, API und Demo-Worker in Docker und Vite direkt auf dem Rechner; Turborepo zeigt jeden Dienst in einem eigenen Bereich. Details zu Steam-Anmeldung und LAN-Adressen stehen im [README](README.md#lokal-starten). Die lokale Umgebung enthält keinen CS2-Server.
 
 Für die Prüfungen außerhalb von Docker werden Node.js ab 22, pnpm 10.12.1, .NET SDK 10 und PowerShell 7 benötigt. Die Bootstrap-Tests benötigen Bash ab 4 sowie `jq`; Video-Tests benötigen `ffmpeg`. Die vorinstallierte Bash 3 von macOS reicht für die Bootstrap-Tests nicht aus.
 

@@ -111,6 +111,10 @@ public sealed partial class PlaybookPlugin
             FormattableString.Invariant($"{pawn.EyeAngles.X:0.##} {pawn.EyeAngles.Y:0.##} {pawn.EyeAngles.Z:0.##}"), player.Buttons.ToString()));
     }
 
+    // Remaining capture window for the panel countdown (docs/ingame-panel-ux.md, D4).
+    private float? CaptureSecondsLeft(int slot) =>
+        _saveRequests.TryGetValue(slot, out var expires) && expires > Server.CurrentTime ? expires - Server.CurrentTime : null;
+
     private void ArmNewLineupCapture(CCSPlayerController player)
     {
         if (!CanWriteNades(player)) return;

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Design System prüfen</title></head><body><main id="root" class="control-content control-main workspace-inset" style="max-width:1100px"></main><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {MemoryRouter} from 'react-router-dom';
+import {PageHeader} from '/src/components/page-header.tsx';
+import {Button} from '/src/components/ui/button.tsx';
+import {Badge} from '/src/components/ui/badge.tsx';
+import {Alert, AlertTitle, AlertDescription} from '/src/components/ui/alert.tsx';
+import {Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter} from '/src/components/ui/card.tsx';
+import {Input} from '/src/components/ui/input.tsx';
+import {Kbd, KbdGroup} from '/src/components/ui/kbd.tsx';
+import {MapAtlas} from '/src/components/map-atlas.tsx';
+import {ACTIVE_DUTY_MAPS} from '/src/lib/maps.ts';
+import '/src/index.css';
+
+const h = React.createElement;
+const swatch = (name, label) => h('div', {className: 'grid gap-1 text-xs'}, h('div', {style: {background: `var(${name})`, height: '2.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--line-default)'}}), h('span', {className: 'font-mono text-muted-foreground'}, name), h('span', null, label));
+const section = (title, ...children) => h('section', {className: 'grid gap-4'}, h('div', {className: 'section-heading'}, h('h2', null, title)), ...children);
+
+function Guide() {
+  return h('div', {className: 'playbook-page'},
+    h(PageHeader, {size: 'display', eyebrow: 'Design System', title: 'Playbook', description: 'Tokens, Typografie und Komponenten auf einer Seite. Quelle: docs/design-system.md.', actions: h(Button, null, 'Hauptaktion')}),
+    section('Flächen und Text', h('div', {className: 'grid grid-cols-4 gap-3 md:grid-cols-7'}, swatch('--surface-0','Konsole'), swatch('--surface-1','Seite'), swatch('--surface-2','Sidebar'), swatch('--surface-3','Karte'), swatch('--surface-4','Popover'), swatch('--surface-5','Sekundär'), swatch('--surface-6','Akzent'))),
+    section('Marke, Status, Radar-Tinte', h('div', {className: 'grid grid-cols-4 gap-3 md:grid-cols-6'}, swatch('--brand','Marke'), swatch('--status-success','Erfolg'), swatch('--status-warning','Warnung'), swatch('--status-danger','Gefahr'), swatch('--side-t','T'), swatch('--side-ct','CT'), swatch('--nade-smoke','Smoke'), swatch('--nade-flash','Flash'), swatch('--nade-he','HE'), swatch('--nade-molly','Molotov'), swatch('--nade-decoy','Decoy'), swatch('--nade-other','Sonstige'))),
+    section('Typografie',
+      h('p', {className: 'control-kicker'}, 'Label · Mono · Versalien'),
+      h('p', {className: 'control-title', style: {fontSize: 'var(--type-display)', fontWeight: 580, letterSpacing: '-0.055em'}}, 'Display: Deine Maps. Deine Nades.'),
+      h('p', {className: 'control-title', style: {fontSize: 'var(--type-2xl)'}}, 'Titel 1: Serversteuerung'),
+      h('p', {style: {fontSize: 'var(--type-xl)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)'}}, 'Titel 2: Mirage'),
+      h('p', {style: {fontSize: 'var(--type-md)', fontWeight: 600}}, 'Titel 3: Automatischer Neustart'),
+      h('p', {style: {fontSize: 'var(--type-base)', lineHeight: 'var(--leading-normal)', maxWidth: '42rem'}}, 'Body: An der Kante stehen. Auf die obere Ecke der Wand zielen und die Smoke im Sprung werfen. Die Flugzeit wird automatisch gemessen.'),
+      h('p', {className: 'text-muted-foreground', style: {fontSize: 'var(--type-xs)'}}, 'Caption: Bei Spielern auf dem Server wird der Neustart um eine Stunde verschoben.'),
+      h('p', {className: 'font-mono text-muted-foreground', style: {fontSize: 'var(--type-2xs)'}}, 'Micro Mono: Jumpthrow · Linksklick · 3,13 s · -1532 2089 -128')),
+    section('Buttons', h('div', {className: 'flex flex-wrap items-center gap-2'}, h(Button, null, 'Speichern'), h(Button, {variant: 'secondary'}, 'Aktualisieren'), h(Button, {variant: 'outline'}, 'Abbrechen'), h(Button, {variant: 'ghost'}, 'Merken'), h(Button, {variant: 'destructive'}, 'Löschen'), h(Button, {size: 'sm'}, 'Klein'), h(Button, {size: 'lg'}, 'Groß'), h(Button, {disabled: true}, 'Deaktiviert'))),
+    section('Badges', h('div', {className: 'flex flex-wrap items-center gap-2'}, h(Badge, null, 'Standard'), h(Badge, {variant: 'highlight'}, 'Must Know'), h(Badge, {variant: 'success'}, 'Offiziell'), h(Badge, {variant: 'warning'}, 'Review angefragt'), h(Badge, {variant: 'destructive'}, 'Abgelehnt'), h(Badge, {variant: 'secondary'}, 'Live verbunden'), h(Badge, {variant: 'outline'}, 'Aufnahme'), h(Badge, {tone: 't'}, 'T'), h(Badge, {tone: 'ct'}, 'CT'), h(Badge, {tone: 'smoke'}, 'Smoke'), h(Badge, {tone: 'flash'}, 'Flash'), h(Badge, {tone: 'he'}, 'HE'), h(Badge, {tone: 'molly'}, 'Molotov'), h(Badge, {tone: 'decoy'}, 'Decoy'))),
+    section('Karte, Alert, Feld, Kbd', h('div', {className: 'grid gap-4 md:grid-cols-2'},
+      h(Card, null, h(CardHeader, null, h(CardTitle, null, 'Automatischer Neustart'), h(CardDescription, null, 'Nur bei leerem Server. Bots zählen nicht als Spieler.')), h(CardContent, {className: 'grid gap-3'}, h(Input, {placeholder: 'Name, Spot oder Beschreibung …'}), h('div', {className: 'flex items-center gap-2 text-xs text-muted-foreground'}, 'Tastenkürzel: ', h(KbdGroup, null, h(Kbd, null, 'KP_0'), h(Kbd, null, 'KP_DEL')))), h(CardFooter, null, h(Button, null, 'Speichern'), h(Button, {variant: 'outline'}, 'Abbrechen'))),
+      h('div', {className: 'grid gap-3'},
+        h(Alert, {variant: 'success'}, h(AlertTitle, null, 'Gespeichert'), h(AlertDescription, null, 'Die Lineup-Daten wurden übernommen.')),
+        h(Alert, {variant: 'warning'}, h(AlertTitle, null, 'Ungespeicherte Änderungen'), h(AlertDescription, null, 'Übernimm die Servereinstellungen mit „Anwenden & neu starten“.')),
+        h(Alert, {variant: 'destructive'}, h(AlertTitle, null, 'Live-Verbindung unterbrochen'), h(AlertDescription, null, 'Playbook versucht automatisch, die Verbindung wiederherzustellen.'))))),
+    section('Seitenkopf in drei Größen',
+      h(PageHeader, {size: 'default', eyebrow: 'Server', title: 'Übersicht', description: 'Status, Wartung und die letzte Aktion auf einen Blick.', actions: h(Button, {variant: 'secondary'}, 'Aktualisieren')}),
+      h(PageHeader, {size: 'compact', title: 'Fenster vom T-Spawn', description: 'T-Spawn → Fenster'})),
+    section('Map-Atlas', h(MemoryRouter, null, h(MapAtlas, {maps: ACTIVE_DUTY_MAPS}))));
+}
+createRoot(document.getElementById('root')).render(h(Guide));
+</script></body></html>

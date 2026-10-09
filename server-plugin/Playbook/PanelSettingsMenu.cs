@@ -14,8 +14,9 @@ public static class PanelSettingsMenu
             ["previous"] = "Zeigt die vorherige Seite. Von der ersten Seite geht es zur letzten.",
             ["next"] = "Zeigt die nächste Seite. Von der letzten Seite geht es zur ersten."
         };
+        // The key sits right as a chip (docs/ingame-panel-ux.md, D8); the label stays left.
         var keys = PlayerPanelSettings.Labels.Select(action => new MenuItem(
-            $"{action.Value}: {PlayerPanelSettings.DefaultKeys[action.Key]}", hints[action.Key])).ToList();
+            action.Value, hints[action.Key], Meta: PlayerPanelSettings.DefaultKeys[action.Key], MetaChip: true)).ToList();
         keys.Insert(0, new("Alle Keybinds in Konsole ausgeben", "Konsole öffnen: Zeile 1 für das Panel, Zeile 2 für Noclip, Zeile 3 für Video-Stopp mit F8. Vorher eigene Binds sichern; kein automatisches Zurücksetzen.", Request: new(TrainingAction.ExportBindings)));
         return new("Keybinds", "Feste Tasten für alle Spieler. Der Server kann deine lokalen Binds weder setzen noch prüfen. Mausbedienung funktioniert ohne diese Binds.", keys, Key: "settings");
     }

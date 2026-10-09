@@ -1,41 +1,135 @@
-/* Panorama CSS: fixed nine-row surface, anchored to the viewport. */
+/* Panorama CSS: fixed nine-row surface, anchored to the viewport.
+   Colours follow docs/design-system.md; Panorama has no variables, so each value names its token. */
 .training-screen { width: 100%; height: 100%; }
 .training-panel {
     visibility: collapse;
     opacity: 0;
     position: -4000px 0px 0px;
+    transform: translateX(16px);
     horizontal-align: right;
     vertical-align: center;
     margin-right: 16px;
     width: 380px;
     flow-children: down;
-    background-color: #111923f5;
-    border: 1px solid #3b4858;
-    border-radius: 8px;
-    padding: 12px;
+    background-color: #0b1118f2;              /* --surface-1 */
+    border: 1px solid #334253;                /* --line-default */
+    border-radius: 10px;                      /* --radius-md */
+    padding: 10px 12px 10px 12px;
+    transition-property: opacity, transform, border-color;
+    transition-duration: 0.16s;
+    transition-timing-function: ease-out;
 }
-.training-panel.shown { visibility: visible; opacity: 1; position: 0px 0px 0px; }
-Label { font-family: "Arial"; font-size: 16px; color: #f0f4f8; }
-.heading { width: 100%; flow-children: down; }
+.training-panel.shown { visibility: visible; opacity: 1; position: 0px 0px 0px; transform: translateX(0px); }   /* slides in from the edge (D3) */
+.training-panel.editing { border-color: #80cabc; }           /* --brand: the mouse drives the panel */
+.training-panel.danger { border-color: #f6747e; }            /* --status-danger: confirmation page */
+
+/* Rail in the ink of the current grenade type (D2); transparent elsewhere so nothing moves */
+.rail { width: 100%; height: 3px; border-radius: 2px; margin-bottom: 8px; background-color: transparent; transition-property: background-color; transition-duration: 0.16s; }
+.page-kind-smoke .rail { background-color: #9fb3c4; }
+.page-kind-he    .rail { background-color: #ef6461; }
+.page-kind-flash .rail { background-color: #f7dd6a; }
+.page-kind-molly .rail { background-color: #f58345; }
+.page-kind-decoy .rail { background-color: #ae8eff; }
+.page-kind-other .rail { background-color: #a5f3c6; }
+
+Label { font-family: "Stratum2", "IBM Plex Sans", Arial; font-size: 15px; color: #edf3f8; }   /* --text-default */
+
+/* Head: brand small, place large (A1), focus state right (A6), player colour on the dot (D10) */
+.heading { width: 100%; flow-children: down; margin-bottom: 6px; }
+.brandline { width: 100%; height: 16px; flow-children: right; }
+.brand { font-size: 11px; letter-spacing: 1.5px; color: #80cabc; }                 /* label role, --brand */
+.map { font-size: 11px; letter-spacing: 1.5px; color: #a3b3c3; margin-left: 8px; text-transform: uppercase; }
+.focus-dot { width: 7px; height: 7px; border-radius: 4px; margin-top: 4px; margin-right: 5px; background-color: #a3b3c3; horizontal-align: right; transition-property: background-color; transition-duration: 0.16s; }
+.focus { font-size: 11px; color: #a3b3c3; horizontal-align: right; }
+.editing .focus-dot { background-color: #80cabc; }
+.editing .focus { color: #80cabc; }
+.player-0 .focus-dot { background-color: #f1d34a; }   /* CS2 teammate colours: yellow, purple, green, blue, orange */
+.player-1 .focus-dot { background-color: #b76eff; }
+.player-2 .focus-dot { background-color: #6ee28a; }
+.player-3 .focus-dot { background-color: #5fa8ff; }
+.player-4 .focus-dot { background-color: #ff9b3d; }
+.title { width: 100%; font-size: 18px; font-weight: bold; color: #f5f8fb; margin-top: 2px; white-space: nowrap; text-overflow: ellipsis; }
+.breadcrumb { width: 100%; height: 16px; font-size: 11px; line-height: 15px; color: #a3b3c3; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Nine fixed rows; empty ones keep their slot and show a faint line (D9) */
 .rows { width: 100%; height: 306px; flow-children: down; }
-.details { width: 100%; flow-children: down; border-top: 1px solid #344253; margin-top: 10px; padding-top: 10px; }
-.eyebrow { font-size: 11px; color: #9eb6cc; letter-spacing: 1px; margin-bottom: 4px; }
-.title { font-size: 24px; font-weight: bold; margin-bottom: 6px; width: 100%; text-align: center; }
-.breadcrumb { width: 100%; height: 18px; font-size: 12px; line-height: 15px; color: #b7c3ce; white-space: normal; text-overflow: ellipsis; margin-bottom: 3px; }
-.row { width: 100%; height: 32px; padding: 6px 9px; margin-bottom: 2px; border-left: 3px solid transparent; border-radius: 3px; }
-.row Label { width: 100%; white-space: nowrap; text-overflow: ellipsis; }
-.row.selected { background-color: #273d50; border-left-color: #89d3ff; }
-.row.selected Label { font-weight: bold; }
-.editing .row:hover { background-color: #334d62; }
-.editing .row:focus { background-color: #334d62; }
-.row.disabled Label { color: #a4afba; }
-/* Keep unused slots in the flow so pagination never moves the controls. */
-.row.empty { opacity: 0; }
+.row {
+    width: 100%; height: 32px; padding: 0px 6px 0px 6px; margin-bottom: 2px;
+    flow-children: right; border-left: 3px solid transparent; border-radius: 6px;
+    transition-property: background-color, border-color; transition-duration: 0.12s;
+}
+.row Label { vertical-align: center; }
+.row .num { width: 14px; font-family: "IBM Plex Mono", "Stratum2 Mono", monospace; font-size: 11px; color: #a3b3c3; }
+/* Grenade icons from the game's own equipment set, tinted in radar ink (D1) */
+.row .kind { width: 16px; height: 16px; margin: 0px 8px 0px 0px; vertical-align: center; background-size: contain; background-repeat: no-repeat; background-position: center; }
+.row.kind-smoke .kind { background-image: url("s2r://panorama/images/icons/equipment/smokegrenade.vsvg_c"); wash-color: #9fb3c4; }
+.row.kind-he    .kind { background-image: url("s2r://panorama/images/icons/equipment/hegrenade.vsvg_c"); wash-color: #ef6461; }
+.row.kind-flash .kind { background-image: url("s2r://panorama/images/icons/equipment/flashbang.vsvg_c"); wash-color: #f7dd6a; }
+.row.kind-molly .kind { background-image: url("s2r://panorama/images/icons/equipment/molotov.vsvg_c"); wash-color: #f58345; }
+.row.kind-decoy .kind { background-image: url("s2r://panorama/images/icons/equipment/decoy.vsvg_c"); wash-color: #ae8eff; }
+.row.kind-other .kind { width: 8px; height: 8px; margin: 0px 12px 0px 4px; border-radius: 4px; background-color: #a5f3c6; }
+.row.must-know .kind { wash-color: #80cabc; }                  /* --brand, like the filled badge on the website (D7) */
+.row .name { width: fill-parent-flow(1); white-space: nowrap; text-overflow: ellipsis; }
+.row .meta { font-family: "IBM Plex Mono", "Stratum2 Mono", monospace; font-size: 11px; color: #a3b3c3; margin-left: 8px; white-space: nowrap; }
+.row.chip .meta { padding: 2px 6px; border: 1px solid #45566a; border-radius: 4px; background-color: #151e29; color: #edf3f8; }   /* key chip (D8) */
+.row .state { font-size: 11px; color: #a3b3c3; margin-left: 8px; white-space: nowrap; }
+.row .fav { width: 22px; height: 22px; margin-left: 4px; border-radius: 4px; vertical-align: center; visibility: collapse; }
+.row .fav Label { width: 100%; font-size: 13px; color: #a3b3c3; text-align: center; }
+.row.lineup .fav { visibility: visible; }
+.row.favorite .fav Label { color: #80cabc; }
+.editing .row .fav:hover { background-color: #304052; }       /* --surface-6 */
+.row.selected { background-color: #1b2a37; border-left-color: #80cabc; }   /* --sidebar-accent + --brand */
+.row.selected .name { font-weight: bold; color: #f5f8fb; }
+.editing .row:hover, .editing .row:focus { background-color: #263341; }    /* --surface-5 */
+.row.disabled .name, .row.disabled .meta, .row.disabled .state { color: #6f8396; }
+.row.danger { background-color: #f6747e1a; }                   /* destructive action tinted (D6) */
+.row.danger .name { color: #f6747e; }
+.row.danger.selected { border-left-color: #f6747e; background-color: #f6747e2e; }
+.row.empty { border-bottom: 1px solid #3342534d; border-radius: 0px; }
+.row.empty .num, .row.empty .kind { opacity: 0; }
+.editing .row.empty:hover { background-color: transparent; }
+
+/* Radar ink: one colour per side and state */
+.row.side-t  .meta { color: #de9a3a; }
+.row.side-ct .meta { color: #6aa9ec; }
+.row.official .state { color: #86d394; }                       /* --status-success */
+.row.favorite .state { color: #80cabc; }                       /* --brand */
+.row.review   .state { color: #e7bb6c; }                       /* --status-warning */
+
+/* Navigation: only what acts is visible; slots stay reserved (B1); dots for two to five pages (D5) */
 .navigation { flow-children: right; width: 100%; margin-top: 8px; }
-.small-button { padding: 8px 6px; background-color: #22303f; border-radius: 3px; width: fill-parent-flow(1); margin-right: 3px; }
+.small-button {
+    padding: 8px 6px; background-color: #263341; border-radius: 6px;
+    width: fill-parent-flow(1); margin-right: 3px;
+    transition-property: background-color, opacity; transition-duration: 0.12s;
+}
 .small-button Label { font-size: 12px; width: 100%; text-align: center; white-space: nowrap; }
-.editing .small-button:hover { background-color: #3a526b; }
-.editing .small-button:focus { background-color: #3a526b; }
-.small-button.unavailable { opacity: 0.4; }
-.page-number { font-size: 12px; color: #b7c3ce; width: 40px; text-align: center; vertical-align: center; }
-.description { width: 100%; height: 80px; font-size: 14px; line-height: 20px; white-space: normal; text-overflow: ellipsis; }
+.editing .small-button:hover, .editing .small-button:focus { background-color: #304052; }
+.small-button.unavailable { opacity: 0; }
+.pages { width: 48px; height: 30px; margin-right: 3px; transition-property: opacity; transition-duration: 0.12s; }
+.pages.unavailable { opacity: 0; }
+.page-number { width: 100%; height: 100%; font-family: "IBM Plex Mono", "Stratum2 Mono", monospace; font-size: 12px; color: #a3b3c3; text-align: center; vertical-align: center; }
+.pages.dots .page-number { visibility: collapse; }
+.page-dots { width: 100%; height: 100%; flow-children: right; horizontal-align: center; vertical-align: center; visibility: collapse; }
+.pages.dots .page-dots { visibility: visible; }
+.dot { width: 6px; height: 6px; margin: 0px 2px; border-radius: 3px; background-color: #334253; vertical-align: center; visibility: collapse; transition-property: background-color; transition-duration: 0.12s; }
+.dot.shown { visibility: visible; }
+.dot.active { background-color: #80cabc; }
+
+/* Status line (A8), capture progress (D4), description with a notice tone (A7) */
+.details { width: 100%; flow-children: down; border-top: 1px solid #2a3a49; margin-top: 10px; padding-top: 8px; }
+.status { width: 100%; height: 16px; font-family: "IBM Plex Mono", "Stratum2 Mono", monospace; font-size: 11px; letter-spacing: 0.5px; color: #a3b3c3; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 4px; }
+.progress { width: 100%; height: 3px; margin-bottom: 6px; border-radius: 2px; background-color: #1b2a37; visibility: collapse; }
+.progress.active { visibility: visible; }
+.progress-fill { width: 0%; height: 100%; border-radius: 2px; background-color: #80cabc; transition-property: width; transition-duration: 0.25s; transition-timing-function: linear; }
+.progress-fill.p-20 { width: 100%; } .progress-fill.p-19 { width: 95%; } .progress-fill.p-18 { width: 90%; } .progress-fill.p-17 { width: 85%; }
+.progress-fill.p-16 { width: 80%; }  .progress-fill.p-15 { width: 75%; } .progress-fill.p-14 { width: 70%; } .progress-fill.p-13 { width: 65%; }
+.progress-fill.p-12 { width: 60%; }  .progress-fill.p-11 { width: 55%; } .progress-fill.p-10 { width: 50%; } .progress-fill.p-9 { width: 45%; }
+.progress-fill.p-8 { width: 40%; }   .progress-fill.p-7 { width: 35%; }  .progress-fill.p-6 { width: 30%; }  .progress-fill.p-5 { width: 25%; }
+.progress-fill.p-4 { width: 20%; }   .progress-fill.p-3 { width: 15%; }  .progress-fill.p-2 { width: 10%; }  .progress-fill.p-1 { width: 5%; }
+.progress-fill.p-0 { width: 0%; }
+.progress-fill.p-3, .progress-fill.p-2, .progress-fill.p-1, .progress-fill.p-0 { background-color: #e7bb6c; }   /* last 30 seconds in warning amber */
+.description { width: 100%; height: 80px; font-size: 14px; line-height: 20px; white-space: normal; text-overflow: ellipsis; padding-left: 0px; border-left: 0px solid transparent; transition-property: color; transition-duration: 0.12s; }
+.description.notice-info    { color: #bbcada; }
+.description.notice-success { color: #86d394; padding-left: 8px; border-left: 2px solid #86d394; }
+.description.notice-error   { color: #f6747e; padding-left: 8px; border-left: 2px solid #f6747e; }

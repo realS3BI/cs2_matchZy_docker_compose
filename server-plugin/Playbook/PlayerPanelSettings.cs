@@ -4,7 +4,10 @@ namespace Playbook;
 
 public sealed record PlayerPanelSettings
 {
+    public const int RecentLimit = 5;
     public IReadOnlyList<NadeReference> Favorites { get; init; } = [];
+    // Lineups the player loaded most recently, newest first (docs/ingame-panel-ux.md, B3).
+    public IReadOnlyList<NadeReference> Recent { get; init; } = [];
     public bool GameButtons { get; init; }
     public Dictionary<string, string> Keys { get; init; } = new(DefaultKeys, StringComparer.Ordinal);
     public static readonly IReadOnlyDictionary<string, string> DefaultKeys = new Dictionary<string, string>
@@ -19,12 +22,15 @@ public sealed record PlayerPanelSettings
         ["up"] = "Auswahl nach oben", ["down"] = "Auswahl nach unten", ["select"] = "Bestätigen",
         ["back"] = "Zurück", ["previous"] = "Vorherige Seite", ["next"] = "Nächste Seite"
     };
+    private static bool Valid(NadeReference? reference) => reference != null &&
+        !string.IsNullOrWhiteSpace(reference.Owner) && !string.IsNullOrWhiteSpace(reference.Map) && !string.IsNullOrWhiteSpace(reference.Name);
     public static PlayerPanelSettings Validate(PlayerPanelSettings value)
     {
-        if (value.Favorites == null || value.Favorites.Count > 1000 || value.Favorites.Any(f => f == null ||
-            string.IsNullOrWhiteSpace(f.Owner) || string.IsNullOrWhiteSpace(f.Map) || string.IsNullOrWhiteSpace(f.Name)))
+        if (value.Favorites == null || value.Favorites.Count > 1000 || value.Favorites.Any(f => !Valid(f)))
             throw new InvalidDataException("Ungültige Favoritenliste.");
-        return value with { Keys = new(DefaultKeys), GameButtons = false, Favorites = value.Favorites.Distinct().ToArray() };
+        // Older files carry no recent list; broken entries are dropped instead of blocking the favourites.
+        var recent = (value.Recent ?? []).Where(Valid).Distinct().Take(RecentLimit).ToArray();
+        return value with { Keys = new(DefaultKeys), GameButtons = false, Favorites = value.Favorites.Distinct().ToArray(), Recent = recent };
     }
     public bool IsFavorite(NadeLineup lineup) => Favorites.Contains(NadeReference.From(lineup));
     public PlayerPanelSettings ToggleFavorite(NadeLineup lineup)
@@ -32,6 +38,11 @@ public sealed record PlayerPanelSettings
         var key = NadeReference.From(lineup);
         return Validate(this with { Favorites = IsFavorite(lineup)
             ? Favorites.Where(f => f != key).ToArray() : Favorites.Append(key).ToArray() });
+    }
+    public PlayerPanelSettings Remember(NadeLineup lineup)
+    {
+        var key = NadeReference.From(lineup);
+        return Validate(this with { Recent = Recent.Where(r => r != key).Prepend(key).ToArray() });
     }
     public PlayerPanelSettings Bind(string action, string key)
     {

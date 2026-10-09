@@ -6,6 +6,7 @@ import { mapMatchesNade } from "../lib/maps";
 import { lineupKey, lineupReviewPath } from "../lib/lineups";
 import { queueSearch, reviewQueue, reviewQueueStatus, reviewStatus, REVIEW_FILTERS } from "../lib/review-queue";
 import { ActionButton } from "./action-button";
+import { PageHeader } from "./page-header";
 import { GrenadeIcon } from "./nade-icons";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -32,10 +33,8 @@ export function ReviewQueuePage({ maps, nades, user, onRefresh, onEntriesChange 
     return map ? `${lineupReviewPath(map, nade)}?${next}` : undefined;
   };
   return <article className="playbook-page grid gap-6">
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div><p className="control-kicker">Verwaltung · Plattform-Admin</p><h1 className="control-title mt-2 text-3xl">Reviews</h1><p className="mt-2 text-sm text-muted-foreground">Eingereichte Lineups prüfen und ausstehende Aufnahmen vervollständigen.</p></div>
-      <ActionButton variant="outline" icon={RefreshCw} onClick={onRefresh} successLabel="Aktualisiert">Aktualisieren</ActionButton>
-    </header>
+    <PageHeader eyebrow="Verwaltung · Plattform-Admin" title="Reviews" description="Eingereichte Lineups prüfen und ausstehende Aufnahmen vervollständigen." className="mb-0"
+      actions={<ActionButton variant="outline" icon={RefreshCw} onClick={onRefresh} successLabel="Aktualisiert">Aktualisieren</ActionButton>} />
     <Collapsible defaultOpen={true} className="grid gap-4">
     <CollapsibleTrigger asChild><Button variant="outline" className="w-full justify-between">Reviews und Filter · {entries.length} offen<ChevronDown data-icon="inline-end" /></Button></CollapsibleTrigger>
     <CollapsibleContent className="grid gap-4">

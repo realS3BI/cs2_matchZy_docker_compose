@@ -1,0 +1,15 @@
+{
+  "name": "playbook-dev",
+  "private": true,
+  "description": "Startet die lokale Entwicklungsumgebung mit Turborepo-Konsole. Die Projekte selbst bleiben eigenständig.",
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "dev": "node dev.mjs",
+    "web": "pnpm --dir admin-panel dev:client",
+    "api": "docker compose --env-file .env.development -f docker-compose.dev.yml logs -f --no-log-prefix --tail 200 api",
+    "worker": "docker compose --env-file .env.development -f docker-compose.dev.yml logs -f --no-log-prefix --tail 200 demo-worker"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.7"
+  }
+}

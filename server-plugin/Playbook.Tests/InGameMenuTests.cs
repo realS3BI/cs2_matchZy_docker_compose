@@ -253,7 +253,7 @@ public sealed class InGameMenuTests
         var menu = TrainingMenu.Create([], "de_mirage", true, null);
         menu.Select(3);
         Assert.DoesNotContain(menu.Current.Items, item => item.Request?.Action is TrainingAction.Noclip or TrainingAction.BestSpawn or TrainingAction.WorstSpawn or TrainingAction.GiveGrenade);
-        Assert.Equal(8, menu.Current.Items.Count);
+        Assert.Equal(9, menu.Current.Items.Count);
     }
 
     [Fact]

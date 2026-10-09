@@ -11,11 +11,15 @@ services:
       timeout: 5s
       retries: 30
 
+  # Source is mounted; tsc --watch compiles, node --watch restarts. New packages need a restart of ./dev.sh.
   api:
     build:
       context: ./admin-panel
       dockerfile: Dockerfile.dev
     init: true
+    command: ["sh", "-c", "./node_modules/.bin/tsc -p tsconfig.server.json --incremental; ./node_modules/.bin/tsc -p tsconfig.server.json --incremental --watch --preserveWatchOutput & exec node --watch build/src/server.js"]
+    ports:
+      - "127.0.0.1:${DEV_API_PORT:-8080}:8080"
     environment:
       NODE_ENV: development
       ADMIN_PANEL_PUBLIC_URL: ${ADMIN_PANEL_PUBLIC_URL:?}
@@ -33,6 +37,11 @@ services:
       STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
       STEAM_GC_REFRESH_TOKEN: ${STEAM_GC_REFRESH_TOKEN:-}
     volumes:
+      - ./admin-panel/src:/app/src:ro
+      - ./admin-panel/shared:/app/shared:ro
+      - ./admin-panel/test:/app/test:ro
+      - ./admin-panel/client:/app/client:ro
+      - ./admin-panel/tsconfig.server.json:/app/tsconfig.server.json:ro
       - runtime:/runtime
       - uploads:/uploads
       - demos:/demos
@@ -44,32 +53,25 @@ services:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 2s
       timeout: 5s
-      retries: 30
-    develop:
-      watch:
-        - action: rebuild
-          path: ./admin-panel/src
-        - action: rebuild
-          path: ./admin-panel/shared
-        - action: rebuild
-          path: ./admin-panel/test
-        - action: rebuild
-          path: ./admin-panel/tsconfig.server.json
-        - action: rebuild
-          path: ./admin-panel/package.json
-        - action: rebuild
-          path: ./admin-panel/pnpm-lock.yaml
+      retries: 60
 
   demo-worker:
     build:
-      context: .
-      dockerfile: admin-panel/Dockerfile.demo-worker
+      context: ./admin-panel
+      dockerfile: Dockerfile.dev
     init: true
     restart: unless-stopped
+    command: ["sh", "-c", "./node_modules/.bin/tsc -p tsconfig.worker.json --incremental; ./node_modules/.bin/tsc -p tsconfig.worker.json --incremental --watch --preserveWatchOutput & exec node --watch build/src/demo-worker-main.js"]
+    environment:
+      NODE_ENV: production
     depends_on:
       mongodb:
         condition: service_healthy
     volumes:
+      - ./admin-panel/src:/app/src:ro
+      - ./admin-panel/shared:/app/shared:ro
+      - ./admin-panel/tsconfig.server.json:/app/tsconfig.server.json:ro
+      - ./admin-panel/tsconfig.worker.json:/app/tsconfig.worker.json:ro
       - demos:/demos
     mem_limit: 4g
     cpus: 2
@@ -77,44 +79,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m
+      - /app/build:size=64m
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    develop:
-      watch:
-        - action: rebuild
-          path: ./admin-panel/src
-        - action: rebuild
-          path: ./admin-panel/shared
-        - action: rebuild
-          path: ./admin-panel/package.json
-        - action: rebuild
-          path: ./admin-panel/pnpm-lock.yaml
-
-  web:
-    build:
-      context: ./admin-panel
-      dockerfile: Dockerfile.dev
-    init: true
-    command: ["pnpm", "dev:client"]
-    environment:
-      DEV_API_URL: http://api:8080
-      DEV_PUBLIC_URL: ${ADMIN_PANEL_PUBLIC_URL:?}
-      DEV_PORT: ${DEV_PORT:-5173}
-      DEV_USE_POLLING: "1"
-    ports:
-      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_PORT:-5173}:${DEV_PORT:-5173}"
-    volumes:
-      - ./admin-panel/client:/app/client:ro
-      - ./admin-panel/shared:/app/shared:ro
-    depends_on:
-      api:
-        condition: service_healthy
-    develop:
-      watch:
-        - action: rebuild
-          path: ./admin-panel/package.json
-        - action: rebuild
-          path: ./admin-panel/pnpm-lock.yaml
 
 volumes:
   mongodb:

@@ -10,6 +10,8 @@ Der [Projekteinstieg](../README.md) erklärt Umfang, Start und Servermodi.
 | Lokale Entwicklung, Tests und Änderungen | [Mitentwickeln](../CONTRIBUTING.md) |
 | Trainingsfunktionen, Servermodi und Reviews | [Playbook im Training](playbook.md) |
 | Bedienung, Aufnahme und Favoriten im Spiel | [Ingame-Panel](nades-menu.md) |
+| Farben, Typografie, Komponenten und Sprache | [Design System](design-system.md) |
+| Vorschläge für Gestaltung und Bedienung des Panels | [Ingame-Panel: Gestaltung und UX](ingame-panel-ux.md) |
 | HUD bauen und auf dem Client installieren | [Trainings-HUD](../training-hud/README.md) |
 | Bestehendes Workshop-Addon aktualisieren | [Workshop-Release](../training-hud/workshop-release.md) |
 | Demoanalyse, Team-Reviews und Trainingsszenen | [Demoanalyse](demo-analysis-plan.md) |

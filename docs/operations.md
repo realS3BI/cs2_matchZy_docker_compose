@@ -12,9 +12,11 @@ Im Repository starten:
 ./dev.sh
 ```
 
-Unter Windows oder ohne Bash funktioniert `node dev.mjs`. Auch `cd admin-panel` und `pnpm dev` starten dieselbe Umgebung. Eine lokale Installation der npm-Abhängigkeiten ist dafür nicht nötig; sie werden im Docker-Image installiert.
+Unter Windows oder ohne Bash funktioniert `node dev.mjs`. Auch `pnpm dev` im Projektordner und `cd admin-panel && pnpm dev` starten dieselbe Umgebung. Neben Docker werden Node.js ab 22 und pnpm benötigt (`corepack enable pnpm`); das Skript führt bei jedem Start `pnpm install --frozen-lockfile` im Projektordner und in `admin-panel` aus.
 
-Das Skript startet MongoDB, die API und Vite unter `http://localhost:5173`. Vite lädt Frontend-Änderungen direkt nach. Änderungen unter `admin-panel/src` bauen die API automatisch neu und starten sie wieder. Währenddessen können API-Anfragen kurz fehlschlagen. Strg+C beendet die Container. Datenbank, Uploads und Runtime-Dateien bleiben in eigenen Volumes des Compose-Projekts `playbook-dev` erhalten.
+MongoDB, API und Demo-Worker laufen in Docker, Vite direkt auf dem Rechner. Im Terminal zeigt [Turborepo](https://turborepo.com/docs/reference/configuration#ui) die Bereiche `web` (Vite), `api` und `worker`. Mit den Pfeiltasten wechselt die Ansicht, Strg+C beendet sie und stoppt danach die Container. Ohne Terminal oder mit `--plain` stehen die Ausgaben mit Präfix untereinander. Das Wurzelpaket enthält nur Turborepo; die Projekte bleiben eigenständig und behalten ihre eigenen Lockfiles.
+
+Die Website ist unter `http://localhost:5173` erreichbar. Vite lädt Frontend-Änderungen direkt nach. API und Demo-Worker erhalten `src`, `shared` und die TypeScript-Konfiguration als Bind-Mount; `tsc --watch` übersetzt Änderungen, `node --watch` startet den Prozess in etwa einer Sekunde neu. Typfehler erscheinen im Bereich `api` bzw. `worker`. Nach Änderungen an `admin-panel/package.json` oder der Lockfile die Umgebung neu starten, damit das Dev-Image die Pakete neu installiert. Strg+C beendet die Container. Datenbank, Uploads und Runtime-Dateien bleiben in eigenen Volumes des Compose-Projekts `playbook-dev` erhalten.
 
 Für den Zugriff über eine LAN- oder Tailscale-Adresse die tatsächliche Browser-Adresse angeben:
 
@@ -26,9 +28,9 @@ Beim ersten Start legt das Skript `.env.development` mit dieser Adresse und eine
 
 Steam verwendet die konfigurierte Adresse für den Callback. Deshalb das Dashboard immer über diese Adresse öffnen. `--url` und `--admin` überschreiben die Dateieinstellungen für den aktuellen Start; dauerhafte Änderungen gehören in `.env.development`. Bereits gesetzte Umgebungsvariablen haben ebenfalls Vorrang vor der Datei. Für einen anderen Port beispielsweise `./dev.sh --url http://localhost:5174` verwenden.
 
-Vite verwendet den gewählten Port auch im Container und zeigt die tatsächliche Browser-Adresse an. Die API läuft intern weiterhin auf Port 8080. Vite leitet `/api` dorthin weiter; der Browser verwendet ausschließlich die konfigurierte öffentliche Adresse.
+Vite zeigt die tatsächliche Browser-Adresse an. Die API ist nur lokal unter `127.0.0.1:8080` erreichbar (änderbar mit `DEV_API_PORT`). Vite leitet `/api` dorthin weiter; der Browser verwendet ausschließlich die konfigurierte öffentliche Adresse.
 
-Ein bisher separat gestartetes Vite zuerst beenden, falls Port 5173 belegt ist. `pnpm dev:client` startet weiterhin nur das Frontend und benötigt eine separat erreichbare API auf Port 8080. Genau diese fehlende API verursachte bisher HTTP 500 beim Steam-Login mit `pnpm dev`.
+Ein bisher separat gestartetes Vite zuerst beenden, falls Port 5173 belegt ist. `pnpm dev:client` in `admin-panel` startet nur das Frontend und benötigt eine laufende API auf Port 8080.
 
 Die Entwicklungsumgebung startet keinen CS2-Gameserver und erhält keinen Docker-Socket. Anmeldung, Dashboard und gespeicherte Daten lassen sich lokal entwickeln; Gameserver-Steuerung und Live-Diagnosen benötigen den vollständigen Deployment-Stack.
 

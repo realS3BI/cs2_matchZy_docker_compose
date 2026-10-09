@@ -338,6 +338,22 @@ public sealed partial class PlaybookPlugin : BasePlugin
         }
     }
 
+    // "Zuletzt trainiert" in the tools page (docs/ingame-panel-ux.md, B3). Persisted with the favourites.
+    private void RememberRecent(CCSPlayerController player, NadeLineup lineup)
+    {
+        if (!_menus.TryGetValue(player.Slot, out var session)) return;
+        try
+        {
+            var settings = session.Settings.Remember(lineup);
+            _settingsStore.Save(player.SteamID, settings);
+            session.Settings = settings;
+            session.Menu.Refresh(BuildMenu(player).Current);
+            session.NextDraw = 0;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        { Logger.LogWarning(error, "Could not store recent lineups for {SteamId}", player.SteamID); }
+    }
+
     private void LoadLineup(CCSPlayerController player, NadeLineup selected)
     {
         ReleaseControl(player.Slot);
@@ -360,6 +376,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
             new QAngle(lineup.Angles.X, lineup.Angles.Y, lineup.Angles.Z), new Vector(0, 0, 0));
         PlayerBodyRotation.Repair(pawn);
         _last[player.Slot] = lineup;
+        RememberRecent(player, lineup);
         if (_menus.TryGetValue(player.Slot, out var session)) session.Library = null;
         ClearCapture(player.Slot);
         Tell(player, $"Geladen: {lineup.Title}. {lineup.Description}" +
@@ -450,7 +467,7 @@ public sealed partial class PlaybookPlugin : BasePlugin
                     if (Server.CurrentTime >= session.NextDraw)
                     {
                         var hadEntity = session.Panel.EntityIndex != null;
-                        session.Panel.Draw(session.Menu, session.Focused);
+                        session.Panel.Draw(session.Menu, session.Focused, CaptureSecondsLeft(slot));
                         if (!hadEntity)
                         {
                             LogPanelState(player, "Panel-Entity erstellt; Client-Anzeige unbestätigt");

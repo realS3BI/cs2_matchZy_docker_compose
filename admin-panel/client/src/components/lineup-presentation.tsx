@@ -111,7 +111,7 @@ export function OfficialLineupDetail({ nade, map, back, onBack, management, chil
       <aside className="official-lineup-sidebar" aria-label="Ansicht und Wurfanleitung">
         <div className="official-lineup-actions"><FavoriteButton nade={nade} /><ActionButton size="sm" variant="secondary" icon={Link2} onClick={() => copyText(window.location.href)} successLabel="Link kopiert">Link kopieren</ActionButton><ActionButton size="sm" variant="secondary" icon={Copy} onClick={() => copyText(`.loadnade ${nade.name}`)} successLabel="Kopiert">Ingame-Befehl kopieren</ActionButton></div>
         <ThrowFacts nade={nade} />
-        <div className="official-lineup-labels"><Badge variant="success">Offiziell</Badge>{nade.mustKnow && <Badge>Must Know</Badge>}</div>
+        <div className="official-lineup-labels"><Badge variant="success">Offiziell</Badge>{nade.mustKnow && <Badge variant="highlight">Must Know</Badge>}</div>
         <section className="official-lineup-instructions" aria-label="Anleitung"><h2><GrenadeIcon type={nade.type} />So wirfst du dieses Lineup</h2><p className="official-lineup-route">{nade.throwFromTitle || "Startposition"} → {nade.throwToTitle || "Zielposition"}</p>{nade.desc && <p className="throw-description">{nade.desc}</p>}</section>
         <details className="official-lineup-management"><summary>Verwalten und Wurfdaten</summary><div>{management}</div></details>
       </aside>

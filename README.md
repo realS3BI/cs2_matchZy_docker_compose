@@ -19,7 +19,7 @@ MatchZy ist ein optionaler Servermodus für Matches und Scrims. Das eigene Playb
 
 ## Lokal starten
 
-Voraussetzungen: Node.js ab 22 und ein laufender Docker-Dienst mit Docker Compose ab 2.22.
+Voraussetzungen: Node.js ab 22, pnpm (`corepack enable pnpm`) und ein laufender Docker-Dienst mit Docker Compose ab 2.22.
 
 ```bash
 git clone https://github.com/realS3BI/playbook.git
@@ -27,7 +27,7 @@ cd playbook
 ./dev.sh
 ```
 
-Unter Windows oder ohne Bash funktioniert `node dev.mjs`. Auch `cd admin-panel` und `pnpm dev` starten dieselbe Umgebung. Das Skript startet MongoDB, API, Demo-Worker und Vite. Die Website ist unter `http://localhost:5173` erreichbar. Es legt `.env.development` mit einem zufälligen Session-Secret an. Für Admin-Rechte die eigene Steam64-ID übergeben:
+Unter Windows oder ohne Bash funktioniert `node dev.mjs`. Auch `pnpm dev` im Projektordner und `cd admin-panel && pnpm dev` starten dieselbe Umgebung. Das Skript startet MongoDB, API und Demo-Worker in Docker und Vite direkt auf dem Rechner. Turborepo zeigt `web`, `api` und `worker` in eigenen Bereichen; API und Worker starten nach Codeänderungen von selbst neu. `--plain` schreibt alle Ausgaben untereinander. Die Website ist unter `http://localhost:5173` erreichbar. Es legt `.env.development` mit einem zufälligen Session-Secret an. Für Admin-Rechte die eigene Steam64-ID übergeben:
 
 ```bash
 node dev.mjs --admin DEINE_STEAM64_ID
@@ -53,11 +53,11 @@ Die Weiterleitung wird einmalig eingerichtet:
 tailscale serve --bg --https=8443 http://127.0.0.1:5173
 ```
 
-Danach startet `./dev.sh` die Umgebung mit dieser Adresse. Steam-Anmeldung und Vites automatisches Neuladen verwenden ebenfalls die HTTPS-Adresse. Der Vite-Port bleibt lokal erreichbar. Ein anderer interner Port lässt sich mit `--port` wählen; dann muss auch das Ziel der Tailscale-Weiterleitung angepasst werden. HTTPS benötigt diesen vorgeschalteten Proxy, Vite selbst stellt kein Zertifikat aus.
+Danach startet `./dev.sh` die Umgebung mit dieser Adresse. Steam-Anmeldung und Vites automatisches Neuladen verwenden ebenfalls die HTTPS-Adresse. Der Vite-Port bleibt lokal erreichbar. Ein anderer interner Port lässt sich mit `--port` wählen. Besteht für die HTTPS-Adresse bereits eine Tailscale-Weiterleitung auf einen anderen Port, stellt das Skript sie beim Start auf den Vite-Port um. HTTPS benötigt diesen vorgeschalteten Proxy, Vite selbst stellt kein Zertifikat aus.
 
 Zum Entfernen ausschließlich dieser Weiterleitung: `tailscale serve --https=8443 off`. [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) speichert die mit `--bg` eingerichtete Weiterleitung über Neustarts hinweg; Docker Desktop und die Entwicklungsumgebung müssen für den Zugriff laufen.
 
-Ein bisher separat gestartetes Vite zuerst beenden, falls Port 5173 belegt ist. `pnpm dev:client` startet weiterhin nur das Frontend und benötigt eine separat erreichbare API auf Port 8080. Genau diese fehlende API verursachte bisher HTTP 500 beim Steam-Login mit `pnpm dev`.
+Ein bisher separat gestartetes Vite zuerst beenden, falls Port 5173 belegt ist. `pnpm dev:client` in `admin-panel` startet nur das Frontend und benötigt eine laufende API auf Port 8080.
 
 Die Entwicklungsumgebung startet keinen CS2-Gameserver und erhält keinen Docker-Socket. Anmeldung, Dashboard und gespeicherte Daten lassen sich lokal entwickeln; Gameserver-Steuerung und Live-Diagnosen benötigen den vollständigen Deployment-Stack.
 
