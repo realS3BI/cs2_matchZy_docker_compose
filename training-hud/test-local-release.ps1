@@ -183,6 +183,16 @@ if ($args -contains '+workshop_build_item') {
     Assert ($global:HudFlowDownloadUrl -eq 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip') 'SteamCMD muss direkt von Valve kommen.'
     Assert ($global:HudFlowLogins -eq $logins) 'Fehlgeschlagener Download darf keine Anmeldung starten.'
 
+    # A saved path on a drive that no longer exists must lead to the prompt instead of a crash.
+    $missingDrive = [char[]]'ZYXWVUTSRQ' | Where-Object { -not (Test-Path -LiteralPath "${_}:\") } | Select-Object -First 1
+    $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+    $settings.cs2 = "${missingDrive}:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive"
+    $settings | ConvertTo-Json | Set-Content -LiteralPath $settingsPath
+    Set-Answers @($cs2)
+    & $script -Mode status | Out-Null
+    $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+    Assert ($settings.cs2 -eq $cs2 -and $global:HudFlowAnswers.Count -eq 0) 'Ein verschobenes CS2 muss erfragt und neu gespeichert werden.'
+
     Set-Answers @()
     $global:HudFlowRunning = $true
     & $script @parameters -Mode status | Out-Null

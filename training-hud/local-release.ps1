@@ -26,6 +26,11 @@ function Read-HudValue([string]$Prompt, [string]$Default) {
     return $Default
 }
 
+# Join-Path fails on drives that no longer exist, e.g. after moving the Steam library.
+function Test-Cs2([string]$Path) {
+    return $Path -and (Test-Path -LiteralPath ([IO.Path]::Join($Path, 'game', 'csgo')) -PathType Container)
+}
+
 function Find-Cs2 {
     if (-not $IsWindows) { return }
     $steam = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
@@ -38,8 +43,8 @@ function Find-Cs2 {
         }
     }
     foreach ($library in $libraries) {
-        $candidate = Join-Path $library 'steamapps/common/Counter-Strike Global Offensive'
-        if (Test-Path -LiteralPath (Join-Path $candidate 'game/csgo') -PathType Container) { return $candidate }
+        $candidate = [IO.Path]::Join($library, 'steamapps', 'common', 'Counter-Strike Global Offensive')
+        if (Test-Cs2 $candidate) { return $candidate }
     }
 }
 
@@ -61,10 +66,10 @@ function Assert-LocalHud($Manifest) {
 }
 
 if (-not $Cs2) { $Cs2 = $settings.cs2 }
-if (-not $Cs2 -or -not (Test-Path -LiteralPath (Join-Path $Cs2 'game/csgo') -PathType Container)) {
+if (-not (Test-Cs2 $Cs2)) {
     $Cs2 = Read-HudValue 'CS2-Installationsverzeichnis' (Find-Cs2)
 }
-if (-not $Cs2 -or -not (Test-Path -LiteralPath (Join-Path $Cs2 'game/csgo') -PathType Container)) {
+if (-not (Test-Cs2 $Cs2)) {
     throw 'CS2-Verzeichnis nicht gefunden. Den Steam-Installationsordner mit game/csgo angeben.'
 }
 $Cs2 = (Resolve-Path -LiteralPath $Cs2).Path
